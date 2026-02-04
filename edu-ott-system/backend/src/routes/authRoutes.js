@@ -5,9 +5,48 @@ const authController = require('../controllers/authController');
 const { protect } = require('../middlewares/auth');
 const validate = require('../middlewares/validate');
 
-// @route   POST /api/v1/auth/register
-// @desc    Register a new user
-// @access  Public
+/**
+ * @swagger
+ * tags:
+ *   name: Auth
+ *   description: User authentication and management
+ */
+
+/**
+ * @swagger
+ * /auth/register:
+ *   post:
+ *     summary: Register a new user
+ *     tags: [Auth]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - email
+ *               - password
+ *               - fullName
+ *               - role
+ *             properties:
+ *               email:
+ *                 type: string
+ *                 format: email
+ *               password:
+ *                 type: string
+ *                 minLength: 6
+ *               fullName:
+ *                 type: string
+ *               role:
+ *                 type: string
+ *                 enum: [student, teacher, admin]
+ *     responses:
+ *       201:
+ *         description: User registered successfully
+ *       400:
+ *         description: Bad request
+ */
 router.post(
   '/register',
   [
@@ -20,9 +59,33 @@ router.post(
   authController.register
 );
 
-// @route   POST /api/v1/auth/login
-// @desc    Login user
-// @access  Public
+/**
+ * @swagger
+ * /auth/login:
+ *   post:
+ *     summary: Login user
+ *     tags: [Auth]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - email
+ *               - password
+ *             properties:
+ *               email:
+ *                 type: string
+ *                 format: email
+ *               password:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Login successful
+ *       401:
+ *         description: Invalid credentials
+ */
 router.post(
   '/login',
   [

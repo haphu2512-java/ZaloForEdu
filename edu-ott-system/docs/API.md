@@ -2,6 +2,8 @@
 
 Base URL: `http://localhost:5000/api/v1`
 
+> **Lưu ý:** Tài liệu này có thể chưa cập nhật kịp thời. Vui lòng xem tài liệu tương tác đầy đủ và mới nhất tại **[Swagger UI](http://localhost:5000/api-docs)**. Xem hướng dẫn sử dụng tại [SWAGGER_GUIDE.md](./SWAGGER_GUIDE.md).
+
 ## Authentication
 
 Tất cả các endpoint (trừ login và register) yêu cầu JWT token trong header:

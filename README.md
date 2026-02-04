@@ -145,14 +145,6 @@ API documentation sẽ có sẵn tại `http://localhost:5000/api-docs` khi ch�
 - Build APK/IPA files
 - Submit lên Google Play Store và Apple App Store
 
-## Contributing
-
-Vui lòng đọc [CONTRIBUTING.md](CONTRIBUTING.md) để biết chi tiết về quy trình đóng góp.
-
-## License
-
-MIT License - xem file [LICENSE](LICENSE)
-
 ## Team
 
 - **Nhóm sinh viên**:  Nhóm 3
