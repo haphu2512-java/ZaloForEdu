@@ -1,0 +1,12 @@
+{
+  "name": "edu-ott-shared",
+  "version": "1.0.0",
+  "description": "Shared utilities, constants, and types for Education OTT Platform",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"No tests yet\""
+  },
+  "keywords": ["shared", "utilities"],
+  "author": "",
+  "license": "MIT"
+}

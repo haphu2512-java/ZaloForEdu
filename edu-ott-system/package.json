@@ -1,0 +1,33 @@
+{
+  "name": "edu-ott-system",
+  "version": "1.0.0",
+  "description": "Education OTT Platform - Hệ thống OTT giáo dục",
+  "private": true,
+  "workspaces": [
+    "backend",
+    "web",
+    "mobile",
+    "shared"
+  ],
+  "scripts": {
+    "backend": "cd backend && npm run dev",
+    "web": "cd web && npm start",
+    "mobile": "cd mobile && npm start",
+    "install:all": "npm install && cd backend && npm install && cd ../web && npm install && cd ../mobile && npm install && cd ../shared && npm install",
+    "clean": "rm -rf node_modules backend/node_modules web/node_modules mobile/node_modules shared/node_modules",
+    "test": "npm run test --workspaces",
+    "lint": "npm run lint --workspaces"
+  },
+  "keywords": [
+    "education",
+    "ott",
+    "chat",
+    "learning-management",
+    "react",
+    "react-native",
+    "nodejs",
+    "express"
+  ],
+  "author": "Your Team",
+  "license": "MIT"
+}
