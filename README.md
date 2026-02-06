@@ -21,9 +21,10 @@ Hệ thống OTT (Over-The-Top) phục vụ giao tiếp và hỗ trợ quản l�
 ```
 edu-ott-system/
 ├── backend/          # Node.js/Express API Server
-├── web/              # ReactJS Web Application
-├── mobile/           # React Native Mobile App
-├── shared/           # Shared utilities, types, constants
+├── frontend/         # ReactJS Web Application
+|  ├── web/              # ReactJS Web Application
+|  ├── mobile/           # React Native Mobile App
+|  ├── shared/           # Shared utilities, types, constants
 └── docs/             # Documentation
 ```
 
