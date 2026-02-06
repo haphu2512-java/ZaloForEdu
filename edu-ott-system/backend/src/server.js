@@ -15,6 +15,8 @@ const connectDB = require('./config/database');
 const errorHandler = require('./middlewares/errorHandler');
 const routes = require('./routes');
 const { initializeSocket } = require('./socket');
+const swaggerUi = require('swagger-ui-express');
+const swaggerSpec = require('./config/swagger');
 
 // Initialize Express app
 const app = express();
@@ -85,21 +87,8 @@ app.get('/health', (req, res) => {
 app.use('/api/v1', routes);
 
 // API Documentation
-app.get('/api-docs', (req, res) => {
-  res.json({
-    message: 'Education OTT Platform API',
-    version: '1.0.0',
-    endpoints: {
-      auth: '/api/v1/auth',
-      users: '/api/v1/users',
-      classes: '/api/v1/classes',
-      groups: '/api/v1/groups',
-      messages: '/api/v1/messages',
-      files: '/api/v1/files',
-      analytics: '/api/v1/analytics',
-    },
-  });
-});
+// API Documentation
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 // 404 Handler
 app.use('*', (req, res) => {
