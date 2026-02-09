@@ -1,39 +1,99 @@
 const express = require('express');
+const userController = require('../controllers/userController');
+const { protect, restrictTo } = require('../middlewares/auth'); // Middleware
+
 const router = express.Router();
-const { protect, restrictTo } = require('../middlewares/auth');
 
-// Placeholder controller - will be implemented later
-const userController = {
-  getAllUsers: (req, res) => res.json({ message: 'Get all users' }),
-  getUser: (req, res) => res.json({ message: 'Get user by ID' }),
-  updateUser: (req, res) => res.json({ message: 'Update user' }),
-  deleteUser: (req, res) => res.json({ message: 'Delete user' }),
-};
+// Bảo vệ tất cả routes (Yêu cầu đăng nhập & quyền Admin)
+// router.use(protect);
+// router.use(restrictTo('admin'));
 
-// All routes require authentication
-router.use(protect);
+/**
+ * @swagger
+ * tags:
+ * name: Users
+ * description: Quản lý người dùng (Chỉ Admin)
+ */
 
-// @route   GET /api/v1/users
-// @desc    Get all users
-// @access  Private
+/**
+ * @swagger
+ * /users:
+ * get:
+ * summary: Lấy danh sách tất cả users
+ * tags: [Users]
+ * responses:
+ * 200:
+ * description: Thành công
+ */
 router.get('/', userController.getAllUsers);
 
-// @route   GET /api/v1/users/:id
-// @desc    Get user by ID
-// @access  Private
+/**
+ * @swagger
+ * /users/{id}:
+ * get:
+ * summary: Lấy thông tin chi tiết user theo ID
+ * tags: [Users]
+ * parameters:
+ * - in: path
+ * name: id
+ * required: true
+ * schema:
+ * type: string
+ * responses:
+ * 200:
+ * description: Thành công
+ * 404:
+ * description: Không tìm thấy user
+ */
 router.get('/:id', userController.getUser);
 
-// Admin only routes
-router.use(restrictTo('admin'));
-
-// @route   PUT /api/v1/users/:id
-// @desc    Update user
-// @access  Private (Admin only)
+/**
+ * @swagger
+ * /users/{id}:
+ * put:
+ * summary: Cập nhật thông tin user (Không bao gồm password)
+ * tags: [Users]
+ * parameters:
+ * - in: path
+ * name: id
+ * required: true
+ * schema:
+ * type: string
+ * requestBody:
+ * required: true
+ * content:
+ * application/json:
+ * schema:
+ * type: object
+ * properties:
+ * fullName:
+ * type: string
+ * isActive:
+ * type: boolean
+ * role:
+ * type: string
+ * responses:
+ * 200:
+ * description: Cập nhật thành công
+ */
 router.put('/:id', userController.updateUser);
 
-// @route   DELETE /api/v1/users/:id
-// @desc    Delete user
-// @access  Private (Admin only)
+/**
+ * @swagger
+ * /users/{id}:
+ * delete:
+ * summary: Xóa user
+ * tags: [Users]
+ * parameters:
+ * - in: path
+ * name: id
+ * required: true
+ * schema:
+ * type: string
+ * responses:
+ * 204:
+ * description: Xóa thành công
+ */
 router.delete('/:id', userController.deleteUser);
 
 module.exports = router;
