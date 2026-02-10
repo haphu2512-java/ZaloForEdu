@@ -85,22 +85,83 @@ app.get('/health', (req, res) => {
 app.use('/api/v1', routes);
 
 // API Documentation
-app.get('/api-docs', (req, res) => {
-  res.json({
-    message: 'Education OTT Platform API',
-    version: '1.0.0',
-    endpoints: {
-      auth: '/api/v1/auth',
-      users: '/api/v1/users',
-      classes: '/api/v1/classes',
-      groups: '/api/v1/groups',
-      messages: '/api/v1/messages',
-      files: '/api/v1/files',
-      analytics: '/api/v1/analytics',
-    },
-  });
-});
+// app.get('/api-docs', (req, res) => {
+//   res.json({
+//     message: 'Education OTT Platform API',
+//     version: '1.0.0',
+//     endpoints: {
+//       auth: '/api/v1/auth',
+//       users: '/api/v1/users',
+//       classes: '/api/v1/classes',
+//       groups: '/api/v1/groups',
+//       messages: '/api/v1/messages',
+//       files: '/api/v1/files',
+//       analytics: '/api/v1/analytics',
+//     },
+//   });
+// });
 
+const swaggerUi = require('swagger-ui-express');
+const swaggerJsdoc = require('swagger-jsdoc');
+
+const swaggerDefinition = {
+  openapi: '3.0.0',
+  info: {
+    title: 'Hệ thống Quản lý Lớp học',
+    version: '1.0.0',
+  },
+  servers: [{ url: 'http://localhost:5000/api/v1' }],
+  components: {
+    securitySchemes: {
+      bearerAuth: {
+        type: 'http',
+        scheme: 'bearer',
+        bearerFormat: 'JWT',
+      },
+    },
+  },
+  paths: {
+    '/classes': {
+      get: {
+        tags: ['Classes'],
+        summary: 'Lấy danh sách lớp',
+        security: [{ bearerAuth: [] }],
+        responses: { 200: { description: 'Thành công' } },
+      },
+      post: {
+        tags: ['Classes'],
+        summary: 'Tạo lớp học mới',
+        security: [{ bearerAuth: [] }],
+        requestBody: {
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  name: { type: 'string', example: 'Lập trình Web' },
+                  code: { type: 'string', example: 'WEB101' },
+                  subject: { type: 'string', example: 'CNTT' },
+                },
+              },
+            },
+          },
+        },
+        responses: { 201: { description: 'Tạo thành công' } },
+      },
+    },
+    '/classes/{id}': {
+      get: {
+        tags: ['Classes'],
+        summary: 'Xem chi tiết lớp',
+        parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: { 200: { description: 'Thành công' } },
+      },
+    },
+  },
+};
+
+const specs = swaggerJsdoc({ swaggerDefinition, apis: [] }); // Để apis rỗng để nó không quét file gây lỗi nữa
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(specs));
 // 404 Handler
 app.use('*', (req, res) => {
   res.status(404).json({
@@ -138,3 +199,4 @@ process.on('SIGTERM', () => {
 });
 
 module.exports = app;
+
