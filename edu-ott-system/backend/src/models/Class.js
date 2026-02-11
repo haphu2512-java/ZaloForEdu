@@ -86,7 +86,7 @@ const classSchema = new mongoose.Schema(
 );
 
 // Indexes
-classSchema.index({ code: 1 });
+// classSchema.index({ code: 1 }); //trên code đã có unique index
 classSchema.index({ teacher: 1 });
 classSchema.index({ status: 1 });
 classSchema.index({ students: 1 });

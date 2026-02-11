@@ -16,14 +16,11 @@ const errorHandler = require('./middlewares/errorHandler');
 const routes = require('./routes');
 const { initializeSocket } = require('./socket');
 
-// Initialize Express app
 const app = express();
 const server = http.createServer(app);
 
-// Connect to Database
 connectDB();
 
-// Initialize Socket.io
 const io = new Server(server, {
   cors: {
     origin: process.env.SOCKET_CORS_ORIGIN?.split(',') || ['http://localhost:3000'],
@@ -31,16 +28,12 @@ const io = new Server(server, {
   },
 });
 initializeSocket(io);
-
-// Make io accessible to routes
 app.set('io', io);
 
-// Security Middlewares
 app.use(helmet());
 app.use(mongoSanitize());
 app.use(hpp());
 
-// CORS Configuration
 const corsOptions = {
   origin: process.env.CORS_ORIGIN?.split(',') || ['http://localhost:3000'],
   credentials: true,
@@ -48,30 +41,23 @@ const corsOptions = {
 };
 app.use(cors(corsOptions));
 
-// Rate Limiting
 const limiter = rateLimit({
-  windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000,
-  max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 100,
+  windowMs: 15 * 60 * 1000,
+  max: 100,
   message: 'Too many requests from this IP, please try again later.',
 });
 app.use('/api', limiter);
 
-// Body Parser & Cookie Parser
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(cookieParser());
-
-// Compression
 app.use(compression());
 
-// Logging
 if (process.env.NODE_ENV === 'development') {
   app.use(morgan('dev'));
-} else {
-  app.use(morgan('combined'));
 }
 
-// Health Check
+// Health Check Endpoint
 app.get('/health', (req, res) => {
   res.status(200).json({
     status: 'success',
@@ -81,25 +67,7 @@ app.get('/health', (req, res) => {
   });
 });
 
-// API Routes
 app.use('/api/v1', routes);
-
-// API Documentation
-// app.get('/api-docs', (req, res) => {
-//   res.json({
-//     message: 'Education OTT Platform API',
-//     version: '1.0.0',
-//     endpoints: {
-//       auth: '/api/v1/auth',
-//       users: '/api/v1/users',
-//       classes: '/api/v1/classes',
-//       groups: '/api/v1/groups',
-//       messages: '/api/v1/messages',
-//       files: '/api/v1/files',
-//       analytics: '/api/v1/analytics',
-//     },
-//   });
-// });
 
 const swaggerUi = require('swagger-ui-express');
 const swaggerJsdoc = require('swagger-jsdoc');
@@ -107,8 +75,9 @@ const swaggerJsdoc = require('swagger-jsdoc');
 const swaggerDefinition = {
   openapi: '3.0.0',
   info: {
-    title: 'Hệ thống Quản lý Lớp học',
+    title: 'Education OTT Platform API - Nhóm 03',
     version: '1.0.0',
+    description: 'Tài liệu API đầy đủ cho hệ thống Zalo Giáo Dục'
   },
   servers: [{ url: 'http://localhost:5000/api/v1' }],
   components: {
@@ -121,82 +90,101 @@ const swaggerDefinition = {
     },
   },
   paths: {
+    // --- 1. AUTH ---
+    '/auth/register': { post: { tags: ['Auth'], responses: { 201: { description: 'Thành công' } } } },
+    '/auth/login': { post: { tags: ['Auth'], responses: { 200: { description: 'Trả về Token' } } } },
+    
+    // --- 2. USERS ---
+    '/users': { get: { tags: ['Users'], security: [{ bearerAuth: [] }], responses: { 200: { description: 'Thành công' } } } },
+
+    // --- 3. CLASSES ---
     '/classes': {
-      get: {
-        tags: ['Classes'],
-        summary: 'Lấy danh sách lớp',
-        security: [{ bearerAuth: [] }],
-        responses: { 200: { description: 'Thành công' } },
-      },
+      get: { tags: ['Classes'], summary: 'Lấy danh sách lớp học', security: [{ bearerAuth: [] }], responses: { 200: { description: 'Thành công' } } },
       post: {
         tags: ['Classes'],
         summary: 'Tạo lớp học mới',
         security: [{ bearerAuth: [] }],
         requestBody: {
-          content: {
-            'application/json': {
-              schema: {
-                type: 'object',
-                properties: {
-                  name: { type: 'string', example: 'Lập trình Web' },
-                  code: { type: 'string', example: 'WEB101' },
-                  subject: { type: 'string', example: 'CNTT' },
-                },
-              },
-            },
-          },
+          content: { 'application/json': { schema: { type: 'object', properties: { name: { type: 'string' }, code: { type: 'string' }, subject: { type: 'string' } } } } }
         },
-        responses: { 201: { description: 'Tạo thành công' } },
-      },
+        responses: { 201: { description: 'Tạo thành công' } }
+      }
     },
     '/classes/{id}': {
+      get: { 
+        tags: ['Classes'], 
+        summary: 'Xem chi tiết lớp (Hiện đầy đủ SV & GV)', 
+        security: [{ bearerAuth: [] }],
+        parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: { 200: { description: 'Thành công' } } 
+      },
+      put: { tags: ['Classes'], summary: 'Cập nhật lớp', security: [{ bearerAuth: [] }], parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }], responses: { 200: { description: 'Thành công' } } },
+      delete: { tags: ['Classes'], summary: 'Xóa lớp', security: [{ bearerAuth: [] }], parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }], responses: { 204: { description: 'Thành công' } } }
+    },
+    '/classes/{id}/invite': {
       get: {
         tags: ['Classes'],
-        summary: 'Xem chi tiết lớp',
+        summary: 'Lấy mã QR và Link mời tham gia lớp',
+        security: [{ bearerAuth: [] }],
         parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
-        responses: { 200: { description: 'Thành công' } },
-      },
+        responses: { 200: { description: 'Trả về mã QR Base64' } }
+      }
     },
+    '/classes/{id}/join': {
+      post: {
+        tags: ['Classes'],
+        summary: 'Tham gia lớp học qua QR/Link',
+        security: [{ bearerAuth: [] }],
+        parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: { 200: { description: 'Tham gia thành công' } }
+      }
+    },
+    '/classes/{id}/leave': {
+      post: {
+        tags: ['Classes'],
+        summary: 'Rời khỏi lớp học',
+        security: [{ bearerAuth: [] }],
+        parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: { 200: { description: 'Thành công' } }
+      }
+    },
+    '/classes/{id}/members': {
+      get: {
+        tags: ['Classes'],
+        summary: 'Xem danh sách thành viên (Chỉ lấy GV & SV)',
+        security: [{ bearerAuth: [] }],
+        parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: { 200: { description: 'Thành công' } }
+      }
+    },
+
+    // --- 4. GROUPS + FILES  ---
+    '/groups': { get: { tags: ['Groups'], security: [{ bearerAuth: [] }], responses: { 200: { description: 'Thành công' } } } },
+    '/files/upload': { post: { tags: ['Files'], security: [{ bearerAuth: [] }], responses: { 200: { description: 'Thành công' } } } },
+
+    // --- 5. MESSAGES + ANALYTICS ---
+    '/messages': { get: { tags: ['Messages'], security: [{ bearerAuth: [] }], responses: { 200: { description: 'Thành công' } } } },
+    '/analytics/dashboard': { get: { tags: ['Analytics'], security: [{ bearerAuth: [] }], responses: { 200: { description: 'Thành công' } } } }
   },
 };
 
-const specs = swaggerJsdoc({ swaggerDefinition, apis: [] }); // Để apis rỗng để nó không quét file gây lỗi nữa
+const specs = swaggerJsdoc({ swaggerDefinition, apis: [] });
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(specs));
-// 404 Handler
+
 app.use('*', (req, res) => {
-  res.status(404).json({
-    status: 'error',
-    message: `Cannot find ${req.originalUrl} on this server`,
-  });
+  res.status(404).json({ status: 'error', message: `Cannot find ${req.originalUrl} on this server` });
 });
 
-// Error Handler
 app.use(errorHandler);
 
-// Start Server
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => {
-  console.log(`
-      Running on port ${PORT}
-  `);
+  console.log(`Server chạy tại: http://localhost:${PORT}. Check Swagger: http://localhost:${PORT}/api-docs`);
 });
 
-// Handle unhandled promise rejections
 process.on('unhandledRejection', (err) => {
   console.log('UNHANDLED REJECTION! 💥 Shutting down...');
-  console.log(err.name, err.message);
-  server.close(() => {
-    process.exit(1);
-  });
-});
-
-// Handle SIGTERM
-process.on('SIGTERM', () => {
-  console.log('👋 SIGTERM RECEIVED. Shutting down gracefully');
-  server.close(() => {
-    console.log('💥 Process terminated!');
-  });
+  server.close(() => process.exit(1));
 });
 
 module.exports = app;
-

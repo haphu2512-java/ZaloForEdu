@@ -1,7 +1,6 @@
 const express = require('express');
 const router = express.Router();
 const { protect, restrictTo } = require('../middlewares/auth');
-// GỌI FILE XỊN Ở ĐÂY NÈ
 const classController = require('../controllers/classController'); 
 
 router.use(protect);
@@ -14,5 +13,6 @@ router.delete('/:id', restrictTo('teacher', 'admin'), classController.deleteClas
 router.post('/:id/join', classController.joinClass);
 router.post('/:id/leave', classController.leaveClass);
 router.get('/:id/members', classController.getClassMembers);
+router.get('/:id/invite', classController.getClassInvite);
 
 module.exports = router;
