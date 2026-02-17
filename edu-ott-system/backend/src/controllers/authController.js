@@ -24,7 +24,7 @@ exports.register = asyncHandler(async (req, res, next) => {
   res.status(201).json({
     status: 'success',
     message: 'Registered successfully. Please check your email to verify account.',
-    // data: { verificationToken } // Dev only
+    data: { verificationToken } // Dev only for testing
   });
 });
 
