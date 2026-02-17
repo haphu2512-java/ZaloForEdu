@@ -2,6 +2,8 @@
 
 Base URL: `http://localhost:5000/api/v1`
 
+> **Lưu ý:** Tài liệu này có thể chưa cập nhật kịp thời. Vui lòng xem tài liệu tương tác đầy đủ và mới nhất tại **[Swagger UI](http://localhost:5000/api-docs)**. Xem hướng dẫn sử dụng tại [SWAGGER_GUIDE.md](./SWAGGER_GUIDE.md).
+
 ## Authentication
 
 Tất cả các endpoint (trừ login và register) yêu cầu JWT token trong header:
@@ -65,6 +67,12 @@ Authorization: Bearer <token>
 }
 ```
 
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "refreshToken": "7c4a8d09ca3762af...", // Added refresh token if applicable
+  }
+}
+```
+
 ### Login
 Đăng nhập
 
@@ -79,6 +87,128 @@ Authorization: Bearer <token>
 ```
 
 **Response:** Giống register
+
+### Logout
+Đăng xuất - Invalidate token hiện tại
+
+**Endpoint:** `POST /auth/logout`
+
+**Headers:**
+```
+Authorization: Bearer <token>
+```
+
+**Response:**
+```json
+{
+  "status": "success",
+  "message": "Logged out successfully"
+}
+```
+
+### Refresh Token
+Lấy access token mới từ refresh token
+
+**Endpoint:** `POST /auth/refresh`
+
+**Body:**
+```json
+{
+  "refreshToken": "7c4a8d09ca3762af..."
+}
+```
+
+**Response:**
+```json
+{
+  "status": "success",
+  "data": {
+    "token": "new_access_token..."
+  }
+}
+```
+
+### Verify Email
+Xác thực email người dùng (New)
+
+**Endpoint:** `POST /auth/verify-email`
+
+**Body:**
+```json
+{
+  "token": "email_verification_token_from_email"
+}
+```
+
+**Response:**
+```json
+{
+  "status": "success",
+  "message": "Email verified successfully"
+}
+```
+
+### Resend Verification Email
+Gửi lại email xác thực (New)
+
+**Endpoint:** `POST /auth/resend-verification`
+
+**Body:**
+```json
+{
+  "email": "student@example.com"
+}
+```
+
+**Response:**
+```json
+{
+  "status": "success",
+  "message": "Verification email sent"
+}
+```
+
+### Forgot Password
+Yêu cầu reset mật khẩu
+
+**Endpoint:** `POST /auth/forgot-password`
+
+**Body:**
+```json
+{
+  "email": "student@example.com"
+}
+```
+
+**Response:**
+```json
+{
+  "status": "success",
+  "message": "Password reset email sent"
+}
+```
+
+### Reset Password
+Đặt lại mật khẩu mới
+
+**Endpoint:** `PUT /auth/reset-password/:token`
+
+**Body:**
+```json
+{
+  "password": "newpassword123"
+}
+```
+
+**Response:**
+```json
+{
+  "status": "success",
+  "data": {
+    "token": "new_token_auto_login..."
+  }
+}
+```
 
 ### Get Current User
 Lấy thông tin user hiện tại

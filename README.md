@@ -21,9 +21,10 @@ Hệ thống OTT (Over-The-Top) phục vụ giao tiếp và hỗ trợ quản l�
 ```
 edu-ott-system/
 ├── backend/          # Node.js/Express API Server
-├── web/              # ReactJS Web Application
-├── mobile/           # React Native Mobile App
-├── shared/           # Shared utilities, types, constants
+├── frontend/         # ReactJS Web Application
+|  ├── web/              # ReactJS Web Application
+|  ├── mobile/           # React Native Mobile App
+|  ├── shared/           # Shared utilities, types, constants
 └── docs/             # Documentation
 ```
 
@@ -144,14 +145,6 @@ API documentation sẽ có sẵn tại `http://localhost:5000/api-docs` khi ch�
 ### Mobile
 - Build APK/IPA files
 - Submit lên Google Play Store và Apple App Store
-
-## Contributing
-
-Vui lòng đọc [CONTRIBUTING.md](CONTRIBUTING.md) để biết chi tiết về quy trình đóng góp.
-
-## License
-
-MIT License - xem file [LICENSE](LICENSE)
 
 ## Team
 
