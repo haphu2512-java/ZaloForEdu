@@ -116,7 +116,7 @@ cd web
 npm start            # Development server
 npm run build        # Production build
 npm test             # Run tests
-```
+``
 
 ### Mobile Application
 ```bash

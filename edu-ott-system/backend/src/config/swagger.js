@@ -22,6 +22,15 @@ const options = {
         description: 'Production Server',
       },
     ],
+    tags: [
+      { name: 'Auth', description: 'Xác thực người dùng' },
+      { name: 'Users', description: 'Quản lý người dùng (Admin)' },
+      { name: 'Classes', description: 'Quản lý lớp học' },
+      { name: 'Groups', description: 'Quản lý nhóm trong lớp' },
+      { name: 'Messages', description: 'Quản lý tin nhắn' },
+      { name: 'Files', description: 'Upload và quản lý file' },
+      { name: 'Analytics', description: 'Thống kê và phân tích' },
+    ],
     components: {
       securitySchemes: {
         bearerAuth: {
