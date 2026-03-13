@@ -12,6 +12,8 @@ const generateAccessToken = (userId) => {
     });
 };
 
+const hashToken = (token) => crypto.createHash('sha256').update(token).digest('hex');
+
 // Helper to generate refresh token
 const generateRefreshToken = async (user, ipAddress) => {
     const token = crypto.randomBytes(40).toString('hex');
@@ -19,16 +21,16 @@ const generateRefreshToken = async (user, ipAddress) => {
 
     const refreshToken = await RefreshToken.create({
         user: user._id,
-        token,
+        token: hashToken(token),
         expires,
         createdByIp: ipAddress,
     });
 
-    return refreshToken;
+    return { refreshToken, token };
 };
 
 exports.register = async (userData) => {
-    const { email, password, fullName, role } = userData;
+    const { email, password, fullName } = userData;
 
     if (await User.findOne({ email })) {
         throw new AppError('Email already registered', 400);
@@ -38,19 +40,19 @@ exports.register = async (userData) => {
         email,
         password,
         fullName,
-        role: role || 'student',
-        isEmailVerified: false, // Force verification
+        role: 'student',
+        isEmailVerified: false,
+        isActive: true,
     });
 
     // Generate verification token
-    const verificationToken = jwt.sign(
-        { id: user._id },
-        process.env.JWT_SECRET,
-        { expiresIn: '24h' }
-    );
+    const verificationToken = crypto.randomBytes(32).toString('hex');
+    const verificationTokenHash = hashToken(verificationToken);
 
-    // Save token hash to user (if using hash strategy) or just send it
-    // For simplicity, we assume we send this token. 
+    user.emailVerificationToken = verificationTokenHash;
+    user.emailVerificationExpire = Date.now() + 24 * 60 * 60 * 1000;
+    await user.save({ validateBeforeSave: false });
+
     // TODO: Send verification email
 
     return { user, verificationToken };
@@ -63,15 +65,15 @@ exports.login = async (email, password, ipAddress) => {
         throw new AppError('Invalid email or password', 401);
     }
 
+    if (!user.isEmailVerified) {
+        throw new AppError('Please verify your email', 401);
+    }
     if (!user.isActive) {
         throw new AppError('Account is deactivated', 401);
     }
 
-    // Optional: Check isEmailVerified
-    // if (!user.isEmailVerified) throw new AppError('Please verify your email', 401);
-
     const accessToken = generateAccessToken(user._id);
-    const refreshToken = await generateRefreshToken(user, ipAddress);
+    const { refreshToken, token: rawRefreshToken } = await generateRefreshToken(user, ipAddress);
 
     user.lastLogin = new Date();
     await user.save({ validateBeforeSave: false });
@@ -79,7 +81,7 @@ exports.login = async (email, password, ipAddress) => {
     return {
         user,
         accessToken,
-        refreshToken: refreshToken.token
+        refreshToken: rawRefreshToken
     };
 };
 
@@ -89,7 +91,7 @@ exports.logout = async (token, ipAddress) => {
     // Since we receive refreshToken usually for logout in this design:
     if (!token) return;
 
-    const refreshToken = await RefreshToken.findOne({ token });
+    const refreshToken = await RefreshToken.findOne({ token: hashToken(token) });
     if (!refreshToken) return; // Already gone or invalid
 
     refreshToken.revoked = new Date();
@@ -98,7 +100,7 @@ exports.logout = async (token, ipAddress) => {
 };
 
 exports.refreshToken = async (token, ipAddress) => {
-    const refreshToken = await RefreshToken.findOne({ token })
+    const refreshToken = await RefreshToken.findOne({ token: hashToken(token) })
         .populate('user');
 
     if (!refreshToken || !refreshToken.isActive) {
@@ -107,8 +109,16 @@ exports.refreshToken = async (token, ipAddress) => {
 
     const { user } = refreshToken;
 
+    if (!user || !user.isActive) {
+        throw new AppError('Account is deactivated', 401);
+    }
+
+    if (!user.isEmailVerified) {
+        throw new AppError('Please verify your email', 401);
+    }
+
     // Replace old refresh token with new one (Rotation)
-    const newRefreshToken = await generateRefreshToken(user, ipAddress);
+    const { refreshToken: newRefreshToken, token: rawRefreshToken } = await generateRefreshToken(user, ipAddress);
 
     refreshToken.revoked = new Date();
     refreshToken.revokedByIp = ipAddress;
@@ -119,23 +129,26 @@ exports.refreshToken = async (token, ipAddress) => {
 
     return {
         accessToken,
-        refreshToken: newRefreshToken.token
+        refreshToken: rawRefreshToken
     };
 };
 
 exports.verifyEmail = async (token) => {
-    try {
-        const decoded = jwt.verify(token, process.env.JWT_SECRET);
-        const user = await User.findById(decoded.id);
+    const verificationTokenHash = hashToken(token);
 
-        if (!user) throw new AppError('Invalid token', 400);
-        if (user.isEmailVerified) return; // Already verified
+    const user = await User.findOne({
+        emailVerificationToken: verificationTokenHash,
+        emailVerificationExpire: { $gt: Date.now() }
+    });
 
-        user.isEmailVerified = true;
-        user.isActive = true; // Activate account
-        user.emailVerificationToken = undefined;
-        await user.save({ validateBeforeSave: false });
-    } catch (err) {
+    if (!user) {
         throw new AppError('Invalid or expired verification token', 400);
     }
+
+    if (user.isEmailVerified) return;
+
+    user.isEmailVerified = true;
+    user.emailVerificationToken = undefined;
+    user.emailVerificationExpire = undefined;
+    await user.save({ validateBeforeSave: false });
 };
