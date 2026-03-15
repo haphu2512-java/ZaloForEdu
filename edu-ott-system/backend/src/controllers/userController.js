@@ -1,77 +1,51 @@
-const User = require('../models/User'); //
-const AppError = require('../utils/appError'); //
-const asyncHandler = require('../utils/asyncHandler'); //
+const userService = require('../services/userService');
+const asyncHandler = require('../utils/asyncHandler');
 
 // @desc    Get all users
 // @route   GET /api/v1/users
 // @access  Private (Admin)
 exports.getAllUsers = asyncHandler(async (req, res, next) => {
-    console.log("1. Đã vào được Controller getAllUsers!"); //
-    const users = await User.find().select('-password');
+  const users = await userService.getAllUsers();
 
-    console.log("2. Đã lấy xong dữ liệu từ DB:", users);
-
-    res.status(200).json({
-        status: 'success',
-        results: users.length,
-        data: {
-            users,
-        },
-    });
+  res.status(200).json({
+    status: 'success',
+    results: users.length,
+    data: { users },
+  });
 });
 
 // @desc    Get user by ID
 // @route   GET /api/v1/users/:id
 // @access  Private (Admin)
 exports.getUser = asyncHandler(async (req, res, next) => {
-    const user = await User.findById(req.params.id).select('-password');
+  const user = await userService.getUserById(req.params.id);
 
-    if (!user) {
-        return next(new AppError('No user found with that ID', 404));
-    }
-
-    res.status(200).json({
-        status: 'success',
-        data: {
-            user,
-        },
-    });
+  res.status(200).json({
+    status: 'success',
+    data: { user },
+  });
 });
 
 // @desc    Update user
 // @route   PUT /api/v1/users/:id
 // @access  Private (Admin)
 exports.updateUser = asyncHandler(async (req, res, next) => {
-    // 1. Lọc body để tránh cập nhật password ở đây (password nên có route riêng)
-    const updatedUser = await User.findByIdAndUpdate(req.params.id, req.body, {
-        new: true, // Trả về data mới sau khi update
-        runValidators: true, // Chạy validate theo Model User
-    }).select('-password');
+  const user = await userService.updateUser(req.params.id, req.body);
 
-    if (!updatedUser) {
-        return next(new AppError('No user found with that ID', 404));
-    }
-
-    res.status(200).json({
-        status: 'success',
-        data: {
-            user: updatedUser,
-        },
-    });
+  res.status(200).json({
+    status: 'success',
+    data: { user },
+  });
 });
 
 // @desc    Delete user
 // @route   DELETE /api/v1/users/:id
 // @access  Private (Admin)
 exports.deleteUser = asyncHandler(async (req, res, next) => {
-    const user = await User.findByIdAndDelete(req.params.id);
+  await userService.deleteUser(req.params.id);
 
-    if (!user) {
-        return next(new AppError('No user found with that ID', 404));
-    }
-
-    res.status(204).json({
-        status: 'success',
-        data: null,
-    });
+  res.status(200).json({
+    status: 'success',
+    message: 'User deleted successfully',
+  });
 });

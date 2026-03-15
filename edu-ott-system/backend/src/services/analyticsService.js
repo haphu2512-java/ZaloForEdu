@@ -65,6 +65,7 @@ exports.getDashboard = async (user) => {
     };
   } else if (userRole === 'teacher') {
     // Teacher sees their own classes
+    const myClassIds = await Class.find({ teacher: userId }).distinct('_id');
     const [myClasses, totalStudents, totalGroups, totalMessages] =
       await Promise.all([
         Class.countDocuments({ teacher: userId }),
@@ -75,7 +76,7 @@ exports.getDashboard = async (user) => {
         ]),
         Group.countDocuments({
           class: {
-            $in: await Class.find({ teacher: userId }).distinct('_id'),
+            $in: myClassIds,
           },
         }),
         Message.countDocuments({

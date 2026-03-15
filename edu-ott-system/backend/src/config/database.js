@@ -1,13 +1,9 @@
 const mongoose = require('mongoose');
 
-
 const connectDB = async () => {
     try {
-     // kết nối vs .env lỗi, nên t để đỡ chỗ này để test api
-        const conn = await mongoose.connect('mongodb://127.0.0.1:27017/edu-ott-db', {
-            useNewUrlParser: true,
-            useUnifiedTopology: true,
-        });
+        const mongoURI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/edu-ott-db';
+        const conn = await mongoose.connect(mongoURI);
 
         console.log(`✅ MongoDB Connected: ${conn.connection.host}`);
 
