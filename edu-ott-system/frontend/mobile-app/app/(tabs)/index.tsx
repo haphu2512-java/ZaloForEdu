@@ -1,26 +1,29 @@
 import { useState, useEffect } from 'react';
-import { StyleSheet, FlatList, Image, TouchableOpacity } from 'react-native';
-import { Text, View } from '@/components/Themed';
-import Colors from '@/constants/Colors';
-import { useColorScheme } from '@/components/useColorScheme';
+import { FlatList, View, SafeAreaView } from 'react-native';
+import { ChatListItem } from '@/components/chat/ChatListItem';
 import { fetchAPI } from '@/utils/api';
 
+// Sample data in case API fails
+const MOCK_CHATS = [
+  { id: '1', name: 'Thầy Nguyễn Văn A', lastMessage: 'Hôm nay lớp mình nghỉ nhé!', avatar: 'https://i.pravatar.cc/150?u=1', time: '09:45', unreadCount: 2 },
+  { id: '2', name: 'Nhóm Lớp 12A1', lastMessage: 'Bạn nào chưa nộp bài tập không?', avatar: 'https://i.pravatar.cc/150?u=2', time: '08:30', unreadCount: 0 },
+  { id: '3', name: 'Cô Lê Thị B', lastMessage: 'Chào em, bài kiểm tra của em rất tốt.', avatar: 'https://i.pravatar.cc/150?u=3', time: 'Hôm qua', unreadCount: 0 },
+  { id: '4', name: 'Hội Phụ Huynh', lastMessage: 'Thông báo về buổi họp phụ huynh...', avatar: 'https://i.pravatar.cc/150?u=4', time: 'Thứ 2', unreadCount: 5 },
+];
+
 export default function MessagesScreen() {
-  const colorScheme = useColorScheme() ?? 'light';
-  const colors = Colors[colorScheme];
-  const [chats, setChats] = useState<any[]>([]);
+  const [chats, setChats] = useState<any[]>(MOCK_CHATS);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const loadChats = async () => {
       try {
-        // Here we attempt to fetch recent chats/conversations depending on backend API design.
-        // Assuming /messages without roomId gives latest messages or conversations for user.
-        // If there's another endpoint like /conversations, replace it accordingly.
-        const res = await fetchAPI('/conversations').catch(() => fetchAPI('/messages'));
-        setChats(res.data?.conversations || res.data?.messages || res.data || []);
+        const res = await fetchAPI('/conversations').catch(() => null);
+        if (res && res.data) {
+          setChats(res.data.conversations || res.data);
+        }
       } catch (error) {
-        console.log('Failed to fetch chats/messages', error);
+        console.log('Failed to fetch chats', error);
       } finally {
         setLoading(false);
       }
@@ -28,58 +31,23 @@ export default function MessagesScreen() {
     loadChats();
   }, []);
 
-  const renderItem = ({ item }: { item: any }) => (
-    <TouchableOpacity style={[styles.chatItem, { borderBottomColor: colors.border }]}>
-      <Image source={{ uri: item.avatar || 'https://i.pravatar.cc/150' }} style={styles.avatar} />
-      <View style={[styles.chatInfo, { backgroundColor: 'transparent' }]}>
-        <View style={[styles.chatHeader, { backgroundColor: 'transparent' }]}>
-          <Text style={styles.name} numberOfLines={1}>{item.name}</Text>
-          <Text style={[styles.time, { color: colors.muted }]}>{item.time || new Date(item.updatedAt || item.createdAt || Date.now()).toLocaleTimeString()}</Text>
-        </View>
-        <View style={[styles.chatFooter, { backgroundColor: 'transparent' }]}>
-          <Text 
-            style={[styles.message, { color: item.unread ? colors.text : colors.muted, fontWeight: item.unread ? '600' : 'normal' }]} 
-            numberOfLines={1}
-          >
-            {item.lastMessage || item.content || 'Tin nhắn mới'}
-          </Text>
-          {item.unread > 0 && (
-            <View style={[styles.unreadBadge, { backgroundColor: colors.error }]}>
-              <Text style={styles.unreadText}>{item.unread}</Text>
-            </View>
-          )}
-        </View>
-      </View>
-    </TouchableOpacity>
-  );
-
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
+    <SafeAreaView className="flex-1 bg-white">
       <FlatList
         data={chats}
         keyExtractor={item => item.id || item._id}
-        renderItem={renderItem}
-        contentContainerStyle={{ backgroundColor: colors.surface }}
+        renderItem={({ item }) => (
+          <ChatListItem
+            id={item.id || item._id}
+            name={item.name}
+            lastMessage={item.lastMessage || item.content}
+            avatar={item.avatar}
+            time={item.time || '10:00'}
+            unreadCount={item.unreadCount || item.unread}
+          />
+        )}
+        className="bg-white"
       />
-    </View>
+    </SafeAreaView>
   );
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1 },
-  chatItem: {
-    flexDirection: 'row',
-    padding: 15,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    alignItems: 'center',
-  },
-  avatar: { width: 50, height: 50, borderRadius: 25, marginRight: 15 },
-  chatInfo: { flex: 1, justifyContent: 'center' },
-  chatHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 5 },
-  name: { fontSize: 16, fontWeight: '600', flex: 1, marginRight: 10 },
-  time: { fontSize: 13 },
-  chatFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  message: { fontSize: 14, flex: 1, marginRight: 10 },
-  unreadBadge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 10, minWidth: 20, alignItems: 'center' },
-  unreadText: { color: 'white', fontSize: 12, fontWeight: 'bold' }
-});
