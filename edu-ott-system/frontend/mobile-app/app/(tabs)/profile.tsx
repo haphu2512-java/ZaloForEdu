@@ -1,12 +1,37 @@
-import { StyleSheet, Image, TouchableOpacity, ScrollView } from 'react-native';
+import { useState, useEffect } from 'react';
+import { StyleSheet, Image, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
 import { Text, View } from '@/components/Themed';
 import Colors from '@/constants/Colors';
 import { useColorScheme } from '@/components/useColorScheme';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
+import { fetchAPI } from '@/utils/api';
 
 export default function ProfileScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const colors = Colors[colorScheme];
+  const [profile, setProfile] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const loadProfile = async () => {
+      try {
+        const res = await fetchAPI('/users/me'); // Getting current user info
+        setProfile(res.data?.user || res.data || {});
+      } catch (error) {
+        console.log('Failed to fetch profile', error);
+        // Fallback or empty if not logged in
+        setProfile({
+          fullName: 'Tài khoản Khách',
+          studentId: 'N/A',
+          role: 'Người dùng',
+          avatar: 'https://i.pravatar.cc/150'
+        });
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadProfile();
+  }, []);
 
   const MenuItem = ({ icon, title, color = colors.text }: { icon: string, title: string, color?: string }) => (
     <TouchableOpacity style={[styles.menuItem, { borderBottomColor: colors.border }]}>
@@ -18,19 +43,28 @@ export default function ProfileScreen() {
     </TouchableOpacity>
   );
 
+  if (loading) {
+    return (
+      <View style={[styles.container, { backgroundColor: colors.background, justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color={colors.tint} />
+      </View>
+    );
+  }
+
   return (
     <ScrollView style={[styles.container, { backgroundColor: colors.background }]}>
       {/* Header Profile */}
       <View style={[styles.profileCard, { backgroundColor: colors.surface }]}>
-        <Image style={styles.avatar} source={{ uri: 'https://i.pravatar.cc/150?u=current' }} />
+        <Image style={styles.avatar} source={{ uri: profile?.avatar || 'https://i.pravatar.cc/150?u=current' }} />
         <View style={[styles.profileInfo, { backgroundColor: 'transparent' }]}>
-          <Text style={styles.name}>Nguyễn Văn A</Text>
-          <Text style={[styles.studentId, { color: colors.muted }]}>SV: 21020000</Text>
+          <Text style={styles.name}>{profile?.fullName || profile?.name || 'Tên người dùng'}</Text>
+          <Text style={[styles.studentId, { color: colors.muted }]}>SV: {profile?.studentId || 'Không rõ'}</Text>
           <View style={[styles.roleBadge, { backgroundColor: colors.tint + '20' }]}>
-            <Text style={[styles.roleText, { color: colors.tint }]}>Sinh viên</Text>
+            <Text style={[styles.roleText, { color: colors.tint }]}>{profile?.role === 'teacher' ? 'Giảng viên' : (profile?.role === 'admin' ? 'Quản trị viên' : 'Sinh viên')}</Text>
           </View>
         </View>
       </View>
+
 
       {/* Stats */}
       <View style={[styles.statsContainer, { backgroundColor: colors.surface, marginTop: 10 }]}>

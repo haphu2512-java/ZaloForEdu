@@ -1,30 +1,32 @@
-const tintColorLight = '#0068FF'; // Zalo Blue
-const tintColorDark = '#4D94FF';
+const tintColorLight = '#007AFF'; // Brighter soft blue for education
+const educationalGreen = '#34C759'; // Positive color for learning progress
+const softBackground = '#F5F7FA'; // Very soft, friendly background
 
 export default {
   light: {
-    text: '#000000',
-    background: '#F0F2F5', // Soft gray like Zalo/FB
+    text: '#111827',
+    background: softBackground, 
     surface: '#FFFFFF',
     tint: tintColorLight,
-    tabIconDefault: '#8E8E93',
+    tabIconDefault: '#9CA3AF',
     tabIconSelected: tintColorLight,
-    border: '#E5E5EA',
-    muted: '#8A8A8E',
-    success: '#34C759',
-    error: '#FF3B30'
+    border: '#E5E7EB',
+    muted: '#6B7280',
+    success: educationalGreen,
+    error: '#EF4444',
+    secondaryBackground: '#E0F2FE' // light blue for active items
   },
-  dark: {
-    text: '#FFFFFF',
-    background: '#000000',
-    surface: '#1C1C1E',
-    tint: tintColorDark,
-    tabIconDefault: '#8E8E93',
-    tabIconSelected: tintColorDark,
-    border: '#38383A',
-    muted: '#8E8E93',
-    success: '#30D158',
-    error: '#FF453A'
+  dark: { // Making dark mode softer or similar
+    text: '#F9FAFB',
+    background: '#1F2937',
+    surface: '#374151',
+    tint: '#60A5FA',
+    tabIconDefault: '#9CA3AF',
+    tabIconSelected: '#60A5FA',
+    border: '#4B5563',
+    muted: '#9CA3AF',
+    success: '#34D399',
+    error: '#F87171',
+    secondaryBackground: '#1E3A8A'
   },
 };
-

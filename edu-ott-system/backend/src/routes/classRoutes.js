@@ -327,7 +327,7 @@ router.put('/:id', restrictTo('teacher', 'admin'), classController.updateClass);
  *         schema:
  *           type: string
  *     responses:
- *       204:
+ *       200:
  *         description: Xóa thành công
  *       403:
  *         description: Không có quyền

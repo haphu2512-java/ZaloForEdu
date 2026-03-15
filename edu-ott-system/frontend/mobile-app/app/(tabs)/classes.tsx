@@ -4,15 +4,29 @@ import Colors from '@/constants/Colors';
 import { useColorScheme } from '@/components/useColorScheme';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 
-const MOCK_CLASSES = [
-  { id: '1', code: 'INT3110', name: 'Lập trình Web', teacher: 'ThS. Nguyễn Văn A', members: 45, status: 'Active' },
-  { id: '2', code: 'INT3111', name: 'Mạng máy tính', teacher: 'TS. Trần Thị B', members: 50, status: 'Active' },
-  { id: '3', code: 'INT3112', name: 'Hệ điều hành', teacher: 'PGS. TS. Phạm C', members: 60, status: 'Completed' },
-];
+import { useState, useEffect } from 'react';
+import { fetchAPI } from '@/utils/api';
+
 
 export default function ClassesScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const colors = Colors[colorScheme];
+  const [classes, setClasses] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const loadClasses = async () => {
+      try {
+        const res = await fetchAPI('/classes');
+        setClasses(res.data?.classes || res.data || []);
+      } catch (error) {
+        console.log('Failed to fetch classes', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadClasses();
+  }, []);
 
   const renderItem = ({ item }: { item: any }) => (
     <TouchableOpacity style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
@@ -21,7 +35,7 @@ export default function ClassesScreen() {
           <FontAwesome name="graduation-cap" size={20} color={colors.tint} />
         </View>
         <View style={[styles.headerText, { backgroundColor: 'transparent' }]}>
-          <Text style={styles.code}>{item.code}</Text>
+          <Text style={styles.code}>{item.code || item._id}</Text>
           <Text style={styles.name} numberOfLines={1}>{item.name}</Text>
         </View>
       </View>
@@ -31,11 +45,11 @@ export default function ClassesScreen() {
       <View style={[styles.cardFooter, { backgroundColor: 'transparent' }]}>
         <View style={[styles.infoRow, { backgroundColor: 'transparent' }]}>
           <FontAwesome name="user" size={14} color={colors.muted} style={{ marginRight: 5 }} />
-          <Text style={[styles.infoText, { color: colors.muted }]}>{item.teacher}</Text>
+          <Text style={[styles.infoText, { color: colors.muted }]}>{item.teacher?.name || item.teacher || 'Chưa rõ'}</Text>
         </View>
         <View style={[styles.infoRow, { backgroundColor: 'transparent' }]}>
           <FontAwesome name="users" size={14} color={colors.muted} style={{ marginRight: 5 }} />
-          <Text style={[styles.infoText, { color: colors.muted }]}>{item.members} học viên</Text>
+          <Text style={[styles.infoText, { color: colors.muted }]}>{item.members?.length || item.members || 0} học viên</Text>
         </View>
       </View>
     </TouchableOpacity>
@@ -44,10 +58,11 @@ export default function ClassesScreen() {
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <FlatList
-        data={MOCK_CLASSES}
-        keyExtractor={item => item.id}
+        data={classes}
+        keyExtractor={item => item.id || item._id}
         renderItem={renderItem}
         contentContainerStyle={styles.listContainer}
+
       />
     </View>
   );
