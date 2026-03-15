@@ -56,16 +56,14 @@ export async function login(payload: LoginPayload): Promise<AuthResponse> {
 }
 
 /** Đăng ký */
-export async function register(payload: RegisterPayload): Promise<AuthResponse> {
+export async function register(payload: RegisterPayload): Promise<{ success: boolean; message?: string }> {
   const res = await fetchAPI(`${AUTH_ENDPOINT}/register`, {
     method: 'POST',
     body: JSON.stringify(payload),
   });
   
-  if (res.data && res.data.token) {
-    await storeToken(res.data.token);
-  }
-  return { success: true, token: res.data?.token, user: res.data?.user };
+  // API giờ trả về verificationToken ở dev, nhưng mobile chỉ cần biết tạo mới user thành công!
+  return { success: true, message: res.message };
 }
 
 /** Lấy Current User Info (kiểm tra token còn hạn không) */

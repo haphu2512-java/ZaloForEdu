@@ -85,8 +85,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const register = async (payload: RegisterPayload) => {
     const res = await authService.register(payload);
-    if (!res.user) throw new Error(res.message || 'Lỗi đăng ký');
-    setUser(res.user);
+    if (!res.success) throw new Error(res.message || 'Lỗi đăng ký');
+    // Note: Do not `setUser()` here. Mobile flow now strictly requires user to Verify Email 
+    // and manually log in to get the JWT Token, unifying security standard with Web app.
   };
 
   const logout = async () => {

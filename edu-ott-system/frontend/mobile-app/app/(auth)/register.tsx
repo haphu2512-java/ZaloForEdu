@@ -8,10 +8,11 @@ import {
   ScrollView,
   Platform,
   SafeAreaView,
+  ActivityIndicator,
+  Alert
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Link, useRouter } from 'expo-router';
-import { ActivityIndicator } from 'react-native';
 import { useAuth } from '../../context/auth';
 
 export default function RegisterScreen() {
@@ -42,7 +43,11 @@ export default function RegisterScreen() {
     setIsSubmitting(true);
     try {
       await register({ fullName: fullName.trim(), email: email.trim(), password, role });
-      // Đăng ký thành công -> context tự auto xử lý login và chuyển hướng
+      Alert.alert(
+        'Đăng ký thành công', 
+        'Vui lòng kiểm tra Email hoặc liên hệ Admin để xác thực tài khoản trước khi đăng nhập nhé!',
+        [{ text: 'Về Đăng Nhập', onPress: () => router.replace('/(auth)/login' as any) }]
+      );
     } catch (err: any) {
       setErrorMsg(err.message || 'Đăng ký thất bại');
     } finally {
