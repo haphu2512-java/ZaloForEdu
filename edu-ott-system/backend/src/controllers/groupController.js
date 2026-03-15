@@ -59,9 +59,9 @@ exports.updateGroup = asyncHandler(async (req, res, next) => {
 exports.deleteGroup = asyncHandler(async (req, res, next) => {
   await groupService.deleteGroup(req.params.id, req.user);
 
-  res.status(204).json({
+  res.status(200).json({
     status: 'success',
-    data: null,
+    message: 'Group deleted successfully',
   });
 });
 

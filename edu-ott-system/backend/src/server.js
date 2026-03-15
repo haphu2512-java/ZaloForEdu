@@ -83,10 +83,12 @@ app.get('/health', (req, res) => {
   });
 });
 
+// Serve uploaded files
+app.use('/uploads', express.static('uploads'));
+
 // API Routes
 app.use('/api/v1', routes);
 
-// API Documentation
 // API Documentation
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 

@@ -59,9 +59,9 @@ exports.updateClass = asyncHandler(async (req, res, next) => {
 exports.deleteClass = asyncHandler(async (req, res, next) => {
   await classService.deleteClass(req.params.id, req.user);
 
-  res.status(204).json({
+  res.status(200).json({
     status: 'success',
-    data: null,
+    message: 'Class deleted successfully',
   });
 });
 

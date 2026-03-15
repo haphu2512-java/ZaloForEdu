@@ -126,7 +126,7 @@ exports.joinClass = async (classId, userId) => {
   }
 
   // Check if already joined
-  if (classDoc.students.includes(userId)) {
+  if (classDoc.students.some((id) => id.toString() === userId.toString())) {
     throw new AppError('You are already a member of this class', 400);
   }
 
@@ -147,7 +147,7 @@ exports.leaveClass = async (classId, userId) => {
   }
 
   // Check if student is in class
-  const studentIndex = classDoc.students.indexOf(userId);
+  const studentIndex = classDoc.students.findIndex((id) => id.toString() === userId.toString());
   if (studentIndex === -1) {
     throw new AppError('You are not a member of this class', 400);
   }

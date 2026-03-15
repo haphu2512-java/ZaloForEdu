@@ -158,20 +158,6 @@ exports.changePassword = asyncHandler(async (req, res, next) => {
   });
 });
 
-// @desc    Forgot password
-// @route   POST /api/v1/auth/forgot-password
-// @access  Public
-// Keeping this logic here for now or move to service (Simplified for brevity)
-exports.forgotPassword = asyncHandler(async (req, res, next) => {
-  // Logic similar to original but should ideally be in service
-  // For this refactor, I'll keep the original logic structure but simplified call if not moved
-  // Re-implementing simplified version:
-  const user = await User.findOne({ email: req.body.email });
-  if (!user) return next(new AppError('No user found', 404));
-
-  // ... generation logic ...
-  res.status(200).json({ status: 'success', message: 'Not fully implemented in refactor yet' });
-});
 
 // Re-implementing full methods that were complex to ensure no regression IF NOT MOVING TO SERVICE COMPLETELY
 // But wait, I am replacing the WHOLE file.
