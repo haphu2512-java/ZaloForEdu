@@ -1,5 +1,6 @@
 const Message = require('../models/Message');
 const AppError = require('../utils/appError');
+const { parsePagination } = require('../utils/pagination');
 
 exports.getMessages = async (query) => {
   const { roomId, roomModel, page = 1, limit = 50, before } = query;
@@ -19,7 +20,10 @@ exports.getMessages = async (query) => {
     filter.createdAt = { $lt: new Date(before) };
   }
 
-  const skip = (parseInt(page) - 1) * parseInt(limit);
+  const { page: currentPage, limit: currentLimit, skip } = parsePagination(page, limit, {
+    page: 1,
+    limit: 50,
+  });
   const total = await Message.countDocuments(filter);
 
   const messages = await Message.find(filter)
@@ -29,13 +33,13 @@ exports.getMessages = async (query) => {
     .populate('reactions.user', 'fullName avatar')
     .sort({ createdAt: -1 })
     .skip(skip)
-    .limit(parseInt(limit));
+    .limit(currentLimit);
 
   return {
     messages,
     total,
-    page: parseInt(page),
-    totalPages: Math.ceil(total / parseInt(limit)),
+    page: currentPage,
+    totalPages: Math.ceil(total / currentLimit),
   };
 };
 

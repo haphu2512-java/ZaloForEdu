@@ -1,5 +1,6 @@
 const File = require('../models/File');
 const AppError = require('../utils/appError');
+const { parsePagination } = require('../utils/pagination');
 
 // Determine file category from mime type
 const getFileCategory = (mimeType) => {
@@ -66,20 +67,23 @@ exports.getFiles = async (query) => {
   if (roomModel) filter.roomModel = roomModel;
   if (category) filter.category = category;
 
-  const skip = (parseInt(page) - 1) * parseInt(limit);
+  const { page: currentPage, limit: currentLimit, skip } = parsePagination(page, limit, {
+    page: 1,
+    limit: 20,
+  });
   const total = await File.countDocuments(filter);
 
   const files = await File.find(filter)
     .populate('uploadedBy', 'fullName email avatar')
     .sort({ createdAt: -1 })
     .skip(skip)
-    .limit(parseInt(limit));
+    .limit(currentLimit);
 
   return {
     files,
     total,
-    page: parseInt(page),
-    totalPages: Math.ceil(total / parseInt(limit)),
+    page: currentPage,
+    totalPages: Math.ceil(total / currentLimit),
   };
 };
 
