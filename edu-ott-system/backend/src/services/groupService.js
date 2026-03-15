@@ -1,6 +1,7 @@
 const Group = require('../models/Group');
 const Class = require('../models/Class');
 const AppError = require('../utils/appError');
+const { parsePagination } = require('../utils/pagination');
 
 exports.getAllGroups = async (query, user) => {
   const { classId, page = 1, limit = 10 } = query;
@@ -15,7 +16,10 @@ exports.getAllGroups = async (query, user) => {
     filter['members.user'] = user._id;
   }
 
-  const skip = (parseInt(page) - 1) * parseInt(limit);
+  const { page: currentPage, limit: currentLimit, skip } = parsePagination(page, limit, {
+    page: 1,
+    limit: 10,
+  });
   const total = await Group.countDocuments(filter);
 
   const groups = await Group.find(filter)
@@ -24,13 +28,13 @@ exports.getAllGroups = async (query, user) => {
     .populate('members.user', 'fullName email avatar')
     .sort({ createdAt: -1 })
     .skip(skip)
-    .limit(parseInt(limit));
+    .limit(currentLimit);
 
   return {
     groups,
     total,
-    page: parseInt(page),
-    totalPages: Math.ceil(total / parseInt(limit)),
+    page: currentPage,
+    totalPages: Math.ceil(total / currentLimit),
   };
 };
 

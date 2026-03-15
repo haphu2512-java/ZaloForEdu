@@ -1,5 +1,6 @@
 const Class = require('../models/Class');
 const AppError = require('../utils/appError');
+const { parsePagination } = require('../utils/pagination');
 
 exports.getAllClasses = async (query, user) => {
   const { status, subject, search, page = 1, limit = 10 } = query;
@@ -30,20 +31,23 @@ exports.getAllClasses = async (query, user) => {
     filter.teacher = user._id;
   }
 
-  const skip = (parseInt(page) - 1) * parseInt(limit);
+  const { page: currentPage, limit: currentLimit, skip } = parsePagination(page, limit, {
+    page: 1,
+    limit: 10,
+  });
   const total = await Class.countDocuments(filter);
 
   const classes = await Class.find(filter)
     .populate('teacher', 'fullName email avatar')
     .sort({ createdAt: -1 })
     .skip(skip)
-    .limit(parseInt(limit));
+    .limit(currentLimit);
 
   return {
     classes,
     total,
-    page: parseInt(page),
-    totalPages: Math.ceil(total / parseInt(limit)),
+    page: currentPage,
+    totalPages: Math.ceil(total / currentLimit),
   };
 };
 
