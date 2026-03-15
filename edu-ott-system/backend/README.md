@@ -17,6 +17,7 @@ backend/
 │   │   ├── userController.js
 │   │   ├── classController.js
 │   │   ├── groupController.js
+│   │   ├── conversationController.js
 │   │   ├── messageController.js
 │   │   ├── fileController.js
 │   │   └── analyticsController.js
@@ -32,6 +33,7 @@ backend/
 │   │   ├── User.js
 │   │   ├── Class.js
 │   │   ├── Group.js
+│   │   ├── Conversation.js
 │   │   ├── Message.js
 │   │   ├── File.js
 │   │   └── RefreshToken.js
@@ -41,6 +43,7 @@ backend/
 │   │   ├── userRoutes.js
 │   │   ├── classRoutes.js
 │   │   ├── groupRoutes.js
+│   │   ├── conversationRoutes.js
 │   │   ├── messageRoutes.js
 │   │   ├── fileRoutes.js
 │   │   └── analyticsRoutes.js
@@ -155,6 +158,12 @@ http://localhost:5000/api-docs
 | DELETE | `/api/v1/groups/:id` | Xóa nhóm | Creator/Admin |
 | POST | `/api/v1/groups/:id/members` | Thêm thành viên | Private |
 | DELETE | `/api/v1/groups/:id/members/:userId` | Xóa thành viên | Creator/Admin |
+
+### Conversations (2 endpoints)
+| Method | Endpoint | Mô tả | Access |
+|--------|----------|--------|--------|
+| GET | `/api/v1/conversations` | Lấy danh sách hội thoại (gồm cả Lớp và Nhóm) | Private |
+| POST | `/api/v1/conversations` | Tạo hoặc lấy hội thoại riêng với User | Private |
 
 ### Messages (6 endpoints)
 | Method | Endpoint | Mô tả | Access |
@@ -273,6 +282,14 @@ http://localhost:5000/api-docs
 | createdBy | Ref User | Người tạo |
 | maxMembers | Number | Số thành viên tối đa |
 | isActive | Boolean | Trạng thái |
+| lastMessage | Ref Message | Tin nhắn cuối cùng |
+
+### Conversation
+| Field | Type | Description |
+|-------|------|-------------|
+| participants | [Ref User] | Danh sách người tham gia (thường là 2) |
+| lastMessage | Ref Message | Tin nhắn cuối cùng |
+| unreadCount | Map | Đếm số tin nhắn chưa đọc cho từng user |
 
 ### Message
 | Field | Type | Description |

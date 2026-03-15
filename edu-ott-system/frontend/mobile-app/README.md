@@ -9,8 +9,9 @@
 
 ## Cấu trúc thư mục tham khảo
 - `app/`: Chứa các màn hình và định tuyến sử dụng Expo Router.
-- `app/(tabs)/`: Chứa các tab chính của ứng dụng: Nhắn tin, Lớp học, Nhóm, và Cá nhân. Các tab này đều đã được call API thực tế từ backend.
+- `app/(tabs)/`: Chứa các tab chính của ứng dụng: Nhắn tin (hiện tại là danh sách tổng hợp từ `/conversations`), Lớp học, Nhóm, và Cá nhân. Các tab này đều đã được call API thực tế từ backend.
 - `components/`: Các component tái sử dụng.
+- `shared/`: (Liên kết từ `frontend/shared`) Chứa các service và type dùng chung (như `socketService.ts`).
 - `constants/`: Khai báo màu sắc chuẩn và các constant khác.
 - `utils/`: Các hàm tiện ích, trong đó có `api.ts` hỗ trợ gọi API trực tiếp vào Backend (tự động nhận diện thiết bị ảo Android/iOS).
 

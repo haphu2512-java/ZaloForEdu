@@ -84,7 +84,7 @@ Web app sẽ mở tại `http://localhost:3000`
 #### 4.1 Setup chung
 
 ```bash
-cd mobile
+cd frontend/mobile-app
 
 # Cài đặt dependencies
 npm install
@@ -145,28 +145,10 @@ npx react-native run-android
 ```
 edu-ott-system/
 ├── backend/              ← Backend API (chạy trước)
-│   ├── src/
-│   ├── .env
-│   └── package.json
-│
-├── web/                  ← Web App
-│   ├── src/
-│   ├── public/
-│   ├── .env
-│   └── package.json
-│
-├── mobile/               ← Mobile App
-│   ├── src/
-│   ├── ios/
-│   ├── android/
-│   ├── .env
-│   └── package.json
-│
-├── shared/               ← Shared code
-│   ├── constants/
-│   ├── types/
-│   └── utils/
-│
+├── frontend/
+│   ├── mobile-app/       ← Mobile App (React Native + Expo)
+│   └── shared/           ← Shared Frontend Logic (SocketService, Types)
+├── shared/               ← Shared logic toàn hệ thống (Constants)
 └── docker-compose.yml    ← Docker setup
 ```
 
@@ -186,9 +168,9 @@ cd web && npm start
 
 **Terminal 3 - Mobile (optional):**
 ```bash
-cd mobile && npm run ios
+cd frontend/mobile-app && npm run ios
 # hoặc
-cd mobile && npm run android
+cd frontend/mobile-app && npm run android
 ```
 
 ### Cách 2: Sử dụng Docker
