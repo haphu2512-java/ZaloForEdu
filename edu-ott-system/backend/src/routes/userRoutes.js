@@ -95,7 +95,7 @@ router.put('/:id', userController.updateUser);
  *         schema:
  *           type: string
  *     responses:
- *       204:
+ *       200:
  *         description: Xóa thành công
  */
 router.delete('/:id', userController.deleteUser);

@@ -30,7 +30,7 @@ const generateRefreshToken = async (user, ipAddress) => {
 };
 
 exports.register = async (userData) => {
-    const { email, password, fullName } = userData;
+    const { email, password, fullName, role } = userData;
 
     if (await User.findOne({ email })) {
         throw new AppError('Email already registered', 400);
@@ -40,7 +40,7 @@ exports.register = async (userData) => {
         email,
         password,
         fullName,
-        role: 'student',
+        role,
         isEmailVerified: false,
         isActive: true,
     });
