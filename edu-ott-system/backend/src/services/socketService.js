@@ -1,5 +1,8 @@
 const Message = require('../models/Message');
 const User = require('../models/User');
+const Class = require('../models/Class');
+const Group = require('../models/Group');
+const Conversation = require('../models/Conversation');
 
 // Store active connections: userId -> { socketId, user, connectedAt }
 const activeUsers = new Map();
@@ -65,6 +68,20 @@ exports.saveMessage = async (data, userId) => {
     attachments: attachments || [],
     replyTo: replyTo || null,
   });
+
+  // Update last message in the room
+  const updateData = { lastMessage: message._id };
+  try {
+    if (roomModel === 'Class') {
+      await Class.findByIdAndUpdate(roomId, updateData);
+    } else if (roomModel === 'Group') {
+      await Group.findByIdAndUpdate(roomId, updateData);
+    } else if (roomModel === 'Conversation') {
+      await Conversation.findByIdAndUpdate(roomId, updateData);
+    }
+  } catch (err) {
+    console.error(`Failed to update lastMessage for ${roomModel}:`, err.message);
+  }
 
   const populatedMessage = await Message.findById(message._id)
     .populate('sender', 'fullName email avatar')

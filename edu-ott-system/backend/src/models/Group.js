@@ -51,6 +51,10 @@ const groupSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
+    lastMessage: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Message',
+    },
   },
   {
     timestamps: true,
