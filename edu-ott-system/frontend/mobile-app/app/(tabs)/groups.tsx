@@ -75,14 +75,10 @@ export default function GroupsScreen() {
   }, [loadGroups]);
 
   const handleGroupPress = (item: GroupItem) => {
+    // Navigate to group detail screen
     router.push({
-      pathname: '/chat/[id]' as any,
-      params: {
-        id: item._id,
-        name: item.name,
-        avatar: item.avatar || '',
-        roomModel: 'Group',
-      },
+      pathname: '/group/[id]' as any,
+      params: { id: item._id },
     });
   };
 
@@ -250,6 +246,15 @@ export default function GroupsScreen() {
         contentContainerStyle={[styles.listContent, filteredGroups.length === 0 ? { flex: 1 } : {}]}
         showsVerticalScrollIndicator={false}
       />
+
+      {/* FAB - Create Group */}
+      <TouchableOpacity
+        style={styles.fab}
+        onPress={() => router.push('/group/create' as any)}
+        activeOpacity={0.8}
+      >
+        <Ionicons name="add" size={28} color="#fff" />
+      </TouchableOpacity>
     </View>
   );
 }
@@ -338,4 +343,12 @@ const styles = StyleSheet.create({
   emptyIcon: { width: 96, height: 96, borderRadius: 48, alignItems: 'center', justifyContent: 'center', marginBottom: 20 },
   emptyTitle: { fontSize: 20, fontWeight: '700', marginBottom: 8 },
   emptySubtitle: { fontSize: 14, textAlign: 'center', lineHeight: 20 },
+
+  fab: {
+    position: 'absolute', bottom: 24, right: 20,
+    width: 56, height: 56, borderRadius: 28,
+    backgroundColor: '#8B5CF6', alignItems: 'center', justifyContent: 'center',
+    shadowColor: '#8B5CF6', shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.35, shadowRadius: 10, elevation: 8,
+  },
 });

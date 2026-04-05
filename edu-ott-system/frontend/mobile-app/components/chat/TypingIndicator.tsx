@@ -8,9 +8,10 @@ import { View, Text, Animated } from 'react-native';
 interface TypingIndicatorProps {
   userName?: string;
   isVisible: boolean;
+  text?: string;
 }
 
-export const TypingIndicator: React.FC<TypingIndicatorProps> = ({ userName, isVisible }) => {
+export const TypingIndicator: React.FC<TypingIndicatorProps> = ({ userName, isVisible, text }) => {
   const dot1 = useRef(new Animated.Value(0)).current;
   const dot2 = useRef(new Animated.Value(0)).current;
   const dot3 = useRef(new Animated.Value(0)).current;
@@ -73,11 +74,15 @@ export const TypingIndicator: React.FC<TypingIndicatorProps> = ({ userName, isVi
           style={{ transform: [{ translateY: dot3 }] }}
         />
       </View>
-      {userName && (
+      {text ? (
+        <Text className="text-gray-400 text-xs ml-2 italic">
+          {text}
+        </Text>
+      ) : userName ? (
         <Text className="text-gray-400 text-xs ml-2 italic">
           {userName} đang nhập...
         </Text>
-      )}
+      ) : null}
     </View>
   );
 };

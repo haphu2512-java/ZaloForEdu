@@ -6,6 +6,31 @@ exports.getAllUsers = async () => {
   return users;
 };
 
+exports.searchUsers = async (query) => {
+  const { q, role, limit = 20 } = query;
+  if (!q || q.length < 2) {
+    throw new AppError('Search query must be at least 2 characters', 400);
+  }
+
+  const filter = {
+    isActive: true,
+    $or: [
+      { fullName: { $regex: q, $options: 'i' } },
+      { email: { $regex: q, $options: 'i' } },
+      { studentId: { $regex: q, $options: 'i' } },
+    ],
+  };
+
+  if (role) filter.role = role;
+
+  const users = await User.find(filter)
+    .select('fullName email avatar role studentId department')
+    .limit(parseInt(limit))
+    .sort({ fullName: 1 });
+
+  return users;
+};
+
 exports.getUserById = async (userId) => {
   const user = await User.findById(userId).select('-password');
 

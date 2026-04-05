@@ -14,6 +14,19 @@ exports.getAllUsers = asyncHandler(async (req, res, next) => {
   });
 });
 
+// @desc    Search users by name/email
+// @route   GET /api/v1/users/search
+// @access  Private
+exports.searchUsers = asyncHandler(async (req, res, next) => {
+  const users = await userService.searchUsers(req.query);
+
+  res.status(200).json({
+    status: 'success',
+    results: users.length,
+    data: { users },
+  });
+});
+
 // @desc    Get user by ID
 // @route   GET /api/v1/users/:id
 // @access  Private (Admin)

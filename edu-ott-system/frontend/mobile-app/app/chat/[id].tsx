@@ -20,6 +20,7 @@ import { ChatHeader } from '@/components/chat/ChatHeader';
 import { TypingIndicator } from '@/components/chat/TypingIndicator';
 import { ReactionPicker } from '@/components/chat/ReactionPicker';
 import { useAuth } from '@/context/auth';
+import { connectSocket, getSocket, joinRoom, leaveRoom, emitTypingStart, emitTypingStop } from '@/utils/socketService';
 
 // ============================================================
 // ChatDetailScreen - Production-ready, tích hợp API backend
@@ -55,6 +56,74 @@ export default function ChatDetailScreen() {
   // Reaction picker state
   const [reactionTarget, setReactionTarget] = useState<Message | null>(null);
   const [showReactionPicker, setShowReactionPicker] = useState(false);
+
+  // Typing state
+  const [typingUsers, setTypingUsers] = useState<Set<string>>(new Set());
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // --- Real-time Socket Connection ---
+  useEffect(() => {
+    let active = true;
+
+    const setupSocket = async () => {
+      if (!id) return;
+      
+      const socket = await connectSocket();
+      if (!socket || !active) return;
+
+      joinRoom(id);
+
+      // Listen for socket events
+      const handleNewMessage = (msg: Message) => {
+        // Prevent duplicate if we sent it (optimistic update sets temp ID, real response updates it, but socket also broadcasts)
+        // Actually, backend broadcasts to `socket.to(roomId)`, so the sender doesn't get `message:new` via this event.
+        setMessages((prev) => {
+          if (prev.some((m) => m._id === msg._id)) return prev;
+          return [...prev, msg];
+        });
+        
+        // Auto scroll to bottom
+        setTimeout(() => {
+          flatListRef.current?.scrollToEnd({ animated: true });
+        }, 100);
+
+        // Mark as read if not from us
+        if (msg.sender?._id !== currentUserId) {
+          messageService.markAsRead(msg._id).catch(() => {});
+        }
+      };
+
+      const handleTypingStart = ({ fullName }: { fullName: string }) => {
+        setTypingUsers((prev) => new Set(prev).add(fullName));
+      };
+
+      const handleTypingStop = ({ fullName }: { fullName: string }) => {
+        setTypingUsers((prev) => {
+          const next = new Set(prev);
+          next.delete(fullName);
+          return next;
+        });
+      };
+
+      socket.on('message:new', handleNewMessage);
+      socket.on('typing:start', handleTypingStart);
+      socket.on('typing:stop', handleTypingStop);
+
+      return () => {
+        socket.off('message:new', handleNewMessage);
+        socket.off('typing:start', handleTypingStart);
+        socket.off('typing:stop', handleTypingStop);
+        leaveRoom(id);
+      };
+    };
+
+    const cleanupPromise = setupSocket();
+
+    return () => {
+      active = false;
+      cleanupPromise.then((cleanup) => cleanup && cleanup());
+    };
+  }, [id, currentUserId]);
 
   // --- Fetch messages ---
   const fetchMessages = useCallback(
@@ -338,7 +407,14 @@ export default function ChatDetailScreen() {
         )}
 
         {/* Typing indicator */}
-        <TypingIndicator isVisible={false} />
+        <TypingIndicator
+          isVisible={typingUsers.size > 0}
+          text={
+            typingUsers.size === 1
+              ? `${Array.from(typingUsers)[0]} đang nhập tin nhắn...`
+              : `${typingUsers.size} người đang nhập tin nhắn...`
+          }
+        />
 
         {/* Message input */}
         <MessageInput
@@ -346,6 +422,15 @@ export default function ChatDetailScreen() {
           replyingTo={replyingTo}
           onCancelReply={() => setReplyingTo(null)}
           disabled={isLoading}
+          onTyping={() => {
+            if (id) {
+              emitTypingStart(id);
+              if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+              typingTimeoutRef.current = setTimeout(() => {
+                emitTypingStop(id);
+              }, 3000);
+            }
+          }}
         />
       </KeyboardAvoidingView>
 

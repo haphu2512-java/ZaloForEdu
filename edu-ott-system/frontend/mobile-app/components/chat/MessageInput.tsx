@@ -16,6 +16,7 @@ interface MessageInputProps {
   replyingTo?: Message | null;
   onCancelReply?: () => void;
   disabled?: boolean;
+  onTyping?: () => void;
 }
 
 export const MessageInput: React.FC<MessageInputProps> = ({
@@ -26,6 +27,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
   replyingTo,
   onCancelReply,
   disabled = false,
+  onTyping,
 }) => {
   const [message, setMessage] = useState('');
   const inputRef = useRef<TextInput>(null);
@@ -80,7 +82,10 @@ export const MessageInput: React.FC<MessageInputProps> = ({
             placeholder="Viết tin nhắn..."
             placeholderTextColor="#9ca3af"
             value={message}
-            onChangeText={setMessage}
+            onChangeText={(t) => {
+              setMessage(t);
+              if (onTyping) onTyping();
+            }}
             multiline
             maxLength={2000}
             editable={!disabled}

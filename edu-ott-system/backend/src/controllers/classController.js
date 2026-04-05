@@ -100,3 +100,15 @@ exports.getClassMembers = asyncHandler(async (req, res, next) => {
     data: members,
   });
 });
+
+// @desc    Add student to class (teacher/admin)
+// @route   POST /api/v1/classes/:id/add-student
+// @access  Private (Teacher/Admin)
+exports.addStudent = asyncHandler(async (req, res, next) => {
+  await classService.joinClass(req.params.id, req.body.userId);
+
+  res.status(200).json({
+    status: 'success',
+    message: 'Student added successfully',
+  });
+});

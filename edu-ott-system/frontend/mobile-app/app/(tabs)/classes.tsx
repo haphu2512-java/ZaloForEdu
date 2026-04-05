@@ -128,7 +128,14 @@ export default function ClassesScreen() {
   };
 
   const handleClassPress = (item: ClassItem) => {
-    // Navigate to chat for this class
+    // Navigate to class detail screen
+    router.push({
+      pathname: '/class/[id]' as any,
+      params: { id: item._id },
+    });
+  };
+
+  const handleClassChat = (item: ClassItem) => {
     router.push({
       pathname: '/chat/[id]' as any,
       params: {
@@ -303,6 +310,17 @@ export default function ClassesScreen() {
         contentContainerStyle={[styles.listContent, classes.length === 0 ? { flex: 1 } : {}]}
         showsVerticalScrollIndicator={false}
       />
+
+      {/* FAB - Create Class (teacher/admin only) */}
+      {isTeacher && (
+        <TouchableOpacity
+          style={styles.fab}
+          onPress={() => router.push('/class/create' as any)}
+          activeOpacity={0.8}
+        >
+          <Ionicons name="add" size={28} color="#fff" />
+        </TouchableOpacity>
+      )}
     </View>
   );
 }
@@ -390,4 +408,12 @@ const styles = StyleSheet.create({
   emptyIcon: { width: 96, height: 96, borderRadius: 48, alignItems: 'center', justifyContent: 'center', marginBottom: 20 },
   emptyTitle: { fontSize: 20, fontWeight: '700', marginBottom: 8 },
   emptySubtitle: { fontSize: 14, textAlign: 'center', lineHeight: 20 },
+
+  fab: {
+    position: 'absolute', bottom: 24, right: 20,
+    width: 56, height: 56, borderRadius: 28,
+    backgroundColor: '#007AFF', alignItems: 'center', justifyContent: 'center',
+    shadowColor: '#007AFF', shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.35, shadowRadius: 10, elevation: 8,
+  },
 });

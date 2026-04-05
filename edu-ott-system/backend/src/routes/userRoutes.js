@@ -4,15 +4,40 @@ const { protect, restrictTo } = require('../middlewares/auth');
 
 const router = express.Router();
 
-// router.use(protect);
-// router.use(restrictTo('admin'));
+// Protect all user routes
+router.use(protect);
 
 /**
  * @swagger
- * tags:
- *   name: Users
- *   description: Quản lý người dùng (Chỉ Admin)
+ * /users/search:
+ *   get:
+ *     summary: Tìm kiếm user theo tên/email
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: q
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Từ khóa tìm kiếm (ít nhất 2 ký tự)
+ *       - in: query
+ *         name: role
+ *         schema:
+ *           type: string
+ *           enum: [student, teacher, admin]
+ *         description: Lọc theo role
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 20
+ *     responses:
+ *       200:
+ *         description: Thành công
  */
+router.get('/search', userController.searchUsers);
 
 /**
  * @swagger
@@ -24,7 +49,7 @@ const router = express.Router();
  *       200:
  *         description: Thành công
  */
-router.get('/', userController.getAllUsers);
+router.get('/', restrictTo('admin'), userController.getAllUsers);
 
 /**
  * @swagger

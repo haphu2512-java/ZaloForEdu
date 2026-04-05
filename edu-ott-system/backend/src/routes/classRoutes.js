@@ -430,4 +430,7 @@ router.post('/:id/leave', classController.leaveClass);
  */
 router.get('/:id/members', classController.getClassMembers);
 
+// Add student to class (teacher/admin only)
+router.post('/:id/add-student', restrictTo('teacher', 'admin'), classController.addStudent);
+
 module.exports = router;
