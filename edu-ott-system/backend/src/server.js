@@ -141,3 +141,4 @@ process.on('SIGTERM', () => {
 });
 
 module.exports = app;
+// Nodemon trigger restart

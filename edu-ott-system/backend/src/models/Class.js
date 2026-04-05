@@ -90,7 +90,6 @@ const classSchema = new mongoose.Schema(
 );
 
 // Indexes
-classSchema.index({ code: 1 });
 classSchema.index({ teacher: 1 });
 classSchema.index({ status: 1 });
 classSchema.index({ students: 1 });
