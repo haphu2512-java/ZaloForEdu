@@ -1,9 +1,13 @@
 import { Platform } from 'react-native';
+import Constants from 'expo-constants';
 
-// Use 10.0.2.2 for Android Emulator to connect to localhost, otherwise use localhost for web/iOS simulator.
-// export const API_BASE_URL = Platform.OS === 'android' ? 'http://10.0.2.2:5000/api/v1' : 'http://localhost:5000/api/v1';
-// export const API_BASE_URL = 'http://localhost:5000/api/v1';
-export const API_BASE_URL = 'http://192.168.1.213:5000/api/v1';
+// Get dynamically the IP address of the Expo bundler, or fallback to the local IP/Emulator
+const hostUri = Constants.expoConfig?.hostUri;
+const localhost = hostUri ? hostUri.split(':')[0] : '192.168.100.39';
+
+export const API_BASE_URL = Platform.OS === 'android' && !hostUri
+  ? 'http://10.0.2.2:5000/api/v1'
+  : `http://${localhost}:5000/api/v1`;
 
 export const fetchAPI = async (endpoint: string, options: RequestInit = {}) => {
   try {

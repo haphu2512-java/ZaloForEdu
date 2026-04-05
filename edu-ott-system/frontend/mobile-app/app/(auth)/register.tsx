@@ -9,7 +9,7 @@ import {
   Platform,
   SafeAreaView,
   ActivityIndicator,
-  Alert
+  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Link, useRouter } from 'expo-router';
@@ -25,13 +25,17 @@ export default function RegisterScreen() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [focusedField, setFocusedField] = useState<string | null>(null);
-  const [role] = useState<'student' | 'teacher' | 'admin'>('student');
+  const [role, setRole] = useState<'student' | 'teacher'>('student');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
   const handleRegister = async () => {
     if (!fullName || !email || !password || !confirmPassword) {
       setErrorMsg('Vui lòng nhập đầy đủ thông tin');
+      return;
+    }
+    if (password.length < 6) {
+      setErrorMsg('Mật khẩu phải có ít nhất 6 ký tự');
       return;
     }
     if (password !== confirmPassword) {
@@ -44,9 +48,19 @@ export default function RegisterScreen() {
     try {
       await register({ fullName: fullName.trim(), email: email.trim(), password, role });
       Alert.alert(
-        'Đăng ký thành công', 
-        'Vui lòng kiểm tra Email hoặc liên hệ Admin để xác thực tài khoản trước khi đăng nhập nhé!',
-        [{ text: 'Về Đăng Nhập', onPress: () => router.replace('/(auth)/login' as any) }]
+        'Đăng ký thành công! 🎉',
+        'Vui lòng xác thực email trước khi đăng nhập.',
+        [
+          {
+            text: 'Xác thực Email',
+            onPress: () => router.push({ pathname: '/(auth)/verify-email' as any, params: { email: email.trim() } }),
+          },
+          {
+            text: 'Về Đăng Nhập',
+            style: 'cancel',
+            onPress: () => router.replace('/(auth)/login' as any),
+          },
+        ]
       );
     } catch (err: any) {
       setErrorMsg(err.message || 'Đăng ký thất bại');
@@ -55,138 +69,208 @@ export default function RegisterScreen() {
     }
   };
 
-  const InputField = ({
-    icon,
-    placeholder,
-    value,
-    onChangeText,
-    secureTextEntry,
-    keyboardType,
-    fieldName,
-  }: {
-    icon: keyof typeof Ionicons.glyphMap;
-    placeholder: string;
-    value: string;
-    onChangeText: (text: string) => void;
-    secureTextEntry?: boolean;
-    keyboardType?: 'default' | 'email-address';
-    fieldName: string;
-  }) => (
-    <View
-      className={`flex-row items-center border rounded-2xl px-4 py-3.5 mb-4 bg-gray-50 ${
-        focusedField === fieldName 
-          ? 'border-indigo-500 bg-white ring-4 ring-indigo-100 shadow-sm' 
-          : 'border-gray-200'
-      }`}
-    >
-      <Ionicons
-        name={icon}
-        size={20}
-        color={focusedField === fieldName ? '#6366f1' : '#9ca3af'}
-        className="mr-3"
-      />
-      <TextInput
-        placeholder={placeholder}
-        value={value}
-        onChangeText={onChangeText}
-        secureTextEntry={secureTextEntry && !showPassword}
-        keyboardType={keyboardType}
-        className="flex-1 text-base text-gray-800"
-        placeholderTextColor="#9ca3af"
-        onFocus={() => setFocusedField(fieldName)}
-        onBlur={() => setFocusedField(null)}
-        autoCapitalize="none"
-      />
-      {secureTextEntry && (
-        <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
-          <Ionicons
-            name={showPassword ? 'eye-off-outline' : 'eye-outline'}
-            size={20}
-            color="#9ca3af"
-          />
-        </TouchableOpacity>
-      )}
-    </View>
-  );
+  const getFieldStyle = (fieldName: string) => ({
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    borderWidth: 1,
+    borderColor: focusedField === fieldName ? '#6366F1' : '#E2E8F0',
+    backgroundColor: focusedField === fieldName ? '#fff' : '#F8FAFC',
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    marginBottom: 16,
+  });
 
   return (
-    <SafeAreaView className="flex-1 bg-white">
+    <SafeAreaView style={{ flex: 1, backgroundColor: '#fff' }}>
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        className="flex-1"
+        style={{ flex: 1 }}
       >
         <ScrollView
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{ flexGrow: 1, paddingHorizontal: 24, paddingBottom: 40 }}
         >
-          <View className="mt-12 mb-10">
-            <Text className="text-4xl font-bold text-gray-900 tracking-tight">
-              Create an Account
+          {/* Header */}
+          <View style={{ marginTop: 48, marginBottom: 36 }}>
+            <Text style={{ fontSize: 34, fontWeight: '800', color: '#0F172A', letterSpacing: -0.5 }}>
+              Tạo tài khoản
             </Text>
-            <Text className="text-gray-500 mt-2 text-lg">
-              Start your educational journey with us.
+            <Text style={{ color: '#64748B', marginTop: 8, fontSize: 16, lineHeight: 24 }}>
+              Bắt đầu hành trình học tập cùng Zalo Edu
             </Text>
           </View>
 
           <View>
+            {/* Error Message */}
             {errorMsg ? (
-              <View className="bg-red-50 p-3 rounded-xl border border-red-200 mb-4">
-                <Text className="text-red-500 text-center font-medium">{errorMsg}</Text>
+              <View style={{
+                backgroundColor: '#FEF2F2', padding: 14, borderRadius: 14,
+                borderWidth: 1, borderColor: '#FECACA', marginBottom: 16,
+              }}>
+                <Text style={{ color: '#EF4444', textAlign: 'center', fontWeight: '600' }}>{errorMsg}</Text>
               </View>
             ) : null}
-            <InputField
-              icon="person-outline"
-              placeholder="Full Name"
-              value={fullName}
-              onChangeText={setFullName}
-              fieldName="fullName"
-            />
 
-            <InputField
-              icon="mail-outline"
-              placeholder="Email Address"
-              value={email}
-              onChangeText={setEmail}
-              keyboardType="email-address"
-              fieldName="email"
-            />
+            {/* Role Selector */}
+            <View style={{ flexDirection: 'row', marginBottom: 20, gap: 12 }}>
+              <TouchableOpacity
+                onPress={() => setRole('student')}
+                style={{
+                  flex: 1, paddingVertical: 14, borderRadius: 14, alignItems: 'center',
+                  backgroundColor: role === 'student' ? '#6366F1' : '#F8FAFC',
+                  borderWidth: 1, borderColor: role === 'student' ? '#6366F1' : '#E2E8F0',
+                  flexDirection: 'row', justifyContent: 'center', gap: 8,
+                }}
+              >
+                <Ionicons name="school-outline" size={18} color={role === 'student' ? '#fff' : '#64748B'} />
+                <Text style={{ color: role === 'student' ? '#fff' : '#64748B', fontWeight: '600', fontSize: 15 }}>
+                  Sinh viên
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => setRole('teacher')}
+                style={{
+                  flex: 1, paddingVertical: 14, borderRadius: 14, alignItems: 'center',
+                  backgroundColor: role === 'teacher' ? '#6366F1' : '#F8FAFC',
+                  borderWidth: 1, borderColor: role === 'teacher' ? '#6366F1' : '#E2E8F0',
+                  flexDirection: 'row', justifyContent: 'center', gap: 8,
+                }}
+              >
+                <Ionicons name="people-outline" size={18} color={role === 'teacher' ? '#fff' : '#64748B'} />
+                <Text style={{ color: role === 'teacher' ? '#fff' : '#64748B', fontWeight: '600', fontSize: 15 }}>
+                  Giảng viên
+                </Text>
+              </TouchableOpacity>
+            </View>
 
-            <InputField
-              icon="lock-closed-outline"
-              placeholder="Password"
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry
-              fieldName="password"
-            />
+            {/* Full Name */}
+            <View style={getFieldStyle('fullName')}>
+              <Ionicons
+                name="person-outline" size={20}
+                color={focusedField === 'fullName' ? '#6366F1' : '#94A3B8'}
+              />
+              <TextInput
+                placeholder="Họ và tên"
+                value={fullName}
+                onChangeText={setFullName}
+                style={{ flex: 1, marginLeft: 12, fontSize: 16, color: '#0F172A' }}
+                placeholderTextColor="#94A3B8"
+                onFocus={() => setFocusedField('fullName')}
+                onBlur={() => setFocusedField(null)}
+              />
+            </View>
 
-            <InputField
-              icon="shield-checkmark-outline"
-              placeholder="Confirm Password"
-              value={confirmPassword}
-              onChangeText={setConfirmPassword}
-              secureTextEntry
-              fieldName="confirmPassword"
-            />
+            {/* Email */}
+            <View style={getFieldStyle('email')}>
+              <Ionicons
+                name="mail-outline" size={20}
+                color={focusedField === 'email' ? '#6366F1' : '#94A3B8'}
+              />
+              <TextInput
+                placeholder="Email"
+                value={email}
+                onChangeText={setEmail}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                style={{ flex: 1, marginLeft: 12, fontSize: 16, color: '#0F172A' }}
+                placeholderTextColor="#94A3B8"
+                onFocus={() => setFocusedField('email')}
+                onBlur={() => setFocusedField(null)}
+              />
+            </View>
 
+            {/* Password */}
+            <View style={getFieldStyle('password')}>
+              <Ionicons
+                name="lock-closed-outline" size={20}
+                color={focusedField === 'password' ? '#6366F1' : '#94A3B8'}
+              />
+              <TextInput
+                placeholder="Mật khẩu (ít nhất 6 ký tự)"
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry={!showPassword}
+                style={{ flex: 1, marginLeft: 12, fontSize: 16, color: '#0F172A' }}
+                placeholderTextColor="#94A3B8"
+                onFocus={() => setFocusedField('password')}
+                onBlur={() => setFocusedField(null)}
+              />
+              <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
+                <Ionicons
+                  name={showPassword ? 'eye-off-outline' : 'eye-outline'}
+                  size={20}
+                  color="#94A3B8"
+                />
+              </TouchableOpacity>
+            </View>
+
+            {/* Confirm Password */}
+            <View style={getFieldStyle('confirmPassword')}>
+              <Ionicons
+                name="shield-checkmark-outline" size={20}
+                color={focusedField === 'confirmPassword' ? '#6366F1' : '#94A3B8'}
+              />
+              <TextInput
+                placeholder="Xác nhận mật khẩu"
+                value={confirmPassword}
+                onChangeText={setConfirmPassword}
+                secureTextEntry={!showPassword}
+                style={{ flex: 1, marginLeft: 12, fontSize: 16, color: '#0F172A' }}
+                placeholderTextColor="#94A3B8"
+                onFocus={() => setFocusedField('confirmPassword')}
+                onBlur={() => setFocusedField(null)}
+              />
+            </View>
+
+            {/* Password strength */}
+            <View style={{ marginBottom: 8, marginTop: -8, height: 20 }}>
+              {password.length > 0 && (
+                <View>
+                  <View style={{ flexDirection: 'row', gap: 4, marginBottom: 4 }}>
+                    {[1, 2, 3, 4].map((level) => (
+                      <View
+                        key={level}
+                        style={{
+                          flex: 1, height: 3, borderRadius: 2,
+                          backgroundColor: password.length >= level * 3
+                            ? level <= 1 ? '#EF4444' : level <= 2 ? '#F59E0B' : level <= 3 ? '#3B82F6' : '#10B981'
+                            : '#E2E8F0',
+                        }}
+                      />
+                    ))}
+                  </View>
+                  <Text style={{ color: '#94A3B8', fontSize: 12 }}>
+                    {password.length < 6 ? 'Quá ngắn' : password.length < 8 ? 'Trung bình' : password.length < 12 ? 'Mạnh' : 'Rất mạnh'}
+                  </Text>
+                </View>
+              )}
+            </View>
+
+            {/* Register Button */}
             <TouchableOpacity
               onPress={handleRegister}
               activeOpacity={0.8}
               disabled={isSubmitting}
-              className={`rounded-2xl py-4 mt-6 shadow-xl flex-row justify-center items-center ${isSubmitting ? 'bg-indigo-400 shadow-indigo-100' : 'bg-indigo-600 shadow-indigo-200'}`}
+              style={{
+                backgroundColor: isSubmitting ? '#A5B4FC' : '#6366F1',
+                borderRadius: 16, paddingVertical: 18, marginTop: 16,
+                flexDirection: 'row', justifyContent: 'center', alignItems: 'center',
+                shadowColor: '#6366F1', shadowOffset: { width: 0, height: 10 },
+                shadowOpacity: 0.35, shadowRadius: 16, elevation: 10,
+              }}
             >
-              {isSubmitting ? (
-                <ActivityIndicator color="white" className="mr-2" />
-              ) : null}
-              <Text className="text-white text-center text-lg font-bold">Register</Text>
+              {isSubmitting ? <ActivityIndicator color="white" style={{ marginRight: 8 }} /> : null}
+              <Text style={{ color: '#fff', textAlign: 'center', fontSize: 17, fontWeight: '700' }}>Đăng ký</Text>
             </TouchableOpacity>
           </View>
 
-          <View className="flex-row justify-center mt-auto pt-10">
-            <Text className="text-gray-600 text-base">Already have an account? </Text>
-            <Link href={"/(auth)/login" as any} asChild>
+          {/* Footer */}
+          <View style={{ flexDirection: 'row', justifyContent: 'center', marginTop: 'auto', paddingTop: 32 }}>
+            <Text style={{ color: '#64748B', fontSize: 15 }}>Đã có tài khoản? </Text>
+            <Link href={'/(auth)/login' as any} asChild>
               <TouchableOpacity>
-                <Text className="text-indigo-600 text-base font-bold">Log in</Text>
+                <Text style={{ color: '#6366F1', fontSize: 15, fontWeight: '800' }}>Đăng nhập</Text>
               </TouchableOpacity>
             </Link>
           </View>

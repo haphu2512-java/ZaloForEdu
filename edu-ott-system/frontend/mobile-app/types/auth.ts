@@ -10,10 +10,12 @@ export interface User {
   avatar?: string | null;
   studentId?: string;
   phoneNumber?: string | null;
+  dateOfBirth?: string | null;
   bio?: string;
   department?: string | null;
   isActive: boolean;
   isEmailVerified: boolean;
+  lastLogin?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -35,4 +37,30 @@ export interface RegisterPayload {
   email: string;
   password?: string;
   role: 'student' | 'teacher' | 'admin';
+}
+
+export interface UpdateProfilePayload {
+  fullName?: string;
+  avatar?: string;
+  phoneNumber?: string;
+  dateOfBirth?: string;
+  bio?: string;
+  department?: string;
+}
+
+export interface ChangePasswordPayload {
+  currentPassword: string;
+  newPassword: string;
+}
+
+export interface ForgotPasswordPayload {
+  email: string;
+}
+
+export interface ResetPasswordPayload {
+  password: string;
+}
+
+export interface VerifyEmailPayload {
+  token: string;
 }

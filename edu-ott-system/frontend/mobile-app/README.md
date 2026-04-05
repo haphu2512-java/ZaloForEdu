@@ -26,6 +26,14 @@
    ```
 3. Nhấn `a` để mở trên Android Emulator, `i` để mở trên iOS Simulator, hoặc quét mã QR qua Expo Go.
 
-## REST API (Đã nâng cấp)
-- Toàn bộ Mock API đã được xóa bỏ.
-- Mobile App kết nối với Backend thông qua IP `http://10.0.2.2:5000` (đối với Android Emulator) hoặc `http://localhost:5000` (đối với môi trường khác).
+## Xác thực (Authentication Flow)
+Ứng dụng đã hoàn thiện luồng xác thực bảo mật chuẩn với Backend:
+- Đăng ký và Xác thực Email bằng Token.
+- Đăng nhập (Tự động cấp và làm mới JWT / Refresh Token qua `AsyncStorage`).
+- Quên mật khẩu và Đặt lại mật khẩu an toàn.
+- Quản lý tài khoản: Cập nhật Profile, thay đổi ảnh đại diện (cho phép chọn preset hoặc URL tùy chỉnh), đổi mật khẩu từ màn hình Cá nhân.
+
+## Cấu hình Mạng (Networking) & API
+1. **Liên kết IP Động (Dynamic IP Binding):** Ứng dụng tích hợp cấu hình tự nhận diện IP thông qua `Constants.expoConfig.hostUri`. Nhờ đó, nếu bạn test trên điện thoại thật bằng phần mềm Expo Go (cùng mạng Wi-Fi), app sẽ **tự động** kết nối về máy tính đang chạy Backend mà không cần sửa IP thủ công.
+2. **Android Emulator fallback:** Nếu chạy bằng Emulator, App sẽ tự điều hướng về `http://10.0.2.2:5000`.
+3. **Tuỳ chỉnh IP Thủ công:** Trong trường hợp môi trường mạng đặc thù không nhận được Expo host, bạn chỉ việc sửa biến IP dự phòng trong file `utils/api.ts` trỏ đúng vào IPv4 của máy tính server (ví dụ `192.168.x.x`).

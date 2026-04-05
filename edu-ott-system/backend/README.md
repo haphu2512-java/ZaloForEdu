@@ -109,6 +109,11 @@ npm start
 http://localhost:5000/api-docs
 ```
 
+## 📧 Dịch vụ Gửi Email (Email Service)
+Hệ thống xác thực (Đăng ký, Quên mật khẩu) yêu cầu gửi email xác thực. Chúng tôi đã xây dựng `emailService.js` sử dụng thư viện **Nodemailer** với hai chế độ:
+- **Chế độ Dev (Mặc định)**: Nếu cấu hình `EMAIL_HOST` trong file `.env` trống, hệ thống sẽ tự động tạo một tài khoản ảo giả lập (*Ethereal Email*). Mỗi khi có Email được gửi đi, Terminal (cửa sổ chạy Node.js) sẽ tự in ra một đường link **TEST EMAIL PREVIEW URL** bắt đầu bằng `https://ethereal.email/message/...`. Bạn click vào link này để đọc Email ngay trên trình duyệt mà không cần tài khoản thật.
+- **Chế độ Production (Real SMTP)**: Điền đầy đủ `EMAIL_HOST`, `EMAIL_PORT`, `EMAIL_USER` và `EMAIL_PASS` (Mật khẩu ứng dụng) vào `.env` (Ví dụ như thiết lập SMTP của Gmail) để hệ thống gửi thư vào hòm mail thực tế của người dùng.
+
 ## API Endpoints (42 endpoints)
 
 > 📖 Chi tiết đầy đủ xem tại Swagger UI: `http://localhost:5000/api-docs`

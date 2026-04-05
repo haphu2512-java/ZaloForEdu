@@ -3,7 +3,7 @@ const crypto = require('crypto');
 const User = require('../models/User');
 const RefreshToken = require('../models/RefreshToken');
 const AppError = require('../utils/appError');
-// const emailService = require('./emailService'); // To be implemented
+const emailService = require('./emailService');
 
 // Helper to generate access token
 const generateAccessToken = (userId) => {
@@ -53,8 +53,29 @@ exports.register = async (userData) => {
     user.emailVerificationExpire = Date.now() + 24 * 60 * 60 * 1000;
     await user.save({ validateBeforeSave: false });
 
-    // TODO: Send verification email
-
+    // Gửi email xác thực
+    try {
+        await emailService({
+            email: user.email,
+            subject: 'Zalo Edu - Xác thực địa chỉ email',
+            html: `
+                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #333;">
+                    <h1 style="color: #2563EB;">Chào mừng bạn đến với Zalo Edu!</h1>
+                    <p>Cảm ơn bạn đã đăng ký tài khoản. Để bảo mật, vui lòng xác thực địa chỉ email của bạn bằng mã dưới đây:</p>
+                    <div style="background-color: #F8FAFC; padding: 20px; text-align: center; border-radius: 12px; margin: 30px 0;">
+                        <h2 style="color: #6366F1; letter-spacing: 6px; margin: 0; font-size: 32px;">${verificationToken}</h2>
+                    </div>
+                    <p style="color: #64748B; font-size: 14px;">Mã này sẽ hết hạn sau 24 giờ. Hãy sao chép và dán vào ứng dụng di động để kích hoạt tài khoản ngay.</p>
+                    <br>
+                    <hr style="border: none; border-top: 1px solid #E2E8F0;"/>
+                    <p style="font-size: 13px; color: #94A3B8;">Trân trọng,<br>Đội ngũ Zalo Edu</p>
+                </div>
+            `,
+            text: `Chào mừng bạn! Mã xác thực của bạn là: ${verificationToken}\n\nMã hết hạn sau 24 giờ.`
+        });
+    } catch (error) {
+        console.error('Failed to send verification email:', error);
+    }
     return { user, verificationToken };
 };
 

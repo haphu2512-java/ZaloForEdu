@@ -1,7 +1,8 @@
 const authService = require('../services/authService');
+const emailService = require('../services/emailService');
 const asyncHandler = require('../utils/asyncHandler');
 const AppError = require('../utils/appError');
-const User = require('../models/User'); // Still needed for some direct queries if any, or strictly use service
+const User = require('../models/User');
 
 // Helper to set cookie
 const setTokenCookie = (res, token) => {
@@ -177,8 +178,32 @@ exports.forgotPassword = asyncHandler(async (req, res, next) => {
   user.resetPasswordExpire = Date.now() + 10 * 60 * 1000;
   await user.save({ validateBeforeSave: false });
 
-  // Send email...
-  res.status(200).json({ status: 'success', message: 'Email sent', resetToken: token }); // Dev
+  // Cung cấp token qua emailService
+  try {
+    await emailService({
+      email: user.email,
+      subject: 'Zalo Edu - Yêu cầu đặt lại mật khẩu',
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #333;">
+            <h2 style="color: #2563EB;">Yêu cầu lấy lại mật khẩu</h2>
+            <p>Bạn nhận được email này vì bạn (hoặc ai đó) đã yêu cầu đặt lại mật khẩu cho tài khoản Zalo Edu.</p>
+            <p>Hãy sao chép mã Token dưới đây để dán vào ứng dụng khôi phục:</p>
+            <div style="background-color: #F8FAFC; padding: 16px; text-align: center; border-radius: 8px; margin: 20px 0;">
+                <h3 style="color: #EF4444; margin: 0; font-size: 24px; letter-spacing: 2px;">${token}</h3>
+            </div>
+            <p>Nếu bạn không yêu cầu thay đổi mật khẩu, vui lòng bỏ qua email này.</p>
+        </div>
+      `,
+      text: `Mã Token đặt lại mật khẩu của bạn là: ${token}`
+    });
+  } catch (error) {
+    user.resetPasswordToken = undefined;
+    user.resetPasswordExpire = undefined;
+    await user.save({ validateBeforeSave: false });
+    return next(new AppError('Không thể gửi email. Vui lòng thử lại sau', 500));
+  }
+
+  res.status(200).json({ status: 'success', message: 'Email sent', resetToken: token }); // Dev mode: return token
 });
 
 exports.resetPassword = asyncHandler(async (req, res, next) => {
@@ -198,7 +223,36 @@ exports.resetPassword = asyncHandler(async (req, res, next) => {
 });
 
 exports.resendVerification = asyncHandler(async (req, res, next) => {
-  // Basic impl
+  const user = await User.findOne({ email: req.body.email });
+  if (!user) return next(new AppError('User not found', 404));
+  if (user.isEmailVerified) return next(new AppError('Email is already verified', 400));
+
+  const crypto = require('crypto');
+  const verificationToken = crypto.randomBytes(32).toString('hex');
+  user.emailVerificationToken = crypto.createHash('sha256').update(verificationToken).digest('hex');
+  user.emailVerificationExpire = Date.now() + 24 * 60 * 60 * 1000;
+  await user.save({ validateBeforeSave: false });
+
+  try {
+    await emailService({
+      email: user.email,
+      subject: 'Zalo Edu - Gửi lại mã xác thực email',
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #333;">
+            <h2 style="color: #2563EB;">Gửi lại Mã Xác Thực</h2>
+            <p>Dưới đây là mã xác thực mới của bạn:</p>
+            <div style="background-color: #F8FAFC; padding: 20px; text-align: center; border-radius: 12px; margin: 30px 0;">
+                <h2 style="color: #6366F1; letter-spacing: 6px; margin: 0; font-size: 32px;">${verificationToken}</h2>
+            </div>
+            <p>Mã này sẽ hết hạn sau 24 giờ. Hãy nhập mã này trên ứng dụng di động để tiếp tục sử dụng.</p>
+        </div>
+      `,
+      text: `Mã xác thực mới ở Zalo Edu của bạn là: ${verificationToken}`
+    });
+  } catch (error) {
+    return next(new AppError('Không thể gửi email. Hãy thử lại', 500));
+  }
+
   res.status(200).json({ status: 'success', message: 'Verification email sent' });
 });
 

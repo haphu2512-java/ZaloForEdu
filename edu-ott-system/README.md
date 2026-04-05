@@ -13,6 +13,7 @@ Dự án được tổ chức theo cấu trúc monorepo để dễ dàng quản 
 - **`docs/`**: Tài liệu thiết kế và hướng dẫn chi tiết.
 
 ## Các tính năng chính
+- 🔐 **Hệ thống Định danh (Authentication):** Luồng đăng ký, đăng nhập bảo mật (JWT Tokens), kích hoạt qua Email thực tế, và quản lý hồ sơ cá nhân đầy đủ dành cho mobile app.
 - 💬 **Hệ thống Chat:** Hỗ trợ chat riêng tư, chat nhóm và chat theo lớp học.
 - 📚 **Quản lý lớp học:** Giảng viên tạo lớp, sinh viên tham gia qua mã code.
 - 📁 **Quản lý tài liệu:** Upload và chia sẻ tài liệu học tập trong từng lớp/nhóm.
