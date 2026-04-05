@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   Alert,
   Text,
+  StyleSheet,
 } from 'react-native';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 
@@ -18,6 +19,7 @@ import { MessageInput } from '@/components/chat/MessageInput';
 import { ChatHeader } from '@/components/chat/ChatHeader';
 import { TypingIndicator } from '@/components/chat/TypingIndicator';
 import { ReactionPicker } from '@/components/chat/ReactionPicker';
+import { useAuth } from '@/context/auth';
 
 // ============================================================
 // ChatDetailScreen - Production-ready, tích hợp API backend
@@ -27,10 +29,9 @@ import { ReactionPicker } from '@/components/chat/ReactionPicker';
 
 const PAGE_SIZE = 30;
 
-// Tạm dùng mock userId cho dev (thực tế lấy từ AuthContext)
-const CURRENT_USER_ID = 'current-user-id';
-
 export default function ChatDetailScreen() {
+  const { user } = useAuth();
+  const currentUserId = user?._id || '';
   const { id, name, avatar, roomModel } = useLocalSearchParams<{
     id: string;
     name: string;
@@ -117,7 +118,7 @@ export default function ChatDetailScreen() {
         _id: `temp-${Date.now()}`,
         content,
         type: 'text',
-        sender: { _id: CURRENT_USER_ID, fullName: 'Tôi' },
+        sender: { _id: currentUserId, fullName: user?.fullName || 'Tôi' },
         room: id,
         roomModel: (roomModel as RoomModel) || 'Conversation',
         attachments: attachments || [],
@@ -168,12 +169,12 @@ export default function ChatDetailScreen() {
         Alert.alert('Lỗi', 'Không thể gửi tin nhắn. Vui lòng thử lại.');
       }
     },
-    [id, roomModel, replyingTo]
+    [id, roomModel, replyingTo, currentUserId, user]
   );
 
   // --- Long press actions ---
   const handleLongPress = useCallback((message: Message) => {
-    const isMyMessage = message.sender?._id === CURRENT_USER_ID;
+    const isMyMessage = message.sender?._id === currentUserId;
 
     const buttons: any[] = [
       {
@@ -211,7 +212,7 @@ export default function ChatDetailScreen() {
     buttons.push({ text: 'Huỷ', style: 'cancel' as const });
 
     Alert.alert('Tuỳ chọn tin nhắn', undefined, buttons);
-  }, []);
+  }, [currentUserId]);
 
   // --- Reaction ---
   const handleReaction = useCallback(
@@ -240,15 +241,15 @@ export default function ChatDetailScreen() {
     ({ viewableItems }: any) => {
       viewableItems?.forEach((item: any) => {
         const msg = item.item as Message;
-        if (msg.sender?._id !== CURRENT_USER_ID) {
-          const alreadyRead = msg.readBy?.some((r) => r.user === CURRENT_USER_ID);
+        if (msg.sender?._id !== currentUserId) {
+          const alreadyRead = msg.readBy?.some((r) => r.user === currentUserId);
           if (!alreadyRead) {
             messageService.markAsRead(msg._id).catch(() => {});
           }
         }
       });
     },
-    []
+    [currentUserId]
   );
 
   // --- Render ---
@@ -256,8 +257,8 @@ export default function ChatDetailScreen() {
     ({ item }: { item: Message }) => (
       <MessageBubble
         message={item}
-        isMe={item.sender?._id === CURRENT_USER_ID}
-        currentUserId={CURRENT_USER_ID}
+        isMe={item.sender?._id === currentUserId}
+        currentUserId={currentUserId}
         onLongPress={handleLongPress}
         onReplyPress={(msg) => setReplyingTo(msg)}
         onReactionPress={(msg) => {
@@ -266,13 +267,13 @@ export default function ChatDetailScreen() {
         }}
       />
     ),
-    [handleLongPress]
+    [handleLongPress, currentUserId]
   );
 
   const renderHeader = () => {
     if (isLoadingMore) {
       return (
-        <View className="py-4 items-center">
+        <View style={styles.loadingMore}>
           <ActivityIndicator size="small" color="#3b82f6" />
         </View>
       );
@@ -281,7 +282,7 @@ export default function ChatDetailScreen() {
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-gray-50">
+    <SafeAreaView style={styles.container}>
       <Stack.Screen options={{ headerShown: false }} />
 
       {/* Custom Header */}
@@ -297,18 +298,23 @@ export default function ChatDetailScreen() {
 
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        className="flex-1"
+        style={styles.flex1}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
       >
         {/* Loading state */}
         {isLoading ? (
-          <View className="flex-1 items-center justify-center">
+          <View style={styles.centerContainer}>
             <ActivityIndicator size="large" color="#3b82f6" />
-            <Text className="text-gray-400 mt-2 text-sm">Đang tải tin nhắn...</Text>
+            <Text style={styles.loadingText}>Đang tải tin nhắn...</Text>
           </View>
         ) : error ? (
-          <View className="flex-1 items-center justify-center px-8">
-            <Text className="text-red-400 text-center">{error}</Text>
+          <View style={styles.centerContainer}>
+            <Text style={styles.errorText}>{error}</Text>
+          </View>
+        ) : messages.length === 0 ? (
+          <View style={styles.centerContainer}>
+            <Text style={styles.emptyText}>Chưa có tin nhắn nào</Text>
+            <Text style={styles.emptySubtext}>Hãy gửi tin nhắn đầu tiên!</Text>
           </View>
         ) : (
           <FlatList
@@ -352,9 +358,20 @@ export default function ChatDetailScreen() {
           setReactionTarget(null);
         }}
         currentUserReaction={
-          reactionTarget?.reactions?.find((r) => r.user === CURRENT_USER_ID)?.emoji
+          reactionTarget?.reactions?.find((r) => r.user === currentUserId)?.emoji
         }
       />
     </SafeAreaView>
   );
 }
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: '#F9FAFB' },
+  flex1: { flex: 1 },
+  loadingMore: { paddingVertical: 16, alignItems: 'center' },
+  centerContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 },
+  loadingText: { color: '#9CA3AF', marginTop: 8, fontSize: 14 },
+  errorText: { color: '#EF4444', textAlign: 'center', fontSize: 15 },
+  emptyText: { color: '#6B7280', fontSize: 17, fontWeight: '600', marginBottom: 4 },
+  emptySubtext: { color: '#9CA3AF', fontSize: 14 },
+});

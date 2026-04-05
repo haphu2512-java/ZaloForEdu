@@ -1,5 +1,6 @@
 import { Platform } from 'react-native';
 import Constants from 'expo-constants';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Get dynamically the IP address of the Expo bundler, or fallback to the local IP/Emulator
 const hostUri = Constants.expoConfig?.hostUri;
@@ -17,9 +18,21 @@ export const fetchAPI = async (endpoint: string, options: RequestInit = {}) => {
     const url = `${API_BASE_URL}${endpoint}`;
     console.log(`Fetching: ${url}`);
 
-    // Default headers
+    // Auto-attach auth token if available
+    let authHeader: Record<string, string> = {};
+    try {
+      const token = await AsyncStorage.getItem('authToken');
+      if (token) {
+        authHeader = { Authorization: `Bearer ${token}` };
+      }
+    } catch (_) {
+      // Silently ignore storage errors
+    }
+
+    // Default headers (auth token is added automatically, can be overridden by options.headers)
     const headers = {
       'Content-Type': 'application/json',
+      ...authHeader,
       ...options.headers,
     };
 
@@ -28,7 +41,10 @@ export const fetchAPI = async (endpoint: string, options: RequestInit = {}) => {
     const data = await response.json();
 
     if (!response.ok) {
-      throw new Error(data.message || 'Error executing request');
+      const err: any = new Error(data.message || 'Error executing request');
+      if (data.errorCode) err.errorCode = data.errorCode;
+      if (data.email) err.email = data.email;
+      throw err;
     }
 
     return data;
@@ -39,6 +55,6 @@ export const fetchAPI = async (endpoint: string, options: RequestInit = {}) => {
       throw new Error('Lỗi kết nối tới máy chủ (Timeout). Vui lòng kiểm tra lại mạng hoặc IP backend.');
     }
     console.error(`API Error on ${endpoint}:`, error.message);
-    throw new Error(error.message || 'Lỗi không xác định khi kết nối API');
+    throw error; // Rethrow to preserve custom fields like errorCode
   }
 };

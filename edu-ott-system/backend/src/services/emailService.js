@@ -1,54 +1,85 @@
 const nodemailer = require('nodemailer');
 
-const sendEmail = async (options) => {
-    let transporterConfig;
+const isPlaceholder = (value) => {
+    if (!value) return true;
+    const placeholders = ['your-email', 'your_email', 'your-app-password', 'your_app_password', 'your-password'];
+    return placeholders.some(p => value.toLowerCase().includes(p));
+};
 
-    // Use environment variables if they exist
-    if (process.env.EMAIL_HOST && process.env.EMAIL_USER) {
-        transporterConfig = {
+// Cache the Ethereal test account so we only create it once per server lifetime
+let _cachedTestAccount = null;
+
+const getEtherealTransporter = async () => {
+    if (!_cachedTestAccount) {
+        console.log('⚠️  No valid SMTP config. Creating Ethereal test account (one-time)...');
+        _cachedTestAccount = await nodemailer.createTestAccount();
+        console.log('✅ Ethereal test account ready:', _cachedTestAccount.user);
+    }
+    return nodemailer.createTransport({
+        host: 'smtp.ethereal.email',
+        port: 587,
+        secure: false,
+        auth: {
+            user: _cachedTestAccount.user,
+            pass: _cachedTestAccount.pass,
+        },
+        tls: {
+            rejectUnauthorized: false,
+        },
+    });
+};
+
+const sendEmail = async (options) => {
+    let transporter;
+    let isEthereal = false;
+
+    // Use environment variables if they exist AND are not placeholder values
+    if (
+        process.env.EMAIL_HOST &&
+        process.env.EMAIL_USER &&
+        !isPlaceholder(process.env.EMAIL_USER) &&
+        !isPlaceholder(process.env.EMAIL_PASSWORD || process.env.EMAIL_PASS)
+    ) {
+        transporter = nodemailer.createTransport({
             host: process.env.EMAIL_HOST,
-            port: process.env.EMAIL_PORT || 587,
+            port: parseInt(process.env.EMAIL_PORT, 10) || 587,
+            secure: parseInt(process.env.EMAIL_PORT, 10) === 465,
             auth: {
                 user: process.env.EMAIL_USER,
-                pass: process.env.EMAIL_PASS
-            }
-        };
+                pass: process.env.EMAIL_PASSWORD || process.env.EMAIL_PASS,
+            },
+            tls: {
+                // Allow self-signed certs in development
+                rejectUnauthorized: process.env.NODE_ENV === 'production',
+            },
+        });
     } else {
-        // Fallback: Create a fake testing account using Ethereal if no SMTP provided
-        console.log('No SMTP config found. Generating Ethereal Test Account...');
-        const testAccount = await nodemailer.createTestAccount();
-        transporterConfig = {
-            host: 'smtp.ethereal.email',
-            port: 587,
-            secure: false,
-            auth: {
-                user: testAccount.user,
-                pass: testAccount.pass
-            }
-        };
+        isEthereal = true;
+        transporter = await getEtherealTransporter();
     }
-
-    const transporter = nodemailer.createTransport(transporterConfig);
 
     const message = {
         from: `${process.env.EMAIL_FROM_NAME || 'Zalo Edu App'} <${process.env.EMAIL_FROM || 'noreply@zaloedu.com'}>`,
         to: options.email,
         subject: options.subject,
         text: options.text,
-        html: options.html || options.text
+        html: options.html || options.text,
     };
 
     const info = await transporter.sendMail(message);
+    console.log(`✅ Email sent: ${info.messageId}`);
 
-    console.log(`Email sent: ${info.messageId}`);
-    
-    // Log the preview URL for Ethereal tests so dev can see it in terminal
-    if (!process.env.EMAIL_HOST) {
+    if (isEthereal) {
+        const previewUrl = nodemailer.getTestMessageUrl(info);
         console.log('==================================================');
-        console.log('📧 TEST EMAIL PREVIEW URL:');
-        console.log(nodemailer.getTestMessageUrl(info));
+        console.log('📧 TEST EMAIL PREVIEW URL (Ethereal):');
+        console.log(previewUrl);
         console.log('==================================================');
+        // Return preview URL so callers can surface it in API response (dev mode)
+        info.previewUrl = previewUrl;
     }
+
+    return info;
 };
 
 module.exports = sendEmail;

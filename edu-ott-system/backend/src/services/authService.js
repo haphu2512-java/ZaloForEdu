@@ -87,7 +87,10 @@ exports.login = async (email, password, ipAddress) => {
     }
 
     if (!user.isEmailVerified) {
-        throw new AppError('Please verify your email', 401);
+        const error = new AppError('Tài khoản chưa xác thực email. Vui lòng kiểm tra hộp thư hoặc gửi lại mã xác thực.', 403);
+        error.errorCode = 'EMAIL_NOT_VERIFIED';
+        error.email = email;
+        throw error;
     }
     if (!user.isActive) {
         throw new AppError('Account is deactivated', 401);

@@ -1,17 +1,18 @@
 import React from 'react';
-import FontAwesome from '@expo/vector-icons/FontAwesome';
-import { Link, Tabs } from 'expo-router';
-import { Pressable, View, Text } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { Tabs } from 'expo-router';
+import { View, TouchableOpacity } from 'react-native';
 
 import Colors from '@/constants/Colors';
 import { useColorScheme } from '@/components/useColorScheme';
 import { useClientOnlyValue } from '@/components/useClientOnlyValue';
 
 function TabBarIcon(props: {
-  name: React.ComponentProps<typeof FontAwesome>['name'];
+  name: React.ComponentProps<typeof Ionicons>['name'];
   color: string;
+  size?: number;
 }) {
-  return <FontAwesome size={24} style={{ marginBottom: -3 }} {...props} />;
+  return <Ionicons size={props.size || 24} style={{ marginBottom: -3 }} {...props} />;
 }
 
 export default function TabLayout() {
@@ -26,12 +27,22 @@ export default function TabLayout() {
         tabBarStyle: {
           backgroundColor: colors.surface,
           borderTopColor: colors.border,
+          height: 60,
+          paddingBottom: 8,
+          paddingTop: 4,
+        },
+        tabBarLabelStyle: {
+          fontSize: 11,
+          fontWeight: '600',
         },
         headerStyle: {
           backgroundColor: colors.surface,
+          shadowColor: 'transparent',
+          elevation: 0,
         },
         headerTitleStyle: {
-          fontWeight: 'bold',
+          fontWeight: '700',
+          fontSize: 20,
           color: colors.text,
         },
         headerShown: useClientOnlyValue(false, true),
@@ -40,11 +51,17 @@ export default function TabLayout() {
         name="index"
         options={{
           title: 'Tin nhắn',
-          tabBarIcon: ({ color }) => <TabBarIcon name="comment" color={color} />,
+          tabBarIcon: ({ color, focused }) => (
+            <TabBarIcon name={focused ? 'chatbubbles' : 'chatbubbles-outline'} color={color} />
+          ),
           headerRight: () => (
-            <View style={{ flexDirection: 'row', paddingRight: 15, gap: 15 }}>
-              <FontAwesome name="search" size={20} color={colors.text} />
-              <FontAwesome name="plus" size={20} color={colors.text} />
+            <View style={{ flexDirection: 'row', paddingRight: 16, gap: 18 }}>
+              <TouchableOpacity>
+                <Ionicons name="search-outline" size={22} color={colors.text} />
+              </TouchableOpacity>
+              <TouchableOpacity>
+                <Ionicons name="create-outline" size={22} color={colors.text} />
+              </TouchableOpacity>
             </View>
           ),
         }}
@@ -53,24 +70,29 @@ export default function TabLayout() {
         name="classes"
         options={{
           title: 'Lớp học',
-          tabBarIcon: ({ color }) => <TabBarIcon name="graduation-cap" color={color} />,
+          tabBarIcon: ({ color, focused }) => (
+            <TabBarIcon name={focused ? 'school' : 'school-outline'} color={color} />
+          ),
         }}
       />
       <Tabs.Screen
         name="groups"
         options={{
           title: 'Nhóm',
-          tabBarIcon: ({ color }) => <TabBarIcon name="users" color={color} />,
+          tabBarIcon: ({ color, focused }) => (
+            <TabBarIcon name={focused ? 'people' : 'people-outline'} color={color} />
+          ),
         }}
       />
       <Tabs.Screen
         name="profile"
         options={{
           title: 'Cá nhân',
-          tabBarIcon: ({ color }) => <TabBarIcon name="user" color={color} />,
+          tabBarIcon: ({ color, focused }) => (
+            <TabBarIcon name={focused ? 'person' : 'person-outline'} color={color} />
+          ),
         }}
       />
     </Tabs>
   );
 }
-

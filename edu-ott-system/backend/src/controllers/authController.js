@@ -20,12 +20,18 @@ const setTokenCookie = (res, token) => {
 // @route   POST /api/v1/auth/register
 // @access  Public
 exports.register = asyncHandler(async (req, res, next) => {
-  const { user, verificationToken } = await authService.register(req.body);
+  const { user, verificationToken, emailPreviewUrl } = await authService.register(req.body);
+
+  const responseData = { verificationToken };
+  // Include preview URL in dev mode so testers can check the Ethereal inbox
+  if (process.env.NODE_ENV !== 'production' && emailPreviewUrl) {
+    responseData.emailPreviewUrl = emailPreviewUrl;
+  }
 
   res.status(201).json({
     status: 'success',
     message: 'Registered successfully. Please check your email to verify account.',
-    data: { verificationToken } // Dev only for testing
+    data: responseData
   });
 });
 
@@ -233,8 +239,9 @@ exports.resendVerification = asyncHandler(async (req, res, next) => {
   user.emailVerificationExpire = Date.now() + 24 * 60 * 60 * 1000;
   await user.save({ validateBeforeSave: false });
 
+  let emailPreviewUrl = null;
   try {
-    await emailService({
+    const info = await emailService({
       email: user.email,
       subject: 'Zalo Edu - Gửi lại mã xác thực email',
       html: `
@@ -249,10 +256,19 @@ exports.resendVerification = asyncHandler(async (req, res, next) => {
       `,
       text: `Mã xác thực mới ở Zalo Edu của bạn là: ${verificationToken}`
     });
+    emailPreviewUrl = info.previewUrl || null;
   } catch (error) {
+    console.error('Failed to resend verification email:', error.message || error);
     return next(new AppError('Không thể gửi email. Hãy thử lại', 500));
   }
 
-  res.status(200).json({ status: 'success', message: 'Verification email sent' });
+  const responseData = { message: 'Verification email sent' };
+  // Return token + preview URL in dev so testers can verify without a real inbox
+  if (process.env.NODE_ENV !== 'production') {
+    responseData.verificationToken = verificationToken;
+    if (emailPreviewUrl) responseData.emailPreviewUrl = emailPreviewUrl;
+  }
+
+  res.status(200).json({ status: 'success', ...responseData });
 });
 

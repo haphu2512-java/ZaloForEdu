@@ -35,7 +35,15 @@ export default function LoginScreen() {
       await login({ email: email.trim(), password });
       // Thành công -> context tự auto đá sang /(tabs)
     } catch (err: any) {
-      setErrorMsg(err.message || 'Đăng nhập thất bại');
+      if (err.errorCode === 'EMAIL_NOT_VERIFIED') {
+        setErrorMsg('');
+        router.push({
+          pathname: '/(auth)/verify-email' as any,
+          params: { email: err.email || email.trim() }
+        });
+      } else {
+        setErrorMsg(err.message || 'Đăng nhập thất bại');
+      }
     } finally {
       setIsSubmitting(false);
     }
