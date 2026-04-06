@@ -1,35 +1,56 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from '/vite.svg'
-import './App.css'
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 
-function App() {
-  const [count, setCount] = useState(0)
+// ==========================================
 
+// ==========================================
+// import { useAuthStore } from "./store/authStore";
+// import LoginPage from "./pages/auth/LoginPage";
+// import RegisterPage from "./pages/auth/RegisterPage";
+// import ForgotPasswordPage from "./pages/auth/ForgotPasswordPage";
+// import ResetPasswordPage from "./pages/auth/ResetPasswordPage";
+// import VerifyEmailPage from "./pages/auth/VerifyEmailPage";
+// import MainLayout from "./components/layout/MainLayout";
+// import HomePage from "./pages/home/HomePage";
+// import ChatPage from "./pages/chat/ChatPage";
+// import ClassesPage from "./pages/classes/ClassesPage";
+// import AnalyticsPage from "./pages/analytics/AnalyticsPage";
+// import ChatbotPage from "./pages/chatbot/ChatbotPage";
+
+// ==========================================
+
+// ==========================================
+import ProfilePage from "./users/UserProfile";       
+import UserManagement from "./users/UserManagement"; 
+
+// ==========================================
+
+// ==========================================
+// function PrivateRoute({ children }) {
+//   const { isAuthenticated } = useAuthStore();
+//   return isAuthenticated ? children : <Navigate to="/login" replace />;
+// }
+//
+// function PublicRoute({ children }) {
+//   const { isAuthenticated } = useAuthStore();
+//   return isAuthenticated ? <Navigate to="/chat" replace /> : children;
+// }
+
+export default function App() {
   return (
-    <>
-      <div>
-        <a href="https://vite.dev" target="_blank">
-          <img src={viteLogo} className="logo" alt="Vite logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <h1>Vite + React</h1>
-      <div className="card">
-        <button onClick={() => setCount((count) => count + 1)}>
-          count is {count}
-        </button>
-        <p>
-          Edit <code>src/App.jsx</code> and save to test HMR
-        </p>
-      </div>
-      <p className="read-the-docs">
-        Click on the Vite and React logos to learn more
-      </p>
-    </>
-  )
-}
+    <BrowserRouter>
+      <Routes>
+     
+            
+        {/* Route xem Profile */}
+        <Route path="/profile" element={<ProfilePage />} />
+        
+        {/* Route cho Admin quản lý user */}
+        <Route path="/admin/users" element={<UserManagement />} />
 
-export default App
+        {/* Nếu gõ đường dẫn bậy bạ, tự động đá về trang profile luôn cho nhanh */}
+        <Route path="*" element={<Navigate to="/profile" replace />} />
+        
+      </Routes>
+    </BrowserRouter>
+  );
+}

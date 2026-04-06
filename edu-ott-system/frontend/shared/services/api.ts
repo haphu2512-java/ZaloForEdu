@@ -30,9 +30,10 @@ api.interceptors.response.use(
     (error: AxiosError) => {
         if (error.response?.status === 401) {
             // Unauthorized - clear token and redirect to login
-            localStorage.removeItem('token');
-            localStorage.removeItem('user');
-            window.location.href = '/login';
+            //Khoá tạm để test
+            // localStorage.removeItem('token');
+            // localStorage.removeItem('user');
+            // window.location.href = '/login';
         }
         return Promise.reject(error);
     }
