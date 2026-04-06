@@ -29,8 +29,11 @@ const sendErrorDev = (err, res) => {
     message: err.message,
     stack: err.stack,
   };
+  // Truyền errorCode và email nếu có (dùng cho Brute-force, Email not verified)
   if (err.errorCode) response.errorCode = err.errorCode;
   if (err.email) response.email = err.email;
+  if (err.loginAttempts !== undefined) response.loginAttempts = err.loginAttempts;
+  if (err.lockUntil) response.lockUntil = err.lockUntil;
   res.status(err.statusCode).json(response);
 };
 

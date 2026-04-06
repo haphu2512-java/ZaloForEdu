@@ -42,21 +42,9 @@ app.use(helmet());
 app.use(mongoSanitize());
 app.use(hpp());
 
-// CORS Configuration
+// CORS Configuration (Nâng cấp từ nhóm: check origin cho production)
 const corsOptions = {
-  origin: function (origin, callback) {
-    // Cho phép môi trường Dev hoặc các request không có origin (như Mobile App) qua cổng
-    if (process.env.NODE_ENV !== 'production' || !origin) {
-      callback(null, true);
-    } else {
-      const allowedOrigins = process.env.CORS_ORIGIN?.split(',') || ['http://localhost:3000'];
-      if (allowedOrigins.indexOf(origin) !== -1) {
-        callback(null, true);
-      } else {
-        callback(new Error('Not allowed by CORS'));
-      }
-    }
-  },
+  origin: process.env.CORS_ORIGIN?.split(',') || ['http://localhost:3000'],
   credentials: true,
   optionsSuccessStatus: 200,
 };

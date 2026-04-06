@@ -1,0 +1,241 @@
+.verify-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #f4f6f9;
+  position: relative;
+  overflow: hidden;
+  font-family:
+    "Inter",
+    system-ui,
+    -apple-system,
+    sans-serif;
+}
+
+.verify-bg-circle-1 {
+  position: absolute;
+  top: -10%;
+  left: -10%;
+  width: 50vw;
+  height: 50vw;
+  background: radial-gradient(
+    circle,
+    rgba(0, 104, 255, 0.15) 0%,
+    transparent 70%
+  );
+  filter: blur(60px);
+  z-index: 0;
+}
+
+.verify-bg-circle-2 {
+  position: absolute;
+  bottom: -15%;
+  right: -5%;
+  width: 40vw;
+  height: 40vw;
+  background: radial-gradient(
+    circle,
+    rgba(21, 88, 208, 0.1) 0%,
+    transparent 70%
+  );
+  filter: blur(50px);
+  z-index: 0;
+}
+
+.verify-card {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(255, 255, 255, 1);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.08);
+  border-radius: 24px;
+  padding: 48px;
+  width: 100%;
+  position: relative;
+  z-index: 10;
+  opacity: 0;
+  transform: translateY(20px);
+  transition: all 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.verify-card.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.verify-header {
+  text-align: center;
+  margin-bottom: 32px;
+}
+
+.verify-icon-wrap {
+  width: 64px;
+  height: 64px;
+  background: linear-gradient(135deg, #0068ff, #0050cd);
+  border-radius: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 20px;
+  box-shadow: 0 8px 24px rgba(0, 104, 255, 0.3);
+}
+
+.verify-title {
+  color: #111827;
+  font-size: 26px;
+  font-weight: 700;
+  margin: 0 0 12px;
+  letter-spacing: -0.5px;
+}
+
+.verify-sub {
+  color: #4b5563;
+  font-size: 15px;
+  line-height: 1.6;
+  margin: 0 auto;
+  max-width: 320px;
+}
+
+.verify-email-text {
+  font-weight: 700;
+  color: #111827;
+}
+
+.verify-error-box {
+  background: #fef2f2;
+  border-left: 4px solid #ef4444;
+  color: #b91c1c;
+  padding: 12px 16px;
+  border-radius: 8px;
+  font-size: 14px;
+  margin-bottom: 24px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  animation: shake 0.4s ease;
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-4px); }
+  75% { transform: translateX(4px); }
+}
+
+.otp-container {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 32px;
+}
+
+.otp-input {
+  width: 50px;
+  height: 60px;
+  border: 1px solid #d1d5db;
+  border-radius: 12px;
+  text-align: center;
+  font-size: 24px;
+  font-weight: 700;
+  color: #111827;
+  background: #fff;
+  transition: all 0.2s ease;
+  outline: none;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+}
+
+.otp-input:focus {
+  border-color: #0068ff;
+  box-shadow: 0 0 0 4px rgba(0, 104, 255, 0.15);
+  transform: translateY(-2px);
+}
+
+.otp-input.has-error {
+  border-color: #ef4444;
+  background-color: #fef2f2;
+}
+
+.btn-verify {
+  width: 100%;
+  background: linear-gradient(135deg, #0068ff, #0050cd);
+  color: white;
+  border: none;
+  padding: 16px;
+  border-radius: 14px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 10px;
+  transition: all 0.3s ease;
+  box-shadow: 0 8px 24px rgba(0, 104, 255, 0.25);
+  margin-bottom: 24px;
+}
+
+.btn-verify:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 28px rgba(0, 104, 255, 0.35);
+}
+
+.btn-verify:disabled {
+  background: #9ca3af;
+  cursor: not-allowed;
+  box-shadow: none;
+  transform: none;
+}
+
+.verify-footer {
+  text-align: center;
+  font-size: 14px;
+  color: #6b7280;
+}
+
+.resend-link {
+  color: #0068ff;
+  font-weight: 600;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  font-size: 14px;
+  transition: color 0.2s;
+}
+
+.resend-link:hover:not(:disabled) {
+  color: #0050cd;
+  text-decoration: underline;
+}
+
+.resend-link:disabled {
+  color: #9ca3af;
+  cursor: not-allowed;
+  text-decoration: none;
+}
+
+.resend-timer {
+  font-weight: 700;
+  color: #0068ff;
+}
+
+.verify-copyright {
+  position: absolute;
+  bottom: 24px;
+  text-align: center;
+  width: 100%;
+  font-size: 13px;
+  color: #9ca3af;
+  z-index: 5;
+}
+
+@media (max-width: 480px) {
+  .verify-card {
+    padding: 32px 24px;
+  }
+  .otp-input {
+    width: 42px;
+    height: 52px;
+    font-size: 20px;
+  }
+}

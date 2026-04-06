@@ -66,3 +66,9 @@ web/build/
 .cache/
 temp/
 tmp/
+
+# IDE
+.idea/
+
+# Local scripts
+backend/scripts/seedAdmin.js

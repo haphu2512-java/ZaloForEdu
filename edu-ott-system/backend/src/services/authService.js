@@ -1,178 +1,366 @@
-const jwt = require('jsonwebtoken');
-const crypto = require('crypto');
-const User = require('../models/User');
-const RefreshToken = require('../models/RefreshToken');
-const AppError = require('../utils/appError');
-const emailService = require('./emailService');
+const jwt = require("jsonwebtoken");
+const crypto = require("crypto");
+const User = require("../models/User");
+const RefreshToken = require("../models/RefreshToken");
+const AppError = require("../utils/appError");
+const {
+  sendVerificationEmail,
+  sendResetPasswordEmail,
+  sendPasswordChangedEmail,
+} = require("../utils/emailService");
 
-// Helper to generate access token
+// ── Helper: Sinh Access Token (ngắn hạn) ──
 const generateAccessToken = (userId) => {
-    return jwt.sign({ id: userId }, process.env.JWT_SECRET, {
-        expiresIn: process.env.JWT_EXPIRE || '15m', // Short-lived
-    });
+  return jwt.sign({ id: userId }, process.env.JWT_SECRET, {
+    expiresIn: process.env.JWT_EXPIRE || "7d",
+  });
 };
 
-const hashToken = (token) => crypto.createHash('sha256').update(token).digest('hex');
+// ── Helper: Hash token bằng SHA-256 ──
+const hashToken = (token) =>
+  crypto.createHash("sha256").update(token).digest("hex");
 
-// Helper to generate refresh token
+// ── Helper: Sinh Refresh Token (dài hạn, lưu DB) ──
 const generateRefreshToken = async (user, ipAddress) => {
-    const token = crypto.randomBytes(40).toString('hex');
-    const expires = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days
+  const token = crypto.randomBytes(40).toString("hex");
+  const expires = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 ngày
 
-    const refreshToken = await RefreshToken.create({
-        user: user._id,
-        token: hashToken(token),
-        expires,
-        createdByIp: ipAddress,
-    });
+  await RefreshToken.create({
+    user: user._id,
+    token: hashToken(token),
+    expires,
+    createdByIp: ipAddress,
+  });
 
-    return { refreshToken, token };
+  return token; // Trả về token chưa hash (gửi cho client)
 };
 
-exports.register = async (userData) => {
-    const { email, password, fullName, role } = userData;
+// ══════════════════════════════════════════════════════════════
+// ĐĂNG KÝ - (dùng OTP 6 số)
+// ══════════════════════════════════════════════════════════════
+exports.registerUser = async ({ email, password, fullName }) => {
+  const existingUser = await User.findOne({ email });
+  if (existingUser) {
+    throw new AppError("Email đã được đăng ký", 400);
+  }
 
-    if (await User.findOne({ email })) {
-        throw new AppError('Email already registered', 400);
+  // Ép cứng quyền sinh viên cho đăng ký
+  const user = await User.create({
+    email,
+    password,
+    fullName,
+    role: "student",
+    isEmailVerified: false,
+    isActive: true,
+  });
+
+  // Sinh OTP 6 số
+  const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+
+  user.emailVerificationToken = otpCode;
+  user.emailVerificationExpire = Date.now() + 10 * 60 * 1000; // 10 phút
+  await user.save({ validateBeforeSave: false });
+
+  try {
+    await sendVerificationEmail(user.email, user.fullName, otpCode);
+  } catch (err) {
+    console.error("Failed to send verification email:", err.message);
+  }
+
+  return { email: user.email };
+};
+
+// ══════════════════════════════════════════════════════════════
+// ĐĂNG NHẬP - (Brute-force + RefreshToken + IP audit)
+// ══════════════════════════════════════════════════════════════
+exports.loginUser = async (email, password, ipAddress) => {
+  const user = await User.findOne({ email }).select("+password");
+  if (!user) {
+    throw new AppError("Email hoặc mật khẩu không chính xác", 401);
+  }
+
+  //  Khóa tài khoản 15 phút ──
+  if (user.lockUntil && user.lockUntil > Date.now()) {
+    const minLeft = Math.ceil((user.lockUntil - Date.now()) / (60 * 1000));
+    throw new AppError(
+      `Tài khoản đã bị tạm khóa do nhập sai quá nhiều lần. Vui lòng thử lại sau ${minLeft} phút.`,
+      403,
+      "ACCOUNT_LOCKED",
+      { lockUntil: user.lockUntil },
+    );
+  }
+
+  // Kiểm tra mật khẩu
+  const isPasswordMatch = await user.comparePassword(password);
+
+  if (!isPasswordMatch) {
+    //  Đếm số lần sai
+    user.loginAttempts = (user.loginAttempts || 0) + 1;
+    let message = "Email hoặc mật khẩu không chính xác";
+    let errorCode = "INVALID_CREDENTIALS";
+
+    if (user.loginAttempts >= 5) {
+      user.lockUntil = Date.now() + 15 * 60 * 1000;
+      message =
+        "Tài khoản đã bị tạm khóa 15 phút do nhập sai mật khẩu quá 5 lần.";
+      errorCode = "ACCOUNT_LOCKED_JUST_NOW";
+    } else if (user.loginAttempts >= 3) {
+      message = `Sai mật khẩu. Bạn còn ${5 - user.loginAttempts} lần thử trước khi bị khóa.`;
     }
 
-    const user = await User.create({
-        email,
-        password,
-        fullName,
-        role,
-        isEmailVerified: false,
-        isActive: true,
-    });
-
-    // Generate verification token
-    const verificationToken = crypto.randomBytes(32).toString('hex');
-    const verificationTokenHash = hashToken(verificationToken);
-
-    user.emailVerificationToken = verificationTokenHash;
-    user.emailVerificationExpire = Date.now() + 24 * 60 * 60 * 1000;
     await user.save({ validateBeforeSave: false });
-
-    // Gửi email xác thực
-    try {
-        await emailService({
-            email: user.email,
-            subject: 'Zalo Edu - Xác thực địa chỉ email',
-            html: `
-                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #333;">
-                    <h1 style="color: #2563EB;">Chào mừng bạn đến với Zalo Edu!</h1>
-                    <p>Cảm ơn bạn đã đăng ký tài khoản. Để bảo mật, vui lòng xác thực địa chỉ email của bạn bằng mã dưới đây:</p>
-                    <div style="background-color: #F8FAFC; padding: 20px; text-align: center; border-radius: 12px; margin: 30px 0;">
-                        <h2 style="color: #6366F1; letter-spacing: 6px; margin: 0; font-size: 32px;">${verificationToken}</h2>
-                    </div>
-                    <p style="color: #64748B; font-size: 14px;">Mã này sẽ hết hạn sau 24 giờ. Hãy sao chép và dán vào ứng dụng di động để kích hoạt tài khoản ngay.</p>
-                    <br>
-                    <hr style="border: none; border-top: 1px solid #E2E8F0;"/>
-                    <p style="font-size: 13px; color: #94A3B8;">Trân trọng,<br>Đội ngũ Zalo Edu</p>
-                </div>
-            `,
-            text: `Chào mừng bạn! Mã xác thực của bạn là: ${verificationToken}\n\nMã hết hạn sau 24 giờ.`
-        });
-    } catch (error) {
-        console.error('Failed to send verification email:', error);
-    }
-    return { user, verificationToken };
-};
-
-exports.login = async (email, password, ipAddress) => {
-    const user = await User.findOne({ email }).select('+password');
-
-    if (!user || !(await user.comparePassword(password))) {
-        throw new AppError('Invalid email or password', 401);
-    }
-
-    if (!user.isEmailVerified) {
-        const error = new AppError('Tài khoản chưa xác thực email. Vui lòng kiểm tra hộp thư hoặc gửi lại mã xác thực.', 403);
-        error.errorCode = 'EMAIL_NOT_VERIFIED';
-        error.email = email;
-        throw error;
-    }
-    if (!user.isActive) {
-        throw new AppError('Account is deactivated', 401);
-    }
-
-    const accessToken = generateAccessToken(user._id);
-    const { refreshToken, token: rawRefreshToken } = await generateRefreshToken(user, ipAddress);
-
-    user.lastLogin = new Date();
-    await user.save({ validateBeforeSave: false });
-
-    return {
-        user,
-        accessToken,
-        refreshToken: rawRefreshToken
-    };
-};
-
-exports.logout = async (token, ipAddress) => {
-    // Revoke refresh token associated with the used access token? 
-    // Or just revoke the refresh token sent in body
-    // Since we receive refreshToken usually for logout in this design:
-    if (!token) return;
-
-    const refreshToken = await RefreshToken.findOne({ token: hashToken(token) });
-    if (!refreshToken) return; // Already gone or invalid
-
-    refreshToken.revoked = new Date();
-    refreshToken.revokedByIp = ipAddress;
-    await refreshToken.save();
-};
-
-exports.refreshToken = async (token, ipAddress) => {
-    const refreshToken = await RefreshToken.findOne({ token: hashToken(token) })
-        .populate('user');
-
-    if (!refreshToken || !refreshToken.isActive) {
-        throw new AppError('Invalid refresh token', 401);
-    }
-
-    const { user } = refreshToken;
-
-    if (!user || !user.isActive) {
-        throw new AppError('Account is deactivated', 401);
-    }
-
-    if (!user.isEmailVerified) {
-        throw new AppError('Please verify your email', 401);
-    }
-
-    // Replace old refresh token with new one (Rotation)
-    const { refreshToken: newRefreshToken, token: rawRefreshToken } = await generateRefreshToken(user, ipAddress);
-
-    refreshToken.revoked = new Date();
-    refreshToken.revokedByIp = ipAddress;
-    refreshToken.replacedByToken = newRefreshToken.token;
-    await refreshToken.save();
-
-    const accessToken = generateAccessToken(user._id);
-
-    return {
-        accessToken,
-        refreshToken: rawRefreshToken
-    };
-};
-
-exports.verifyEmail = async (token) => {
-    const verificationTokenHash = hashToken(token);
-
-    const user = await User.findOne({
-        emailVerificationToken: verificationTokenHash,
-        emailVerificationExpire: { $gt: Date.now() }
+    throw new AppError(message, 401, errorCode, {
+      loginAttempts: user.loginAttempts,
     });
+  }
 
-    if (!user) {
-        throw new AppError('Invalid or expired verification token', 400);
-    }
+  // Kiểm tra tài khoản bị vô hiệu hóa
+  if (!user.isActive) {
+    throw new AppError(
+      "Tài khoản đã bị vô hiệu hóa. Vui lòng liên hệ Admin.",
+      401,
+      "ACCOUNT_INACTIVE",
+    );
+  }
 
-    if (user.isEmailVerified) return;
+  // Kiểm tra xác thực email (Admin và Teacher bypass)
+  if (
+    !user.isEmailVerified &&
+    user.role !== "admin" &&
+    user.role !== "teacher"
+  ) {
+    throw new AppError(
+      "Tài khoản chưa được xác thực email. Vui lòng xác thực trước khi đăng nhập.",
+      403,
+      "EMAIL_NOT_VERIFIED",
+      { email: user.email },
+    );
+  }
 
-    user.isEmailVerified = true;
-    user.emailVerificationToken = undefined;
-    user.emailVerificationExpire = undefined;
+  // ──  Sinh Access Token + Refresh Token ──
+  const accessToken = generateAccessToken(user._id);
+  const refreshToken = await generateRefreshToken(user, ipAddress);
+
+  // Reset brute-force counter
+  user.lastLogin = new Date();
+  user.loginAttempts = 0;
+  user.lockUntil = undefined;
+  await user.save({ validateBeforeSave: false });
+
+  return {
+    user,
+    accessToken,
+    refreshToken,
+  };
+};
+
+// ═════════════════════
+// ĐĂNG XUẤT - Logout
+// ════════════════════════════
+exports.logoutUser = async (token, ipAddress) => {
+  if (!token) return;
+
+  const refreshToken = await RefreshToken.findOne({ token: hashToken(token) });
+  if (!refreshToken) return;
+
+  refreshToken.revoked = new Date();
+  refreshToken.revokedByIp = ipAddress;
+  await refreshToken.save();
+};
+
+// ═══════════════
+// LÀM MỚI TOKEN - Refresh (Token Rotation)
+// ═════════════════════════
+exports.refreshUserToken = async (token, ipAddress) => {
+  const refreshToken = await RefreshToken.findOne({
+    token: hashToken(token),
+  }).populate("user");
+
+  if (!refreshToken || !refreshToken.isActive) {
+    throw new AppError("Refresh token không hợp lệ hoặc đã hết hạn", 401);
+  }
+
+  const { user } = refreshToken;
+
+  if (!user || !user.isActive) {
+    throw new AppError("Tài khoản đã bị vô hiệu hóa", 401);
+  }
+
+  // Thu hồi token cũ, cấp token mới
+  const newRawToken = await generateRefreshToken(user, ipAddress);
+
+  refreshToken.revoked = new Date();
+  refreshToken.revokedByIp = ipAddress;
+  refreshToken.replacedByToken = hashToken(newRawToken);
+  await refreshToken.save();
+
+  const accessToken = generateAccessToken(user._id);
+
+  return {
+    accessToken,
+    refreshToken: newRawToken,
+  };
+};
+
+// ════════════════════════
+// XÁC THỰC EMAIL
+// ═══════════════════════
+exports.verifyUserEmail = async (email, otp) => {
+  if (!email || !otp) {
+    throw new AppError("Vui lòng cung cấp email và mã OTP", 400);
+  }
+
+  const user = await User.findOne({
+    email,
+    emailVerificationToken: otp,
+    emailVerificationExpire: { $gt: Date.now() },
+  });
+
+  if (!user) {
+    throw new AppError("Mã xác thực không hợp lệ hoặc đã hết hạn", 400);
+  }
+
+  user.isEmailVerified = true;
+  user.emailVerificationToken = undefined;
+  user.emailVerificationExpire = undefined;
+  user.lastLogin = new Date();
+  await user.save({ validateBeforeSave: false });
+
+  const token = generateAccessToken(user._id);
+
+  return {
+    user: user.getPublicProfile(),
+    token,
+  };
+};
+
+// ══════════════════════════════════════════════════════════════
+// GỬI LẠI OTP - Resend Verification
+// ══════════════════════════════════════════════════════════════
+exports.resendUserVerification = async (email) => {
+  const user = await User.findOne({ email });
+  if (!user) throw new AppError("Không tìm thấy tài khoản với email này", 404);
+  if (user.isEmailVerified)
+    throw new AppError("Tài khoản này đã được xác thực", 400);
+
+  const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+
+  user.emailVerificationToken = otpCode;
+  user.emailVerificationExpire = Date.now() + 10 * 60 * 1000;
+  await user.save({ validateBeforeSave: false });
+
+  try {
+    await sendVerificationEmail(user.email, user.fullName, otpCode);
+  } catch (err) {
+    throw new AppError(
+      "Không thể gửi email lúc này. Vui lòng thử lại sau.",
+      500,
+    );
+  }
+};
+
+// ═══════════════
+// LẤY THÔNG TIN CÁ NHÂN - Get Me
+// ═════════════════════════=
+exports.getMeProfile = async (userId) => {
+  const user = await User.findById(userId);
+  if (!user) throw new AppError("Không tìm thấy người dùng", 404);
+  return user.getPublicProfile();
+};
+
+// ═════════════════
+// CẬP NHẬT HỒ SƠ - Update Profile
+// ════════════════════════
+exports.updateProfileData = async (userId, body) => {
+  const { fullName, avatar, phoneNumber, dateOfBirth, bio, department } = body;
+  const updateData = {
+    fullName,
+    avatar,
+    phoneNumber,
+    dateOfBirth,
+    bio,
+    department,
+  };
+
+  // Lọc bỏ các trường undefined
+  Object.keys(updateData).forEach(
+    (key) => updateData[key] === undefined && delete updateData[key],
+  );
+
+  const user = await User.findByIdAndUpdate(userId, updateData, {
+    new: true,
+    runValidators: true,
+  });
+  return user.getPublicProfile();
+};
+
+// ════════════════════════════
+// ĐỔI MẬT KHẨU - Change Password
+// ═══════════════════════════
+exports.changeUserPassword = async (userId, currentPassword, newPassword) => {
+  const user = await User.findById(userId).select("+password");
+
+  if (!(await user.comparePassword(currentPassword))) {
+    throw new AppError("Mật khẩu hiện tại không chính xác", 401);
+  }
+
+  user.password = newPassword;
+  await user.save();
+
+  return { message: "Đổi mật khẩu thành công" };
+};
+
+// ══════════════════════
+// QUÊN MẬT KHẨU
+//// ═════════
+exports.forgotUserPassword = async (email) => {
+  const user = await User.findOne({ email });
+  if (!user) {
+    throw new AppError("Không tìm thấy tài khoản với email này", 404);
+  }
+
+  // Sinh token ngẫu nhiên rồi hash lưu DB
+  const rawToken = crypto.randomBytes(20).toString("hex");
+  user.resetPasswordToken = hashToken(rawToken);
+  user.resetPasswordExpire = Date.now() + 60 * 60 * 1000; // 1 giờ
+  await user.save({ validateBeforeSave: false });
+
+  try {
+    await sendResetPasswordEmail(user.email, user.fullName, rawToken);
+    console.log(`✅ Reset password email sent to: ${user.email}`);
+  } catch (emailError) {
+    user.resetPasswordToken = undefined;
+    user.resetPasswordExpire = undefined;
     await user.save({ validateBeforeSave: false });
+    throw new AppError("Không thể gửi email. Vui lòng thử lại sau.", 500);
+  }
+};
+
+// ══════════════════════════════════════════════════════════════
+// ĐẶT LẠI MẬT KHẨU - Reset Password
+// ════════════════════════
+exports.resetUserPassword = async (token, newPassword) => {
+  const hashedToken = hashToken(token);
+
+  const user = await User.findOne({
+    resetPasswordToken: hashedToken,
+    resetPasswordExpire: { $gt: Date.now() },
+  });
+
+  if (!user) {
+    throw new AppError("Mã khôi phục không hợp lệ hoặc đã hết hạn", 400);
+  }
+
+  user.password = newPassword;
+  user.resetPasswordToken = undefined;
+  user.resetPasswordExpire = undefined;
+  await user.save();
+
+  try {
+    await sendPasswordChangedEmail(user.email, user.fullName);
+  } catch (err) {
+    console.error("Password changed notification email failed:", err.message);
+  }
+
+  return { message: "Đặt lại mật khẩu thành công" };
 };

@@ -1,15 +1,12 @@
 const authService = require('../services/authService');
-const emailService = require('../services/emailService');
 const asyncHandler = require('../utils/asyncHandler');
 const AppError = require('../utils/appError');
-const User = require('../models/User');
 
-// Helper to set cookie
+// ── Helper: Gắn Refresh Token vào Cookie ──
 const setTokenCookie = (res, token) => {
   const cookieOptions = {
-    expires: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days
+    expires: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 ngày
     httpOnly: true,
-    // secure: process.env.NODE_ENV === 'production', // Send only via HTTPS
   };
   if (process.env.NODE_ENV === 'production') cookieOptions.secure = true;
 
@@ -20,18 +17,11 @@ const setTokenCookie = (res, token) => {
 // @route   POST /api/v1/auth/register
 // @access  Public
 exports.register = asyncHandler(async (req, res, next) => {
-  const { user, verificationToken, emailPreviewUrl } = await authService.register(req.body);
-
-  const responseData = { verificationToken };
-  // Include preview URL in dev mode so testers can check the Ethereal inbox
-  if (process.env.NODE_ENV !== 'production' && emailPreviewUrl) {
-    responseData.emailPreviewUrl = emailPreviewUrl;
-  }
-
+  const result = await authService.registerUser(req.body);
   res.status(201).json({
     status: 'success',
-    message: 'Registered successfully. Please check your email to verify account.',
-    data: responseData
+    message: 'Đăng ký thành công. Vui lòng kiểm tra email để xác thực tài khoản.',
+    data: result,
   });
 });
 
@@ -41,9 +31,10 @@ exports.register = asyncHandler(async (req, res, next) => {
 exports.login = asyncHandler(async (req, res, next) => {
   const ipAddress = req.ip;
   const { email, password } = req.body;
+  
+  const { user, accessToken, refreshToken } = await authService.loginUser(email, password, ipAddress);
 
-  const { user, accessToken, refreshToken } = await authService.login(email, password, ipAddress);
-
+  // Gắn refresh token vào cookie
   setTokenCookie(res, refreshToken);
 
   res.status(200).json({
@@ -51,7 +42,7 @@ exports.login = asyncHandler(async (req, res, next) => {
     data: {
       user: user.getPublicProfile(),
       token: accessToken,
-      refreshToken, // Also return in body for mobile/non-cookie clients
+      refreshToken, // Trả cả trong body cho mobile/non-cookie clients
     },
   });
 });
@@ -60,14 +51,12 @@ exports.login = asyncHandler(async (req, res, next) => {
 // @route   POST /api/v1/auth/logout
 // @access  Private
 exports.logout = asyncHandler(async (req, res, next) => {
-  const { refreshToken } = req.body; // Or from cookie
+  const token = req.body.refreshToken || req.cookies?.refreshToken;
   const ipAddress = req.ip;
 
-  // Also check cookie
-  const token = refreshToken || req.cookies?.refreshToken;
+  await authService.logoutUser(token, ipAddress);
 
-  await authService.logout(token, ipAddress);
-
+  // Xóa cookie
   res.cookie('refreshToken', 'none', {
     expires: new Date(Date.now() + 10 * 1000),
     httpOnly: true,
@@ -75,7 +64,45 @@ exports.logout = asyncHandler(async (req, res, next) => {
 
   res.status(200).json({
     status: 'success',
-    message: 'Logged out successfully',
+    message: 'Đăng xuất thành công',
+  });
+});
+
+// @desc    Refresh access token
+// @route   POST /api/v1/auth/refresh
+// @access  Public
+exports.refreshToken = asyncHandler(async (req, res, next) => {
+  const token = req.body.refreshToken || req.cookies?.refreshToken;
+  const ipAddress = req.ip;
+
+  if (!token) {
+    return next(new AppError('No refresh token provided', 400));
+  }
+
+  const { accessToken, refreshToken: newRefreshToken } = await authService.refreshUserToken(token, ipAddress);
+
+  setTokenCookie(res, newRefreshToken);
+
+  res.status(200).json({
+    status: 'success',
+    data: {
+      token: accessToken,
+      refreshToken: newRefreshToken,
+    },
+  });
+});
+
+// @desc    Verify email with OTP
+// @route   POST /api/v1/auth/verify-email
+// @access  Public
+exports.verifyEmail = asyncHandler(async (req, res, next) => {
+  const { email, otp } = req.body;
+  const result = await authService.verifyUserEmail(email, otp);
+
+  res.status(200).json({
+    status: 'success',
+    message: 'Email xác thực thành công',
+    data: result,
   });
 });
 
@@ -118,10 +145,10 @@ exports.verifyEmail = asyncHandler(async (req, res, next) => {
 // @route   GET /api/v1/auth/me
 // @access  Private
 exports.getMe = asyncHandler(async (req, res, next) => {
-  const user = await User.findById(req.user._id);
+  const profile = await authService.getMeProfile(req.user._id);
   res.status(200).json({
     status: 'success',
-    data: { user: user.getPublicProfile() },
+    data: { user: profile },
   });
 });
 
@@ -129,17 +156,10 @@ exports.getMe = asyncHandler(async (req, res, next) => {
 // @route   PUT /api/v1/auth/update-profile
 // @access  Private
 exports.updateProfile = asyncHandler(async (req, res, next) => {
-  const { fullName, avatar, phoneNumber, dateOfBirth, bio, department } = req.body;
-  const updateData = { fullName, avatar, phoneNumber, dateOfBirth, bio, department };
-
-  // Filter undefined
-  Object.keys(updateData).forEach(key => updateData[key] === undefined && delete updateData[key]);
-
-  const user = await User.findByIdAndUpdate(req.user._id, updateData, { new: true, runValidators: true });
-
+  const updatedUser = await authService.updateProfileData(req.user._id, req.body);
   res.status(200).json({
     status: 'success',
-    data: { user: user.getPublicProfile() },
+    data: { user: updatedUser },
   });
 });
 
@@ -148,20 +168,11 @@ exports.updateProfile = asyncHandler(async (req, res, next) => {
 // @access  Private
 exports.changePassword = asyncHandler(async (req, res, next) => {
   const { currentPassword, newPassword } = req.body;
-  const user = await User.findById(req.user._id).select('+password');
-
-  if (!(await user.comparePassword(currentPassword))) {
-    return next(new AppError('Current password is incorrect', 401));
-  }
-
-  user.password = newPassword;
-  await user.save();
-
-  // Create new Access Token (or should we revoke refresh tokens?)
-  // For now just return success
+  const result = await authService.changeUserPassword(req.user._id, currentPassword, newPassword);
   res.status(200).json({
     status: 'success',
     message: 'Password changed successfully',
+    data: result,
   });
 });
 
@@ -174,101 +185,33 @@ exports.changePassword = asyncHandler(async (req, res, next) => {
 // So I must include them here fully.
 
 exports.forgotPassword = asyncHandler(async (req, res, next) => {
-  const user = await User.findOne({ email: req.body.email });
-  if (!user) return next(new AppError('No user found', 404));
-
-  // const resetToken = user.getResetPasswordToken(); // Method not on model yet
-  // Manual for now as I didn't check User model methods for this
-  const token = require('crypto').randomBytes(20).toString('hex');
-  user.resetPasswordToken = require('crypto').createHash('sha256').update(token).digest('hex');
-  user.resetPasswordExpire = Date.now() + 10 * 60 * 1000;
-  await user.save({ validateBeforeSave: false });
-
-  // Cung cấp token qua emailService
-  try {
-    await emailService({
-      email: user.email,
-      subject: 'Zalo Edu - Yêu cầu đặt lại mật khẩu',
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #333;">
-            <h2 style="color: #2563EB;">Yêu cầu lấy lại mật khẩu</h2>
-            <p>Bạn nhận được email này vì bạn (hoặc ai đó) đã yêu cầu đặt lại mật khẩu cho tài khoản Zalo Edu.</p>
-            <p>Hãy sao chép mã Token dưới đây để dán vào ứng dụng khôi phục:</p>
-            <div style="background-color: #F8FAFC; padding: 16px; text-align: center; border-radius: 8px; margin: 20px 0;">
-                <h3 style="color: #EF4444; margin: 0; font-size: 24px; letter-spacing: 2px;">${token}</h3>
-            </div>
-            <p>Nếu bạn không yêu cầu thay đổi mật khẩu, vui lòng bỏ qua email này.</p>
-        </div>
-      `,
-      text: `Mã Token đặt lại mật khẩu của bạn là: ${token}`
-    });
-  } catch (error) {
-    user.resetPasswordToken = undefined;
-    user.resetPasswordExpire = undefined;
-    await user.save({ validateBeforeSave: false });
-    return next(new AppError('Không thể gửi email. Vui lòng thử lại sau', 500));
-  }
-
-  res.status(200).json({ status: 'success', message: 'Email sent', resetToken: token }); // Dev mode: return token
-});
-
-exports.resetPassword = asyncHandler(async (req, res, next) => {
-  const hashedToken = require('crypto').createHash('sha256').update(req.params.token).digest('hex');
-  const user = await User.findOne({
-    resetPasswordToken: hashedToken,
-    resetPasswordExpire: { $gt: Date.now() }
+  await authService.forgotUserPassword(req.body.email);
+  res.status(200).json({
+    status: 'success',
+    message: 'Email đặt lại mật khẩu đã được gửi',
   });
-  if (!user) return next(new AppError('Invalid token', 400));
-
-  user.password = req.body.password;
-  user.resetPasswordToken = undefined;
-  user.resetPasswordExpire = undefined;
-  await user.save();
-
-  res.status(200).json({ status: 'success', message: 'Password reset' });
 });
 
+// @desc    Reset password
+// @route   PUT /api/v1/auth/reset-password/:token
+// @access  Public
+exports.resetPassword = asyncHandler(async (req, res, next) => {
+  const result = await authService.resetUserPassword(req.params.token, req.body.password);
+  res.status(200).json({
+    status: 'success',
+    message: 'Đặt lại mật khẩu thành công',
+    data: result,
+  });
+});
+
+// @desc    Resend OTP email
+// @route   POST /api/v1/auth/resend-verification
+// @access  Public
 exports.resendVerification = asyncHandler(async (req, res, next) => {
-  const user = await User.findOne({ email: req.body.email });
-  if (!user) return next(new AppError('User not found', 404));
-  if (user.isEmailVerified) return next(new AppError('Email is already verified', 400));
-
-  const crypto = require('crypto');
-  const verificationToken = crypto.randomBytes(32).toString('hex');
-  user.emailVerificationToken = crypto.createHash('sha256').update(verificationToken).digest('hex');
-  user.emailVerificationExpire = Date.now() + 24 * 60 * 60 * 1000;
-  await user.save({ validateBeforeSave: false });
-
-  let emailPreviewUrl = null;
-  try {
-    const info = await emailService({
-      email: user.email,
-      subject: 'Zalo Edu - Gửi lại mã xác thực email',
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #333;">
-            <h2 style="color: #2563EB;">Gửi lại Mã Xác Thực</h2>
-            <p>Dưới đây là mã xác thực mới của bạn:</p>
-            <div style="background-color: #F8FAFC; padding: 20px; text-align: center; border-radius: 12px; margin: 30px 0;">
-                <h2 style="color: #6366F1; letter-spacing: 6px; margin: 0; font-size: 32px;">${verificationToken}</h2>
-            </div>
-            <p>Mã này sẽ hết hạn sau 24 giờ. Hãy nhập mã này trên ứng dụng di động để tiếp tục sử dụng.</p>
-        </div>
-      `,
-      text: `Mã xác thực mới ở Zalo Edu của bạn là: ${verificationToken}`
-    });
-    emailPreviewUrl = info.previewUrl || null;
-  } catch (error) {
-    console.error('Failed to resend verification email:', error.message || error);
-    return next(new AppError('Không thể gửi email. Hãy thử lại', 500));
-  }
-
-  const responseData = { message: 'Verification email sent' };
-  // Return token + preview URL in dev so testers can verify without a real inbox
-  if (process.env.NODE_ENV !== 'production') {
-    responseData.verificationToken = verificationToken;
-    if (emailPreviewUrl) responseData.emailPreviewUrl = emailPreviewUrl;
-  }
-
-  res.status(200).json({ status: 'success', ...responseData });
+  await authService.resendUserVerification(req.body.email);
+  res.status(200).json({
+    status: 'success',
+    message: 'Mã xác thực mới đã được gửi đến email của bạn',
+  });
 });
 
