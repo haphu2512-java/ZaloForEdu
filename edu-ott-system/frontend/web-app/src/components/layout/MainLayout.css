@@ -184,7 +184,7 @@
   box-shadow: 0 8px 30px rgba(0, 0, 0, 0.15);
   border: 1px solid #e5e7eb;
   overflow: hidden;
-  z-index: 2000;
+  z-index: 1000; /* ← tăng lên 1000 */
   animation: menuPop 0.15s ease;
 }
 
