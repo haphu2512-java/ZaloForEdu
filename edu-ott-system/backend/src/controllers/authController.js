@@ -1,48 +1,27 @@
-const jwt = require('jsonwebtoken');
-const User = require('../models/User');
-const AppError = require('../utils/appError');
+const authService = require('../services/authService');
 const asyncHandler = require('../utils/asyncHandler');
+const AppError = require('../utils/appError');
 
-// Generate JWT Token
-const generateToken = (id) => {
-  return jwt.sign({ id }, process.env.JWT_SECRET, {
-    expiresIn: process.env.JWT_EXPIRE || '7d',
-  });
+// ── Helper: Gắn Refresh Token vào Cookie ──
+const setTokenCookie = (res, token) => {
+  const cookieOptions = {
+    expires: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 ngày
+    httpOnly: true,
+  };
+  if (process.env.NODE_ENV === 'production') cookieOptions.secure = true;
+
+  res.cookie('refreshToken', token, cookieOptions);
 };
 
 // @desc    Register a new user
 // @route   POST /api/v1/auth/register
 // @access  Public
 exports.register = asyncHandler(async (req, res, next) => {
-  const { email, password, fullName, role } = req.body;
-
-  // Check if user exists
-  const existingUser = await User.findOne({ email });
-  if (existingUser) {
-    return next(new AppError('Email already registered', 400));
-  }
-
-  // Create user
-  const user = await User.create({
-    email,
-    password,
-    fullName,
-    role: role || 'student',
-  });
-
-  // Generate token
-  const token = generateToken(user._id);
-
-  // Update last login
-  user.lastLogin = new Date();
-  await user.save({ validateBeforeSave: false });
-
+  const result = await authService.registerUser(req.body);
   res.status(201).json({
     status: 'success',
-    data: {
-      user: user.getPublicProfile(),
-      token,
-    },
+    message: 'Đăng ký thành công. Vui lòng kiểm tra email để xác thực tài khoản.',
+    data: result,
   });
 });
 
@@ -51,36 +30,19 @@ exports.register = asyncHandler(async (req, res, next) => {
 // @access  Public
 exports.login = asyncHandler(async (req, res, next) => {
   const { email, password } = req.body;
+  const ipAddress = req.ip;
 
-  // Check if user exists and get password field
-  const user = await User.findOne({ email }).select('+password');
-  if (!user) {
-    return next(new AppError('Invalid email or password', 401));
-  }
+  const { user, accessToken, refreshToken } = await authService.loginUser(email, password, ipAddress);
 
-  // Check if password matches
-  const isPasswordMatch = await user.comparePassword(password);
-  if (!isPasswordMatch) {
-    return next(new AppError('Invalid email or password', 401));
-  }
-
-  // Check if account is active
-  if (!user.isActive) {
-    return next(new AppError('Your account has been deactivated. Please contact support.', 401));
-  }
-
-  // Generate token
-  const token = generateToken(user._id);
-
-  // Update last login
-  user.lastLogin = new Date();
-  await user.save({ validateBeforeSave: false });
+  // Gắn refresh token vào cookie
+  setTokenCookie(res, refreshToken);
 
   res.status(200).json({
     status: 'success',
     data: {
       user: user.getPublicProfile(),
-      token,
+      token: accessToken,
+      refreshToken, // Trả cả trong body cho mobile/non-cookie clients
     },
   });
 });
@@ -89,12 +51,58 @@ exports.login = asyncHandler(async (req, res, next) => {
 // @route   POST /api/v1/auth/logout
 // @access  Private
 exports.logout = asyncHandler(async (req, res, next) => {
-  // In a more advanced setup, you might want to blacklist the token
-  // For now, client will just remove the token from storage
-  
+  const token = req.body.refreshToken || req.cookies?.refreshToken;
+  const ipAddress = req.ip;
+
+  await authService.logoutUser(token, ipAddress);
+
+  // Xóa cookie
+  res.cookie('refreshToken', 'none', {
+    expires: new Date(Date.now() + 10 * 1000),
+    httpOnly: true,
+  });
+
   res.status(200).json({
     status: 'success',
-    message: 'Logged out successfully',
+    message: 'Đăng xuất thành công',
+  });
+});
+
+// @desc    Refresh access token
+// @route   POST /api/v1/auth/refresh
+// @access  Public
+exports.refreshToken = asyncHandler(async (req, res, next) => {
+  const token = req.body.refreshToken || req.cookies?.refreshToken;
+  const ipAddress = req.ip;
+
+  if (!token) {
+    return next(new AppError('No refresh token provided', 400));
+  }
+
+  const { accessToken, refreshToken: newRefreshToken } = await authService.refreshUserToken(token, ipAddress);
+
+  setTokenCookie(res, newRefreshToken);
+
+  res.status(200).json({
+    status: 'success',
+    data: {
+      token: accessToken,
+      refreshToken: newRefreshToken,
+    },
+  });
+});
+
+// @desc    Verify email with OTP
+// @route   POST /api/v1/auth/verify-email
+// @access  Public
+exports.verifyEmail = asyncHandler(async (req, res, next) => {
+  const { email, otp } = req.body;
+  const result = await authService.verifyUserEmail(email, otp);
+
+  res.status(200).json({
+    status: 'success',
+    message: 'Email xác thực thành công',
+    data: result,
   });
 });
 
@@ -102,13 +110,10 @@ exports.logout = asyncHandler(async (req, res, next) => {
 // @route   GET /api/v1/auth/me
 // @access  Private
 exports.getMe = asyncHandler(async (req, res, next) => {
-  const user = await User.findById(req.user._id);
-
+  const profile = await authService.getMeProfile(req.user._id);
   res.status(200).json({
     status: 'success',
-    data: {
-      user: user.getPublicProfile(),
-    },
+    data: { user: profile },
   });
 });
 
@@ -116,27 +121,10 @@ exports.getMe = asyncHandler(async (req, res, next) => {
 // @route   PUT /api/v1/auth/update-profile
 // @access  Private
 exports.updateProfile = asyncHandler(async (req, res, next) => {
-  const { fullName, avatar, phoneNumber, dateOfBirth, bio, department } = req.body;
-
-  const updateData = {};
-  if (fullName) updateData.fullName = fullName;
-  if (avatar) updateData.avatar = avatar;
-  if (phoneNumber) updateData.phoneNumber = phoneNumber;
-  if (dateOfBirth) updateData.dateOfBirth = dateOfBirth;
-  if (bio) updateData.bio = bio;
-  if (department) updateData.department = department;
-
-  const user = await User.findByIdAndUpdate(
-    req.user._id,
-    updateData,
-    { new: true, runValidators: true }
-  );
-
+  const updatedUser = await authService.updateProfileData(req.user._id, req.body);
   res.status(200).json({
     status: 'success',
-    data: {
-      user: user.getPublicProfile(),
-    },
+    data: { user: updatedUser },
   });
 });
 
@@ -145,29 +133,11 @@ exports.updateProfile = asyncHandler(async (req, res, next) => {
 // @access  Private
 exports.changePassword = asyncHandler(async (req, res, next) => {
   const { currentPassword, newPassword } = req.body;
-
-  // Get user with password
-  const user = await User.findById(req.user._id).select('+password');
-
-  // Check current password
-  const isMatch = await user.comparePassword(currentPassword);
-  if (!isMatch) {
-    return next(new AppError('Current password is incorrect', 401));
-  }
-
-  // Update password
-  user.password = newPassword;
-  await user.save();
-
-  // Generate new token
-  const token = generateToken(user._id);
-
+  const result = await authService.changeUserPassword(req.user._id, currentPassword, newPassword);
   res.status(200).json({
     status: 'success',
     message: 'Password changed successfully',
-    data: {
-      token,
-    },
+    data: result,
   });
 });
 
@@ -175,34 +145,10 @@ exports.changePassword = asyncHandler(async (req, res, next) => {
 // @route   POST /api/v1/auth/forgot-password
 // @access  Public
 exports.forgotPassword = asyncHandler(async (req, res, next) => {
-  const { email } = req.body;
-
-  const user = await User.findOne({ email });
-  if (!user) {
-    return next(new AppError('No user found with this email', 404));
-  }
-
-  // Generate reset token (in production, send email with reset link)
-  const resetToken = jwt.sign(
-    { id: user._id },
-    process.env.JWT_SECRET,
-    { expiresIn: '1h' }
-  );
-
-  // Save reset token to user (optional, for additional security)
-  user.resetPasswordToken = resetToken;
-  user.resetPasswordExpire = Date.now() + 60 * 60 * 1000; // 1 hour
-  await user.save({ validateBeforeSave: false });
-
-  // TODO: Send email with reset link
-  // const resetUrl = `${process.env.WEB_URL}/reset-password/${resetToken}`;
-  // await sendEmail({ to: user.email, subject: 'Password Reset', resetUrl });
-
+  await authService.forgotUserPassword(req.body.email);
   res.status(200).json({
     status: 'success',
-    message: 'Password reset email sent',
-    // For development only - remove in production
-    resetToken,
+    message: 'Email đặt lại mật khẩu đã được gửi',
   });
 });
 
@@ -210,68 +156,21 @@ exports.forgotPassword = asyncHandler(async (req, res, next) => {
 // @route   PUT /api/v1/auth/reset-password/:token
 // @access  Public
 exports.resetPassword = asyncHandler(async (req, res, next) => {
-  const { token } = req.params;
-  const { password } = req.body;
-
-  try {
-    // Verify token
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-
-    // Find user
-    const user = await User.findOne({
-      _id: decoded.id,
-      resetPasswordToken: token,
-      resetPasswordExpire: { $gt: Date.now() },
-    });
-
-    if (!user) {
-      return next(new AppError('Invalid or expired reset token', 400));
-    }
-
-    // Update password
-    user.password = password;
-    user.resetPasswordToken = undefined;
-    user.resetPasswordExpire = undefined;
-    await user.save();
-
-    // Generate new token
-    const newToken = generateToken(user._id);
-
-    res.status(200).json({
-      status: 'success',
-      message: 'Password reset successful',
-      data: {
-        token: newToken,
-      },
-    });
-  } catch (error) {
-    return next(new AppError('Invalid or expired reset token', 400));
-  }
+  const result = await authService.resetUserPassword(req.params.token, req.body.password);
+  res.status(200).json({
+    status: 'success',
+    message: 'Đặt lại mật khẩu thành công',
+    data: result,
+  });
 });
 
-// @desc    Refresh access token
-// @route   POST /api/v1/auth/refresh
+// @desc    Resend OTP email
+// @route   POST /api/v1/auth/resend-verification
 // @access  Public
-exports.refreshToken = asyncHandler(async (req, res, next) => {
-  // In a more advanced setup, you would use refresh tokens stored in httpOnly cookies
-  // For now, we'll just generate a new token if the old one is still valid
-  
-  const oldToken = req.headers.authorization?.split(' ')[1];
-  if (!oldToken) {
-    return next(new AppError('No token provided', 401));
-  }
-
-  try {
-    const decoded = jwt.verify(oldToken, process.env.JWT_SECRET);
-    const newToken = generateToken(decoded.id);
-
-    res.status(200).json({
-      status: 'success',
-      data: {
-        token: newToken,
-      },
-    });
-  } catch (error) {
-    return next(new AppError('Invalid token', 401));
-  }
+exports.resendVerification = asyncHandler(async (req, res, next) => {
+  await authService.resendUserVerification(req.body.email);
+  res.status(200).json({
+    status: 'success',
+    message: 'Mã xác thực mới đã được gửi đến email của bạn',
+  });
 });

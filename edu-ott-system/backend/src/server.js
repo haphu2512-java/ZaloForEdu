@@ -42,9 +42,20 @@ app.use(helmet());
 app.use(mongoSanitize());
 app.use(hpp());
 
-// CORS Configuration
+// CORS Configuration (Nâng cấp từ nhóm: check origin cho production)
 const corsOptions = {
-  origin: process.env.CORS_ORIGIN?.split(',') || ['http://localhost:3000'],
+  origin: function (origin, callback) {
+    if (process.env.NODE_ENV !== 'production' || !origin) {
+      callback(null, true);
+    } else {
+      const allowedOrigins = process.env.CORS_ORIGIN?.split(',') || ['http://localhost:3000'];
+      if (allowedOrigins.indexOf(origin) !== -1) {
+        callback(null, true);
+      } else {
+        callback(new Error('Not allowed by CORS'));
+      }
+    }
+  },
   credentials: true,
   optionsSuccessStatus: 200,
 };
@@ -53,8 +64,15 @@ app.use(cors(corsOptions));
 // Rate Limiting
 const limiter = rateLimit({
   windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000,
-  max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 100,
-  message: 'Too many requests from this IP, please try again later.',
+  max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 1000,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: (req, res) => {
+    res.status(429).json({
+      status: 'error',
+      message: 'Too many requests from this IP, please try again later.',
+    });
+  },
 });
 app.use('/api', limiter);
 
@@ -83,10 +101,12 @@ app.get('/health', (req, res) => {
   });
 });
 
+// Serve uploaded files
+app.use('/uploads', express.static('uploads'));
+
 // API Routes
 app.use('/api/v1', routes);
 
-// API Documentation
 // API Documentation
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
@@ -103,7 +123,7 @@ app.use(errorHandler);
 
 // Start Server
 const PORT = process.env.PORT || 5000;
-server.listen(PORT, () => {
+server.listen(PORT, '0.0.0.0', () => {
   console.log(`
       Running on port ${PORT}
   `);

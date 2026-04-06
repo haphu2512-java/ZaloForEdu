@@ -28,7 +28,6 @@ const validate = require('../middlewares/validate');
  *               - email
  *               - password
  *               - fullName
- *               - role
  *             properties:
  *               email:
  *                 type: string
@@ -38,9 +37,6 @@ const validate = require('../middlewares/validate');
  *                 minLength: 6
  *               fullName:
  *                 type: string
- *               role:
- *                 type: string
- *                 enum: [student, teacher, admin]
  *     responses:
  *       201:
  *         description: User registered successfully
@@ -53,7 +49,7 @@ router.post(
     body('email').isEmail().normalizeEmail(),
     body('password').isLength({ min: 6 }),
     body('fullName').trim().notEmpty(),
-    body('role').isIn(['student', 'teacher', 'admin']),
+    // role bị ép cứng 'student' trong service, không cho user tự chọn (bảo mật)
   ],
   validate,
   authController.register
@@ -157,6 +153,29 @@ router.put(
   [body('password').isLength({ min: 6 })],
   validate,
   authController.resetPassword
+);
+
+// @route   POST /api/v1/auth/verify-email
+// @desc    Verify email with OTP
+// @access  Public
+router.post(
+  '/verify-email',
+  [
+    body('email').isEmail().normalizeEmail(),
+    body('otp').notEmpty(),
+  ],
+  validate,
+  authController.verifyEmail
+);
+
+// @route   POST /api/v1/auth/resend-verification
+// @desc    Resend OTP to email
+// @access  Public
+router.post(
+  '/resend-verification',
+  [body('email').isEmail().normalizeEmail()],
+  validate,
+  authController.resendVerification
 );
 
 module.exports = router;

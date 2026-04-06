@@ -36,6 +36,11 @@ const userSchema = new mongoose.Schema(
       sparse: true,
       unique: true,
     },
+    teacherId: {
+      type: String,
+      sparse: true,
+      unique: true,
+    },
     phoneNumber: {
       type: String,
       default: null,
@@ -69,6 +74,13 @@ const userSchema = new mongoose.Schema(
     resetPasswordExpire: Date,
     emailVerificationToken: String,
     emailVerificationExpire: Date,
+    loginAttempts: {
+      type: Number,
+      default: 0,
+    },
+    lockUntil: {
+      type: Date,
+    },
   },
   {
     timestamps: true,
@@ -76,9 +88,9 @@ const userSchema = new mongoose.Schema(
     toObject: { virtuals: true },
   }
 );
+// thêm mới field teacherId để dịnh danh gv
 
 // Indexes
-userSchema.index({ email: 1 });
 userSchema.index({ role: 1 });
 userSchema.index({ isActive: 1 });
 
