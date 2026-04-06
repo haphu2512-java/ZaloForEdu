@@ -25,7 +25,6 @@ export default function RegisterScreen() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [focusedField, setFocusedField] = useState<string | null>(null);
-  const [role, setRole] = useState<'student' | 'teacher'>('student');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
@@ -46,7 +45,7 @@ export default function RegisterScreen() {
     setErrorMsg('');
     setIsSubmitting(true);
     try {
-      await register({ fullName: fullName.trim(), email: email.trim(), password, role });
+      await register({ fullName: fullName.trim(), email: email.trim(), password });
       Alert.alert(
         'Đăng ký thành công! 🎉',
         'Vui lòng xác thực email trước khi đăng nhập.',
@@ -111,38 +110,6 @@ export default function RegisterScreen() {
                 <Text style={{ color: '#EF4444', textAlign: 'center', fontWeight: '600' }}>{errorMsg}</Text>
               </View>
             ) : null}
-
-            {/* Role Selector */}
-            <View style={{ flexDirection: 'row', marginBottom: 20, gap: 12 }}>
-              <TouchableOpacity
-                onPress={() => setRole('student')}
-                style={{
-                  flex: 1, paddingVertical: 14, borderRadius: 14, alignItems: 'center',
-                  backgroundColor: role === 'student' ? '#6366F1' : '#F8FAFC',
-                  borderWidth: 1, borderColor: role === 'student' ? '#6366F1' : '#E2E8F0',
-                  flexDirection: 'row', justifyContent: 'center', gap: 8,
-                }}
-              >
-                <Ionicons name="school-outline" size={18} color={role === 'student' ? '#fff' : '#64748B'} />
-                <Text style={{ color: role === 'student' ? '#fff' : '#64748B', fontWeight: '600', fontSize: 15 }}>
-                  Sinh viên
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={() => setRole('teacher')}
-                style={{
-                  flex: 1, paddingVertical: 14, borderRadius: 14, alignItems: 'center',
-                  backgroundColor: role === 'teacher' ? '#6366F1' : '#F8FAFC',
-                  borderWidth: 1, borderColor: role === 'teacher' ? '#6366F1' : '#E2E8F0',
-                  flexDirection: 'row', justifyContent: 'center', gap: 8,
-                }}
-              >
-                <Ionicons name="people-outline" size={18} color={role === 'teacher' ? '#fff' : '#64748B'} />
-                <Text style={{ color: role === 'teacher' ? '#fff' : '#64748B', fontWeight: '600', fontSize: 15 }}>
-                  Giảng viên
-                </Text>
-              </TouchableOpacity>
-            </View>
 
             {/* Full Name */}
             <View style={getFieldStyle('fullName')}>

@@ -1,33 +1,39 @@
-/**
- * Swagger docs + search route  + teacher routes 
- */
 const express = require('express');
 const userController = require('../controllers/userController');
 const { protect, restrictTo } = require('../middlewares/auth');
 
-// Placeholder controller - will be implemented later
-const userController = {
-  getAllUsers: (req, res) => res.json({ message: 'Get all users' }),
-  getUser: (req, res) => res.json({ message: 'Get user by ID' }),
-  updateUser: (req, res) => res.json({ message: 'Update user' }),
-  deleteUser: (req, res) => res.json({ message: 'Delete user' }),
-};
+const router = express.Router();
 
 // All routes require authentication
 router.use(protect);
 
-// @route   GET /api/v1/users
-// @desc    Get all users
+// @route   GET /api/v1/users/search
+// @desc    Search users
 // @access  Private
-router.get('/', userController.getAllUsers);
+router.get('/search', userController.searchUsers);
 
 // @route   GET /api/v1/users/:id
 // @desc    Get user by ID
 // @access  Private
 router.get('/:id', userController.getUser);
 
-// Admin only routes
+// Admin-only routes
 router.use(restrictTo('admin'));
+
+// @route   GET /api/v1/users
+// @desc    Get all users
+// @access  Private (Admin only)
+router.get('/', userController.getAllUsers);
+
+// @route   POST /api/v1/users/teacher
+// @desc    Create teacher account
+// @access  Private (Admin only)
+router.post('/teacher', userController.createTeacher);
+
+// @route   GET /api/v1/users/teachers
+// @desc    Get all teachers
+// @access  Private (Admin only)
+router.get('/teachers', userController.getAllTeachers);
 
 // @route   PUT /api/v1/users/:id
 // @desc    Update user

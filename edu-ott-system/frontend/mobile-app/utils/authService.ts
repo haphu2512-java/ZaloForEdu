@@ -91,9 +91,10 @@ export async function login(payload: LoginPayload): Promise<AuthResponse> {
 
 /** Đăng ký */
 export async function register(payload: RegisterPayload): Promise<{ success: boolean; message?: string; verificationToken?: string }> {
+  const { fullName, email, password } = payload;
   const res = await fetchAPI(`${AUTH_ENDPOINT}/register`, {
     method: 'POST',
-    body: JSON.stringify(payload),
+    body: JSON.stringify({ fullName, email, password }),
   });
 
   return { success: true, message: res.message, verificationToken: res.data?.verificationToken };
@@ -101,11 +102,39 @@ export async function register(payload: RegisterPayload): Promise<{ success: boo
 
 /** Xác thực Email */
 export async function verifyEmail(payload: VerifyEmailPayload): Promise<{ success: boolean; message?: string }> {
-  const res = await fetchAPI(`${AUTH_ENDPOINT}/verify-email`, {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  });
-  return { success: true, message: res.message };
+  const email = payload.email?.trim();
+  const otp = payload.otp?.trim();
+  const token = payload.token?.trim();
+
+  // New backend flow: verify with email + OTP
+  if (email && otp) {
+    try {
+      const res = await fetchAPI(`${AUTH_ENDPOINT}/verify-email`, {
+        method: 'POST',
+        body: JSON.stringify({ email, otp }),
+      });
+      return { success: true, message: res.message };
+    } catch (error: any) {
+      // Backward compatibility with old token-based API
+      const fallbackToken = token || otp;
+      const shouldFallback = fallbackToken && (
+        /token/i.test(error?.message || '') ||
+        /otp/i.test(error?.message || '') ||
+        error?.message === 'Error executing request'
+      );
+      if (!shouldFallback) throw error;
+    }
+  }
+
+  if (token || otp) {
+    const res = await fetchAPI(`${AUTH_ENDPOINT}/verify-email`, {
+      method: 'POST',
+      body: JSON.stringify({ token: token || otp }),
+    });
+    return { success: true, message: res.message };
+  }
+
+  throw new Error('Thiếu thông tin xác thực email');
 }
 
 /** Gửi lại email xác thực */

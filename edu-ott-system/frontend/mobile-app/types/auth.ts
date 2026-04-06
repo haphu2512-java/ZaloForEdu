@@ -35,8 +35,7 @@ export interface LoginPayload {
 export interface RegisterPayload {
   fullName: string;
   email: string;
-  password?: string;
-  role: 'student' | 'teacher' | 'admin';
+  password: string;
 }
 
 export interface UpdateProfilePayload {
@@ -62,5 +61,7 @@ export interface ResetPasswordPayload {
 }
 
 export interface VerifyEmailPayload {
-  token: string;
+  email?: string;
+  otp?: string;
+  token?: string;
 }

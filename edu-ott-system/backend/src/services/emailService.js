@@ -66,20 +66,45 @@ const sendEmail = async (options) => {
         html: options.html || options.text,
     };
 
-    const info = await transporter.sendMail(message);
-    console.log(`✅ Email sent: ${info.messageId}`);
+    try {
+        const info = await transporter.sendMail(message);
+        console.log(`✅ Email sent: ${info.messageId}`);
 
-    if (isEthereal) {
-        const previewUrl = nodemailer.getTestMessageUrl(info);
-        console.log('==================================================');
-        console.log('📧 TEST EMAIL PREVIEW URL (Ethereal):');
-        console.log(previewUrl);
-        console.log('==================================================');
-        // Return preview URL so callers can surface it in API response (dev mode)
-        info.previewUrl = previewUrl;
+        if (isEthereal) {
+            const previewUrl = nodemailer.getTestMessageUrl(info);
+            console.log('==================================================');
+            console.log('📧 TEST EMAIL PREVIEW URL (Ethereal):');
+            console.log(previewUrl);
+            console.log('==================================================');
+            info.previewUrl = previewUrl;
+        }
+
+        return info;
+    } catch (error) {
+        const isAuthError = error && (
+            error.code === 'EAUTH' ||
+            error.responseCode === 535 ||
+            /BadCredentials|Username and Password not accepted/i.test(error.message || '')
+        );
+
+        if (process.env.NODE_ENV !== 'production' && isAuthError && !isEthereal) {
+            console.warn('⚠️  SMTP auth failed. Falling back to Ethereal test mailbox in development.');
+            transporter = await getEtherealTransporter();
+            isEthereal = true;
+
+            const info = await transporter.sendMail(message);
+            console.log(`✅ Email sent (Ethereal fallback): ${info.messageId}`);
+            const previewUrl = nodemailer.getTestMessageUrl(info);
+            console.log('==================================================');
+            console.log('📧 TEST EMAIL PREVIEW URL (Ethereal fallback):');
+            console.log(previewUrl);
+            console.log('==================================================');
+            info.previewUrl = previewUrl;
+            return info;
+        }
+
+        throw error;
     }
-
-    return info;
 };
 
 module.exports = sendEmail;

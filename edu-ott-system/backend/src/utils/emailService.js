@@ -1,20 +1,4 @@
-const nodemailer = require('nodemailer');
-
-/**
- * Tạo transporter cho Nodemailer
- * Hỗ trợ Gmail App Password
- */
-const createTransporter = () => {
-  return nodemailer.createTransport({
-    host: process.env.EMAIL_HOST || 'smtp.gmail.com',
-    port: parseInt(process.env.EMAIL_PORT) || 587,
-    secure: false, // true cho port 465, false cho port 587
-    auth: {
-      user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_PASSWORD, // App Password từ Google
-    },
-  });
-};
+const sendEmail = require('../services/emailService');
 
 /**
  * Gửi email đặt lại mật khẩu
@@ -23,8 +7,6 @@ const createTransporter = () => {
  * @param {string} resetToken - Token đặt lại mật khẩu
  */
 const sendResetPasswordEmail = async (to, fullName, resetToken) => {
-  const transporter = createTransporter();
-
   const webUrl = process.env.WEB_URL || 'http://localhost:3000';
   const resetUrl = `${webUrl}/reset-password/${resetToken}`;
 
@@ -103,15 +85,18 @@ const sendResetPasswordEmail = async (to, fullName, resetToken) => {
     `,
   };
 
-  await transporter.sendMail(mailOptions);
+  await sendEmail({
+    email: to,
+    subject: mailOptions.subject,
+    html: mailOptions.html,
+    text: `Xin chào ${fullName}, truy cập liên kết để đặt lại mật khẩu: ${resetUrl}`,
+  });
 };
 
 /**
  * Gửi email xác nhận đổi mật khẩu thành công
  */
 const sendPasswordChangedEmail = async (to, fullName) => {
-  const transporter = createTransporter();
-
   const mailOptions = {
     from: `"Zalo Edu" <${process.env.EMAIL_FROM || process.env.EMAIL_USER}>`,
     to,
@@ -175,7 +160,12 @@ const sendPasswordChangedEmail = async (to, fullName) => {
     `,
   };
 
-  await transporter.sendMail(mailOptions);
+  await sendEmail({
+    email: to,
+    subject: mailOptions.subject,
+    html: mailOptions.html,
+    text: `Xin chào ${fullName}, mật khẩu tài khoản của bạn đã được thay đổi.`,
+  });
 };
 
 /**
@@ -185,8 +175,6 @@ const sendPasswordChangedEmail = async (to, fullName) => {
  * @param {string} otpCode - Mã OTP 6 số
  */
 const sendVerificationEmail = async (to, fullName, otpCode) => {
-  const transporter = createTransporter();
-
   const mailOptions = {
     from: `"Zalo Edu" <${process.env.EMAIL_FROM || process.env.EMAIL_USER}>`,
     to,
@@ -245,7 +233,12 @@ const sendVerificationEmail = async (to, fullName, otpCode) => {
     `,
   };
 
-  await transporter.sendMail(mailOptions);
+  await sendEmail({
+    email: to,
+    subject: mailOptions.subject,
+    html: mailOptions.html,
+    text: `Xin chào ${fullName}, mã OTP xác thực của bạn là: ${otpCode}`,
+  });
 };
 
 /**
@@ -255,8 +248,6 @@ const sendVerificationEmail = async (to, fullName, otpCode) => {
  * @param {string} tempPassword - Mật khẩu sinh ngẫu nhiên
  */
 const sendTeacherInvitationEmail = async (to, fullName, tempPassword) => {
-  const transporter = createTransporter();
-
   const mailOptions = {
     from: `"Zalo Edu" <${process.env.EMAIL_FROM || process.env.EMAIL_USER}>`,
     to,
@@ -324,7 +315,12 @@ const sendTeacherInvitationEmail = async (to, fullName, tempPassword) => {
     `,
   };
 
-  await transporter.sendMail(mailOptions);
+  await sendEmail({
+    email: to,
+    subject: mailOptions.subject,
+    html: mailOptions.html,
+    text: `Xin chào ${fullName}, tài khoản giảng viên đã được tạo. Mật khẩu tạm thời: ${tempPassword}`,
+  });
 };
 
 module.exports = {

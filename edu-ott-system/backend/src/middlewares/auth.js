@@ -5,9 +5,6 @@ const asyncHandler = require('../utils/asyncHandler');
 
 // Protect routes - verify JWT token
 exports.protect = asyncHandler(async (req, res, next) => {
-  //thêm tạm để test
-  return next();
-  
   let token;
 
   // Check for token in headers

@@ -78,7 +78,6 @@ router.post(
  *       400:
  *         description: Invalid or expired token
  */
-router.post('/verify-email', authController.verifyEmail);
 
 /**
  * @swagger
@@ -104,7 +103,6 @@ router.post('/verify-email', authController.verifyEmail);
  *       404:
  *         description: User not found
  */
-router.post('/resend-verification', authController.resendVerification);
 
 /**
  * @swagger

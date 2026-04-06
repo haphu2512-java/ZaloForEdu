@@ -18,14 +18,14 @@ import * as authService from '../../utils/authService';
 export default function VerifyEmailScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ email?: string }>();
-  const [token, setToken] = useState('');
+  const [otp, setOtp] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isResending, setIsResending] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
 
   const handleVerify = async () => {
-    if (!token.trim()) {
+    if (!otp.trim()) {
       setErrorMsg('Vui lòng nhập mã xác thực');
       return;
     }
@@ -33,7 +33,10 @@ export default function VerifyEmailScreen() {
     setSuccessMsg('');
     setIsSubmitting(true);
     try {
-      await authService.verifyEmail({ token: token.trim() });
+      await authService.verifyEmail({
+        email: params.email?.trim(),
+        otp: otp.trim(),
+      });
       Alert.alert(
         'Xác thực thành công! ✅',
         'Email của bạn đã được xác thực. Bạn có thể đăng nhập ngay bây giờ.',
@@ -120,7 +123,7 @@ export default function VerifyEmailScreen() {
 
             {/* Token Input */}
             <Text style={{ color: '#334155', fontWeight: '600', marginLeft: 4, marginBottom: 8, fontSize: 15 }}>
-              Mã xác thực
+              Mã OTP
             </Text>
             <View style={{
               flexDirection: 'row', alignItems: 'center', backgroundColor: '#F8FAFC',
@@ -129,13 +132,15 @@ export default function VerifyEmailScreen() {
             }}>
               <Ionicons name="key-outline" size={22} color="#64748B" />
               <TextInput
-                placeholder="Dán mã xác thực tại đây"
+                placeholder="Nhập mã OTP 6 số"
                 placeholderTextColor="#94A3B8"
                 style={{ flex: 1, marginLeft: 12, color: '#0F172A', fontSize: 16 }}
                 autoCapitalize="none"
                 autoCorrect={false}
-                value={token}
-                onChangeText={setToken}
+                keyboardType="number-pad"
+                maxLength={6}
+                value={otp}
+                onChangeText={setOtp}
               />
             </View>
 

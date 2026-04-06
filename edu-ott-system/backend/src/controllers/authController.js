@@ -106,45 +106,13 @@ exports.verifyEmail = asyncHandler(async (req, res, next) => {
   });
 });
 
-// @desc    Refresh access token
-// @route   POST /api/v1/auth/refresh
-// @access  Public
-exports.refreshToken = asyncHandler(async (req, res, next) => {
-  const refreshToken = req.body.refreshToken || req.cookies?.refreshToken;
-  const ipAddress = req.ip;
-
-  if (!refreshToken) {
-    return next(new AppError('No refresh token provided', 400));
-  }
-
-  const { accessToken, refreshToken: newRefreshToken } = await authService.refreshToken(refreshToken, ipAddress);
-
-  setTokenCookie(res, newRefreshToken);
-
-  res.status(200).json({
-    status: 'success',
-    data: {
-      token: accessToken,
-      refreshToken: newRefreshToken,
-    },
-  });
-});
-
-// @desc    Verify Email
-// @route   POST /api/v1/auth/verify-email
-// @access  Public
-exports.verifyEmail = asyncHandler(async (req, res, next) => {
-  await authService.verifyEmail(req.body.token);
-  res.status(200).json({
-    status: 'success',
-    message: 'Email verified successfully',
-  });
-});
-
 // @desc    Get current user
 // @route   GET /api/v1/auth/me
 // @access  Private
 exports.getMe = asyncHandler(async (req, res, next) => {
+  if (!req.user || !req.user._id) {
+    return next(new AppError('Bạn chưa đăng nhập hoặc token không hợp lệ', 401));
+  }
   const profile = await authService.getMeProfile(req.user._id);
   res.status(200).json({
     status: 'success',
