@@ -114,6 +114,41 @@ Hệ thống xác thực (Đăng ký, Quên mật khẩu) yêu cầu gửi email
 - **Chế độ Dev (Mặc định)**: Nếu cấu hình `EMAIL_HOST` trong file `.env` trống, hệ thống sẽ tự động tạo một tài khoản ảo giả lập (*Ethereal Email*). Mỗi khi có Email được gửi đi, Terminal (cửa sổ chạy Node.js) sẽ tự in ra một đường link **TEST EMAIL PREVIEW URL** bắt đầu bằng `https://ethereal.email/message/...`. Bạn click vào link này để đọc Email ngay trên trình duyệt mà không cần tài khoản thật.
 - **Chế độ Production (Real SMTP)**: Điền đầy đủ `EMAIL_HOST`, `EMAIL_PORT`, `EMAIL_USER` và `EMAIL_PASS` (Mật khẩu ứng dụng) vào `.env` (Ví dụ như thiết lập SMTP của Gmail) để hệ thống gửi thư vào hòm mail thực tế của người dùng.
 
+## 🔄 Cập nhật contract API gần đây (quan trọng cho frontend)
+
+### 1) Verify Email dùng OTP
+- Endpoint: `POST /api/v1/auth/verify-email`
+- Payload chuẩn:
+```json
+{
+  "email": "student@example.com",
+  "otp": "123456"
+}
+```
+
+### 2) Join lớp bằng mã
+- Endpoint mới: `POST /api/v1/classes/join-by-code`
+- Quyền truy cập: **Student**
+- Payload:
+```json
+{
+  "code": "WEB101"
+}
+```
+
+### 3) Reaction trả về full message
+- Endpoint: `POST /api/v1/messages/:id/reaction`
+- Response hiện tại:
+```json
+{
+  "status": "success",
+  "data": {
+    "message": { "...": "populated message object" }
+  }
+}
+```
+- Socket event `message:reaction` cũng emit kèm `message` để client cập nhật UI ngay.
+
 ## API Endpoints (43 endpoints)
 
 > 📖 Chi tiết đầy đủ xem tại Swagger UI: `http://localhost:5000/api-docs`
