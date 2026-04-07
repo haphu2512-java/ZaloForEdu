@@ -42,9 +42,9 @@ export const useClassStore = create((set, get) => ({
   },
 
   // Join lớp
-  joinClass: async (id, enrollmentCode) => {
+  joinClass: async (code) => {
     try {
-      await classService.join(id, enrollmentCode);
+      await classService.joinByCode(code);
       get().fetchClasses();
       return { success: true };
     } catch (err) {

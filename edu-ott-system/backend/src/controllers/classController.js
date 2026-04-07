@@ -89,6 +89,18 @@ exports.leaveClass = asyncHandler(async (req, res, next) => {
   });
 });
 
+// @desc    Join class by class code
+// @route   POST /api/v1/classes/join-by-code
+// @access  Private
+exports.joinClassByCode = asyncHandler(async (req, res, next) => {
+  await classService.joinClassByCode(req.body.code, req.user._id);
+
+  res.status(200).json({
+    status: 'success',
+    message: 'Joined class successfully',
+  });
+});
+
 // @desc    Get class members
 // @route   GET /api/v1/classes/:id/members
 // @access  Private

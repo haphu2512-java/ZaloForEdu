@@ -59,31 +59,7 @@ router.post(
  * @swagger
  * /auth/verify-email:
  *   post:
- *     summary: Verify email address
- *     tags: [Auth]
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - token
- *             properties:
- *               token:
- *                 type: string
- *     responses:
- *       200:
- *         description: Email verified successfully
- *       400:
- *         description: Invalid or expired token
- */
-
-/**
- * @swagger
- * /auth/resend-verification:
- *   post:
- *     summary: Resend verification email
+ *     summary: Verify email with OTP
  *     tags: [Auth]
  *     requestBody:
  *       required: true
@@ -93,15 +69,18 @@ router.post(
  *             type: object
  *             required:
  *               - email
+ *               - otp
  *             properties:
  *               email:
  *                 type: string
  *                 format: email
+ *               otp:
+ *                 type: string
  *     responses:
  *       200:
- *         description: Verification email sent
- *       404:
- *         description: User not found
+ *         description: Email verified successfully
+ *       400:
+ *         description: Invalid or expired OTP
  */
 
 /**
@@ -345,9 +324,6 @@ router.put(
   authController.resetPassword
 );
 
-// @route   POST /api/v1/auth/verify-email
-// @desc    Verify email with OTP
-// @access  Public
 router.post(
   '/verify-email',
   [
@@ -358,9 +334,6 @@ router.post(
   authController.verifyEmail
 );
 
-// @route   POST /api/v1/auth/resend-verification
-// @desc    Resend OTP to email
-// @access  Public
 router.post(
   '/resend-verification',
   [body('email').isEmail().normalizeEmail()],

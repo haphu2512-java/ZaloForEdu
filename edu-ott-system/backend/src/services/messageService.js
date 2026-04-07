@@ -141,10 +141,13 @@ exports.addReaction = async (messageId, userId, emoji) => {
   await message.addReaction(userId, emoji);
 
   const updatedMessage = await Message.findById(messageId)
+    .populate('sender', 'fullName email avatar')
+    .populate('replyTo', 'content sender')
+    .populate('readBy.user', 'fullName avatar')
     .populate('reactions.user', 'fullName avatar');
 
   return {
-    reactions: updatedMessage.reactions,
+    message: updatedMessage,
     roomId: message.room.toString(),
   };
 };

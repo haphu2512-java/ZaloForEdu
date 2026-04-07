@@ -100,7 +100,7 @@ exports.markAsRead = asyncHandler(async (req, res, next) => {
 // @route   POST /api/v1/messages/:id/reaction
 // @access  Private
 exports.addReaction = asyncHandler(async (req, res, next) => {
-  const { reactions, roomId } = await messageService.addReaction(
+  const { message, roomId } = await messageService.addReaction(
     req.params.id,
     req.user._id,
     req.body.emoji
@@ -111,12 +111,13 @@ exports.addReaction = asyncHandler(async (req, res, next) => {
   if (io) {
     io.to(roomId).emit('message:reaction', {
       messageId: req.params.id,
-      reactions,
+      reactions: message.reactions,
+      message,
     });
   }
 
   res.status(200).json({
     status: 'success',
-    data: { reactions },
+    data: { message },
   });
 });

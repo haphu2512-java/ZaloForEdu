@@ -160,6 +160,22 @@ exports.leaveClass = async (classId, userId) => {
   await classDoc.save();
 };
 
+exports.joinClassByCode = async (classCode, userId) => {
+  if (!classCode || !classCode.trim()) {
+    throw new AppError('Class code is required', 400);
+  }
+
+  const classDoc = await Class.findOne({ code: classCode.trim().toUpperCase() });
+
+  if (!classDoc) {
+    throw new AppError('Class not found with provided code', 404);
+  }
+
+  await exports.joinClass(classDoc._id, userId);
+
+  return classDoc;
+};
+
 exports.getClassMembers = async (classId) => {
   const classDoc = await Class.findById(classId)
     .populate('teacher', 'fullName email avatar role department')

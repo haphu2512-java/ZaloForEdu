@@ -245,9 +245,7 @@ export default function ClassesPage() {
   };
 
   const handleJoin = async (code) => {
-    const found = classes.find((c) => c.code === code);
-    if (found) return await joinClass(found._id, code);
-    return { success: false, error: "Không tìm thấy dữ liệu về lớp học này." };
+    return await joinClass(code);
   };
 
   return (

@@ -216,6 +216,15 @@ router.post(
   classController.createClass
 );
 
+router.post(
+  '/join-by-code',
+  [
+    body('code').trim().notEmpty().withMessage('Class code is required'),
+  ],
+  validate,
+  classController.joinClassByCode
+);
+
 /**
  * @swagger
  * /classes/{id}:
