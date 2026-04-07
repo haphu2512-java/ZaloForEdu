@@ -43,12 +43,18 @@ export const fetchAPI = async (endpoint: string, options: RequestInit = {}) => {
       // Silently ignore storage errors
     }
 
+    const isMultipart = typeof FormData !== 'undefined' && options.body instanceof FormData;
+
     // Default headers (auth token is added automatically, can be overridden by options.headers)
-    const headers = {
-      'Content-Type': 'application/json',
+    const headers: Record<string, string> = {
       ...authHeader,
-      ...options.headers,
+      ...(options.headers as Record<string, string>),
     };
+
+    // Let fetch auto-generate multipart boundary for FormData.
+    if (!isMultipart && !headers['Content-Type']) {
+      headers['Content-Type'] = 'application/json';
+    }
 
     const response = await fetch(url, { ...options, headers, signal: controller.signal as any });
     clearTimeout(id);

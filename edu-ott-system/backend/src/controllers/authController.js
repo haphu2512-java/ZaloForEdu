@@ -1,6 +1,32 @@
 const authService = require('../services/authService');
+const multer = require('multer');
 const asyncHandler = require('../utils/asyncHandler');
 const AppError = require('../utils/appError');
+
+const avatarUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 5 * 1024 * 1024,
+  },
+  fileFilter: (req, file, cb) => {
+    if (!file.mimetype.startsWith('image/')) {
+      return cb(new AppError('Avatar must be an image file', 400), false);
+    }
+    return cb(null, true);
+  },
+});
+
+exports.uploadAvatarMiddleware = (req, res, next) => {
+  avatarUpload.single('avatar')(req, res, (err) => {
+    if (!err) return next();
+
+    if (err instanceof multer.MulterError && err.code === 'LIMIT_FILE_SIZE') {
+      return next(new AppError('Avatar file size must be less than 5MB', 400));
+    }
+
+    return next(err);
+  });
+};
 
 // ── Helper: Gắn Refresh Token vào Cookie ──
 const setTokenCookie = (res, token) => {
@@ -124,7 +150,7 @@ exports.getMe = asyncHandler(async (req, res, next) => {
 // @route   PUT /api/v1/auth/update-profile
 // @access  Private
 exports.updateProfile = asyncHandler(async (req, res, next) => {
-  const updatedUser = await authService.updateProfileData(req.user._id, req.body);
+  const updatedUser = await authService.updateProfileData(req.user._id, req.body, req.file);
   res.status(200).json({
     status: 'success',
     data: { user: updatedUser },

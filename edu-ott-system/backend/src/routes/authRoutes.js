@@ -180,9 +180,10 @@ router.get('/me', protect, authController.getMe);
 router.put(
   '/update-profile',
   protect,
+  authController.uploadAvatarMiddleware,
   [
-    body('fullName').optional().trim().notEmpty(),
-    body('avatar').optional().isURL(),
+    body('fullName').optional({ values: 'falsy' }).trim().notEmpty(),
+    body('avatar').optional({ values: 'falsy' }).isURL(),
   ],
   validate,
   authController.updateProfile

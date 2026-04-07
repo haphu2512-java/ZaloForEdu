@@ -8,6 +8,10 @@ const {
   sendResetPasswordEmail,
   sendPasswordChangedEmail,
 } = require("../utils/emailService");
+const {
+  uploadImageBuffer,
+  deleteImageByUrl,
+} = require("../utils/cloudinaryService");
 
 // ── Helper: Sinh Access Token (ngắn hạn) ──
 const generateAccessToken = (userId) => {
@@ -271,7 +275,12 @@ exports.getMeProfile = async (userId) => {
 // ═════════════════
 // CẬP NHẬT HỒ SƠ - Update Profile
 // ════════════════════════
-exports.updateProfileData = async (userId, body) => {
+exports.updateProfileData = async (userId, body, avatarFile = null) => {
+  const existingUser = await User.findById(userId);
+  if (!existingUser) {
+    throw new AppError("KhÃ´ng tÃ¬m tháº¥y ngÆ°á»i dÃ¹ng", 404);
+  }
+
   const { fullName, avatar, phoneNumber, dateOfBirth, bio, department } = body;
   const updateData = {
     fullName,
@@ -287,10 +296,22 @@ exports.updateProfileData = async (userId, body) => {
     (key) => updateData[key] === undefined && delete updateData[key],
   );
 
+  if (avatarFile && avatarFile.buffer) {
+    const uploadResult = await uploadImageBuffer(avatarFile.buffer, {
+      publicId: `user_${userId}_${Date.now()}`,
+    });
+    updateData.avatar = uploadResult.secure_url;
+  }
+
   const user = await User.findByIdAndUpdate(userId, updateData, {
     new: true,
     runValidators: true,
   });
+
+  if (avatarFile && avatarFile.buffer && existingUser.avatar && user.avatar !== existingUser.avatar) {
+    await deleteImageByUrl(existingUser.avatar);
+  }
+
   return user.getPublicProfile();
 };
 

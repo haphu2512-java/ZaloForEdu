@@ -36,6 +36,7 @@ export default function ProfilePage() {
   const [isLoading, setIsLoading] = useState(true);
   const fileInputRef = useRef(null); 
   const [activeTab, setActiveTab] = useState('view_profile'); 
+  const [avatarFile, setAvatarFile] = useState(null);
 
   useEffect(() => {
     const fetchUserProfile = async () => {
@@ -105,6 +106,7 @@ export default function ProfilePage() {
     const file = e.target.files[0];
     if (file) {
       const previewUrl = URL.createObjectURL(file);
+      setAvatarFile(file);
       setProfile({ ...profile, avatarUrl: previewUrl });
     }
   };
@@ -114,14 +116,24 @@ export default function ProfilePage() {
       const fullName = `${profile.lastName} ${profile.firstName}`.trim();
       const updateData = {
         fullName: fullName,
-        avatar: profile.avatarUrl,
         phoneNumber: profile.phoneNumber,
         dateOfBirth: profile.dateOfBirth,
         bio: profile.bio,
         department: profile.department
       };
 
-      await userService.updateProfile(updateData);
+      if (avatarFile) {
+        updateData.avatarFile = avatarFile;
+      } else if (profile.avatarUrl?.startsWith('http')) {
+        updateData.avatar = profile.avatarUrl;
+      }
+
+      const response = await userService.updateProfile(updateData);
+      const updatedUser = response?.data?.user || response?.user || response?.data?.data?.user;
+      if (updatedUser?.avatar) {
+        setProfile((prev) => ({ ...prev, avatarUrl: updatedUser.avatar }));
+      }
+      setAvatarFile(null);
       alert('Cập nhật thông tin thành công!');
       setActiveTab('view_profile');
     } catch (error) {
@@ -360,7 +372,7 @@ export default function ProfilePage() {
                       </div>
 
                       <div style={styles.actionRow}>
-                        <button onClick={() => setActiveTab('view_profile')} style={styles.btnSecondary}>Hủy bỏ</button>
+                        <button onClick={() => { setAvatarFile(null); setActiveTab('view_profile'); }} style={styles.btnSecondary}>Hủy bỏ</button>
                         <button onClick={handleSaveProfile} style={styles.btnPrimary}><Save size={20} /> Lưu thay đổi</button>
                       </div>
                     </div>

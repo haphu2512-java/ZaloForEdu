@@ -15,6 +15,7 @@ export default function AdminProfileSettings() {
   const [isEditing, setIsEditing] = useState(false);
   const [isFetching, setIsFetching] = useState(false);
   const fileInputRef = useRef(null);
+  const [avatarFile, setAvatarFile] = useState(null);
 
   const [passForm, setPassForm] = useState({ currentPassword: "", newPassword: "", confirmPassword: "" });
   const [showPass, setShowPass] = useState({ current: false, new: false, confirm: false });
@@ -50,16 +51,27 @@ export default function AdminProfileSettings() {
     const file = e.target.files[0];
     if (file) {
       const previewUrl = URL.createObjectURL(file);
+      setAvatarFile(file);
       setAdminProfile({ ...adminProfile, avatarUrl: previewUrl });
     }
   };
 
   const handleUpdateProfile = async () => {
     try {
-      await userService.updateProfile({ 
+      const updateData = {
         fullName: adminProfile.fullName,
-        avatar: adminProfile.avatarUrl 
-      });
+      };
+      if (avatarFile) {
+        updateData.avatarFile = avatarFile;
+      } else if (adminProfile.avatarUrl?.startsWith('http')) {
+        updateData.avatar = adminProfile.avatarUrl;
+      }
+      const response = await userService.updateProfile(updateData);
+      const updatedUser = response?.data?.user || response?.user || response?.data?.data?.user;
+      if (updatedUser?.avatar) {
+        setAdminProfile((prev) => ({ ...prev, avatarUrl: updatedUser.avatar }));
+      }
+      setAvatarFile(null);
       alert("Cập nhật hồ sơ thành công!");
       setIsEditing(false); // Lưu xong tự động quay về chế độ Xem
     } catch (error) { 
@@ -188,7 +200,7 @@ export default function AdminProfileSettings() {
               </div>
               
               <div style={{ display: "flex", gap: "12px", marginTop: "10px" }}>
-                <button onClick={() => setIsEditing(false)} style={{ padding: "12px 20px", background: "#f1f5f9", color: "#475569", borderRadius: "10px", border: "none", cursor: "pointer", fontWeight: 600, display: "flex", gap: "8px", alignItems: "center" }}>
+                <button onClick={() => { setAvatarFile(null); setIsEditing(false); }} style={{ padding: "12px 20px", background: "#f1f5f9", color: "#475569", borderRadius: "10px", border: "none", cursor: "pointer", fontWeight: 600, display: "flex", gap: "8px", alignItems: "center" }}>
                   <FaTimes /> Hủy bỏ
                 </button>
                 <button onClick={handleUpdateProfile} style={{ padding: "12px 24px", background: "#2563eb", color: "#fff", borderRadius: "10px", border: "none", cursor: "pointer", fontWeight: 600, display: "flex", alignItems: "center", gap: "8px", boxShadow: "0 4px 12px rgba(37, 99, 235, 0.2)" }}>

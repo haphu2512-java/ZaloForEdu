@@ -41,6 +41,11 @@ export interface RegisterPayload {
 export interface UpdateProfilePayload {
   fullName?: string;
   avatar?: string;
+  avatarFile?: {
+    uri: string;
+    name?: string;
+    type?: string;
+  };
   phoneNumber?: string;
   dateOfBirth?: string;
   bio?: string;

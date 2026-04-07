@@ -136,13 +136,24 @@ export default function ProfileScreen() {
 
   // ==================== CHANGE AVATAR ====================
   const handleChangeAvatar = async () => {
-    if (!avatarUrl.trim()) {
+    const nextAvatar = avatarUrl.trim();
+    if (!nextAvatar) {
       Alert.alert('Lỗi', 'Vui lòng nhập URL ảnh');
       return;
     }
     setIsUploadingAvatar(true);
     try {
-      await updateUser({ avatar: avatarUrl.trim() });
+      const isHttpUrl = /^https?:\/\//i.test(nextAvatar);
+      const isLocalFileUri = /^(file|content):\/\//i.test(nextAvatar);
+
+      if (isLocalFileUri) {
+        await updateUser({ avatarFile: { uri: nextAvatar } });
+      } else if (isHttpUrl) {
+        await updateUser({ avatar: nextAvatar });
+      } else {
+        Alert.alert('Lỗi', 'URL ảnh không hợp lệ');
+        return;
+      }
       setAvatarModalVisible(false);
       setAvatarUrl('');
       Alert.alert('Thành công ✅', 'Ảnh đại diện đã được cập nhật!');
@@ -847,3 +858,5 @@ const styles = StyleSheet.create({
     flex: 1, marginLeft: 10, fontSize: 15,
   },
 });
+
+

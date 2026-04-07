@@ -9,7 +9,24 @@ export const userService = {
   },
 
   updateProfile: async (data) => {
-    const response = await api.put('/auth/update-profile', data);
+    const hasAvatarFile = data?.avatarFile instanceof File;
+    let payload = data;
+    let config = undefined;
+
+    if (hasAvatarFile) {
+      const formData = new FormData();
+      if (data.fullName) formData.append('fullName', data.fullName);
+      if (data.phoneNumber) formData.append('phoneNumber', data.phoneNumber);
+      if (data.dateOfBirth) formData.append('dateOfBirth', data.dateOfBirth);
+      if (data.bio !== undefined) formData.append('bio', data.bio);
+      if (data.department) formData.append('department', data.department);
+      formData.append('avatar', data.avatarFile);
+
+      payload = formData;
+      config = { headers: { 'Content-Type': 'multipart/form-data' } };
+    }
+
+    const response = await api.put('/auth/update-profile', payload, config);
     return response.data;
   },
 

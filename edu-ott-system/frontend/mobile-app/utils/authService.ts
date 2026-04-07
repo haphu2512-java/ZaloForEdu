@@ -165,10 +165,37 @@ export async function getMe(): Promise<{ success: boolean; data: User }> {
 /** Cập nhật Profile */
 export async function updateProfile(payload: UpdateProfilePayload): Promise<{ success: boolean; data: User }> {
   const headers = await getAuthHeaders();
+  let body: any = JSON.stringify(payload);
+  const requestHeaders: Record<string, string> = { ...headers };
+
+  if (payload.avatarFile?.uri) {
+    const formData = new FormData();
+
+    if (payload.fullName) formData.append('fullName', payload.fullName);
+    if (payload.phoneNumber) formData.append('phoneNumber', payload.phoneNumber);
+    if (payload.dateOfBirth) formData.append('dateOfBirth', payload.dateOfBirth);
+    if (payload.bio !== undefined) formData.append('bio', payload.bio);
+    if (payload.department) formData.append('department', payload.department);
+
+    const uri = payload.avatarFile.uri;
+    const filename = payload.avatarFile.name || uri.split('/').pop() || 'avatar.jpg';
+    const type = payload.avatarFile.type || (/\.(\w+)$/.exec(filename)?.[1]
+      ? `image/${/\.(\w+)$/.exec(filename)?.[1]}`
+      : 'image/jpeg');
+
+    formData.append('avatar', {
+      uri,
+      name: filename,
+      type,
+    } as any);
+
+    body = formData;
+  }
+
   const res = await fetchAPI(`${AUTH_ENDPOINT}/update-profile`, {
     method: 'PUT',
-    headers,
-    body: JSON.stringify(payload),
+    headers: requestHeaders,
+    body,
   });
   return { success: true, data: res.data?.user };
 }
