@@ -5,7 +5,7 @@ const asyncHandler = require('../utils/asyncHandler');
 // @route   GET /api/v1/messages
 // @access  Private
 exports.getMessages = asyncHandler(async (req, res, next) => {
-  const result = await messageService.getMessages(req.query);
+  const result = await messageService.getMessages(req.query, req.user);
 
   res.status(200).json({
     status: 'success',
@@ -21,7 +21,7 @@ exports.getMessages = asyncHandler(async (req, res, next) => {
 // @route   POST /api/v1/messages
 // @access  Private
 exports.sendMessage = asyncHandler(async (req, res, next) => {
-  const message = await messageService.sendMessage(req.body, req.user._id);
+  const message = await messageService.sendMessage(req.body, req.user);
 
   // Emit socket event for real-time
   const io = req.app.get('io');
@@ -79,7 +79,7 @@ exports.deleteMessage = asyncHandler(async (req, res, next) => {
 // @route   POST /api/v1/messages/:id/read
 // @access  Private
 exports.markAsRead = asyncHandler(async (req, res, next) => {
-  const { messageId, roomId } = await messageService.markAsRead(req.params.id, req.user._id);
+  const { messageId, roomId } = await messageService.markAsRead(req.params.id, req.user);
 
   // Emit socket event
   const io = req.app.get('io');
@@ -102,7 +102,7 @@ exports.markAsRead = asyncHandler(async (req, res, next) => {
 exports.addReaction = asyncHandler(async (req, res, next) => {
   const { message, roomId } = await messageService.addReaction(
     req.params.id,
-    req.user._id,
+    req.user,
     req.body.emoji
   );
 

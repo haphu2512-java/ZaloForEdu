@@ -77,6 +77,29 @@ exports.getClassById = async (classId) => {
   return classDoc;
 };
 
+const ensureClassReadableByUser = (classDoc, user) => {
+  if (user.role === 'admin') return;
+
+  const teacherId = classDoc.teacher?._id
+    ? classDoc.teacher._id.toString()
+    : classDoc.teacher.toString();
+  const isTeacher = teacherId === user._id.toString();
+  const isStudent = classDoc.students.some((student) => {
+    const studentId = student?._id ? student._id.toString() : student.toString();
+    return studentId === user._id.toString();
+  });
+
+  if (!isTeacher && !isStudent) {
+    throw new AppError('You are not authorized to access this class', 403);
+  }
+};
+
+exports.getClassByIdForUser = async (classId, user) => {
+  const classDoc = await exports.getClassById(classId);
+  ensureClassReadableByUser(classDoc, user);
+  return classDoc;
+};
+
 exports.updateClass = async (classId, data, user) => {
   const classDoc = await Class.findById(classId);
 
@@ -190,4 +213,16 @@ exports.getClassMembers = async (classId) => {
     students: classDoc.students,
     totalMembers: classDoc.students.length + 1,
   };
+};
+
+exports.getClassMembersForUser = async (classId, user) => {
+  const classDoc = await Class.findById(classId)
+    .select('teacher students');
+
+  if (!classDoc) {
+    throw new AppError('No class found with that ID', 404);
+  }
+
+  ensureClassReadableByUser(classDoc, user);
+  return exports.getClassMembers(classId);
 };

@@ -33,7 +33,7 @@ exports.createClass = asyncHandler(async (req, res, next) => {
 // @route   GET /api/v1/classes/:id
 // @access  Private
 exports.getClass = asyncHandler(async (req, res, next) => {
-  const classDoc = await classService.getClassById(req.params.id);
+  const classDoc = await classService.getClassByIdForUser(req.params.id, req.user);
 
   res.status(200).json({
     status: 'success',
@@ -105,7 +105,7 @@ exports.joinClassByCode = asyncHandler(async (req, res, next) => {
 // @route   GET /api/v1/classes/:id/members
 // @access  Private
 exports.getClassMembers = asyncHandler(async (req, res, next) => {
-  const members = await classService.getClassMembers(req.params.id);
+  const members = await classService.getClassMembersForUser(req.params.id, req.user);
 
   res.status(200).json({
     status: 'success',

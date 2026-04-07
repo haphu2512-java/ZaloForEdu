@@ -33,7 +33,7 @@ exports.createGroup = asyncHandler(async (req, res, next) => {
 // @route   GET /api/v1/groups/:id
 // @access  Private
 exports.getGroup = asyncHandler(async (req, res, next) => {
-  const group = await groupService.getGroupById(req.params.id);
+  const group = await groupService.getGroupById(req.params.id, req.user);
 
   res.status(200).json({
     status: 'success',

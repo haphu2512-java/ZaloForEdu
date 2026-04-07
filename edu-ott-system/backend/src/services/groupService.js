@@ -75,7 +75,7 @@ exports.createGroup = async (data, userId) => {
   return populatedGroup;
 };
 
-exports.getGroupById = async (groupId) => {
+exports.getGroupById = async (groupId, currentUser) => {
   const group = await Group.findById(groupId)
     .populate('class', 'name code subject')
     .populate('createdBy', 'fullName email avatar')
@@ -83,6 +83,15 @@ exports.getGroupById = async (groupId) => {
 
   if (!group) {
     throw new AppError('No group found with that ID', 404);
+  }
+
+  if (currentUser.role !== 'admin') {
+    const isMember = group.members.some(
+      (m) => m.user && m.user._id.toString() === currentUser._id.toString()
+    );
+    if (!isMember) {
+      throw new AppError('You are not authorized to access this group', 403);
+    }
   }
 
   return group;

@@ -218,6 +218,7 @@ router.post(
 
 router.post(
   '/join-by-code',
+  restrictTo('student'),
   [
     body('code').trim().notEmpty().withMessage('Class code is required'),
   ],
@@ -369,7 +370,7 @@ router.delete('/:id', restrictTo('teacher', 'admin'), classController.deleteClas
  *       404:
  *         description: Không tìm thấy lớp học
  */
-router.post('/:id/join', classController.joinClass);
+router.post('/:id/join', restrictTo('student'), classController.joinClass);
 
 /**
  * @swagger
@@ -395,7 +396,7 @@ router.post('/:id/join', classController.joinClass);
  *       404:
  *         description: Không tìm thấy lớp học
  */
-router.post('/:id/leave', classController.leaveClass);
+router.post('/:id/leave', restrictTo('student'), classController.leaveClass);
 
 /**
  * @swagger
