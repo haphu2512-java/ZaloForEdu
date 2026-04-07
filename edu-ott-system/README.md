@@ -8,7 +8,7 @@ Dự án được tổ chức theo cấu trúc monorepo để dễ dàng quản 
 
 - **`backend/`**: Server API xây dựng bằng Node.js, Express và MongoDB.
 - **`frontend/mobile-app/`**: Ứng dụng di động xây dựng bằng React Native và Expo.
-- **`frontend/shared/`**: Chứa logic dùng chung cho các ứng dụng frontend (Web/Mobile) như Socket Services và Types.
+- **`frontend/shared/`**: Chứa các định nghĩa dùng chung (types, README) cho frontend. Logic gọi API hiện được tách riêng theo từng client (`web-app` và `mobile-app`).
 - **`shared/`**: Thư mục chứa các hằng số (constants) và cấu hình dùng chung cho cả Backend và Frontend.
 - **`docs/`**: Tài liệu thiết kế và hướng dẫn chi tiết.
 
@@ -19,6 +19,14 @@ Dự án được tổ chức theo cấu trúc monorepo để dễ dàng quản 
 - 📁 **Quản lý tài liệu:** Upload và chia sẻ tài liệu học tập trong từng lớp/nhóm.
 - 🔔 **Thông báo:** Thông báo thời gian thực qua Socket.io.
 - 📊 **Thống kê:** Dashboard theo dõi tiến độ và hoạt động.
+
+## Cập nhật quan trọng gần đây
+- ✅ **Join lớp bằng mã**: thêm endpoint `POST /api/v1/classes/join-by-code` cho Student.
+- ✅ **Siết quyền truy cập theo resource**:
+  - Chỉ member/teacher/admin mới xem được chi tiết lớp và danh sách thành viên lớp.
+  - Chỉ member hoặc admin mới xem được chi tiết nhóm.
+  - API tin nhắn kiểm tra quyền truy cập room (Class/Group/Conversation) trước khi đọc/gửi/đọc trạng thái/thả reaction.
+- ✅ **Contract reaction mới**: `POST /api/v1/messages/:id/reaction` trả về `data.message` (message đã populate) để client cập nhật UI trực tiếp.
 
 ## Tài liệu hướng dẫn
 - **[Hướng dẫn cài đặt (SETUP.md)](./SETUP.md)**: Các bước để chạy môi trường phát triển.

@@ -114,7 +114,7 @@ Hệ thống xác thực (Đăng ký, Quên mật khẩu) yêu cầu gửi email
 - **Chế độ Dev (Mặc định)**: Nếu cấu hình `EMAIL_HOST` trong file `.env` trống, hệ thống sẽ tự động tạo một tài khoản ảo giả lập (*Ethereal Email*). Mỗi khi có Email được gửi đi, Terminal (cửa sổ chạy Node.js) sẽ tự in ra một đường link **TEST EMAIL PREVIEW URL** bắt đầu bằng `https://ethereal.email/message/...`. Bạn click vào link này để đọc Email ngay trên trình duyệt mà không cần tài khoản thật.
 - **Chế độ Production (Real SMTP)**: Điền đầy đủ `EMAIL_HOST`, `EMAIL_PORT`, `EMAIL_USER` và `EMAIL_PASS` (Mật khẩu ứng dụng) vào `.env` (Ví dụ như thiết lập SMTP của Gmail) để hệ thống gửi thư vào hòm mail thực tế của người dùng.
 
-## API Endpoints (42 endpoints)
+## API Endpoints (43 endpoints)
 
 > 📖 Chi tiết đầy đủ xem tại Swagger UI: `http://localhost:5000/api-docs`
 
@@ -137,20 +137,21 @@ Hệ thống xác thực (Đăng ký, Quên mật khẩu) yêu cầu gửi email
 | Method | Endpoint | Mô tả | Access |
 |--------|----------|--------|--------|
 | GET | `/api/v1/users` | Lấy danh sách users | Admin |
-| GET | `/api/v1/users/:id` | Lấy thông tin user | Admin |
+| GET | `/api/v1/users/:id` | Lấy thông tin user theo ID | Private |
 | PUT | `/api/v1/users/:id` | Cập nhật user | Admin |
 | DELETE | `/api/v1/users/:id` | Xóa user | Admin |
 
-### Classes (8 endpoints)
+### Classes (9 endpoints)
 | Method | Endpoint | Mô tả | Access |
 |--------|----------|--------|--------|
 | GET | `/api/v1/classes` | Danh sách lớp học (phân trang, tìm kiếm, lọc) | Private |
 | POST | `/api/v1/classes` | Tạo lớp học mới | Teacher/Admin |
+| POST | `/api/v1/classes/join-by-code` | Tham gia lớp bằng mã lớp | Student |
 | GET | `/api/v1/classes/:id` | Chi tiết lớp học | Private |
 | PUT | `/api/v1/classes/:id` | Cập nhật lớp học | Teacher/Admin |
 | DELETE | `/api/v1/classes/:id` | Xóa lớp học | Teacher/Admin |
-| POST | `/api/v1/classes/:id/join` | Tham gia lớp học | Private |
-| POST | `/api/v1/classes/:id/leave` | Rời lớp học | Private |
+| POST | `/api/v1/classes/:id/join` | Tham gia lớp học | Student |
+| POST | `/api/v1/classes/:id/leave` | Rời lớp học | Student |
 | GET | `/api/v1/classes/:id/members` | Danh sách thành viên | Private |
 
 ### Groups (7 endpoints)
@@ -230,7 +231,7 @@ Hệ thống xác thực (Đăng ký, Quên mật khẩu) yêu cầu gửi email
 | `message:read` | `{ messageId, userId, fullName, readAt }` | Tin nhắn đã đọc |
 | `message:updated` | `Message object` | Tin nhắn đã sửa (từ REST API) |
 | `message:deleted` | `{ messageId }` | Tin nhắn đã xóa (từ REST API) |
-| `message:reaction` | `{ messageId, reactions }` | Reaction mới (từ REST API) |
+| `message:reaction` | `{ messageId, reactions, message }` | Reaction mới (kèm message đã populate) |
 | `typing:start` | `{ userId, fullName, avatar, roomId }` | Ai đó đang gõ |
 | `typing:stop` | `{ userId, roomId }` | Dừng gõ |
 | `call:offer` | `{ from, offer, roomId?, callType, caller }` | Nhận cuộc gọi đến |
@@ -258,6 +259,17 @@ Hệ thống xác thực (Đăng ký, Quên mật khẩu) yêu cầu gửi email
 | isActive | Boolean | Trạng thái tài khoản |
 | isEmailVerified | Boolean | Email đã xác thực |
 | lastLogin | Date | Lần đăng nhập cuối |
+
+## Authorization Notes (RBAC + Resource-based)
+
+- **Admin**: có quyền quản trị tổng thể (users/classes/groups/messages theo rule hiện có).
+- **Teacher**: tạo/cập nhật/xóa lớp của mình; xem lớp theo phân quyền; không dùng endpoint join/leave dành cho student.
+- **Student**: chỉ tham gia/rời lớp và join bằng mã lớp; chỉ truy cập tài nguyên lớp/nhóm/hội thoại mà mình là thành viên.
+
+### Resource-level guard mới
+- `GET /classes/:id` và `GET /classes/:id/members`: yêu cầu user phải là admin hoặc thuộc lớp (teacher/student).
+- `GET /groups/:id`: yêu cầu user phải là admin hoặc member của group.
+- `/messages` (get/send/read/reaction): kiểm tra quyền theo room (`Class`, `Group`, `Conversation`) trước khi thao tác.
 
 ### Class
 | Field | Type | Description |
@@ -347,4 +359,3 @@ pm2 start src/server.js --name edu-ott-backend
 ## License
 
 MIT
-
