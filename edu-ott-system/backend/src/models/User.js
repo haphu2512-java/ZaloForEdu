@@ -124,7 +124,7 @@ userSchema.methods.getPublicProfile = function () {
 userSchema.virtual('classes', {
   ref: 'Class',
   localField: '_id',
-  foreignField: 'members.user',
+  foreignField: 'students',
 });
 
 module.exports = mongoose.model('User', userSchema);
