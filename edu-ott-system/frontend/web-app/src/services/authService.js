@@ -32,6 +32,8 @@ export const authService = {
   verifyEmail: (email, otp) => api.post("/auth/verify-email", { email, otp }),
 
   resendVerification: (email) => api.post("/auth/resend-verification", { email }),
+
+  changePassword: (data) => api.put("/auth/change-password", data),
 };
 
 export default api;
