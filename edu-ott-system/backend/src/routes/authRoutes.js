@@ -57,34 +57,6 @@ router.post(
 
 /**
  * @swagger
- * /auth/verify-email:
- *   post:
- *     summary: Verify email with OTP
- *     tags: [Auth]
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - email
- *               - otp
- *             properties:
- *               email:
- *                 type: string
- *                 format: email
- *               otp:
- *                 type: string
- *     responses:
- *       200:
- *         description: Email verified successfully
- *       400:
- *         description: Invalid or expired OTP
- */
-
-/**
- * @swagger
  * /auth/login:
  *   post:
  *     summary: Login user
@@ -324,6 +296,33 @@ router.put(
   authController.resetPassword
 );
 
+/**
+ * @swagger
+ * /auth/verify-email:
+ *   post:
+ *     summary: Verify email with OTP
+ *     tags: [Auth]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - email
+ *               - otp
+ *             properties:
+ *               email:
+ *                 type: string
+ *                 format: email
+ *               otp:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Email verified successfully
+ *       400:
+ *         description: Invalid or expired OTP
+ */
 router.post(
   '/verify-email',
   [
@@ -334,6 +333,32 @@ router.post(
   authController.verifyEmail
 );
 
+/**
+ * @swagger
+ * /auth/resend-verification:
+ *   post:
+ *     summary: Resend verification OTP
+ *     tags: [Auth]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - email
+ *             properties:
+ *               email:
+ *                 type: string
+ *                 format: email
+ *     responses:
+ *       200:
+ *         description: Verification email sent
+ *       404:
+ *         description: User not found
+ *       400:
+ *         description: Email already verified
+ */
 router.post(
   '/resend-verification',
   [body('email').isEmail().normalizeEmail()],

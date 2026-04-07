@@ -216,6 +216,34 @@ router.post(
   classController.createClass
 );
 
+/**
+ * @swagger
+ * /classes/join-by-code:
+ *   post:
+ *     summary: Tham gia lớp học bằng mã
+ *     description: Học sinh nhập mã lớp để tham gia vào lớp
+ *     tags: [Classes]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - code
+ *             properties:
+ *               code:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Tham gia thành công
+ *       400:
+ *         description: Mã lớp không hợp lệ hoặc đã tham gia
+ *       404:
+ *         description: Không tìm thấy lớp học
+ */
 router.post(
   '/join-by-code',
   restrictTo('student'),
@@ -440,7 +468,43 @@ router.post('/:id/leave', restrictTo('student'), classController.leaveClass);
  */
 router.get('/:id/members', classController.getClassMembers);
 
-// Add student to class (teacher/admin only)
+/**
+ * @swagger
+ * /classes/{id}/add-student:
+ *   post:
+ *     summary: Thêm học sinh vào lớp (Teacher/Admin)
+ *     description: Giáo viên hoặc Admin thêm trực tiếp học sinh vào lớp thông qua userId
+ *     tags: [Classes]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         description: Class ID
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - studentId
+ *             properties:
+ *               studentId:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Thêm học sinh thành công
+ *       400:
+ *         description: Học sinh đã có trong lớp
+ *       403:
+ *         description: Không có quyền
+ *       404:
+ *         description: Không tìm thấy lớp học hoặc học sinh
+ */
 router.post('/:id/add-student', restrictTo('teacher', 'admin'), classController.addStudent);
 
 module.exports = router;
