@@ -21,7 +21,7 @@ exports.getAllGroups = asyncHandler(async (req, res, next) => {
 // @route   POST /api/v1/groups
 // @access  Private
 exports.createGroup = asyncHandler(async (req, res, next) => {
-  const group = await groupService.createGroup(req.body, req.user._id);
+  const group = await groupService.createGroup(req.body, req.user);
 
   res.status(201).json({
     status: 'success',
@@ -69,7 +69,7 @@ exports.deleteGroup = asyncHandler(async (req, res, next) => {
 // @route   POST /api/v1/groups/:id/members
 // @access  Private
 exports.addMember = asyncHandler(async (req, res, next) => {
-  const group = await groupService.addMember(req.params.id, req.body.userId);
+  const group = await groupService.addMember(req.params.id, req.body.userId, req.user);
 
   res.status(200).json({
     status: 'success',

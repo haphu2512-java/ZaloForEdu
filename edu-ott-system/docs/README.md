@@ -1,0 +1,57 @@
+# Docs Index - Education OTT System
+
+Tài li?u trong thu m?c `docs/` du?c t? ch?c nhu sau:
+
+- `API.md`: T?ng quan API REST, request/response m?u.
+- `AUTH_FLOW.md`: Lu?ng xác th?c, dang ký, dang nh?p, refresh token.
+- `DATABASE.md`: Thi?t k? d? li?u MongoDB/Mongoose.
+- `PROJECT_STRUCTURE.md`: C?u trúc mã ngu?n theo module.
+- `SWAGGER_GUIDE.md`: Hu?ng d?n ch?y và dùng Swagger UI.
+
+## Ngu?n tài li?u uu tiên
+
+1. Swagger runtime: `http://localhost:5000/api-docs`
+2. Route/controller/service trong code backend
+3. Tài li?u markdown trong thu m?c `docs/`
+
+## C?p nh?t g?n nh?t (2026-04-07)
+
+Các thay d?i du?i dây dã du?c áp d?ng trong code và c?n dùng làm chu?n khi tích h?p:
+
+### 1. Users API: fix route shadow + phân quy?n rõ ràng
+
+- Ðã x? lý th? t? route d? tránh `/:id` nu?t `/teacher` và `/teachers`.
+- Quy?n hi?n t?i:
+  - `GET /users/search`: user dã dang nh?p.
+  - `GET /users/:id`: user dã dang nh?p.
+  - `GET /users`, `POST /users/teacher`, `GET /users/teachers`, `PUT /users/:id`, `DELETE /users/:id`: ch? `admin`.
+
+### 2. Groups API: b? sung ki?m soát quy?n nghi?p v?
+
+- `POST /groups`: ngu?i t?o ph?i thu?c l?p tuong ?ng (teacher/student c?a l?p), `admin` du?c phép t?o cho m?i l?p.
+- `POST /groups/:id/members`:
+  - Ch? `admin`/`creator`/`leader` du?c thêm thành viên.
+  - `userId` b?t bu?c.
+  - User du?c thêm ph?i thu?c l?p c?a group.
+- `DELETE /groups/:id/members/:userId`:
+  - Ch? `admin`/`creator`/`leader`.
+  - Không cho xóa `leader` hi?n t?i.
+
+### 3. Classes API: d?ng b? contract add-student
+
+- `POST /classes/:id/add-student` ch?p nh?n c? `userId` và `studentId` d? tuong thích ngu?c.
+- Validation: b?t bu?c có ít nh?t m?t trong hai field trên.
+
+### 4. Socket typing event
+
+- Event `typing:stop` t? backend dã emit thêm `fullName` (ngoài `userId`) d? client d? d?ng b? hi?n th?.
+
+### 5. Auth client notes
+
+- Mobile auth parse response theo chu?n backend: `data.token`, `data.user`, `data.refreshToken`.
+- Web auth dã b?t `withCredentials` và h? tr? logout kèm `refreshToken` (n?u có trong local storage).
+
+## Luu ý ph?m vi c?p nh?t
+
+- Ð?t c?p nh?t này **không bao g?m** vi?c thay th? d? li?u mock ? web b?ng API th?t cho các màn chat/class detail.
+- N?u c?n d?ng b? hoàn toàn mobile/web ? t?ng UI-data, th?c hi?n ? m?t phase riêng.

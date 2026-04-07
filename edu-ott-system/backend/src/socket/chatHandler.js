@@ -85,6 +85,7 @@ module.exports = (io, socket) => {
   socket.on('typing:stop', ({ roomId }) => {
     socket.to(roomId).emit('typing:stop', {
       userId: socket.userId,
+      fullName: socket.user.fullName,
       roomId,
     });
   });

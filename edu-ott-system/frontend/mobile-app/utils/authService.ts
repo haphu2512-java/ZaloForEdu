@@ -80,13 +80,14 @@ export async function login(payload: LoginPayload): Promise<AuthResponse> {
     body: JSON.stringify(payload),
   });
 
-  if (res.data && res.data.token) {
-    await storeToken(res.data.token);
-    if (res.data.refreshToken) {
-      await storeRefreshToken(res.data.refreshToken);
+  const authData = res.data || {};
+  if (authData.token) {
+    await storeToken(authData.token);
+    if (authData.refreshToken) {
+      await storeRefreshToken(authData.refreshToken);
     }
   }
-  return { success: true, token: res.data?.token, user: res.data?.user };
+  return { success: true, token: authData.token, user: authData.user };
 }
 
 /** Đăng ký */
@@ -189,7 +190,7 @@ export async function forgotPassword(payload: ForgotPasswordPayload): Promise<{ 
     method: 'POST',
     body: JSON.stringify(payload),
   });
-  return { success: true, message: res.message, resetToken: res.resetToken };
+  return { success: true, message: res.message, resetToken: res.data?.resetToken || res.resetToken };
 }
 
 /** Reset mật khẩu bằng token */

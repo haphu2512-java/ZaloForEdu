@@ -223,7 +223,7 @@ export default function GroupDetailScreen() {
           {canManage && (
             <TouchableOpacity
               style={[s.actionBtn, { backgroundColor: '#6366F1' }]}
-              onPress={() => router.push({ pathname: '/group/edit' as any, params: { id: group._id } })}
+              onPress={() => Alert.alert('Thông báo', 'Màn hình chỉnh sửa nhóm đang được phát triển.')}
             >
               <Ionicons name="create-outline" size={18} color="#fff" />
               <Text style={s.actionBtnText}>Chỉnh sửa</Text>

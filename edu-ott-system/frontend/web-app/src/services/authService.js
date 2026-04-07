@@ -5,10 +5,11 @@ const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api/v1";
 const api = axios.create({
   baseURL: API_URL,
   headers: { "Content-Type": "application/json" },
-  timeout: 10000, // 10 giây - tránh treo vô hạn khi backend không phản hồi
+  withCredentials: true,
+  timeout: 10000,
 });
 
-// Tự động đính kèm token vào mỗi request
+// Auto attach access token
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem("token");
   if (token) config.headers.Authorization = `Bearer ${token}`;
@@ -20,7 +21,8 @@ export const authService = {
 
   register: (data) => api.post("/auth/register", data),
 
-  logout: () => api.post("/auth/logout"),
+  logout: (refreshToken) =>
+    api.post("/auth/logout", refreshToken ? { refreshToken } : {}),
 
   getMe: () => api.get("/auth/me"),
 

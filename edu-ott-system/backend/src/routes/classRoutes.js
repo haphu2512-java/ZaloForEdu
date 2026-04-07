@@ -505,6 +505,19 @@ router.get('/:id/members', classController.getClassMembers);
  *       404:
  *         description: Không tìm thấy lớp học hoặc học sinh
  */
-router.post('/:id/add-student', restrictTo('teacher', 'admin'), classController.addStudent);
+router.post(
+  '/:id/add-student',
+  restrictTo('teacher', 'admin'),
+  [
+    body().custom((value, { req }) => {
+      if (!req.body.userId && !req.body.studentId) {
+        throw new Error('Either userId or studentId is required');
+      }
+      return true;
+    }),
+  ],
+  validate,
+  classController.addStudent
+);
 
 module.exports = router;

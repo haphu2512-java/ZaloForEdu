@@ -1,5 +1,6 @@
 const classService = require('../services/classService');
 const asyncHandler = require('../utils/asyncHandler');
+const AppError = require('../utils/appError');
 
 // @desc    Get all classes (for current user)
 // @route   GET /api/v1/classes
@@ -117,7 +118,12 @@ exports.getClassMembers = asyncHandler(async (req, res, next) => {
 // @route   POST /api/v1/classes/:id/add-student
 // @access  Private (Teacher/Admin)
 exports.addStudent = asyncHandler(async (req, res, next) => {
-  await classService.joinClass(req.params.id, req.body.userId);
+  const targetUserId = req.body.userId || req.body.studentId;
+  if (!targetUserId) {
+    return next(new AppError('User ID is required', 400));
+  }
+
+  await classService.joinClass(req.params.id, targetUserId);
 
   res.status(200).json({
     status: 'success',

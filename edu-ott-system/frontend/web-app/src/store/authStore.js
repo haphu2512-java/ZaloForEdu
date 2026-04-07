@@ -18,9 +18,12 @@ export const useAuthStore = create((set) => ({
     set({ isLoading: true, error: null });
     try {
       const res = await authService.login(email, password);
-      const { user, token } = res.data.data;
+      const { user, token, refreshToken } = res.data.data;
       localStorage.setItem("token", token);
       localStorage.setItem("user", JSON.stringify(user));
+      if (refreshToken) {
+        localStorage.setItem("refreshToken", refreshToken);
+      }
       set({ user, token, isAuthenticated: true, isLoading: false });
       return { success: true, role: user.role };
     } catch (err) {
@@ -66,10 +69,18 @@ export const useAuthStore = create((set) => ({
     }
   },
 
-  logout: () => {
-    localStorage.removeItem("token");
-    localStorage.removeItem("user");
-    set({ user: null, token: null, isAuthenticated: false });
+  logout: async () => {
+    const refreshToken = localStorage.getItem("refreshToken");
+    try {
+      await authService.logout(refreshToken);
+    } catch (_) {
+      // Ignore API logout failure and clear local state regardless.
+    } finally {
+      localStorage.removeItem("token");
+      localStorage.removeItem("refreshToken");
+      localStorage.removeItem("user");
+      set({ user: null, token: null, isAuthenticated: false });
+    }
   },
 
   clearError: () => set({ error: null }),

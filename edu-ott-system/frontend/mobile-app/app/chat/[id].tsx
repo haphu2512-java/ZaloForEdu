@@ -93,14 +93,18 @@ export default function ChatDetailScreen() {
         }
       };
 
-      const handleTypingStart = ({ fullName }: { fullName: string }) => {
-        setTypingUsers((prev) => new Set(prev).add(fullName));
+      const handleTypingStart = ({ fullName, userId }: { fullName?: string; userId?: string }) => {
+        const typingKey = fullName || userId;
+        if (!typingKey) return;
+        setTypingUsers((prev) => new Set(prev).add(typingKey));
       };
 
-      const handleTypingStop = ({ fullName }: { fullName: string }) => {
+      const handleTypingStop = ({ fullName, userId }: { fullName?: string; userId?: string }) => {
+        const typingKey = fullName || userId;
+        if (!typingKey) return;
         setTypingUsers((prev) => {
           const next = new Set(prev);
-          next.delete(fullName);
+          next.delete(typingKey);
           return next;
         });
       };

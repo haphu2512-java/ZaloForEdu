@@ -304,7 +304,12 @@ router.delete('/:id', groupController.deleteGroup);
  *       404:
  *         description: Không tìm thấy nhóm
  */
-router.post('/:id/members', groupController.addMember);
+router.post(
+  '/:id/members',
+  [body('userId').notEmpty().withMessage('User ID is required')],
+  validate,
+  groupController.addMember
+);
 
 /**
  * @swagger
