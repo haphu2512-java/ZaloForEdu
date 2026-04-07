@@ -20,6 +20,7 @@ import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@/context/auth';
 import * as authService from '@/utils/authService';
+import * as ImagePicker from 'expo-image-picker';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -135,6 +136,29 @@ export default function ProfileScreen() {
   };
 
   // ==================== CHANGE AVATAR ====================
+  const handlePickAvatarFromLibrary = async () => {
+    try {
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert('Thiếu quyền', 'Vui lòng cấp quyền truy cập thư viện ảnh để chọn ảnh đại diện.');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets?.length > 0) {
+        setAvatarUrl(result.assets[0].uri);
+      }
+    } catch (error: any) {
+      Alert.alert('Lỗi', error?.message || 'Không thể mở thư viện ảnh');
+    }
+  };
+
   const handleChangeAvatar = async () => {
     const nextAvatar = avatarUrl.trim();
     if (!nextAvatar) {
@@ -625,6 +649,30 @@ export default function ProfileScreen() {
 
             {/* URL Input */}
             <View style={{ width: '100%' }}>
+              <TouchableOpacity
+                onPress={handlePickAvatarFromLibrary}
+                activeOpacity={0.8}
+                style={{
+                  borderRadius: 14,
+                  borderWidth: 1,
+                  borderColor: colors.border,
+                  backgroundColor: colorScheme === 'dark' ? '#374151' : '#F8FAFC',
+                  paddingVertical: 14,
+                  paddingHorizontal: 14,
+                  marginBottom: 12,
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 8,
+                }}
+              >
+                <Ionicons name="images-outline" size={20} color={colors.tint} />
+                <Text style={{ color: colors.text, fontWeight: '600' }}>Chọn ảnh từ thư viện</Text>
+              </TouchableOpacity>
+
+              <Text style={{ color: colors.muted, fontSize: 12, marginBottom: 10 }}>
+                Hoặc dán URL ảnh bên dưới:
+              </Text>
               <Text style={[styles.inputLabel, { color: colors.text }]}>URL hình ảnh</Text>
               <View style={[styles.passwordInput, { borderColor: colors.border, backgroundColor: colorScheme === 'dark' ? '#374151' : '#F8FAFC' }]}>
                 <Ionicons name="link-outline" size={20} color={colors.muted} />
