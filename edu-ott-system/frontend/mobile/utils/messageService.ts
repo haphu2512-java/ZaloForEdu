@@ -7,6 +7,7 @@ import type {
   Conversation,
   CreateConversationPayload,
   PaginatedResponse,
+  TransferGroupOwnerPayload,
 } from '../types/chat';
 
 // ============================================================
@@ -64,6 +65,112 @@ export async function createConversation(
     body: JSON.stringify(payload),
   });
   return normalizeConversation(res.data);
+}
+
+export async function updateGroupName(conversationId: string, name: string): Promise<Conversation> {
+  const res = await fetchAPI(`${CONVERSATIONS_ENDPOINT}/${conversationId}/name`, {
+    method: 'PUT',
+    body: JSON.stringify({ name }),
+  });
+  return normalizeConversation(res.data);
+}
+
+export async function addGroupMembers(conversationId: string, memberIds: string[]): Promise<Conversation> {
+  const res = await fetchAPI(`${CONVERSATIONS_ENDPOINT}/${conversationId}/members`, {
+    method: 'POST',
+    body: JSON.stringify({ memberIds }),
+  });
+  return normalizeConversation(res.data);
+}
+
+export async function removeGroupMember(conversationId: string, memberId: string): Promise<Conversation> {
+  const res = await fetchAPI(`${CONVERSATIONS_ENDPOINT}/${conversationId}/members/${memberId}`, {
+    method: 'DELETE',
+  });
+  return normalizeConversation(res.data);
+}
+
+export async function promoteGroupAdmin(conversationId: string, memberId: string): Promise<Conversation> {
+  const res = await fetchAPI(`${CONVERSATIONS_ENDPOINT}/${conversationId}/admins/${memberId}/promote`, {
+    method: 'PUT',
+  });
+  return normalizeConversation(res.data);
+}
+
+export async function demoteGroupAdmin(conversationId: string, memberId: string): Promise<Conversation> {
+  const res = await fetchAPI(`${CONVERSATIONS_ENDPOINT}/${conversationId}/admins/${memberId}/demote`, {
+    method: 'PUT',
+  });
+  return normalizeConversation(res.data);
+}
+
+export async function transferGroupOwner(
+  conversationId: string,
+  payload: TransferGroupOwnerPayload,
+): Promise<Conversation> {
+  const res = await fetchAPI(`${CONVERSATIONS_ENDPOINT}/${conversationId}/owner`, {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  });
+  return normalizeConversation(res.data);
+}
+
+export async function leaveGroup(conversationId: string): Promise<Conversation> {
+  const res = await fetchAPI(`${CONVERSATIONS_ENDPOINT}/${conversationId}/leave`, {
+    method: 'POST',
+  });
+  return normalizeConversation(res.data);
+}
+
+export async function updateGroupAvatar(conversationId: string, avatarUrl: string): Promise<Conversation> {
+  const res = await fetchAPI(`${CONVERSATIONS_ENDPOINT}/${conversationId}/avatar`, {
+    method: 'PUT',
+    body: JSON.stringify({ avatarUrl }),
+  });
+  return normalizeConversation(res.data);
+}
+
+export async function updateGroupNickname(
+  conversationId: string,
+  memberId: string,
+  nickname: string,
+): Promise<Conversation> {
+  const res = await fetchAPI(`${CONVERSATIONS_ENDPOINT}/${conversationId}/nicknames/${memberId}`, {
+    method: 'PUT',
+    body: JSON.stringify({ nickname }),
+  });
+  return normalizeConversation(res.data);
+}
+
+export async function pinGroupMessage(conversationId: string, messageId: string): Promise<Conversation> {
+  const res = await fetchAPI(`${CONVERSATIONS_ENDPOINT}/${conversationId}/pin`, {
+    method: 'PUT',
+    body: JSON.stringify({ messageId }),
+  });
+  return normalizeConversation(res.data);
+}
+
+export async function unpinGroupMessage(conversationId: string): Promise<Conversation> {
+  const res = await fetchAPI(`${CONVERSATIONS_ENDPOINT}/${conversationId}/pin`, {
+    method: 'DELETE',
+  });
+  return normalizeConversation(res.data);
+}
+
+export async function updateConversationPreference(
+  conversationId: string,
+  payload: {
+    category?: 'primary' | 'work' | 'family' | 'other';
+    nickname?: string | null;
+    isHidden?: boolean;
+    isDeleted?: boolean;
+  },
+): Promise<any> {
+  const res = await fetchAPI(`${CONVERSATIONS_ENDPOINT}/${conversationId}/preferences`, {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  });
+  return res.data;
 }
 
 // ==================== MESSAGES ====================

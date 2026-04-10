@@ -78,6 +78,15 @@ export default function TabLayout() {
           ),
         }}
       />
+       <Tabs.Screen
+        name="chatbot"
+        options={{
+          title: 'ChatBot AI',
+          tabBarIcon: ({ color, focused }) => (
+            <TabBarIcon name={focused ? 'sparkles' : 'sparkles-outline'} color={color} />
+          ),
+        }}
+      />
       <Tabs.Screen
         name="profile"
         options={{

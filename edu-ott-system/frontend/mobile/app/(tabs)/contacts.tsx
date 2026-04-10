@@ -18,7 +18,19 @@ import { useColorScheme } from '@/components/useColorScheme';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@/context/auth';
 import { useRouter } from 'expo-router';
-import { createConversation } from '@/utils/messageService';
+import {
+  createConversation,
+  getConversations,
+  updateGroupName,
+  addGroupMembers,
+  removeGroupMember,
+  promoteGroupAdmin,
+  demoteGroupAdmin,
+  transferGroupOwner,
+  leaveGroup,
+  updateGroupAvatar,
+  updateGroupNickname,
+} from '@/utils/messageService';
 import {
   getFriendList,
   sendFriendRequest,
@@ -29,7 +41,7 @@ import {
 } from '@/utils/friendService';
 import { searchUsers } from '@/utils/searchService';
 import { blockOrUnblockUser } from '@/utils/userService';
-import type { UserInfo, FriendRequest } from '@/types/chat';
+import type { UserInfo, FriendRequest, Conversation } from '@/types/chat';
 
 type ContactTab = 'friends' | 'groups' | 'oa';
 type FilterTab = 'all' | 'recent';
@@ -48,6 +60,7 @@ export default function ContactsScreen() {
   const [activeFilter, setActiveFilter] = useState<FilterTab>('all');
 
   const [friends, setFriends] = useState<UserInfo[]>([]);
+  const [groups, setGroups] = useState<Conversation[]>([]);
   const [incomingRequests, setIncomingRequests] = useState<FriendRequest[]>([]);
   const [searchResults, setSearchResults] = useState<UserInfo[]>([]);
   const [loading, setLoading] = useState(true);
@@ -56,17 +69,28 @@ export default function ContactsScreen() {
   const [isSearching, setIsSearching] = useState(false);
   const [requestModalVisible, setRequestModalVisible] = useState(false);
   const [processingRequestId, setProcessingRequestId] = useState<string | null>(null);
+  const [createGroupVisible, setCreateGroupVisible] = useState(false);
+  const [selectedGroupMembers, setSelectedGroupMembers] = useState<string[]>([]);
+  const [groupNameInput, setGroupNameInput] = useState('');
+  const [groupActionLoading, setGroupActionLoading] = useState(false);
+  const [groupManageVisible, setGroupManageVisible] = useState(false);
+  const [selectedGroup, setSelectedGroup] = useState<Conversation | null>(null);
+  const [addMembersVisible, setAddMembersVisible] = useState(false);
+  const [selectedMembersToAdd, setSelectedMembersToAdd] = useState<string[]>([]);
 
   const getUserId = useCallback((u: UserInfo) => u._id || u.id || '', []);
 
   const loadContacts = useCallback(async () => {
     try {
-      const [friendsRes, incomingRes] = await Promise.all([
+      const [friendsRes, incomingRes, conversationsRes] = await Promise.all([
         getFriendList(1, 100),
         getIncomingFriendRequests(1, 100),
+        getConversations(1, 100),
       ]);
       setFriends(friendsRes?.items || []);
       setIncomingRequests(incomingRes?.items || []);
+      const myGroups = (conversationsRes?.items || []).filter((conv) => conv.type === 'group');
+      setGroups(myGroups);
     } catch (error: any) {
       console.log('Failed to fetch contacts:', error.message);
     }
@@ -220,6 +244,72 @@ export default function ContactsScreen() {
     return Array.from(map.entries()).map(([title, data]) => ({ title, data }));
   }, [filteredFriends]);
 
+  const getConversationUserId = useCallback((value: string | UserInfo | undefined) => {
+    if (!value) return '';
+    if (typeof value === 'string') return value;
+    return value._id || value.id || '';
+  }, []);
+
+  const openManageGroup = (group: Conversation) => {
+    setSelectedGroup(group);
+    setGroupManageVisible(true);
+  };
+
+  const toggleMemberSelection = (friendId: string) => {
+    setSelectedGroupMembers((prev) =>
+      prev.includes(friendId) ? prev.filter((id) => id !== friendId) : [...prev, friendId],
+    );
+  };
+
+  const toggleAddMemberSelection = (friendId: string) => {
+    setSelectedMembersToAdd((prev) =>
+      prev.includes(friendId) ? prev.filter((id) => id !== friendId) : [...prev, friendId],
+    );
+  };
+
+  const handleCreateGroup = async () => {
+    if (!groupNameInput.trim()) {
+      Alert.alert('Thiếu thông tin', 'Vui lòng nhập tên nhóm');
+      return;
+    }
+    if (selectedGroupMembers.length < 2) {
+      Alert.alert('Thiếu thành viên', 'Nhóm cần ít nhất 3 người (bao gồm bạn)');
+      return;
+    }
+    try {
+      setGroupActionLoading(true);
+      await createConversation({
+        type: 'group',
+        name: groupNameInput.trim(),
+        participantIds: selectedGroupMembers,
+      });
+      setCreateGroupVisible(false);
+      setGroupNameInput('');
+      setSelectedGroupMembers([]);
+      await loadContacts();
+      Alert.alert('Thành công', 'Đã tạo nhóm mới');
+    } catch (error: any) {
+      Alert.alert('Lỗi', error.message || 'Không thể tạo nhóm');
+    } finally {
+      setGroupActionLoading(false);
+    }
+  };
+
+  const handleGroupAction = async (action: () => Promise<any>, successMessage: string) => {
+    try {
+      setGroupActionLoading(true);
+      await action();
+      await loadContacts();
+      Alert.alert('Thành công', successMessage);
+    } catch (error: any) {
+      Alert.alert('Lỗi', error.message || 'Không thể cập nhật nhóm');
+    } finally {
+      setGroupActionLoading(false);
+    }
+  };
+
+  const currentUserId = user?.id || '';
+
   const renderSearchUserItem = ({ item }: { item: UserInfo }) => {
     const uid = getUserId(item);
     const isBlocked = (user?.blockedUsers || []).includes(uid);
@@ -292,6 +382,40 @@ export default function ContactsScreen() {
     </TouchableOpacity>
   );
 
+  const renderGroupItem = ({ item }: { item: Conversation }) => {
+    const ownerId = getConversationUserId(item.ownerId) || item.createdBy;
+    const adminIds = (item.adminIds || []).map((admin) => getConversationUserId(admin));
+    const isOwner = ownerId === currentUserId;
+    const isAdmin = isOwner || adminIds.includes(currentUserId);
+    const memberCount = item.participants?.length || 0;
+
+    return (
+      <TouchableOpacity
+        style={[styles.userRow, { backgroundColor: colors.surface }]}
+        onPress={() => router.push(`/chat/${item._id}`)}
+        onLongPress={() => openManageGroup(item)}
+      >
+        <Image
+          source={{
+            uri:
+              item.avatarUrl ||
+              `https://ui-avatars.com/api/?name=${encodeURIComponent(item.name || 'Group')}&background=8B5CF6&color=fff&size=100&bold=true`,
+          }}
+          style={styles.avatar}
+        />
+        <View style={{ flex: 1, backgroundColor: 'transparent' }}>
+          <Text style={[styles.userName, { color: colors.text }]}>{item.name || 'Nhóm không tên'}</Text>
+          <Text style={{ fontSize: 13, color: colors.muted }}>
+            {memberCount} thành viên - {isOwner ? 'Trưởng nhóm' : isAdmin ? 'Phó nhóm' : 'Thành viên'}
+          </Text>
+        </View>
+        <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#8B5CF6' }]} onPress={() => openManageGroup(item)}>
+          <Text style={{ color: '#fff', fontWeight: '700', fontSize: 12 }}>Quản lý</Text>
+        </TouchableOpacity>
+      </TouchableOpacity>
+    );
+  };
+
   const renderSectionHeader = ({ section }: { section: { title: string } }) => (
     <View style={[styles.sectionHeader, { backgroundColor: colors.background }]}>
       <Text style={[styles.sectionHeaderText, { color: colors.text }]}>{section.title}</Text>
@@ -344,7 +468,37 @@ export default function ContactsScreen() {
         ))}
       </View>
 
-      {activeTab !== 'friends' ? (
+      {activeTab === 'groups' ? (
+        <FlatList
+          data={groups}
+          keyExtractor={(item) => item._id}
+          renderItem={renderGroupItem}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={brand} />}
+          ListHeaderComponent={
+            <View style={{ backgroundColor: colors.surface }}>
+              <TouchableOpacity
+                style={styles.featureRow}
+                onPress={async () => {
+                  setSelectedGroupMembers([]);
+                  await loadContacts();
+                  setCreateGroupVisible(true);
+                }}
+              >
+                <View style={[styles.featureIcon, { backgroundColor: '#8B5CF6' }]}>
+                  <Ionicons name="people" size={20} color="#fff" />
+                </View>
+                <Text style={[styles.featureText, { color: colors.text }]}>Tạo nhóm mới</Text>
+              </TouchableOpacity>
+              <View style={[styles.divider, { backgroundColor: colors.border }]} />
+            </View>
+          }
+          ListEmptyComponent={
+            <View style={styles.emptyContainer}>
+              <Text style={{ color: colors.muted }}>Bạn chưa có nhóm nào</Text>
+            </View>
+          }
+        />
+      ) : activeTab !== 'friends' ? (
         <View style={styles.emptyContainer}>
           <Text style={{ color: colors.muted }}>Tab này đang được cập nhật</Text>
         </View>
@@ -480,6 +634,306 @@ export default function ContactsScreen() {
                     <Text style={{ color: '#374151', fontWeight: '700', fontSize: 12 }}>Từ chối</Text>
                   </TouchableOpacity>
                 </View>
+              );
+            }}
+          />
+        </View>
+      </Modal>
+
+      <Modal visible={createGroupVisible} animationType="slide" onRequestClose={() => setCreateGroupVisible(false)}>
+        <View style={[styles.modalContainer, { backgroundColor: colors.background }]}>
+          <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
+            <TouchableOpacity onPress={() => setCreateGroupVisible(false)}>
+              <Text style={{ color: brand, fontWeight: '700' }}>Đóng</Text>
+            </TouchableOpacity>
+            <Text style={[styles.modalTitle, { color: colors.text }]}>Tạo nhóm</Text>
+            <TouchableOpacity disabled={groupActionLoading} onPress={handleCreateGroup}>
+              <Text style={{ color: groupActionLoading ? colors.muted : brand, fontWeight: '700' }}>Tạo</Text>
+            </TouchableOpacity>
+          </View>
+          <View style={{ padding: 16, gap: 12, backgroundColor: 'transparent' }}>
+            <TextInput
+              value={groupNameInput}
+              onChangeText={setGroupNameInput}
+              placeholder="Nhập tên nhóm"
+              placeholderTextColor={colors.muted}
+              style={[styles.groupInput, { borderColor: colors.border, color: colors.text }]}
+            />
+            <Text style={{ color: colors.muted, fontSize: 13 }}>Chọn tối thiểu 2 bạn bè để tạo nhóm</Text>
+          </View>
+          {friends.length <= 0 ? (
+            <View style={styles.emptyContainer}>
+              <Text style={{ color: colors.muted }}>Bạn chưa có bạn bè để tạo nhóm</Text>
+            </View>
+          ) : null}
+
+          <FlatList
+            data={friends}
+            keyExtractor={(item, index) => getUserId(item) || `member-${index}`}
+            ListEmptyComponent={
+              <View style={styles.emptyContainer}>
+                <Text style={{ color: colors.muted }}>Bạn chưa có bạn bè để tạo nhóm</Text>
+              </View>
+            }
+            renderItem={({ item }) => {
+              const fid = getUserId(item);
+              const checked = selectedGroupMembers.includes(fid);
+              return (
+                <TouchableOpacity
+                  style={[styles.userRow, { backgroundColor: colors.surface }]}
+                  onPress={() => toggleMemberSelection(fid)}
+                >
+                  <Image
+                    source={{
+                      uri:
+                        item.avatarUrl ||
+                        `https://ui-avatars.com/api/?name=${encodeURIComponent(item.username)}&background=2563EB&color=fff&size=100&bold=true`,
+                    }}
+                    style={styles.avatar}
+                  />
+                  <View style={{ flex: 1, backgroundColor: 'transparent' }}>
+                    <Text style={[styles.userName, { color: colors.text }]}>{item.username}</Text>
+                  </View>
+                  <Ionicons name={checked ? 'checkbox' : 'square-outline'} size={24} color={checked ? brand : colors.muted} />
+                </TouchableOpacity>
+              );
+            }}
+          />
+        </View>
+      </Modal>
+
+      <Modal visible={groupManageVisible} animationType="slide" onRequestClose={() => setGroupManageVisible(false)}>
+        <View style={[styles.modalContainer, { backgroundColor: colors.background }]}>
+          <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
+            <TouchableOpacity onPress={() => setGroupManageVisible(false)}>
+              <Text style={{ color: brand, fontWeight: '700' }}>Đóng</Text>
+            </TouchableOpacity>
+            <Text style={[styles.modalTitle, { color: colors.text }]}>Quản lý nhóm</Text>
+            <View style={{ width: 40 }} />
+          </View>
+          {selectedGroup ? (
+            <FlatList
+              data={selectedGroup.participants || []}
+              keyExtractor={(item, index) => getUserId(item) || `participant-${index}`}
+              ListHeaderComponent={
+                <View style={{ padding: 16, gap: 10, backgroundColor: 'transparent' }}>
+                  <Text style={[styles.userName, { color: colors.text }]}>{selectedGroup.name || 'Nhóm không tên'}</Text>
+                  <TouchableOpacity
+                    style={[styles.groupActionBtn, { backgroundColor: '#EEF2FF' }]}
+                    disabled={groupActionLoading}
+                    onPress={() =>
+                      Alert.prompt('Đổi tên nhóm', 'Nhập tên mới', [
+                        { text: 'Hủy', style: 'cancel' },
+                        {
+                          text: 'Lưu',
+                          onPress: (value?: string) => {
+                            if (!value?.trim()) return;
+                            void handleGroupAction(
+                              () => updateGroupName(selectedGroup._id, value.trim()),
+                              'Đã cập nhật tên nhóm',
+                            );
+                          },
+                        },
+                      ])
+                    }
+                  >
+                    <Text style={{ color: '#3730A3', fontWeight: '700' }}>Đổi tên nhóm</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.groupActionBtn, { backgroundColor: '#F3E8FF' }]}
+                    disabled={groupActionLoading}
+                    onPress={() =>
+                      Alert.prompt('Đổi ảnh nhóm', 'Nhập URL ảnh nhóm', [
+                        { text: 'Hủy', style: 'cancel' },
+                        {
+                          text: 'Lưu',
+                          onPress: (value?: string) => {
+                            if (!value?.trim()) return;
+                            void handleGroupAction(
+                              () => updateGroupAvatar(selectedGroup._id, value.trim()),
+                              'Đã cập nhật ảnh nhóm',
+                            );
+                          },
+                        },
+                      ])
+                    }
+                  >
+                    <Text style={{ color: '#7E22CE', fontWeight: '700' }}>Đổi ảnh nhóm</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.groupActionBtn, { backgroundColor: '#ECFDF5' }]}
+                    disabled={groupActionLoading}
+                    onPress={() => {
+                      setSelectedMembersToAdd([]);
+                      setAddMembersVisible(true);
+                    }}
+                  >
+                    <Text style={{ color: '#065F46', fontWeight: '700' }}>Thêm thành viên</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.groupActionBtn, { backgroundColor: '#FEE2E2' }]}
+                    disabled={groupActionLoading}
+                    onPress={() =>
+                      handleGroupAction(() => leaveGroup(selectedGroup._id), 'Bạn đã rời nhóm')
+                    }
+                  >
+                    <Text style={{ color: '#991B1B', fontWeight: '700' }}>Rời nhóm</Text>
+                  </TouchableOpacity>
+                </View>
+              }
+              renderItem={({ item }) => {
+                const uid = getUserId(item);
+                const ownerId = getConversationUserId(selectedGroup.ownerId) || selectedGroup.createdBy;
+                const adminIds = (selectedGroup.adminIds || []).map((admin) => getConversationUserId(admin));
+                const isOwner = ownerId === uid;
+                const isAdmin = adminIds.includes(uid);
+                const iAmOwner = ownerId === currentUserId;
+                const iAmAdmin = iAmOwner || adminIds.includes(currentUserId);
+
+                return (
+                  <View style={[styles.requestRow, { borderBottomColor: colors.border }]}>
+                    <Image
+                      source={{
+                        uri:
+                          item.avatarUrl ||
+                          `https://ui-avatars.com/api/?name=${encodeURIComponent(item.username)}&background=2563EB&color=fff&size=100&bold=true`,
+                      }}
+                      style={styles.avatar}
+                    />
+                    <View style={{ flex: 1, backgroundColor: 'transparent' }}>
+                      <Text style={[styles.userName, { color: colors.text }]}>{item.username}</Text>
+                      <Text style={{ color: colors.muted, fontSize: 12 }}>
+                        {isOwner ? 'Trưởng nhóm' : isAdmin ? 'Phó nhóm' : 'Thành viên'}
+                      </Text>
+                    </View>
+                    {iAmOwner && !isOwner && (
+                      <TouchableOpacity
+                        style={[styles.smallBtn, { backgroundColor: '#E0E7FF' }]}
+                        onPress={() =>
+                          handleGroupAction(
+                            () =>
+                              isAdmin
+                                ? demoteGroupAdmin(selectedGroup._id, uid)
+                                : promoteGroupAdmin(selectedGroup._id, uid),
+                            isAdmin ? 'Đã hạ quyền admin' : 'Đã nâng quyền admin',
+                          )
+                        }
+                      >
+                        <Text style={{ color: '#3730A3', fontWeight: '700', fontSize: 12 }}>{isAdmin ? 'Hạ quyền' : 'Nâng quyền'}</Text>
+                      </TouchableOpacity>
+                    )}
+                    {iAmAdmin && !isOwner && uid !== currentUserId && (
+                      <TouchableOpacity
+                        style={[styles.smallBtn, { backgroundColor: '#FEE2E2' }]}
+                        onPress={() =>
+                          handleGroupAction(
+                            () => removeGroupMember(selectedGroup._id, uid),
+                            'Đã xóa thành viên',
+                          )
+                        }
+                      >
+                        <Text style={{ color: '#991B1B', fontWeight: '700', fontSize: 12 }}>Xóa</Text>
+                      </TouchableOpacity>
+                    )}
+                    {iAmOwner && !isOwner && (
+                      <TouchableOpacity
+                        style={[styles.smallBtn, { backgroundColor: '#DCFCE7' }]}
+                        onPress={() =>
+                          handleGroupAction(
+                            () => transferGroupOwner(selectedGroup._id, { newOwnerId: uid }),
+                            'Đã chuyển quyền trưởng nhóm',
+                          )
+                        }
+                      >
+                        <Text style={{ color: '#166534', fontWeight: '700', fontSize: 12 }}>Chuyển quyền</Text>
+                      </TouchableOpacity>
+                    )}
+                    {iAmAdmin && (
+                      <TouchableOpacity
+                        style={[styles.smallBtn, { backgroundColor: '#FEF3C7' }]}
+                        onPress={() =>
+                          Alert.prompt('Đặt biệt danh', `Biệt danh cho ${item.username}`, [
+                            { text: 'Hủy', style: 'cancel' },
+                            {
+                              text: 'Lưu',
+                              onPress: (value?: string) => {
+                                if (!value?.trim()) return;
+                                void handleGroupAction(
+                                  () => updateGroupNickname(selectedGroup._id, uid, value.trim()),
+                                  'Đã cập nhật biệt danh',
+                                );
+                              },
+                            },
+                          ])
+                        }
+                      >
+                        <Text style={{ color: '#92400E', fontWeight: '700', fontSize: 12 }}>Biệt danh</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                );
+              }}
+            />
+          ) : (
+            <View style={styles.emptyContainer}>
+              <Text style={{ color: colors.muted }}>Không có dữ liệu nhóm</Text>
+            </View>
+          )}
+        </View>
+      </Modal>
+
+      <Modal visible={addMembersVisible} animationType="slide" onRequestClose={() => setAddMembersVisible(false)}>
+        <View style={[styles.modalContainer, { backgroundColor: colors.background }]}>
+          <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
+            <TouchableOpacity onPress={() => setAddMembersVisible(false)}>
+              <Text style={{ color: brand, fontWeight: '700' }}>Đóng</Text>
+            </TouchableOpacity>
+            <Text style={[styles.modalTitle, { color: colors.text }]}>Thêm thành viên</Text>
+            <TouchableOpacity
+              disabled={!selectedGroup || groupActionLoading || selectedMembersToAdd.length === 0}
+              onPress={() => {
+                if (!selectedGroup) return;
+                void handleGroupAction(
+                  () => addGroupMembers(selectedGroup._id, selectedMembersToAdd),
+                  'Đã thêm thành viên mới',
+                );
+                setAddMembersVisible(false);
+                setSelectedMembersToAdd([]);
+              }}
+            >
+              <Text style={{ color: selectedMembersToAdd.length > 0 ? brand : colors.muted, fontWeight: '700' }}>Thêm</Text>
+            </TouchableOpacity>
+          </View>
+          <FlatList
+            data={friends.filter((friend) => {
+              const friendId = getUserId(friend);
+              const memberIds = new Set((selectedGroup?.participants || []).map((member) => getUserId(member)));
+              return friendId && !memberIds.has(friendId);
+            })}
+            keyExtractor={(item, index) => getUserId(item) || `add-member-${index}`}
+            ListEmptyComponent={
+              <View style={styles.emptyContainer}>
+                <Text style={{ color: colors.muted }}>Không còn bạn bè để thêm</Text>
+              </View>
+            }
+            renderItem={({ item }) => {
+              const uid = getUserId(item);
+              const checked = selectedMembersToAdd.includes(uid);
+              return (
+                <TouchableOpacity style={[styles.userRow, { backgroundColor: colors.surface }]} onPress={() => toggleAddMemberSelection(uid)}>
+                  <Image
+                    source={{
+                      uri:
+                        item.avatarUrl ||
+                        `https://ui-avatars.com/api/?name=${encodeURIComponent(item.username)}&background=2563EB&color=fff&size=100&bold=true`,
+                    }}
+                    style={styles.avatar}
+                  />
+                  <View style={{ flex: 1, backgroundColor: 'transparent' }}>
+                    <Text style={[styles.userName, { color: colors.text }]}>{item.username}</Text>
+                  </View>
+                  <Ionicons name={checked ? 'checkbox' : 'square-outline'} size={24} color={checked ? brand : colors.muted} />
+                </TouchableOpacity>
               );
             }}
           />
@@ -625,6 +1079,18 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   modalTitle: { fontSize: 18, fontWeight: '700' },
+  groupInput: {
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 16,
+  },
+  groupActionBtn: {
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
   requestRow: {
     flexDirection: 'row',
     alignItems: 'center',

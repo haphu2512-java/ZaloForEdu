@@ -24,6 +24,10 @@ const sendMessage = asyncHandler(async (req, res) => {
   });
 
   socketService.emitToConversation(conversationId, 'new_message', message);
+  await socketService.emitConversationUpdated(conversationId, {
+    conversationId,
+    latestMessage: message,
+  });
 
   return successResponse(res, message, 'Message sent', 201);
 });

@@ -7,7 +7,9 @@ const mediaRoutes = require('./media.routes');
 const messageRoutes = require('./message.routes');
 const notificationRoutes = require('./notification.routes');
 const searchRoutes = require('./search.routes');
+const settingsRoutes = require('./settings.routes');
 const userRoutes = require('./user.routes');
+const chatbotRoutes = require('./chatbot.routes');
 
 const router = express.Router();
 
@@ -19,5 +21,7 @@ router.use('/messages', messageRoutes);
 router.use('/media', mediaRoutes);
 router.use('/notifications', notificationRoutes);
 router.use('/search', searchRoutes);
+router.use('/settings', settingsRoutes);
+router.use('/chatbot', chatbotRoutes);
 
 module.exports = router;

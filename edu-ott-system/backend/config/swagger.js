@@ -23,6 +23,8 @@ const options = {
       { name: 'Media' },
       { name: 'Notifications' },
       { name: 'Search' },
+      { name: 'Settings' },
+      { name: 'ChatBot' },
     ],
     components: {
       securitySchemes: {
@@ -191,6 +193,54 @@ const options = {
             },
             replyTo: { type: 'string' },
             forwardFrom: { type: 'string' },
+          },
+        },
+        UpdateGroupNameInput: {
+          type: 'object',
+          required: ['name'],
+          properties: {
+            name: { type: 'string', minLength: 1, maxLength: 120, example: 'Nhóm lớp 12A1' },
+          },
+        },
+        AddGroupMembersInput: {
+          type: 'object',
+          required: ['memberIds'],
+          properties: {
+            memberIds: {
+              type: 'array',
+              minItems: 1,
+              items: { type: 'string' },
+              example: ['661d7e5d00f1e0a67ea9b111', '661d7e5d00f1e0a67ea9b222'],
+            },
+          },
+        },
+        TransferGroupOwnerInput: {
+          type: 'object',
+          required: ['newOwnerId'],
+          properties: {
+            newOwnerId: { type: 'string', example: '661d7e5d00f1e0a67ea9b333' },
+          },
+        },
+        AskChatbotInput: {
+          type: 'object',
+          required: ['message'],
+          properties: {
+            message: { type: 'string', maxLength: 2000, example: 'Hướng dẫn tạo nhóm giúp mình' },
+          },
+        },
+        UpdateSettingsInput: {
+          type: 'object',
+          properties: {
+            theme: { type: 'string', enum: ['light', 'dark', 'system'] },
+            notifications: {
+              type: 'object',
+              properties: {
+                pushEnabled: { type: 'boolean' },
+                messageEnabled: { type: 'boolean' },
+                groupEnabled: { type: 'boolean' },
+                soundEnabled: { type: 'boolean' },
+              },
+            },
           },
         },
         UploadMediaInput: {

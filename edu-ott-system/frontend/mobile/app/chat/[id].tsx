@@ -27,6 +27,8 @@ import {
   reactToMessage,
   uploadMedia,
   getConversations,
+  pinGroupMessage,
+  unpinGroupMessage,
 } from '../../utils/messageService';
 import { connectSocket, getSocket, joinConversation } from '../../utils/socketService';
 import type { Message, Conversation } from '../../types/chat';
@@ -35,7 +37,7 @@ const QUICK_EMOJIS = ['😀', '😂', '😍', '🥰', '👍', '❤️', '🔥', 
 
 function getMessageSenderId(msg: Message): string {
   if (typeof msg.senderId === 'string') return msg.senderId;
-  return msg.senderId?._id || '';
+  return msg.senderId?._id || (msg.senderId as any)?.id || '';
 }
 
 function getMessageId(msg: Message): string {
@@ -60,6 +62,7 @@ export default function ChatScreen() {
   const insets = useSafeAreaInsets();
 
   const [messages, setMessages] = useState<Message[]>([]);
+  const currentUserId = user?.id || (user as any)?._id || '';
   const [inputText, setInputText] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isSending, setIsSending] = useState(false);
@@ -72,6 +75,7 @@ export default function ChatScreen() {
   const [forwardSource, setForwardSource] = useState<Message | null>(null);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [isForwarding, setIsForwarding] = useState(false);
+  const [conversation, setConversation] = useState<Conversation | null>(null);
 
   const loadInitialMessages = useCallback(async () => {
     setIsLoading(true);
@@ -79,6 +83,9 @@ export default function ChatScreen() {
       const res = await getMessages({ conversationId, limit: 30 });
       setMessages(res.items);
       setNextCursor(res.nextCursor);
+      const convRes = await getConversations(1, 100);
+      const matched = (convRes.items || []).find((item) => (item._id || item.id) === conversationId) || null;
+      setConversation(matched);
     } catch (error) {
       console.log('Error loading messages', error);
       Alert.alert('Lỗi', 'Không thể tải tin nhắn');
@@ -116,7 +123,7 @@ export default function ChatScreen() {
             ? prev
             : [message, ...prev],
         );
-        if (getMessageSenderId(message) !== user?.id) {
+        if (getMessageSenderId(message) !== currentUserId) {
           markMessageRead(getMessageId(message)).catch(() => null);
         }
       };
@@ -198,7 +205,7 @@ export default function ChatScreen() {
         socketRef.off('message_reacted');
       }
     };
-  }, [conversationId, user?.id]);
+  }, [conversationId, currentUserId]);
 
   const loadMoreMessages = async () => {
     if (!nextCursor || isFetchingMore) return;
@@ -356,9 +363,10 @@ export default function ChatScreen() {
   };
 
   const handleMessageLongPress = (msg: Message) => {
-    const isMine = getMessageSenderId(msg) === user?.id;
+    const isMine = getMessageSenderId(msg) === currentUserId;
     const options = ['Hủy'];
     const actions: Array<() => void> = [() => {}];
+    const isGroup = conversation?.type === 'group';
 
     if (isMine && !msg.isRecalled) {
       options.push('Thu hồi tin nhắn');
@@ -399,6 +407,18 @@ export default function ChatScreen() {
         openForwardModal(msg);
       });
     }
+    if (isGroup && !msg.isRecalled) {
+      options.push('Ghim tin nhắn');
+      actions.push(async () => {
+        try {
+          const updated = await pinGroupMessage(conversationId, getMessageId(msg));
+          setConversation(updated);
+          Alert.alert('Thành công', 'Đã ghim tin nhắn');
+        } catch (_e) {
+          Alert.alert('Lỗi', 'Không thể ghim tin nhắn');
+        }
+      });
+    }
 
     if (Platform.OS === 'ios') {
       ActionSheetIOS.showActionSheetWithOptions(
@@ -421,7 +441,7 @@ export default function ChatScreen() {
   };
 
   const renderMessage = ({ item }: { item: Message }) => {
-    const isMine = getMessageSenderId(item) === user?.id;
+    const isMine = getMessageSenderId(item) === currentUserId;
     const senderName = typeof item.senderId === 'string' ? 'Khách' : item.senderId?.username || 'Khách';
 
     if (item.isRecalled) {
@@ -495,6 +515,24 @@ export default function ChatScreen() {
       {!isSocketReady && (
         <View style={{ paddingVertical: 8, backgroundColor: '#FEF3C7', alignItems: 'center' }}>
           <Text style={{ color: '#92400E', fontSize: 12 }}>Đang thiết lập kết nối chat...</Text>
+        </View>
+      )}
+      {conversation?.type === 'group' && conversation?.pinnedMessageId && (
+        <View style={{ paddingVertical: 8, backgroundColor: '#EDE9FE', alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 8 }}>
+          <Ionicons name="pin" size={14} color="#6D28D9" />
+          <Text style={{ color: '#5B21B6', fontSize: 12 }}>Nhóm đang có tin nhắn ghim</Text>
+          <TouchableOpacity
+            onPress={async () => {
+              try {
+                const updated = await unpinGroupMessage(conversationId);
+                setConversation(updated);
+              } catch (_e) {
+                Alert.alert('Lỗi', 'Không thể bỏ ghim');
+              }
+            }}
+          >
+            <Text style={{ color: '#6D28D9', fontWeight: '700', fontSize: 12 }}>Bỏ ghim</Text>
+          </TouchableOpacity>
         </View>
       )}
 

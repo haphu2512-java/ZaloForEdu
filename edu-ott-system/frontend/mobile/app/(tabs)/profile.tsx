@@ -12,6 +12,7 @@ import {
   Modal,
   KeyboardAvoidingView,
   Dimensions,
+  Switch,
 } from 'react-native';
 import { Text, View } from '@/components/Themed';
 import Colors from '@/constants/Colors';
@@ -23,6 +24,7 @@ import { useAuth } from '@/context/auth';
 import { changePassword, resendVerificationEmail } from '@/utils/authService';
 import { uploadImageToCloudinary } from '@/utils/mediaService';
 import { deleteMyAccount } from '@/utils/userService';
+import { getMySettings, updateMySettings, type UserSettings, type ThemeMode } from '@/utils/settingsService';
 import { useRouter } from 'expo-router';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -65,6 +67,9 @@ export default function ProfileScreen() {
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const [isResendingVerify, setIsResendingVerify] = useState(false);
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
+  const [settings, setSettings] = useState<UserSettings | null>(null);
+  const [isLoadingSettings, setIsLoadingSettings] = useState(false);
+  const [isSavingSettings, setIsSavingSettings] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -77,11 +82,67 @@ export default function ProfileScreen() {
     }
   }, [user]);
 
+  useEffect(() => {
+    const loadSettings = async () => {
+      setIsLoadingSettings(true);
+      try {
+        const data = await getMySettings();
+        setSettings(data);
+      } catch (error: any) {
+        console.log('Failed to load settings:', error.message);
+      } finally {
+        setIsLoadingSettings(false);
+      }
+    };
+    void loadSettings();
+  }, []);
+
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await refreshUser();
+    await Promise.all([
+      refreshUser(),
+      getMySettings()
+        .then(setSettings)
+        .catch((error: any) => console.log('Failed to refresh settings:', error.message)),
+    ]);
     setRefreshing(false);
-  }, []);
+  }, [refreshUser]);
+
+  const handleUpdateTheme = async (theme: ThemeMode) => {
+    if (!settings || isSavingSettings) return;
+    const previous = settings;
+    const next = { ...settings, theme };
+    setSettings(next);
+    setIsSavingSettings(true);
+    try {
+      await updateMySettings({ theme });
+      Alert.alert('Thành công', 'Đã lưu cài đặt giao diện');
+    } catch (error: any) {
+      setSettings(previous);
+      Alert.alert('Lỗi', error.message || 'Không thể lưu cài đặt giao diện');
+    } finally {
+      setIsSavingSettings(false);
+    }
+  };
+
+  const handleToggleNotification = async (
+    key: keyof UserSettings['notifications'],
+    value: boolean,
+  ) => {
+    if (!settings || isSavingSettings) return;
+    const previous = settings;
+    const notifications = { ...settings.notifications, [key]: value };
+    setSettings({ ...settings, notifications });
+    setIsSavingSettings(true);
+    try {
+      await updateMySettings({ notifications });
+    } catch (error: any) {
+      setSettings(previous);
+      Alert.alert('Lỗi', error.message || 'Không thể lưu cài đặt thông báo');
+    } finally {
+      setIsSavingSettings(false);
+    }
+  };
 
   const requireEmailVerification = useCallback(() => {
     if (user?.email && !user?.isEmailVerified) {
@@ -503,6 +564,71 @@ export default function ProfileScreen() {
       <View style={[styles.sectionContainer, { backgroundColor: colors.surface }]}>
         <Text style={[styles.sectionTitle, { color: colors.text }]}>Khác</Text>
 
+        <View style={[styles.preferenceWrap, { borderBottomColor: colors.border }]}>
+          <View style={{ flex: 1, backgroundColor: 'transparent' }}>
+            <Text style={[styles.menuText, { color: colors.text }]}>Theme</Text>
+            <Text style={{ fontSize: 12, color: colors.muted, marginTop: 2 }}>
+              Chọn giao diện ứng dụng
+            </Text>
+          </View>
+          <View style={{ flexDirection: 'row', gap: 8, backgroundColor: 'transparent' }}>
+            {(['light', 'dark', 'system'] as ThemeMode[]).map((mode) => {
+              const active = settings?.theme === mode;
+              return (
+                <TouchableOpacity
+                  key={mode}
+                  onPress={() => handleUpdateTheme(mode)}
+                  disabled={isLoadingSettings || isSavingSettings}
+                  style={[
+                    styles.themeChip,
+                    {
+                      borderColor: active ? colors.tint : colors.border,
+                      backgroundColor: active ? colors.tint + '20' : 'transparent',
+                    },
+                  ]}
+                >
+                  <Text style={{ color: active ? colors.tint : colors.muted, fontWeight: '700', fontSize: 12 }}>
+                    {mode === 'light' ? 'Sáng' : mode === 'dark' ? 'Tối' : 'System'}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+
+        <PreferenceSwitchRow
+          label="Thông báo đẩy"
+          subtitle="Bật/tắt toàn bộ push notification"
+          value={!!settings?.notifications?.pushEnabled}
+          colors={colors}
+          disabled={isLoadingSettings || isSavingSettings}
+          onValueChange={(v) => handleToggleNotification('pushEnabled', v)}
+        />
+        <PreferenceSwitchRow
+          label="Thông báo tin nhắn"
+          subtitle="Nhận thông báo cho chat cá nhân"
+          value={!!settings?.notifications?.messageEnabled}
+          colors={colors}
+          disabled={isLoadingSettings || isSavingSettings}
+          onValueChange={(v) => handleToggleNotification('messageEnabled', v)}
+        />
+        <PreferenceSwitchRow
+          label="Thông báo nhóm"
+          subtitle="Nhận thông báo trong nhóm chat"
+          value={!!settings?.notifications?.groupEnabled}
+          colors={colors}
+          disabled={isLoadingSettings || isSavingSettings}
+          onValueChange={(v) => handleToggleNotification('groupEnabled', v)}
+        />
+        <PreferenceSwitchRow
+          label="Âm thanh thông báo"
+          subtitle="Phát âm khi có thông báo mới"
+          value={!!settings?.notifications?.soundEnabled}
+          colors={colors}
+          disabled={isLoadingSettings || isSavingSettings}
+          onValueChange={(v) => handleToggleNotification('soundEnabled', v)}
+        />
+
         <MenuItem
           ionIcon="notifications-outline"
           title="Thông báo"
@@ -842,6 +968,38 @@ function ModalInput({
   );
 }
 
+function PreferenceSwitchRow({
+  label,
+  subtitle,
+  value,
+  onValueChange,
+  colors,
+  disabled = false,
+}: {
+  label: string;
+  subtitle?: string;
+  value: boolean;
+  onValueChange: (next: boolean) => void;
+  colors: any;
+  disabled?: boolean;
+}) {
+  return (
+    <View style={[styles.preferenceWrap, { borderBottomColor: colors.border }]}>
+      <View style={{ flex: 1, backgroundColor: 'transparent', paddingRight: 12 }}>
+        <Text style={[styles.menuText, { color: colors.text }]}>{label}</Text>
+        {subtitle ? <Text style={{ fontSize: 12, color: colors.muted, marginTop: 2 }}>{subtitle}</Text> : null}
+      </View>
+      <Switch
+        value={value}
+        onValueChange={onValueChange}
+        disabled={disabled}
+        trackColor={{ false: '#CBD5E1', true: colors.tint }}
+        thumbColor={value ? '#FFFFFF' : '#F1F5F9'}
+      />
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   container: { flex: 1 },
 
@@ -889,6 +1047,20 @@ const styles = StyleSheet.create({
     marginRight: 14,
   },
   menuText: { fontSize: 15, fontWeight: '600' },
+  preferenceWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  themeChip: {
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
 
   profileRow: {
     flexDirection: 'row',

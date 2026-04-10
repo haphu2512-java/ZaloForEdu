@@ -40,8 +40,19 @@ export interface Conversation {
   id?: string;
   type: ConversationType;
   name?: string | null;
+  avatarUrl?: string | null;
   participants: UserInfo[];
   createdBy: string;
+  ownerId?: string | UserInfo;
+  adminIds?: Array<string | UserInfo>;
+  pinnedMessageId?: string | null;
+  nicknames?: Record<string, string>;
+  preference?: {
+    category?: 'primary' | 'work' | 'family' | 'other';
+    nickname?: string | null;
+    isHidden?: boolean;
+    isDeleted?: boolean;
+  } | null;
   lastMessageAt?: string | null;
   createdAt: string;
   updatedAt: string;
@@ -122,6 +133,10 @@ export interface CreateConversationPayload {
   type: ConversationType;
   name?: string;
   participantIds: string[];
+}
+
+export interface TransferGroupOwnerPayload {
+  newOwnerId: string;
 }
 
 /** POST /friends/request body */

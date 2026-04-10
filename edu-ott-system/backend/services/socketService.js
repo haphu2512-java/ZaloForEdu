@@ -23,6 +23,15 @@ const emitToConversation = (conversationId, event, payload) => {
   io.to(`conversation:${conversationId}`).emit(event, payload);
 };
 
+const emitConversationUpdated = async (conversationId, payload) => {
+  if (!io) return;
+  const conversation = await Conversation.findById(conversationId).select('participants');
+  if (!conversation) return;
+  conversation.participants.forEach((participantId) => {
+    io.to(`user:${participantId.toString()}`).emit('conversation_updated', payload);
+  });
+};
+
 const closeSocket = async () => {
   if (!io) return;
   await new Promise((resolve) => {
@@ -109,6 +118,10 @@ const initSocket = (server) => {
           forwardFrom: payload.forwardFrom,
         });
         emitToConversation(payload.conversationId, 'new_message', message);
+        await emitConversationUpdated(payload.conversationId, {
+          conversationId: payload.conversationId,
+          latestMessage: message,
+        });
       } catch (error) {
         socket.emit('socket_error', { message: error.message });
       }
@@ -172,4 +185,5 @@ const initSocket = (server) => {
 
 module.exports = initSocket;
 module.exports.emitToConversation = emitToConversation;
+module.exports.emitConversationUpdated = emitConversationUpdated;
 module.exports.closeSocket = closeSocket;

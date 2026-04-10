@@ -11,11 +11,14 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { getConversations } from '@/utils/messageService';
+import { connectSocket, getSocket } from '@/utils/socketService';
 import { useAuth } from '@/context/auth';
 import Colors from '@/constants/Colors';
 import { useColorScheme } from '@/components/useColorScheme';
 import type { Conversation } from '@/types/chat';
 import { useRouter } from 'expo-router';
+import { Alert } from 'react-native';
+import { updateConversationPreference } from '@/utils/messageService';
 
 function formatTime(dateStr?: string | null): string {
   if (!dateStr) return '';
@@ -47,6 +50,7 @@ function getDisplayName(conv: Conversation, currentUserId: string): string {
 /** Get display avatar for a conversation */
 function getDisplayAvatar(conv: Conversation, currentUserId: string): string {
   if (conv.type === 'group') {
+    if (conv.avatarUrl) return conv.avatarUrl;
     const name = conv.name || 'Group';
     return `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=8B5CF6&color=fff&size=100&bold=true`;
   }
@@ -84,6 +88,44 @@ export default function MessagesScreen() {
   }, []);
 
   useEffect(() => {
+    let mounted = true;
+    let off: (() => void) | null = null;
+
+    const setupSocketForList = async () => {
+      const socket = await connectSocket();
+      if (!mounted || !socket) return;
+
+      const onConversationUpdated = (payload: any) => {
+        const conversationId = payload?.conversationId;
+        if (!conversationId) return;
+        setConversations((prev) => {
+          const idx = prev.findIndex((conv) => conv._id === conversationId || conv.id === conversationId);
+          if (idx < 0) {
+            void loadConversations();
+            return prev;
+          }
+          const updated = {
+            ...prev[idx],
+            latestMessage: payload.latestMessage || prev[idx].latestMessage,
+            lastMessageAt: payload.latestMessage?.createdAt || new Date().toISOString(),
+          };
+          const next = [updated, ...prev.filter((_, i) => i !== idx)];
+          return next;
+        });
+      };
+
+      socket.on('conversation_updated', onConversationUpdated);
+      off = () => socket.off('conversation_updated', onConversationUpdated);
+    };
+
+    void setupSocketForList();
+    return () => {
+      mounted = false;
+      if (off) off();
+    };
+  }, [loadConversations]);
+
+  useEffect(() => {
     const init = async () => {
       setLoading(true);
       await loadConversations();
@@ -102,6 +144,41 @@ export default function MessagesScreen() {
 
   const handlePress = (item: Conversation) => {
     router.push(`/chat/${item._id}`);
+  };
+
+  const handleLongPress = (item: Conversation) => {
+    Alert.alert('Tùy chọn cuộc trò chuyện', 'Chọn thao tác', [
+      {
+        text: 'Phân loại: Công việc',
+        onPress: async () => {
+          await updateConversationPreference(item._id, { category: 'work' });
+          await loadConversations();
+        },
+      },
+      {
+        text: 'Phân loại: Gia đình',
+        onPress: async () => {
+          await updateConversationPreference(item._id, { category: 'family' });
+          await loadConversations();
+        },
+      },
+      {
+        text: 'Ẩn cuộc trò chuyện',
+        onPress: async () => {
+          await updateConversationPreference(item._id, { isHidden: true });
+          await loadConversations();
+        },
+      },
+      {
+        text: 'Xóa khỏi danh sách',
+        style: 'destructive',
+        onPress: async () => {
+          await updateConversationPreference(item._id, { isDeleted: true });
+          await loadConversations();
+        },
+      },
+      { text: 'Hủy', style: 'cancel' },
+    ]);
   };
 
   const renderItem = ({ item }: { item: Conversation }) => {
@@ -124,6 +201,7 @@ export default function MessagesScreen() {
       <TouchableOpacity
         style={[styles.chatItem, { backgroundColor: colors.surface }]}
         onPress={() => handlePress(item)}
+        onLongPress={() => handleLongPress(item)}
         activeOpacity={0.7}
       >
         {/* Avatar */}
