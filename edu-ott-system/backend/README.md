@@ -1,11 +1,14 @@
-# Backend - Education OTT Platform
+# OTT Messaging Backend (MVP)
 
-## Giới thiệu
+Backend API cho hệ thống nhắn tin realtime theo chuẩn `/api/v1`.
 
-Backend API server cho hệ thống OTT giáo dục, xây dựng bằng Node.js, Express.js và MongoDB.
+## 1) Yêu cầu
 
-## Cấu trúc thư mục
+- Node.js 18+
+- MongoDB local (mặc định: `mongodb://127.0.0.1:27017/ott_messaging`)
+- Redis local (mặc định: `redis://127.0.0.1:6379`)
 
+<<<<<<< HEAD
 ```
 backend/
 ├── src/
@@ -77,33 +80,34 @@ Route (+ Swagger) → Controller (req/res) → Service (business logic) → Mode
 - **Model**: Schema definition, indexes, methods, virtuals
 
 ## Cài đặt
+=======
+## 2) Cấu hình môi trường
 
-1. Cài đặt dependencies:
-```bash
-npm install
-```
+1. Tạo file `.env` từ `.env.example`:
+>>>>>>> Refactor_Project
 
-2. Tạo file `.env` từ `.env.example`:
 ```bash
 cp .env.example .env
 ```
 
-3. Cấu hình các biến môi trường trong file `.env`
+2. Kiểm tra các biến quan trọng:
 
-4. Khởi động MongoDB (nếu chạy local):
-```bash
-mongod
-```
+- `MONGODB_URI`
+- `REDIS_URL`
+- `JWT_SECRET`
+- `JWT_REFRESH_SECRET`
+- `PORT`
+- `CORS_ORIGIN` (hỗ trợ nhiều origin, phân tách bằng dấu phẩy)
 
-5. Chạy server:
+## 3) Chạy local
+
 ```bash
-# Development mode
+cd backend
+npm install
 npm run dev
-
-# Production mode
-npm start
 ```
 
+<<<<<<< HEAD
 6. Xem API Documentation:
 ```
 http://localhost:5000/api-docs
@@ -373,24 +377,101 @@ Hệ thống xác thực (Đăng ký, Quên mật khẩu) yêu cầu gửi email
 | isDeleted | Boolean | Đã xóa (soft delete) |
 
 ## Testing
+=======
+Health check:
+>>>>>>> Refactor_Project
 
 ```bash
+GET http://localhost:5000/health
+```
+
+Swagger docs:
+
+```bash
+GET http://localhost:5000/api-docs/
+GET http://localhost:5000/api-docs/openapi.json
+```
+
+## 3.1) Chạy test
+
+```bash
+cd backend
 npm test
 ```
 
-## Deployment
+Test suite hiện có:
 
-### Docker
-```bash
-docker build -t edu-ott-backend .
-docker run -p 5000:5000 edu-ott-backend
+- `tests/auth.e2e.test.js`
+- `tests/message.e2e.test.js`
+
+## 4) Hỗ trợ Web và Mobile
+
+Backend được thiết kế để dùng chung cho web frontend và mobile app:
+
+- Auth thống nhất qua `Authorization: Bearer <accessToken>`
+- Socket.IO auth thống nhất (token ở handshake auth/query/header)
+- Metadata client hỗ trợ theo header:
+  - `x-client-platform`: `web | ios | android | desktop | unknown`
+  - `x-app-version`: phiên bản ứng dụng
+  - `x-device-id`: định danh thiết bị
+  - `x-request-id`: request correlation id (nếu thiếu server tự sinh và trả lại ở response header)
+- CORS hỗ trợ multi-origin để phục vụ nhiều web domain cùng lúc
+
+Ví dụ cấu hình CORS cho web:
+
+```env
+CORS_ORIGIN=http://localhost:3000,http://localhost:5173,https://your-web-domain.com
 ```
 
-### PM2
-```bash
-pm2 start src/server.js --name edu-ott-backend
-```
+Lưu ý mobile app native thường không cần CORS, nhưng vẫn nên gửi `x-client-platform` và `x-device-id` để backend theo dõi session rõ ràng hơn.
 
-## License
+## 5) API đã implement
 
-MIT
+### Auth
+
+- `POST /api/v1/auth/register`
+- `POST /api/v1/auth/login`
+- `POST /api/v1/auth/refresh-token`
+- `POST /api/v1/auth/logout`
+- `POST /api/v1/auth/logout-all`
+
+### User/Friend
+
+- `GET /api/v1/users/:id`
+- `PUT /api/v1/users/:id`
+- `DELETE /api/v1/users/:id` (soft delete)
+- `POST /api/v1/users/block/:id`
+- `POST /api/v1/friends/request`
+- `PUT /api/v1/friends/request/:id/accept`
+- `PUT /api/v1/friends/request/:id/reject`
+- `DELETE /api/v1/friends/:friendId`
+- `GET /api/v1/friends/list`
+
+### Conversation/Message
+
+- `GET /api/v1/conversations`
+- `POST /api/v1/conversations`
+- `POST /api/v1/messages/send`
+- `GET /api/v1/messages/conversation/:id?limit=20&cursor=...`
+- `PUT /api/v1/messages/:id/read`
+- `DELETE /api/v1/messages/:id`
+
+### Media/Notification
+
+- `POST /api/v1/media/upload` (base64 payload, lưu local)
+- `GET /api/v1/media/:id`
+- `DELETE /api/v1/media/:id`
+- `GET /api/v1/notifications`
+- `PUT /api/v1/notifications/:id/read`
+
+## 6) Socket.IO events
+
+- Client -> Server: `join_conversation`, `send_message`, `typing`, `stop_typing`, `message_delivered`, `message_seen`
+- Server -> Client: `new_message`, `typing`, `stop_typing`, `message_delivered`, `message_seen`, `user_online`, `user_offline`
+
+## 7) Ghi chú hiện tại
+
+- Redis blacklist/presence đã tích hợp thật khi Redis available.
+- Nếu Redis down, hệ thống tự fallback sang in-memory để không làm sập API local.
+- Upload media đang dùng local storage (`backend/uploads`).
+- Swagger được sinh từ annotation ngay trong các file `backend/routes/*.js`, và render bằng `swagger-ui-express`.

@@ -1,0 +1,276 @@
+.main-layout {
+  display: flex;
+  height: 100vh;
+  overflow: hidden;
+  font-family: "Be Vietnam Pro", system-ui, sans-serif;
+  background: #f0f2f5;
+}
+
+/* ── SIDEBAR ── */
+.sidebar {
+  width: 68px;
+  height: 100vh;
+  background: #1b2a47;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 12px 0;
+  flex-shrink: 0;
+  z-index: 10;
+}
+
+/* Logo */
+.sidebar-logo {
+  margin-bottom: 20px;
+  padding: 0 12px;
+}
+.sidebar-logo-icon {
+  width: 40px;
+  height: 40px;
+  background: #1b6ef3;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Nav */
+.sidebar-nav {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  padding: 0 8px;
+}
+
+.sidebar-nav-item {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding: 8px 4px;
+  border-radius: 12px;
+  cursor: pointer;
+  text-decoration: none;
+  color: #8899bb;
+  transition: all 0.15s;
+  position: relative;
+}
+.sidebar-nav-item:hover {
+  background: #243354;
+  color: #c0ccdd;
+}
+.sidebar-nav-item.active {
+  background: #1b6ef3;
+  color: white;
+}
+
+.sidebar-nav-icon-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sidebar-badge {
+  position: absolute;
+  top: -5px;
+  right: -7px;
+  min-width: 16px;
+  height: 16px;
+  background: #ef4444;
+  color: white;
+  font-size: 9px;
+  font-weight: 700;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 3px;
+  border: 1.5px solid #1b2a47;
+}
+
+.sidebar-nav-label {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+
+/* Bottom */
+.sidebar-bottom {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 0 8px;
+}
+
+.sidebar-icon-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: transparent;
+  border: none;
+  color: #8899bb;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+}
+.sidebar-icon-btn:hover {
+  background: #243354;
+  color: #c0ccdd;
+}
+
+/* Avatar */
+.sidebar-avatar-wrap {
+  position: relative;
+}
+
+.sidebar-avatar-btn {
+  position: relative;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+}
+
+.sidebar-avatar-img {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid #243354;
+}
+
+.sidebar-avatar-placeholder {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+  color: white;
+  border: 2px solid #243354;
+}
+
+.sidebar-online-dot {
+  position: absolute;
+  bottom: 1px;
+  right: 1px;
+  width: 9px;
+  height: 9px;
+  background: #22c55e;
+  border-radius: 50%;
+  border: 2px solid #1b2a47;
+}
+
+/* User menu popup */
+.sidebar-user-menu {
+  position: absolute;
+  bottom: 44px;
+  left: 44px;
+  width: 200px;
+  background: white;
+  border-radius: 14px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.15);
+  border: 1px solid #e5e7eb;
+  overflow: hidden;
+  z-index: 1000; /* ← tăng lên 1000 */
+  animation: menuPop 0.15s ease;
+}
+
+@keyframes menuPop {
+  from {
+    opacity: 0;
+    transform: scale(0.95) translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.sidebar-user-info {
+  padding: 14px 14px 10px;
+}
+.sidebar-user-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: #111827;
+  margin-bottom: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sidebar-user-email {
+  font-size: 11px;
+  color: #9ca3af;
+  margin-bottom: 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sidebar-user-role {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 600;
+  background: #eff6ff;
+  color: #1d4ed8;
+  padding: 2px 8px;
+  border-radius: 6px;
+}
+
+.sidebar-menu-divider {
+  height: 1px;
+  background: #f3f4f6;
+}
+
+.sidebar-menu-item {
+  width: 100%;
+  padding: 10px 14px;
+  background: none;
+  border: none;
+  font-size: 13px;
+  font-weight: 500;
+  color: #374151;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-family: inherit;
+  text-align: left;
+  transition: background 0.15s;
+}
+.sidebar-menu-item:hover {
+  background: #f9fafb;
+}
+.sidebar-menu-item.danger {
+  color: #ef4444;
+}
+.sidebar-menu-item.danger:hover {
+  background: #fef2f2;
+}
+
+/* ── MAIN CONTENT ── */
+.main-content {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+  min-width: 0;
+}
+
+/* Transparent overlay */
+.overlay-transparent {
+  position: fixed;
+  inset: 0;
+  z-index: 999;
+}
