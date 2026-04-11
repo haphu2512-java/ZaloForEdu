@@ -7,6 +7,8 @@ import { useEffect } from 'react';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import 'react-native-reanimated';
 
+// 🔑 Use the CUSTOM hook (respects user's saved theme preference: light/dark/system)
+// NOT the React Native built-in hook, which only reads device system setting
 import { useColorScheme } from '@/components/useColorScheme';
 
 export {
@@ -59,6 +61,8 @@ function RootLayoutNav() {
             <Stack.Screen name="(auth)" options={{ headerShown: false }} />
             <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
             <Stack.Screen name="chat/[id]" options={{ headerShown: true, title: 'Trò chuyện' }} />
+            <Stack.Screen name="blocked-users" options={{ headerShown: false }} />
+            <Stack.Screen name="archived-conversations" options={{ headerShown: false }} />
             <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
           </Stack>
         </AuthProvider>
@@ -66,3 +70,4 @@ function RootLayoutNav() {
     </SafeAreaProvider>
   );
 }
+

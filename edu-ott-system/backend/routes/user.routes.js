@@ -9,6 +9,20 @@ const router = express.Router();
 
 /**
  * @openapi
+ * /users/me/blocked:
+ *   get:
+ *     tags: [Users]
+ *     summary: Get current user's blocked users list
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Blocked users fetched
+ */
+router.get('/me/blocked', auth, userController.getBlockedUsers);
+
+/**
+ * @openapi
  * /users/{id}:
  *   get:
  *     tags: [Users]

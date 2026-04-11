@@ -53,8 +53,8 @@ export default function ContactsScreen() {
   const router = useRouter();
 
   const brand = colors.tint;
-  const headerBg = colorScheme === 'dark' ? '#1F2937' : brand;
-  const searchSurface = colorScheme === 'dark' ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.20)';
+  const headerBg = colorScheme === 'dark' ? colors.surface : brand;
+  const searchSurface = colorScheme === 'dark' ? colors.background : 'rgba(255,255,255,0.20)';
 
   const [activeTab, setActiveTab] = useState<ContactTab>('friends');
   const [activeFilter, setActiveFilter] = useState<FilterTab>('all');
@@ -748,7 +748,7 @@ export default function ContactsScreen() {
                 <View style={{ padding: 16, gap: 10, backgroundColor: 'transparent' }}>
                   <Text style={[styles.userName, { color: colors.text }]}>{selectedGroup.name || 'Nhóm không tên'}</Text>
                   <TouchableOpacity
-                    style={[styles.groupActionBtn, { backgroundColor: '#EEF2FF' }]}
+                    style={[styles.groupActionBtn, { backgroundColor: colorScheme === 'dark' ? '#312E81' : '#EEF2FF', borderColor: colors.border }]}
                     disabled={groupActionLoading}
                     onPress={() =>
                       openTextEditor(
@@ -763,10 +763,10 @@ export default function ContactsScreen() {
                       )
                     }
                   >
-                    <Text style={{ color: '#3730A3', fontWeight: '700' }}>Đổi tên nhóm</Text>
+                    <Text style={{ color: colorScheme === 'dark' ? '#A5B4FC' : '#3730A3', fontWeight: '700' }}>Đổi tên nhóm</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
-                    style={[styles.groupActionBtn, { backgroundColor: '#F3E8FF' }]}
+                    style={[styles.groupActionBtn, { backgroundColor: colorScheme === 'dark' ? '#4C1D95' : '#F3E8FF', borderColor: colors.border }]}
                     disabled={groupActionLoading}
                     onPress={() =>
                       openTextEditor(
@@ -781,20 +781,20 @@ export default function ContactsScreen() {
                       )
                     }
                   >
-                    <Text style={{ color: '#7E22CE', fontWeight: '700' }}>Đổi ảnh nhóm</Text>
+                    <Text style={{ color: colorScheme === 'dark' ? '#DDD6FE' : '#7E22CE', fontWeight: '700' }}>Đổi ảnh nhóm</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
-                    style={[styles.groupActionBtn, { backgroundColor: '#ECFDF5' }]}
+                    style={[styles.groupActionBtn, { backgroundColor: colorScheme === 'dark' ? '#064E3B' : '#ECFDF5', borderColor: colors.border }]}
                     disabled={groupActionLoading}
                     onPress={() => {
                       setSelectedMembersToAdd([]);
                       setAddMembersVisible(true);
                     }}
                   >
-                    <Text style={{ color: '#065F46', fontWeight: '700' }}>Thêm thành viên</Text>
+                    <Text style={{ color: colorScheme === 'dark' ? '#6EE7B7' : '#065F46', fontWeight: '700' }}>Thêm thành viên</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
-                    style={[styles.groupActionBtn, { backgroundColor: '#FEE2E2' }]}
+                    style={[styles.groupActionBtn, { backgroundColor: colorScheme === 'dark' ? '#7F1D1D' : '#FEE2E2', borderColor: colors.border }]}
                     disabled={groupActionLoading}
                     onPress={() =>
                       handleGroupAction(() => leaveGroup(selectedGroup._id), 'Bạn đã rời nhóm')

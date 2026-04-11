@@ -12,6 +12,7 @@ import {
   ActionSheetIOS,
   Modal,
   Linking,
+  StyleSheet,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
@@ -213,10 +214,10 @@ export default function ChatScreen() {
           prev.map((m) =>
             getMessageId(m) === payload.messageId
               ? {
-                  ...m,
-                  seenBy: Array.from(new Set([...(m.seenBy || []), payload.userId])),
-                  deliveredTo: Array.from(new Set([...(m.deliveredTo || []), payload.userId])),
-                }
+                ...m,
+                seenBy: Array.from(new Set([...(m.seenBy || []), payload.userId])),
+                deliveredTo: Array.from(new Set([...(m.deliveredTo || []), payload.userId])),
+              }
               : m,
           ),
         );
@@ -227,9 +228,9 @@ export default function ChatScreen() {
           prev.map((m) =>
             getMessageId(m) === payload.messageId
               ? {
-                  ...m,
-                  deliveredTo: Array.from(new Set([...(m.deliveredTo || []), payload.userId])),
-                }
+                ...m,
+                deliveredTo: Array.from(new Set([...(m.deliveredTo || []), payload.userId])),
+              }
               : m,
           ),
         );
@@ -388,7 +389,7 @@ export default function ChatScreen() {
     if (!forwardSource) return;
     setIsForwarding(true);
     try {
-        const fallbackContent =
+      const fallbackContent =
         forwardSource.content?.trim() || (forwardSource.mediaIds?.length ? 'Tin nhắn được chuyển tiếp' : '');
       await sendMessage({
         conversationId: targetConversationId,
@@ -451,7 +452,7 @@ export default function ChatScreen() {
   const handleOpenConversationOptions = () => {
     if (!conversation) return;
     const options = ['Hủy'];
-    const actions: Array<() => void> = [() => {}];
+    const actions: Array<() => void> = [() => { }];
 
     options.push('Đặt biệt danh');
     actions.push(() =>
@@ -526,7 +527,7 @@ export default function ChatScreen() {
   const handleMessageLongPress = (msg: Message) => {
     const isMine = getMessageSenderId(msg) === currentUserId;
     const options = ['Hủy'];
-    const actions: Array<() => void> = [() => {}];
+    const actions: Array<() => void> = [() => { }];
     const isGroup = conversation?.type === 'group';
 
     if (isMine && !msg.isRecalled) {
@@ -635,7 +636,7 @@ export default function ChatScreen() {
         {item.forwardFrom && (
           <Text style={{ color: isMine ? '#DBEAFE' : '#64748B', fontSize: 12, marginBottom: 6 }}>Tin nhắn chuyển tiếp</Text>
         )}
-        {item.content ? <Text style={{ color: isMine ? '#fff' : '#0F172A', fontSize: 16 }}>{item.content}</Text> : null}
+        {item.content ? <Text style={{ color: isMine ? '#fff' : colors.text, fontSize: 16 }}>{item.content}</Text> : null}
         {!!item.reactions?.length && (
           <Text style={{ marginTop: 6, color: isMine ? '#DBEAFE' : '#475569', fontSize: 13 }}>
             {item.reactions.map((r) => r.emoji).join(' ')}
@@ -664,7 +665,7 @@ export default function ChatScreen() {
                     borderRadius: 10,
                     paddingHorizontal: 10,
                     paddingVertical: 8,
-                    backgroundColor: isMine ? '#1D4ED8' : '#E5E7EB',
+                    backgroundColor: isMine ? '#1D4ED8' : colors.border,
                     flexDirection: 'row',
                     alignItems: 'center',
                     gap: 8,
@@ -689,14 +690,14 @@ export default function ChatScreen() {
 
   if (isLoading) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-        <ActivityIndicator size="large" color="#0068FF" />
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background }}>
+        <ActivityIndicator size="large" color={colors.tint} />
       </View>
     );
   }
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: '#FFFFFF' }}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
       <Stack.Screen
         options={{
           title: conversationTitle,
@@ -716,14 +717,14 @@ export default function ChatScreen() {
       />
 
       {!isSocketReady && (
-        <View style={{ paddingVertical: 8, backgroundColor: '#FEF3C7', alignItems: 'center' }}>
-          <Text style={{ color: '#92400E', fontSize: 12 }}>Đang thiết lập kết nối chat...</Text>
+        <View style={{ paddingVertical: 6, backgroundColor: colorScheme === 'dark' ? '#78350F' : '#FEF3C7', alignItems: 'center' }}>
+          <Text style={{ color: colorScheme === 'dark' ? '#FDE68A' : '#92400E', fontSize: 12 }}>Đang thiết lập kết nối chat...</Text>
         </View>
       )}
       {conversation?.type === 'group' && conversation?.pinnedMessageId && (
-        <View style={{ paddingVertical: 8, backgroundColor: '#EEF4FF', alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 8 }}>
-          <Ionicons name="pin" size={14} color="#0068FF" />
-          <Text style={{ color: '#0068FF', fontSize: 12 }}>Nhóm đang có tin nhắn ghim</Text>
+        <View style={{ paddingVertical: 8, backgroundColor: colorScheme === 'dark' ? '#1E3A5F' : '#EEF4FF', alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 8 }}>
+          <Ionicons name="pin" size={14} color={colors.tint} />
+          <Text style={{ color: colors.tint, fontSize: 12 }}>Nhóm đang có tin nhắn ghim</Text>
           <TouchableOpacity
             onPress={async () => {
               try {
@@ -734,7 +735,7 @@ export default function ChatScreen() {
               }
             }}
           >
-            <Text style={{ color: '#0068FF', fontWeight: '700', fontSize: 12 }}>Bỏ ghim</Text>
+            <Text style={{ color: colors.tint, fontWeight: '700', fontSize: 12 }}>Bỏ ghim</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -756,12 +757,12 @@ export default function ChatScreen() {
         />
 
         {showEmojiPanel && (
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 12, paddingVertical: 8, gap: 8, backgroundColor: '#F5F5F5' }}>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 12, paddingVertical: 8, gap: 8, backgroundColor: colors.surface }}>
             {QUICK_EMOJIS.map((emoji) => (
               <TouchableOpacity
                 key={emoji}
                 onPress={() => setInputText((prev) => `${prev}${emoji}`)}
-                style={{ paddingVertical: 6, paddingHorizontal: 10, borderRadius: 12, backgroundColor: '#EAF2FF' }}
+                style={{ paddingVertical: 6, paddingHorizontal: 10, borderRadius: 12, backgroundColor: colors.tint + '20' }}
               >
                 <Text style={{ fontSize: 20 }}>{emoji}</Text>
               </TouchableOpacity>
@@ -775,33 +776,35 @@ export default function ChatScreen() {
             alignItems: 'center',
             padding: 12,
             paddingBottom: Math.max(12, insets.bottom),
-            borderTopWidth: 1,
-            borderTopColor: '#EAEAEA',
-            backgroundColor: '#FFFFFF',
+            borderTopWidth: StyleSheet.hairlineWidth,
+            borderTopColor: colors.border,
+            backgroundColor: colors.surface,
           }}
         >
           <TouchableOpacity onPress={() => setShowEmojiPanel((prev) => !prev)} style={{ marginRight: 10 }}>
-            <Ionicons name="happy-outline" size={24} color="#8A8A8A" />
+            <Ionicons name="happy-outline" size={24} color={colors.muted} />
           </TouchableOpacity>
 
           <TouchableOpacity onPress={handleDocumentPick} style={{ marginRight: 10 }}>
-            <Ionicons name="attach" size={24} color="#8A8A8A" />
+            <Ionicons name="attach" size={24} color={colors.muted} />
           </TouchableOpacity>
 
           <TextInput
             style={{
               flex: 1,
-              backgroundColor: '#fff',
+              backgroundColor: colors.background,
               borderWidth: 1,
-              borderColor: '#EAEAEA',
+              borderColor: colors.border,
               borderRadius: 24,
               paddingHorizontal: 16,
               paddingTop: 10,
               paddingBottom: 10,
               fontSize: 16,
               maxHeight: 100,
+              color: colors.text,
             }}
             placeholder="Nhắn tin..."
+            placeholderTextColor={colors.muted}
             value={inputText}
             onChangeText={setInputText}
             multiline
@@ -826,12 +829,12 @@ export default function ChatScreen() {
       </KeyboardAvoidingView>
 
       <Modal visible={forwardModalVisible} animationType="slide" onRequestClose={() => setForwardModalVisible(false)}>
-        <SafeAreaView style={{ flex: 1, backgroundColor: '#fff' }}>
-          <View style={{ paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#E2E8F0', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+        <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
+          <View style={{ paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: colors.surface }}>
             <TouchableOpacity onPress={() => setForwardModalVisible(false)}>
-              <Text style={{ color: '#3B82F6', fontWeight: '700' }}>Đóng</Text>
+              <Text style={{ color: colors.tint, fontWeight: '700' }}>Đóng</Text>
             </TouchableOpacity>
-            <Text style={{ fontSize: 18, fontWeight: '700' }}>Chuyển tiếp tin nhắn</Text>
+            <Text style={{ fontSize: 18, fontWeight: '700', color: colors.text }}>Chuyển tiếp tin nhắn</Text>
             <View style={{ width: 36 }} />
           </View>
 
@@ -840,16 +843,16 @@ export default function ChatScreen() {
             keyExtractor={(item) => item._id}
             ListEmptyComponent={
               <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingVertical: 40 }}>
-                <Text style={{ color: '#64748B' }}>Không có cuộc trò chuyện phù hợp</Text>
+                <Text style={{ color: colors.muted }}>Không có cuộc trò chuyện phù hợp</Text>
               </View>
             }
             renderItem={({ item }) => (
               <TouchableOpacity
                 disabled={isForwarding}
                 onPress={() => handleForward(item._id || item.id || '')}
-                style={{ paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#F1F5F9' }}
+                style={{ paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border, backgroundColor: colors.surface }}
               >
-                <Text style={{ fontSize: 16, color: '#0F172A' }}>{getConversationTitle(item, user?.id || '')}</Text>
+                <Text style={{ fontSize: 16, color: colors.text }}>{getConversationTitle(item, user?.id || '')}</Text>
               </TouchableOpacity>
             )}
           />
@@ -857,12 +860,12 @@ export default function ChatScreen() {
       </Modal>
 
       <Modal visible={commonGroupsVisible} animationType="slide" onRequestClose={() => setCommonGroupsVisible(false)}>
-        <SafeAreaView style={{ flex: 1, backgroundColor: '#fff' }}>
-          <View style={{ paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#E2E8F0', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+        <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
+          <View style={{ paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: colors.surface }}>
             <TouchableOpacity onPress={() => setCommonGroupsVisible(false)}>
-              <Text style={{ color: '#0068FF', fontWeight: '700' }}>Đóng</Text>
+              <Text style={{ color: colors.tint, fontWeight: '700' }}>Đóng</Text>
             </TouchableOpacity>
-            <Text style={{ fontSize: 18, fontWeight: '700' }}>Nhóm chung</Text>
+            <Text style={{ fontSize: 18, fontWeight: '700', color: colors.text }}>Nhóm chung</Text>
             <View style={{ width: 36 }} />
           </View>
           <FlatList
@@ -870,7 +873,7 @@ export default function ChatScreen() {
             keyExtractor={(item) => item._id || item.id || String(Math.random())}
             ListEmptyComponent={
               <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingVertical: 40 }}>
-                <Text style={{ color: '#64748B' }}>Chưa có nhóm chung</Text>
+                <Text style={{ color: colors.muted }}>Chưa có nhóm chung</Text>
               </View>
             }
             renderItem={({ item }) => (
@@ -879,9 +882,9 @@ export default function ChatScreen() {
                   setCommonGroupsVisible(false);
                   router.push(`/chat/${item._id || item.id}`);
                 }}
-                style={{ paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#F1F5F9' }}
+                style={{ paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border, backgroundColor: colors.surface }}
               >
-                <Text style={{ fontSize: 16, color: '#0F172A' }}>{item.name || 'Nhóm chat'}</Text>
+                <Text style={{ fontSize: 16, color: colors.text }}>{item.name || 'Nhóm chat'}</Text>
               </TouchableOpacity>
             )}
           />
@@ -889,19 +892,19 @@ export default function ChatScreen() {
       </Modal>
 
       <Modal visible={editorVisible} transparent animationType="fade" onRequestClose={() => setEditorVisible(false)}>
-        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'center', alignItems: 'center', padding: 20 }}>
-          <View style={{ width: '100%', borderRadius: 12, borderWidth: 1, borderColor: '#E2E8F0', padding: 16, gap: 12, backgroundColor: '#fff' }}>
-            <Text style={{ fontSize: 17, fontWeight: '700', color: '#0F172A' }}>{editorTitle}</Text>
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+          <View style={{ width: '100%', borderRadius: 16, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, padding: 20, gap: 14, backgroundColor: colors.surface }}>
+            <Text style={{ fontSize: 17, fontWeight: '700', color: colors.text }}>{editorTitle}</Text>
             <TextInput
               value={editorValue}
               onChangeText={setEditorValue}
               placeholder={editorPlaceholder}
-              placeholderTextColor="#94A3B8"
-              style={{ borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, color: '#0F172A', fontSize: 16 }}
+              placeholderTextColor={colors.muted}
+              style={{ borderWidth: 1, borderColor: colors.border, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, color: colors.text, fontSize: 16, backgroundColor: colors.background }}
             />
             <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 8 }}>
-              <TouchableOpacity onPress={() => setEditorVisible(false)} style={{ borderRadius: 8, paddingHorizontal: 14, paddingVertical: 10, backgroundColor: '#E5E7EB' }}>
-                <Text style={{ color: '#374151', fontWeight: '700' }}>Hủy</Text>
+              <TouchableOpacity onPress={() => setEditorVisible(false)} style={{ borderRadius: 8, paddingHorizontal: 14, paddingVertical: 10, backgroundColor: colors.border }}>
+                <Text style={{ color: colors.text, fontWeight: '700' }}>Hủy</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 onPress={() => {
@@ -910,7 +913,7 @@ export default function ChatScreen() {
                   setEditorVisible(false);
                   editorSubmit(value);
                 }}
-                style={{ borderRadius: 8, paddingHorizontal: 14, paddingVertical: 10, backgroundColor: '#0068FF' }}
+                style={{ borderRadius: 8, paddingHorizontal: 14, paddingVertical: 10, backgroundColor: colors.tint }}
               >
                 <Text style={{ color: '#fff', fontWeight: '700' }}>Lưu</Text>
               </TouchableOpacity>
