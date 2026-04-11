@@ -77,15 +77,21 @@ export default function ContactsScreen() {
   const [selectedGroup, setSelectedGroup] = useState<Conversation | null>(null);
   const [addMembersVisible, setAddMembersVisible] = useState(false);
   const [selectedMembersToAdd, setSelectedMembersToAdd] = useState<string[]>([]);
+  const [sentFriendRequestIds, setSentFriendRequestIds] = useState<string[]>([]);
+  const [editorVisible, setEditorVisible] = useState(false);
+  const [editorTitle, setEditorTitle] = useState('');
+  const [editorPlaceholder, setEditorPlaceholder] = useState('');
+  const [editorValue, setEditorValue] = useState('');
+  const [editorSubmit, setEditorSubmit] = useState<null | ((value: string) => void)>(null);
 
   const getUserId = useCallback((u: UserInfo) => u._id || u.id || '', []);
 
   const loadContacts = useCallback(async () => {
     try {
       const [friendsRes, incomingRes, conversationsRes] = await Promise.all([
-        getFriendList(1, 100),
-        getIncomingFriendRequests(1, 100),
-        getConversations(1, 100),
+        getFriendList(null, 100),
+        getIncomingFriendRequests(null, 100),
+        getConversations(null, 100),
       ]);
       setFriends(friendsRes?.items || []);
       setIncomingRequests(incomingRes?.items || []);
@@ -121,7 +127,7 @@ export default function ContactsScreen() {
     const timeout = setTimeout(async () => {
       setIsSearching(true);
       try {
-        const res = await searchUsers(searchQuery.trim(), 1, 20);
+        const res = await searchUsers(searchQuery.trim(), null, 20);
         const filtered = (res?.items || []).filter((u) => getUserId(u) && getUserId(u) !== user?.id);
         const deduped = Array.from(new Map(filtered.map((u) => [getUserId(u), u])).values());
         setSearchResults(deduped);
@@ -143,6 +149,9 @@ export default function ContactsScreen() {
 
     try {
       await sendFriendRequest({ toUserId: targetUserId });
+      setSentFriendRequestIds((prev) =>
+        prev.includes(targetUserId) ? prev : [...prev, targetUserId],
+      );
       Alert.alert('Thành công', 'Đã gửi lời mời kết bạn');
       await loadContacts();
     } catch (err: any) {
@@ -156,7 +165,7 @@ export default function ContactsScreen() {
     const action = isBlocked ? 'unblock' : 'block';
     try {
       const result = await blockOrUnblockUser(targetUserId, action);
-      setUser((prev) => (prev ? { ...prev, blockedUsers: result.blockedUsers || [] } : prev));
+      setUser((prev: any) => (prev ? { ...prev, blockedUsers: result.blockedUsers || [] } : prev));
       Alert.alert(
         'Thành công',
         action === 'block' ? 'Đã chặn người dùng' : 'Đã bỏ chặn người dùng',
@@ -310,9 +319,23 @@ export default function ContactsScreen() {
 
   const currentUserId = user?.id || '';
 
+  const openTextEditor = (
+    title: string,
+    placeholder: string,
+    onSubmit: (value: string) => void,
+    defaultValue: string = '',
+  ) => {
+    setEditorTitle(title);
+    setEditorPlaceholder(placeholder);
+    setEditorValue(defaultValue);
+    setEditorSubmit(() => onSubmit);
+    setEditorVisible(true);
+  };
+
   const renderSearchUserItem = ({ item }: { item: UserInfo }) => {
     const uid = getUserId(item);
     const isBlocked = (user?.blockedUsers || []).includes(uid);
+    const isRequestSent = sentFriendRequestIds.includes(uid);
     return (
       <View style={[styles.userRow, { backgroundColor: colors.surface }]}>
         <Image
@@ -329,8 +352,14 @@ export default function ContactsScreen() {
         </View>
         {!isFriend(uid) ? (
           <View style={{ gap: 8, backgroundColor: 'transparent' }}>
-            <TouchableOpacity style={[styles.actionBtn, { backgroundColor: brand }]} onPress={() => handleAddFriend(uid)}>
-              <Text style={{ color: '#fff', fontWeight: '700', fontSize: 12 }}>Kết bạn</Text>
+            <TouchableOpacity
+              style={[styles.actionBtn, { backgroundColor: isRequestSent ? '#9CA3AF' : brand }]}
+              onPress={() => handleAddFriend(uid)}
+              disabled={isRequestSent}
+            >
+              <Text style={{ color: '#fff', fontWeight: '700', fontSize: 12 }}>
+                {isRequestSent ? 'Đã gửi' : 'Kết bạn'}
+              </Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.actionBtn, { backgroundColor: isBlocked ? '#16A34A' : '#DC2626' }]}
@@ -722,19 +751,16 @@ export default function ContactsScreen() {
                     style={[styles.groupActionBtn, { backgroundColor: '#EEF2FF' }]}
                     disabled={groupActionLoading}
                     onPress={() =>
-                      Alert.prompt('Đổi tên nhóm', 'Nhập tên mới', [
-                        { text: 'Hủy', style: 'cancel' },
-                        {
-                          text: 'Lưu',
-                          onPress: (value?: string) => {
-                            if (!value?.trim()) return;
-                            void handleGroupAction(
-                              () => updateGroupName(selectedGroup._id, value.trim()),
-                              'Đã cập nhật tên nhóm',
-                            );
-                          },
-                        },
-                      ])
+                      openTextEditor(
+                        'Đổi tên nhóm',
+                        'Nhập tên mới',
+                        (value) =>
+                          void handleGroupAction(
+                            () => updateGroupName(selectedGroup._id, value),
+                            'Đã cập nhật tên nhóm',
+                          ),
+                        selectedGroup.name || '',
+                      )
                     }
                   >
                     <Text style={{ color: '#3730A3', fontWeight: '700' }}>Đổi tên nhóm</Text>
@@ -743,19 +769,16 @@ export default function ContactsScreen() {
                     style={[styles.groupActionBtn, { backgroundColor: '#F3E8FF' }]}
                     disabled={groupActionLoading}
                     onPress={() =>
-                      Alert.prompt('Đổi ảnh nhóm', 'Nhập URL ảnh nhóm', [
-                        { text: 'Hủy', style: 'cancel' },
-                        {
-                          text: 'Lưu',
-                          onPress: (value?: string) => {
-                            if (!value?.trim()) return;
-                            void handleGroupAction(
-                              () => updateGroupAvatar(selectedGroup._id, value.trim()),
-                              'Đã cập nhật ảnh nhóm',
-                            );
-                          },
-                        },
-                      ])
+                      openTextEditor(
+                        'Đổi ảnh nhóm',
+                        'Nhập URL ảnh nhóm',
+                        (value) =>
+                          void handleGroupAction(
+                            () => updateGroupAvatar(selectedGroup._id, value),
+                            'Đã cập nhật ảnh nhóm',
+                          ),
+                        selectedGroup.avatarUrl || '',
+                      )
                     }
                   >
                     <Text style={{ color: '#7E22CE', fontWeight: '700' }}>Đổi ảnh nhóm</Text>
@@ -852,19 +875,15 @@ export default function ContactsScreen() {
                       <TouchableOpacity
                         style={[styles.smallBtn, { backgroundColor: '#FEF3C7' }]}
                         onPress={() =>
-                          Alert.prompt('Đặt biệt danh', `Biệt danh cho ${item.username}`, [
-                            { text: 'Hủy', style: 'cancel' },
-                            {
-                              text: 'Lưu',
-                              onPress: (value?: string) => {
-                                if (!value?.trim()) return;
-                                void handleGroupAction(
-                                  () => updateGroupNickname(selectedGroup._id, uid, value.trim()),
-                                  'Đã cập nhật biệt danh',
-                                );
-                              },
-                            },
-                          ])
+                          openTextEditor(
+                            'Đặt biệt danh',
+                            `Biệt danh cho ${item.username}`,
+                            (value) =>
+                              void handleGroupAction(
+                                () => updateGroupNickname(selectedGroup._id, uid, value),
+                                'Đã cập nhật biệt danh',
+                              ),
+                          )
                         }
                       >
                         <Text style={{ color: '#92400E', fontWeight: '700', fontSize: 12 }}>Biệt danh</Text>
@@ -937,6 +956,36 @@ export default function ContactsScreen() {
               );
             }}
           />
+        </View>
+      </Modal>
+      <Modal visible={editorVisible} transparent animationType="fade" onRequestClose={() => setEditorVisible(false)}>
+        <View style={styles.editorOverlay}>
+          <View style={[styles.editorCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <Text style={[styles.modalTitle, { color: colors.text, marginBottom: 12 }]}>{editorTitle}</Text>
+            <TextInput
+              value={editorValue}
+              onChangeText={setEditorValue}
+              placeholder={editorPlaceholder}
+              placeholderTextColor={colors.muted}
+              style={[styles.groupInput, { borderColor: colors.border, color: colors.text }]}
+            />
+            <View style={styles.editorActions}>
+              <TouchableOpacity onPress={() => setEditorVisible(false)} style={[styles.editorBtn, { backgroundColor: '#E5E7EB' }]}>
+                <Text style={{ color: '#374151', fontWeight: '700' }}>Hủy</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => {
+                  const value = editorValue.trim();
+                  if (!value || !editorSubmit) return;
+                  setEditorVisible(false);
+                  editorSubmit(value);
+                }}
+                style={[styles.editorBtn, { backgroundColor: brand }]}
+              >
+                <Text style={{ color: '#fff', fontWeight: '700' }}>Lưu</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
         </View>
       </Modal>
     </View>
@@ -1103,5 +1152,29 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     paddingHorizontal: 10,
     paddingVertical: 8,
+  },
+  editorOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  editorCard: {
+    width: '100%',
+    borderRadius: 12,
+    borderWidth: 1,
+    padding: 16,
+    gap: 12,
+  },
+  editorActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 8,
+  },
+  editorBtn: {
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
   },
 });

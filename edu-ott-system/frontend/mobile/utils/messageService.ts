@@ -38,14 +38,16 @@ function normalizeMessage(message: Message): Message {
 
 /**
  * Lấy danh sách conversations của user hiện tại
- * GET /conversations?page=&limit=
+ * GET /conversations?limit=&cursor=
  */
 export async function getConversations(
-  page: number = 1,
+  cursor: string | null = null,
   limit: number = 20,
 ): Promise<PaginatedResponse<Conversation>> {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (cursor) params.append('cursor', cursor);
   const res = await fetchAPI(
-    `${CONVERSATIONS_ENDPOINT}?page=${page}&limit=${limit}`,
+    `${CONVERSATIONS_ENDPOINT}?${params.toString()}`,
   );
   return {
     ...res.data,

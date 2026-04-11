@@ -1,6 +1,5 @@
 import React from 'react';
 import { View, Text, Image, TouchableOpacity, StyleSheet } from 'react-native';
-import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
 interface ChatListItemProps {
@@ -11,6 +10,17 @@ interface ChatListItemProps {
   time: string;
   unreadCount?: number;
   roomModel?: 'Conversation' | 'Class' | 'Group';
+  isOnline?: boolean;
+  onPress?: () => void;
+  onLongPress?: () => void;
+  colors?: {
+    text: string;
+    muted: string;
+    tint: string;
+    border: string;
+    surface: string;
+    secondaryBackground: string;
+  };
 }
 
 function getRoomBadge(roomModel?: string): { icon: keyof typeof Ionicons.glyphMap; color: string } | null {
@@ -25,36 +35,35 @@ function getRoomBadge(roomModel?: string): { icon: keyof typeof Ionicons.glyphMa
 }
 
 export const ChatListItem: React.FC<ChatListItemProps> = ({
-  id,
   name,
   lastMessage,
   avatar,
   time,
   unreadCount,
   roomModel,
+  isOnline,
+  onPress,
+  onLongPress,
+  colors,
 }) => {
-  const router = useRouter();
   const badge = getRoomBadge(roomModel);
   const hasUnread = (unreadCount || 0) > 0;
 
-  const handlePress = () => {
-    router.push({
-      pathname: '/chat/[id]' as any,
-      params: { id, name, avatar: avatar || '', roomModel: roomModel || 'Conversation' },
-    });
-  };
-
   return (
     <TouchableOpacity
-      style={[styles.container, hasUnread && styles.unreadBg]}
-      onPress={handlePress}
+      style={[
+        styles.container,
+        { backgroundColor: colors?.surface || '#fff' },
+      ]}
+      onPress={onPress}
+      onLongPress={onLongPress}
       activeOpacity={0.7}
     >
       {/* Avatar */}
       <View style={styles.avatarWrapper}>
         <Image
           source={{
-            uri: avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=6366F1&color=fff&size=100&bold=true`,
+            uri: avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=0068FF&color=fff&size=100&bold=true`,
           }}
           style={styles.avatar}
         />
@@ -63,24 +72,33 @@ export const ChatListItem: React.FC<ChatListItemProps> = ({
             <Ionicons name={badge.icon} size={10} color="#fff" />
           </View>
         )}
+        {isOnline && <View style={[styles.onlineDot, { borderColor: colors?.surface || '#fff' }]} />}
       </View>
 
       {/* Content */}
       <View style={styles.content}>
         <View style={styles.topRow}>
           <Text
-            style={[styles.name, hasUnread && styles.nameUnread]}
+            style={[
+              styles.name,
+              { color: colors?.text || '#111827' },
+              hasUnread && styles.nameUnread,
+            ]}
             numberOfLines={1}
           >
             {name}
           </Text>
-          <Text style={[styles.time, hasUnread && styles.timeUnread]}>
+          <Text style={[styles.time, { color: colors?.muted || '#8A8A8A' }, hasUnread && styles.timeUnread]}>
             {time}
           </Text>
         </View>
         <View style={styles.bottomRow}>
           <Text
-            style={[styles.message, hasUnread && styles.messageUnread]}
+            style={[
+              styles.message,
+              { color: colors?.muted || '#6B7280' },
+              hasUnread && { color: colors?.text || '#111827', fontWeight: '500' },
+            ]}
             numberOfLines={1}
           >
             {lastMessage || 'Chưa có tin nhắn'}
@@ -104,12 +122,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 14,
-    backgroundColor: '#fff',
   },
-  unreadBg: { backgroundColor: '#E0F2FE' },
-
   avatarWrapper: { position: 'relative', marginRight: 14 },
-  avatar: { width: 54, height: 54, borderRadius: 27 },
+  avatar: { width: 48, height: 48, borderRadius: 24 },
+  onlineDot: {
+    position: 'absolute',
+    bottom: 1,
+    right: 1,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: '#22C55E',
+    borderWidth: 2,
+    borderColor: '#fff',
+  },
   badgeIcon: {
     position: 'absolute',
     bottom: -1,
@@ -125,20 +151,19 @@ const styles = StyleSheet.create({
 
   content: { flex: 1 },
   topRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
-  name: { fontSize: 16, fontWeight: '500', color: '#111827', flex: 1, marginRight: 8 },
+  name: { fontSize: 16, fontWeight: '500', flex: 1, marginRight: 8 },
   nameUnread: { fontWeight: '700' },
-  time: { fontSize: 12, color: '#9CA3AF' },
-  timeUnread: { color: '#007AFF' },
+  time: { fontSize: 12, color: '#8A8A8A' },
+  timeUnread: { color: '#0068FF' },
 
   bottomRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  message: { fontSize: 14, color: '#6B7280', flex: 1, marginRight: 8 },
-  messageUnread: { color: '#111827', fontWeight: '500' },
+  message: { fontSize: 14, flex: 1, marginRight: 8 },
 
   unreadBadge: {
     minWidth: 20,
     height: 20,
     borderRadius: 10,
-    backgroundColor: '#007AFF',
+    backgroundColor: '#FF3B30',
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 6,

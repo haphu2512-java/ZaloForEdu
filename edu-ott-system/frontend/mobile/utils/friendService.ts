@@ -78,15 +78,15 @@ export async function removeFriend(friendId: string): Promise<void> {
 
 /**
  * Lấy danh sách bạn bè
- * GET /friends/list?page=&limit=
+ * GET /friends/list?limit=&cursor=
  */
 export async function getFriendList(
-  page: number = 1,
+  cursor: string | null = null,
   limit: number = 20,
 ): Promise<PaginatedResponse<UserInfo>> {
-  const res = await fetchAPI(
-    `${FRIENDS_ENDPOINT}/list?page=${page}&limit=${limit}`,
-  );
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (cursor) params.append('cursor', cursor);
+  const res = await fetchAPI(`${FRIENDS_ENDPOINT}/list?${params.toString()}`);
   return {
     ...res.data,
     items: (res.data?.items || []).map(normalizeUser),
@@ -95,14 +95,16 @@ export async function getFriendList(
 
 /**
  * Lấy danh sách lời mời kết bạn đến (pending)
- * GET /friends/request/incoming?page=&limit=
+ * GET /friends/request/incoming?limit=&cursor=
  */
 export async function getIncomingFriendRequests(
-  page: number = 1,
+  cursor: string | null = null,
   limit: number = 20,
 ): Promise<PaginatedResponse<FriendRequest>> {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (cursor) params.append('cursor', cursor);
   const res = await fetchAPI(
-    `${FRIENDS_ENDPOINT}/request/incoming?page=${page}&limit=${limit}`,
+    `${FRIENDS_ENDPOINT}/request/incoming?${params.toString()}`,
   );
   return res.data;
 }

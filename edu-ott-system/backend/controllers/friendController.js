@@ -3,6 +3,7 @@ const User = require('../models/User');
 const asyncHandler = require('../utils/asyncHandler');
 const ApiError = require('../utils/apiError');
 const { successResponse } = require('../utils/apiResponse');
+const { encodeCursor, decodeCursor } = require('../utils/cursor');
 
 const sendFriendRequest = asyncHandler(async (req, res) => {
   const fromUserId = req.user._id;
@@ -86,66 +87,105 @@ const removeFriend = asyncHandler(async (req, res) => {
 });
 
 const getFriendList = asyncHandler(async (req, res) => {
-  const page = Number(req.query.page);
-  const limit = Number(req.query.limit);
+  const limit = Math.min(Number(req.query.limit) || 20, 100);
+  const { cursor } = req.query;
 
   const user = await User.findById(req.user._id).select('friends');
-  const total = user?.friends?.length || 0;
-  const skip = (page - 1) * limit;
+  const friendIds = user?.friends || [];
 
-  const paginatedFriendIds = user.friends.slice(skip, skip + limit);
+  // Parse cursor to get starting position
+  let startIndex = 0;
+  if (cursor) {
+    const parsed = decodeCursor(cursor);
+    if (!parsed) {
+      throw new ApiError(400, 'INVALID_CURSOR', 'Cursor is invalid');
+    }
+    // Find the index of the friend after the cursor
+    startIndex = friendIds.findIndex(id => id.toString() === parsed.id) + 1;
+  }
+
+  // Get items for this page (fetch one extra to check if more exist)
+  const paginatedFriendIds = friendIds.slice(startIndex, startIndex + limit + 1);
   const friends = await User.find({
     _id: { $in: paginatedFriendIds },
     deletedAt: null,
   }).select('username email phone avatarUrl isOnline lastSeen');
 
+  // Sort to maintain original friend list order
   const orderMap = new Map(paginatedFriendIds.map((id, index) => [id.toString(), index]));
   friends.sort((a, b) => orderMap.get(a._id.toString()) - orderMap.get(b._id.toString()));
+
+  let nextCursor = null;
+  let finalItems = friends;
+
+  if (friends.length > limit) {
+    const nextItem = friends[limit - 1];
+    nextCursor = encodeCursor({
+      createdAt: new Date().toISOString(),
+      id: nextItem._id.toString(),
+    });
+    finalItems = friends.slice(0, limit);
+  }
 
   return successResponse(
     res,
     {
-      items: friends,
-      pagination: {
-        page,
-        limit,
-        total,
-        totalPages: Math.ceil(total / limit),
-      },
+      items: finalItems,
+      nextCursor,
+      limit,
     },
     'Friend list fetched',
   );
 });
 
 const getIncomingFriendRequests = asyncHandler(async (req, res) => {
-  const page = Number(req.query.page);
-  const limit = Number(req.query.limit);
-  const skip = (page - 1) * limit;
+  const limit = Math.min(Number(req.query.limit) || 20, 100);
+  const { cursor } = req.query;
 
   const filter = {
     toUserId: req.user._id,
     status: 'pending',
   };
 
-  const [items, total] = await Promise.all([
-    FriendRequest.find(filter)
-      .sort({ createdAt: -1, _id: -1 })
-      .skip(skip)
-      .limit(limit)
-      .populate('fromUserId', 'username email phone avatarUrl isOnline lastSeen'),
-    FriendRequest.countDocuments(filter),
-  ]);
+  // Apply cursor filter
+  const query = { ...filter };
+  if (cursor) {
+    const parsed = decodeCursor(cursor);
+    if (!parsed) {
+      throw new ApiError(400, 'INVALID_CURSOR', 'Cursor is invalid');
+    }
+    query.$or = [
+      { createdAt: { $lt: parsed.createdAt } },
+      {
+        createdAt: parsed.createdAt,
+        _id: { $lt: parsed.id },
+      },
+    ];
+  }
+
+  const items = await FriendRequest.find(query)
+    .sort({ createdAt: -1, _id: -1 })
+    .limit(limit + 1)
+    .populate('fromUserId', 'username email phone avatarUrl isOnline lastSeen');
+
+  let nextCursor = null;
+  let finalItems = items;
+
+  if (items.length > limit) {
+    const nextItem = items[limit - 1];
+    nextCursor = encodeCursor({
+      createdAt: nextItem.createdAt,
+      id: nextItem._id.toString(),
+    });
+    finalItems = items.slice(0, limit);
+  }
 
   return successResponse(
     res,
     {
-      items,
-      pagination: {
-        page,
-        limit,
-        total,
-        totalPages: Math.ceil(total / limit),
-      },
+      items: finalItems,
+      nextCursor,
+      limit,
     },
     'Incoming friend requests fetched',
   );

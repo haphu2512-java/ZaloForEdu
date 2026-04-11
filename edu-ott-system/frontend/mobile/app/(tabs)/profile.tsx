@@ -21,7 +21,7 @@ import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { useAuth } from '@/context/auth';
-import { changePassword, resendVerificationEmail } from '@/utils/authService';
+import { changePassword, logoutAll, resendVerificationEmail } from '@/utils/authService';
 import { uploadImageToCloudinary } from '@/utils/mediaService';
 import { deleteMyAccount } from '@/utils/userService';
 import { getMySettings, updateMySettings, type UserSettings, type ThemeMode } from '@/utils/settingsService';
@@ -323,6 +323,24 @@ export default function ProfileScreen() {
           onPress: async () => { await logout(); },
         },
       ]
+    );
+  };
+
+  const handleLogoutAll = () => {
+    Alert.alert(
+      'Đăng xuất mọi thiết bị',
+      'Bạn có chắc chắn muốn đăng xuất trên tất cả thiết bị?',
+      [
+        { text: 'Hủy', style: 'cancel' },
+        {
+          text: 'Đăng xuất tất cả',
+          style: 'destructive',
+          onPress: async () => {
+            await logoutAll();
+            await logout();
+          },
+        },
+      ],
     );
   };
 
@@ -657,6 +675,13 @@ export default function ProfileScreen() {
           title="Đăng xuất"
           onPress={handleLogout}
           color={colors.error}
+          showChevron={false}
+        />
+        <MenuItem
+          ionIcon="log-out"
+          title="Đăng xuất tất cả thiết bị"
+          onPress={handleLogoutAll}
+          color="#B91C1C"
           showChevron={false}
         />
         <MenuItem

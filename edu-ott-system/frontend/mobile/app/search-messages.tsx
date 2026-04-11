@@ -55,7 +55,7 @@ export default function SearchMessagesScreen() {
     const timer = setTimeout(async () => {
       try {
         setLoading(true);
-        const res = (await searchMessages(query.trim(), 1, 30)) as SearchMessagesResponse;
+        const res = (await searchMessages(query.trim(), null, 30)) as SearchMessagesResponse;
         setResults(res?.items || []);
       } catch (_error) {
         setResults([]);

@@ -2,15 +2,16 @@ const Conversation = require('../models/Conversation');
 const Message = require('../models/Message');
 const User = require('../models/User');
 const asyncHandler = require('../utils/asyncHandler');
+const ApiError = require('../utils/apiError');
 const { successResponse } = require('../utils/apiResponse');
+const { encodeCursor, decodeCursor } = require('../utils/cursor');
 
 const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 const searchMessages = asyncHandler(async (req, res) => {
   const { q } = req.query;
-  const page = Number(req.query.page);
-  const limit = Number(req.query.limit);
-  const skip = (page - 1) * limit;
+  const limit = Math.min(Number(req.query.limit) || 20, 100);
+  const { cursor } = req.query;
   const queryRegex = new RegExp(escapeRegex(q), 'i');
 
   const conversations = await Conversation.find({ participants: req.user._id }).select('_id');
@@ -21,12 +22,8 @@ const searchMessages = asyncHandler(async (req, res) => {
       res,
       {
         items: [],
-        pagination: {
-          page,
-          limit,
-          total: 0,
-          totalPages: 0,
-        },
+        nextCursor: null,
+        limit,
       },
       'Message search result',
     );
@@ -37,26 +34,46 @@ const searchMessages = asyncHandler(async (req, res) => {
     content: queryRegex,
   };
 
-  const [items, total] = await Promise.all([
-    Message.find(filter)
-      .sort({ createdAt: -1, _id: -1 })
-      .skip(skip)
-      .limit(limit)
-      .populate('senderId', 'username avatarUrl')
-      .populate('conversationId', 'type name participants'),
-    Message.countDocuments(filter),
-  ]);
+  // Apply cursor filter
+  const query = { ...filter };
+  if (cursor) {
+    const parsed = decodeCursor(cursor);
+    if (!parsed) {
+      throw new ApiError(400, 'INVALID_CURSOR', 'Cursor is invalid');
+    }
+    query.$or = [
+      { createdAt: { $lt: parsed.createdAt } },
+      {
+        createdAt: parsed.createdAt,
+        _id: { $lt: parsed.id },
+      },
+    ];
+  }
+
+  const items = await Message.find(query)
+    .sort({ createdAt: -1, _id: -1 })
+    .limit(limit + 1)
+    .populate('senderId', 'username avatarUrl')
+    .populate('conversationId', 'type name participants');
+
+  let nextCursor = null;
+  let finalItems = items;
+
+  if (items.length > limit) {
+    const nextItem = items[limit - 1];
+    nextCursor = encodeCursor({
+      createdAt: nextItem.createdAt,
+      id: nextItem._id.toString(),
+    });
+    finalItems = items.slice(0, limit);
+  }
 
   return successResponse(
     res,
     {
-      items,
-      pagination: {
-        page,
-        limit,
-        total,
-        totalPages: Math.ceil(total / limit),
-      },
+      items: finalItems,
+      nextCursor,
+      limit,
     },
     'Message search result',
   );
@@ -64,9 +81,8 @@ const searchMessages = asyncHandler(async (req, res) => {
 
 const searchUsers = asyncHandler(async (req, res) => {
   const { q } = req.query;
-  const page = Number(req.query.page);
-  const limit = Number(req.query.limit);
-  const skip = (page - 1) * limit;
+  const limit = Math.min(Number(req.query.limit) || 20, 100);
+  const { cursor } = req.query;
   const queryRegex = new RegExp(escapeRegex(q), 'i');
 
   const filter = {
@@ -74,25 +90,47 @@ const searchUsers = asyncHandler(async (req, res) => {
     $or: [{ username: queryRegex }, { email: queryRegex }, { phone: queryRegex }],
   };
 
-  const [items, total] = await Promise.all([
-    User.find(filter)
-      .select('username email phone avatarUrl isOnline lastSeen')
-      .sort({ isOnline: -1, updatedAt: -1 })
-      .skip(skip)
-      .limit(limit),
-    User.countDocuments(filter),
-  ]);
+  // Apply cursor filter
+  const query = { ...filter };
+  if (cursor) {
+    const parsed = decodeCursor(cursor);
+    if (!parsed) {
+      throw new ApiError(400, 'INVALID_CURSOR', 'Cursor is invalid');
+    }
+    // Merge with existing $or condition for search + pagination cursor
+    query.$or = [
+      ...(filter.$or || []),
+      { updatedAt: { $lt: parsed.createdAt } },
+      {
+        updatedAt: parsed.createdAt,
+        _id: { $lt: parsed.id },
+      },
+    ];
+  }
+
+  const items = await User.find(query)
+    .select('username email phone avatarUrl isOnline lastSeen')
+    .sort({ isOnline: -1, updatedAt: -1 })
+    .limit(limit + 1);
+
+  let nextCursor = null;
+  let finalItems = items;
+
+  if (items.length > limit) {
+    const nextItem = items[limit - 1];
+    nextCursor = encodeCursor({
+      createdAt: nextItem.updatedAt,
+      id: nextItem._id.toString(),
+    });
+    finalItems = items.slice(0, limit);
+  }
 
   return successResponse(
     res,
     {
-      items,
-      pagination: {
-        page,
-        limit,
-        total,
-        totalPages: Math.ceil(total / limit),
-      },
+      items: finalItems,
+      nextCursor,
+      limit,
     },
     'User search result',
   );

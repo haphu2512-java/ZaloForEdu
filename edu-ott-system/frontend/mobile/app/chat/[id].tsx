@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -11,6 +11,7 @@ import {
   Alert,
   ActionSheetIOS,
   Modal,
+  Linking,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
@@ -25,13 +26,18 @@ import {
   deleteMessage,
   recallMessage,
   reactToMessage,
-  uploadMedia,
   getConversations,
+  createConversation,
   pinGroupMessage,
   unpinGroupMessage,
+  updateConversationPreference,
 } from '../../utils/messageService';
+import { uploadMediaBase64 } from '../../utils/mediaService';
+import { getMediaById } from '../../utils/mediaService';
 import { connectSocket, getSocket, joinConversation } from '../../utils/socketService';
-import type { Message, Conversation } from '../../types/chat';
+import type { Message, Conversation, MediaItem } from '../../types/chat';
+import { useColorScheme } from '@/components/useColorScheme';
+import Colors from '@/constants/Colors';
 
 const QUICK_EMOJIS = ['😀', '😂', '😍', '🥰', '👍', '❤️', '🔥', '😭', '🙏', '🎉'];
 
@@ -60,6 +66,8 @@ export default function ChatScreen() {
   const router = useRouter();
   const { user } = useAuth();
   const insets = useSafeAreaInsets();
+  const colorScheme = useColorScheme();
+  const colors = Colors[colorScheme === 'dark' ? 'dark' : 'light'];
 
   const [messages, setMessages] = useState<Message[]>([]);
   const currentUserId = user?.id || (user as any)?._id || '';
@@ -76,6 +84,64 @@ export default function ChatScreen() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [isForwarding, setIsForwarding] = useState(false);
   const [conversation, setConversation] = useState<Conversation | null>(null);
+  const [mediaById, setMediaById] = useState<Record<string, MediaItem>>({});
+  const [editorVisible, setEditorVisible] = useState(false);
+  const [editorTitle, setEditorTitle] = useState('');
+  const [editorPlaceholder, setEditorPlaceholder] = useState('');
+  const [editorValue, setEditorValue] = useState('');
+  const [editorSubmit, setEditorSubmit] = useState<null | ((value: string) => void)>(null);
+  const [commonGroupsVisible, setCommonGroupsVisible] = useState(false);
+  const [commonGroups, setCommonGroups] = useState<Conversation[]>([]);
+
+  const getUserId = (value: any): string => {
+    if (!value) return '';
+    if (typeof value === 'string') return value;
+    return value._id || value.id || '';
+  };
+
+  const otherParticipant =
+    conversation?.type === 'direct'
+      ? conversation.participants?.find((p) => (p._id || p.id || '') !== currentUserId)
+      : null;
+
+  const conversationTitle =
+    conversation?.preference?.nickname ||
+    (conversation ? getConversationTitle(conversation, currentUserId) : 'Trò chuyện');
+
+  const openTextEditor = (
+    title: string,
+    placeholder: string,
+    onSubmit: (value: string) => void,
+    defaultValue: string = '',
+  ) => {
+    setEditorTitle(title);
+    setEditorPlaceholder(placeholder);
+    setEditorValue(defaultValue);
+    setEditorSubmit(() => onSubmit);
+    setEditorVisible(true);
+  };
+
+  const ensureMediaLoaded = useCallback(async (mediaIds: string[]) => {
+    const uniqueIds = Array.from(new Set((mediaIds || []).filter(Boolean)));
+    const missingIds = uniqueIds.filter((id) => !mediaById[id]);
+    if (missingIds.length === 0) return;
+    const entries = await Promise.all(
+      missingIds.map(async (id) => {
+        try {
+          const media = await getMediaById(id);
+          return [id, media] as const;
+        } catch {
+          return null;
+        }
+      }),
+    );
+    const validEntries = entries.filter((e): e is readonly [string, MediaItem] => !!e);
+    if (!validEntries.length) return;
+    setMediaById((prev) => ({
+      ...prev,
+      ...Object.fromEntries(validEntries),
+    }));
+  }, [mediaById]);
 
   const loadInitialMessages = useCallback(async () => {
     setIsLoading(true);
@@ -83,7 +149,7 @@ export default function ChatScreen() {
       const res = await getMessages({ conversationId, limit: 30 });
       setMessages(res.items);
       setNextCursor(res.nextCursor);
-      const convRes = await getConversations(1, 100);
+      const convRes = await getConversations(null, 100);
       const matched = (convRes.items || []).find((item) => (item._id || item.id) === conversationId) || null;
       setConversation(matched);
     } catch (error) {
@@ -97,6 +163,13 @@ export default function ChatScreen() {
   useEffect(() => {
     loadInitialMessages();
   }, [loadInitialMessages]);
+
+  useEffect(() => {
+    const ids = messages.flatMap((m) => m.mediaIds || []);
+    if (ids.length) {
+      void ensureMediaLoaded(ids);
+    }
+  }, [messages, ensureMediaLoaded]);
 
   useEffect(() => {
     let mounted = true;
@@ -268,7 +341,7 @@ export default function ChatScreen() {
           encoding: FileSystem.EncodingType.Base64,
         });
 
-        const media = await uploadMedia({
+        const media = await uploadMediaBase64({
           fileName: asset.name,
           mimeType: asset.mimeType || 'application/octet-stream',
           contentBase64: base64,
@@ -301,7 +374,7 @@ export default function ChatScreen() {
 
   const openForwardModal = async (msg: Message) => {
     try {
-      const res = await getConversations(1, 50);
+      const res = await getConversations(null, 50);
       const targets = (res.items || []).filter((c) => (c._id || c.id) !== conversationId);
       setConversations(targets);
       setForwardSource(msg);
@@ -358,6 +431,94 @@ export default function ChatScreen() {
             Alert.alert('Lỗi', 'Không thể thả cảm xúc');
           }
         },
+      })),
+    );
+  };
+
+  const loadCommonGroupsWithUser = async () => {
+    if (!otherParticipant) return;
+    const otherUserId = getUserId(otherParticipant);
+    const allConversations = conversations.length ? conversations : (await getConversations(null, 100)).items || [];
+    const sharedGroups = allConversations.filter((conv) => {
+      if (conv.type !== 'group') return false;
+      const participantIds = (conv.participants || []).map((p) => getUserId(p));
+      return participantIds.includes(currentUserId) && participantIds.includes(otherUserId);
+    });
+    setCommonGroups(sharedGroups);
+    setCommonGroupsVisible(true);
+  };
+
+  const handleOpenConversationOptions = () => {
+    if (!conversation) return;
+    const options = ['Hủy'];
+    const actions: Array<() => void> = [() => {}];
+
+    options.push('Đặt biệt danh');
+    actions.push(() =>
+      openTextEditor(
+        'Đặt biệt danh cuộc trò chuyện',
+        'Nhập biệt danh',
+        (value) =>
+          void (async () => {
+            try {
+              await updateConversationPreference(conversationId, { nickname: value });
+              setConversation((prev) =>
+                prev
+                  ? { ...prev, preference: { ...(prev.preference || {}), nickname: value } }
+                  : prev,
+              );
+            } catch (e: any) {
+              Alert.alert('Lỗi', e.message || 'Không thể cập nhật biệt danh');
+            }
+          })(),
+        conversation.preference?.nickname || '',
+      ),
+    );
+
+    if (conversation.type === 'direct' && otherParticipant) {
+      options.push('Xem nhóm chung');
+      actions.push(() => {
+        void loadCommonGroupsWithUser();
+      });
+
+      options.push('Tạo nhóm với người này');
+      actions.push(() =>
+        openTextEditor(
+          'Tạo nhóm',
+          'Nhập tên nhóm',
+          (value) =>
+            void (async () => {
+              try {
+                const created = await createConversation({
+                  type: 'group',
+                  name: value,
+                  participantIds: [getUserId(otherParticipant)],
+                });
+                const newId = created._id || created.id;
+                if (newId) router.push(`/chat/${newId}`);
+              } catch (e: any) {
+                Alert.alert('Lỗi', e.message || 'Không thể tạo nhóm');
+              }
+            })(),
+          `Nhóm với ${otherParticipant.username || 'bạn'}`,
+        ),
+      );
+    }
+
+    if (Platform.OS === 'ios') {
+      ActionSheetIOS.showActionSheetWithOptions({ options, cancelButtonIndex: 0 }, (idx) => {
+        actions[idx]?.();
+      });
+      return;
+    }
+
+    Alert.alert(
+      'Tùy chọn cuộc trò chuyện',
+      '',
+      options.map((text, idx) => ({
+        text,
+        style: idx === 0 ? 'cancel' : 'default',
+        onPress: actions[idx],
       })),
     );
   };
@@ -450,8 +611,8 @@ export default function ChatScreen() {
           style={[
             { padding: 10, marginVertical: 4, marginHorizontal: 16, borderRadius: 16, maxWidth: '75%' },
             isMine
-              ? { alignSelf: 'flex-end', backgroundColor: '#F1F5F9' }
-              : { alignSelf: 'flex-start', backgroundColor: '#F1F5F9' },
+              ? { alignSelf: 'flex-end', backgroundColor: colors.surface }
+              : { alignSelf: 'flex-start', backgroundColor: colors.surface },
           ]}
         >
           <Text style={{ color: '#94A3B8', fontStyle: 'italic' }}>Tin nhắn đã bị thu hồi</Text>
@@ -466,8 +627,8 @@ export default function ChatScreen() {
         style={[
           { padding: 12, marginVertical: 4, marginHorizontal: 16, borderRadius: 16, maxWidth: '75%' },
           isMine
-            ? { alignSelf: 'flex-end', backgroundColor: '#3B82F6', borderBottomRightRadius: 4 }
-            : { alignSelf: 'flex-start', backgroundColor: '#F1F5F9', borderBottomLeftRadius: 4 },
+            ? { alignSelf: 'flex-end', backgroundColor: '#0068FF', borderBottomRightRadius: 4 }
+            : { alignSelf: 'flex-start', backgroundColor: colors.surface, borderBottomLeftRadius: 4 },
         ]}
       >
         {!isMine && <Text style={{ fontSize: 12, color: '#64748B', marginBottom: 4 }}>{senderName}</Text>}
@@ -481,9 +642,46 @@ export default function ChatScreen() {
           </Text>
         )}
         {!!item.mediaIds?.length && (
-          <Text style={{ marginTop: 6, color: isMine ? '#DBEAFE' : '#475569', fontSize: 12 }}>
-            Đính kèm {item.mediaIds.length} file
-          </Text>
+          <View style={{ marginTop: 8, gap: 6 }}>
+            {item.mediaIds.map((mediaId, idx) => {
+              const media = mediaById[mediaId];
+              const fileName = media?.fileName || `Tệp đính kèm ${idx + 1}`;
+              const canOpen = !!media?.url;
+              return (
+                <TouchableOpacity
+                  key={`${mediaId}-${idx}`}
+                  disabled={!canOpen}
+                  onPress={async () => {
+                    if (!media?.url) return;
+                    const supported = await Linking.canOpenURL(media.url);
+                    if (supported) {
+                      await Linking.openURL(media.url);
+                    } else {
+                      Alert.alert('Lỗi', 'Không thể mở tệp này trên thiết bị');
+                    }
+                  }}
+                  style={{
+                    borderRadius: 10,
+                    paddingHorizontal: 10,
+                    paddingVertical: 8,
+                    backgroundColor: isMine ? '#1D4ED8' : '#E5E7EB',
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 8,
+                    opacity: canOpen ? 1 : 0.7,
+                  }}
+                >
+                  <Ionicons name="document-attach-outline" size={16} color={isMine ? '#DBEAFE' : '#334155'} />
+                  <Text
+                    numberOfLines={1}
+                    style={{ flex: 1, color: isMine ? '#DBEAFE' : '#334155', fontSize: 12, fontWeight: '600' }}
+                  >
+                    {fileName}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
         )}
       </TouchableOpacity>
     );
@@ -492,21 +690,26 @@ export default function ChatScreen() {
   if (isLoading) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-        <ActivityIndicator size="large" color="#3B82F6" />
+        <ActivityIndicator size="large" color="#0068FF" />
       </View>
     );
   }
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: '#fff' }}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: '#FFFFFF' }}>
       <Stack.Screen
         options={{
-          title: 'Trò chuyện',
+          title: conversationTitle,
           headerShown: true,
           headerBackVisible: false,
           headerLeft: () => (
             <TouchableOpacity onPress={() => router.back()} style={{ padding: 8, marginLeft: 4 }}>
-              <Ionicons name="arrow-back" size={26} color="#0F172A" />
+              <Ionicons name="arrow-back" size={24} color={colors.text} />
+            </TouchableOpacity>
+          ),
+          headerRight: () => (
+            <TouchableOpacity onPress={handleOpenConversationOptions} style={{ padding: 8, marginRight: 6 }}>
+              <Ionicons name="ellipsis-vertical" size={20} color={colors.text} />
             </TouchableOpacity>
           ),
         }}
@@ -518,9 +721,9 @@ export default function ChatScreen() {
         </View>
       )}
       {conversation?.type === 'group' && conversation?.pinnedMessageId && (
-        <View style={{ paddingVertical: 8, backgroundColor: '#EDE9FE', alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 8 }}>
-          <Ionicons name="pin" size={14} color="#6D28D9" />
-          <Text style={{ color: '#5B21B6', fontSize: 12 }}>Nhóm đang có tin nhắn ghim</Text>
+        <View style={{ paddingVertical: 8, backgroundColor: '#EEF4FF', alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 8 }}>
+          <Ionicons name="pin" size={14} color="#0068FF" />
+          <Text style={{ color: '#0068FF', fontSize: 12 }}>Nhóm đang có tin nhắn ghim</Text>
           <TouchableOpacity
             onPress={async () => {
               try {
@@ -531,7 +734,7 @@ export default function ChatScreen() {
               }
             }}
           >
-            <Text style={{ color: '#6D28D9', fontWeight: '700', fontSize: 12 }}>Bỏ ghim</Text>
+            <Text style={{ color: '#0068FF', fontWeight: '700', fontSize: 12 }}>Bỏ ghim</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -553,12 +756,12 @@ export default function ChatScreen() {
         />
 
         {showEmojiPanel && (
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 12, paddingVertical: 8, gap: 8, backgroundColor: '#F8FAFC' }}>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 12, paddingVertical: 8, gap: 8, backgroundColor: '#F5F5F5' }}>
             {QUICK_EMOJIS.map((emoji) => (
               <TouchableOpacity
                 key={emoji}
                 onPress={() => setInputText((prev) => `${prev}${emoji}`)}
-                style={{ paddingVertical: 6, paddingHorizontal: 10, borderRadius: 12, backgroundColor: '#EEF2FF' }}
+                style={{ paddingVertical: 6, paddingHorizontal: 10, borderRadius: 12, backgroundColor: '#EAF2FF' }}
               >
                 <Text style={{ fontSize: 20 }}>{emoji}</Text>
               </TouchableOpacity>
@@ -573,16 +776,16 @@ export default function ChatScreen() {
             padding: 12,
             paddingBottom: Math.max(12, insets.bottom),
             borderTopWidth: 1,
-            borderTopColor: '#E2E8F0',
-            backgroundColor: '#F8FAFC',
+            borderTopColor: '#EAEAEA',
+            backgroundColor: '#FFFFFF',
           }}
         >
           <TouchableOpacity onPress={() => setShowEmojiPanel((prev) => !prev)} style={{ marginRight: 10 }}>
-            <Ionicons name="happy-outline" size={26} color="#64748B" />
+            <Ionicons name="happy-outline" size={24} color="#8A8A8A" />
           </TouchableOpacity>
 
           <TouchableOpacity onPress={handleDocumentPick} style={{ marginRight: 10 }}>
-            <Ionicons name="attach" size={26} color="#64748B" />
+            <Ionicons name="attach" size={24} color="#8A8A8A" />
           </TouchableOpacity>
 
           <TextInput
@@ -590,7 +793,7 @@ export default function ChatScreen() {
               flex: 1,
               backgroundColor: '#fff',
               borderWidth: 1,
-              borderColor: '#E2E8F0',
+              borderColor: '#EAEAEA',
               borderRadius: 24,
               paddingHorizontal: 16,
               paddingTop: 10,
@@ -612,7 +815,7 @@ export default function ChatScreen() {
               width: 44,
               height: 44,
               borderRadius: 22,
-              backgroundColor: inputText.trim().length > 0 ? '#3B82F6' : '#CBD5E1',
+              backgroundColor: inputText.trim().length > 0 ? '#0068FF' : '#D1D5DB',
               alignItems: 'center',
               justifyContent: 'center',
             }}
@@ -651,6 +854,69 @@ export default function ChatScreen() {
             )}
           />
         </SafeAreaView>
+      </Modal>
+
+      <Modal visible={commonGroupsVisible} animationType="slide" onRequestClose={() => setCommonGroupsVisible(false)}>
+        <SafeAreaView style={{ flex: 1, backgroundColor: '#fff' }}>
+          <View style={{ paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#E2E8F0', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+            <TouchableOpacity onPress={() => setCommonGroupsVisible(false)}>
+              <Text style={{ color: '#0068FF', fontWeight: '700' }}>Đóng</Text>
+            </TouchableOpacity>
+            <Text style={{ fontSize: 18, fontWeight: '700' }}>Nhóm chung</Text>
+            <View style={{ width: 36 }} />
+          </View>
+          <FlatList
+            data={commonGroups}
+            keyExtractor={(item) => item._id || item.id || String(Math.random())}
+            ListEmptyComponent={
+              <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingVertical: 40 }}>
+                <Text style={{ color: '#64748B' }}>Chưa có nhóm chung</Text>
+              </View>
+            }
+            renderItem={({ item }) => (
+              <TouchableOpacity
+                onPress={() => {
+                  setCommonGroupsVisible(false);
+                  router.push(`/chat/${item._id || item.id}`);
+                }}
+                style={{ paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#F1F5F9' }}
+              >
+                <Text style={{ fontSize: 16, color: '#0F172A' }}>{item.name || 'Nhóm chat'}</Text>
+              </TouchableOpacity>
+            )}
+          />
+        </SafeAreaView>
+      </Modal>
+
+      <Modal visible={editorVisible} transparent animationType="fade" onRequestClose={() => setEditorVisible(false)}>
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+          <View style={{ width: '100%', borderRadius: 12, borderWidth: 1, borderColor: '#E2E8F0', padding: 16, gap: 12, backgroundColor: '#fff' }}>
+            <Text style={{ fontSize: 17, fontWeight: '700', color: '#0F172A' }}>{editorTitle}</Text>
+            <TextInput
+              value={editorValue}
+              onChangeText={setEditorValue}
+              placeholder={editorPlaceholder}
+              placeholderTextColor="#94A3B8"
+              style={{ borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, color: '#0F172A', fontSize: 16 }}
+            />
+            <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 8 }}>
+              <TouchableOpacity onPress={() => setEditorVisible(false)} style={{ borderRadius: 8, paddingHorizontal: 14, paddingVertical: 10, backgroundColor: '#E5E7EB' }}>
+                <Text style={{ color: '#374151', fontWeight: '700' }}>Hủy</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => {
+                  const value = editorValue.trim();
+                  if (!value || !editorSubmit) return;
+                  setEditorVisible(false);
+                  editorSubmit(value);
+                }}
+                style={{ borderRadius: 8, paddingHorizontal: 14, paddingVertical: 10, backgroundColor: '#0068FF' }}
+              >
+                <Text style={{ color: '#fff', fontWeight: '700' }}>Lưu</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
       </Modal>
     </SafeAreaView>
   );

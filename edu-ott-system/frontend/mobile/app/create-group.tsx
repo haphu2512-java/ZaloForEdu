@@ -37,7 +37,7 @@ export default function CreateGroupScreen() {
     const run = async () => {
       try {
         setLoading(true);
-        const res = await getFriendList(1, 200);
+        const res = await getFriendList(null, 200);
         setFriends(res.items || []);
       } finally {
         setLoading(false);

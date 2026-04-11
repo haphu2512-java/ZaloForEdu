@@ -146,15 +146,11 @@ export interface SendFriendRequestPayload {
 
 // --- API Responses ---
 
-/** Paginated response wrapper */
+/** Cursor-based paginated response wrapper */
 export interface PaginatedResponse<T> {
   items: T[];
-  pagination: {
-    page: number;
-    limit: number;
-    total: number;
-    totalPages: number;
-  };
+  nextCursor: string | null;  // Base64-encoded cursor for next page
+  limit: number;
 }
 
 /** Cursor-based pagination for messages */

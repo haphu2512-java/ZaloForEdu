@@ -2,6 +2,7 @@
 import { useRouter, useSegments } from 'expo-router';
 import * as authService from '../utils/authService';
 import type { User, LoginPayload, RegisterPayload, UpdateProfilePayload } from '../types/auth';
+import { getMySettings } from '../utils/settingsService';
 
 interface AuthContextType {
   user: User | null;
@@ -43,6 +44,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const segments = useSegments();
   const router = useRouter();
 
+  const syncThemeSettings = async () => {
+    try {
+      await getMySettings();
+    } catch {
+      // Ignore theme sync errors to avoid blocking auth flow.
+    }
+  };
+
   // Khá»Ÿi cháº¡y App: Load cached user & try refresh token
   useEffect(() => {
     const loadUser = async () => {
@@ -59,6 +68,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           const refreshResult = await authService.refreshAccessToken();
           if (refreshResult?.success && refreshResult.user) {
             setUser(refreshResult.user);
+            await syncThemeSettings();
           } else if (!cachedUser) {
             // No cached user and failed to refresh â€” session expired
             await authService.removeToken();
@@ -97,6 +107,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const res = await authService.login(payload);
     if (!res.user) throw new Error('ÄÄƒng nháº­p tháº¥t báº¡i');
     setUser(res.user);
+    await syncThemeSettings();
     return res.user;
   };
 

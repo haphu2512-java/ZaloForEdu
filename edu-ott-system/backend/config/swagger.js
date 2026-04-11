@@ -4,14 +4,33 @@ const options = {
   definition: {
     openapi: '3.0.3',
     info: {
-      title: 'OTT Messaging Platform API',
-      version: '1.2.0',
-      description: 'REST API for auth, users, friends, conversations, messages, media and notifications.',
+      title: 'Zalo Clone - OTT Messaging Platform API',
+      version: '2.0.0',
+      description: 'Complete REST API documentation for authentication, users, messaging, friends, conversations, media, notifications, search, settings and chatbot.',
+      contact: {
+        name: 'Development Team',
+        url: 'https://github.com/ZaloClone',
+      },
+      license: {
+        name: 'MIT',
+      },
     },
     servers: [
       {
         url: 'http://localhost:5000/api/v1',
-        description: 'Local Development',
+        description: 'Local Development Server',
+        variables: {
+          protocol: {
+            default: 'http',
+          },
+          host: {
+            default: 'localhost:5000',
+          },
+        },
+      },
+      {
+        url: 'https://api.example.com/api/v1',
+        description: 'Production Server',
       },
     ],
     tags: [
@@ -274,8 +293,40 @@ const options = {
         },
       },
       responses: {
-        Unauthorized: {
-          description: 'Unauthorized',
+        UnauthorizedError: {
+          description: 'Access token is missing or invalid',
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/ApiError' },
+            },
+          },
+        },
+        ForbiddenError: {
+          description: 'User does not have permission for this resource',
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/ApiError' },
+            },
+          },
+        },
+        NotFoundError: {
+          description: 'Resource not found',
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/ApiError' },
+            },
+          },
+        },
+        ConflictError: {
+          description: 'Resource conflict',
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/ApiError' },
+            },
+          },
+        },
+        ValidationError: {
+          description: 'Request validation failed',
           content: {
             'application/json': {
               schema: { $ref: '#/components/schemas/ApiError' },
@@ -285,7 +336,14 @@ const options = {
       },
     },
   },
+  // Load all endpoint and schema documentation from routes folder
+  // Format: ['path/to/files/*.js']
+  // Picks up:
+  //   - auth.routes.js, user.routes.js, etc.
+  //   - swagger.endpoints.js (comprehensive endpoint documentation)
+  //   - swagger.schemas.js (comprehensive schema definitions)
   apis: ['./routes/*.js'],
 };
 
+// Generate Swagger specification from JSDoc comments
 module.exports = swaggerJsdoc(options);

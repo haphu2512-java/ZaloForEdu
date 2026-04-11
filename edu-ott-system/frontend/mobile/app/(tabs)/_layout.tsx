@@ -18,7 +18,8 @@ function TabBarIcon(props: {
 
 export default function TabLayout() {
   const colorScheme = useColorScheme() ?? 'light';
-  const colors = Colors[colorScheme];
+  const resolvedScheme: 'light' | 'dark' = colorScheme === 'dark' ? 'dark' : 'light';
+  const colors = Colors[resolvedScheme];
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
@@ -39,14 +40,14 @@ export default function TabLayout() {
           fontWeight: '600',
         },
         headerStyle: {
-          backgroundColor: colors.surface,
+          backgroundColor: colors.tint,
           shadowColor: 'transparent',
           elevation: 0,
         },
         headerTitleStyle: {
           fontWeight: '700',
-          fontSize: 20,
-          color: colors.text,
+          fontSize: 18,
+          color: '#FFFFFF',
         },
         headerShown: useClientOnlyValue(false, true),
       }}>
@@ -54,16 +55,16 @@ export default function TabLayout() {
         name="index"
         options={{
           title: 'Tin nhắn',
-          tabBarIcon: ({ color, focused }) => (
+          tabBarIcon: ({ color, focused }: { color: string; focused: boolean }) => (
             <TabBarIcon name={focused ? 'chatbubbles' : 'chatbubbles-outline'} color={color} />
           ),
           headerRight: () => (
             <View style={{ flexDirection: 'row', paddingRight: 16, gap: 18 }}>
               <TouchableOpacity onPress={() => router.push('/search-messages' as any)}>
-                <Ionicons name="search-outline" size={22} color={colors.text} />
+                <Ionicons name="search-outline" size={22} color="#FFFFFF" />
               </TouchableOpacity>
               <TouchableOpacity onPress={() => router.push('/create-group' as any)}>
-                <Ionicons name="create-outline" size={22} color={colors.text} />
+                <Ionicons name="create-outline" size={22} color="#FFFFFF" />
               </TouchableOpacity>
             </View>
           ),
@@ -73,7 +74,7 @@ export default function TabLayout() {
         name="contacts"
         options={{
           title: 'Danh bạ',
-          tabBarIcon: ({ color, focused }) => (
+          tabBarIcon: ({ color, focused }: { color: string; focused: boolean }) => (
             <TabBarIcon name={focused ? 'people' : 'people-outline'} color={color} />
           ),
         }}
@@ -82,7 +83,7 @@ export default function TabLayout() {
         name="chatbot"
         options={{
           title: 'ChatBot AI',
-          tabBarIcon: ({ color, focused }) => (
+          tabBarIcon: ({ color, focused }: { color: string; focused: boolean }) => (
             <TabBarIcon name={focused ? 'sparkles' : 'sparkles-outline'} color={color} />
           ),
         }}
@@ -91,7 +92,7 @@ export default function TabLayout() {
         name="profile"
         options={{
           title: 'Cá nhân',
-          tabBarIcon: ({ color, focused }) => (
+          tabBarIcon: ({ color, focused }: { color: string; focused: boolean }) => (
             <TabBarIcon name={focused ? 'person' : 'person-outline'} color={color} />
           ),
         }}

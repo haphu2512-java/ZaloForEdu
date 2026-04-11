@@ -4,6 +4,7 @@ const Message = require('../models/Message');
 const asyncHandler = require('../utils/asyncHandler');
 const ApiError = require('../utils/apiError');
 const { successResponse } = require('../utils/apiResponse');
+const { encodeCursor, decodeCursor } = require('../utils/cursor');
 
 const toStr = (id) => id?.toString();
 const getOwnerId = (conversation) => conversation.ownerId || conversation.createdBy;
@@ -39,9 +40,9 @@ const ensureAdminOrOwner = (conversation, userId) => {
 };
 
 const listConversations = asyncHandler(async (req, res) => {
-  const page = Number(req.query.page);
-  const limit = Number(req.query.limit);
-  const skip = (page - 1) * limit;
+  const limit = Math.min(Number(req.query.limit) || 20, 100);
+  const { cursor } = req.query;
+
   const hiddenOrDeletedPrefs = await ConversationPreference.find({
     userId: req.user._id,
     $or: [{ isHidden: true }, { isDeleted: true }],
@@ -53,34 +54,54 @@ const listConversations = asyncHandler(async (req, res) => {
     ...(excludedConversationIds.length > 0 ? { _id: { $nin: excludedConversationIds } } : {}),
   };
 
-  const [conversations, total] = await Promise.all([
-    Conversation.find(baseFilter)
-      .populate('participants', 'username email avatarUrl isOnline lastSeen')
-      .populate('ownerId', 'username avatarUrl')
-      .populate('adminIds', 'username avatarUrl')
-      .sort({ lastMessageAt: -1, updatedAt: -1 })
-      .skip(skip)
-      .limit(limit),
-    Conversation.countDocuments(baseFilter),
-  ]);
+  // Apply cursor filter
+  const query = { ...baseFilter };
+  if (cursor) {
+    const parsedCursor = decodeCursor(cursor);
+    if (!parsedCursor) {
+      throw new ApiError(400, 'INVALID_CURSOR', 'Cursor is invalid');
+    }
+    query.$or = [
+      { lastMessageAt: { $lt: parsedCursor.createdAt } },
+      {
+        lastMessageAt: parsedCursor.createdAt,
+        _id: { $lt: parsedCursor.id },
+      },
+    ];
+  }
 
-  if (conversations.length === 0) {
+  const conversations = await Conversation.find(query)
+    .populate('participants', 'username email avatarUrl isOnline lastSeen')
+    .populate('ownerId', 'username avatarUrl')
+    .populate('adminIds', 'username avatarUrl')
+    .sort({ lastMessageAt: -1, _id: -1 })
+    .limit(limit + 1);
+
+  let nextCursor = null;
+  let finalItems = conversations;
+
+  if (conversations.length > limit) {
+    const nextItem = conversations[limit - 1];
+    nextCursor = encodeCursor({
+      createdAt: nextItem.lastMessageAt,
+      id: nextItem._id.toString(),
+    });
+    finalItems = conversations.slice(0, limit);
+  }
+
+  if (finalItems.length === 0) {
     return successResponse(
       res,
       {
         items: [],
-        pagination: {
-          page,
-          limit,
-          total,
-          totalPages: 0,
-        },
+        nextCursor: null,
+        limit,
       },
       'Conversations fetched',
     );
   }
 
-  const conversationIds = conversations.map((conversation) => conversation._id);
+  const conversationIds = finalItems.map((conversation) => conversation._id);
   
   const latestMessagePromises = conversationIds.map((cid) => 
     Message.findOne({ conversationId: cid, deletedBy: { $ne: req.user._id } })
@@ -90,13 +111,14 @@ const listConversations = asyncHandler(async (req, res) => {
   
   const latestMessagesArr = await Promise.all(latestMessagePromises);
 
-  const items = conversations.map((conversation, index) => {
+  const items = finalItems.map((conversation, index) => {
     const latest = latestMessagesArr[index];
     return {
       ...conversation.toObject(),
       latestMessage: latest ? latest.toObject() : null,
     };
   });
+
   const preferences = await ConversationPreference.find({
     userId: req.user._id,
     conversationId: { $in: conversationIds },
@@ -111,12 +133,8 @@ const listConversations = asyncHandler(async (req, res) => {
     res,
     {
       items: itemsWithPrefs,
-      pagination: {
-        page,
-        limit,
-        total,
-        totalPages: Math.ceil(total / limit),
-      },
+      nextCursor,
+      limit,
     },
     'Conversations fetched',
   );

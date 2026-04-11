@@ -17,18 +17,18 @@ function normalizeUser(user: UserInfo): UserInfo {
 
 /**
  * Tìm kiếm users theo username, email hoặc phone
- * GET /search/users?q=&page=&limit=
+ * GET /search/users?q=&limit=&cursor=
  */
 export async function searchUsers(
   query: string,
-  page: number = 1,
+  cursor: string | null = null,
   limit: number = 20,
 ): Promise<PaginatedResponse<UserInfo>> {
   const params = new URLSearchParams({
     q: query,
-    page: String(page),
     limit: String(limit),
   });
+  if (cursor) params.append('cursor', cursor);
   const res = await fetchAPI(`${SEARCH_ENDPOINT}/users?${params.toString()}`);
   return {
     ...res.data,
@@ -38,18 +38,18 @@ export async function searchUsers(
 
 /**
  * Tìm kiếm messages trong conversations của user
- * GET /search/messages?q=&page=&limit=
+ * GET /search/messages?q=&limit=&cursor=
  */
 export async function searchMessages(
   query: string,
-  page: number = 1,
+  cursor: string | null = null,
   limit: number = 20,
 ): Promise<any> {
   const params = new URLSearchParams({
     q: query,
-    page: String(page),
     limit: String(limit),
   });
+  if (cursor) params.append('cursor', cursor);
   const res = await fetchAPI(
     `${SEARCH_ENDPOINT}/messages?${params.toString()}`,
   );

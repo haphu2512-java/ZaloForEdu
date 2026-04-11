@@ -12,6 +12,18 @@ type CloudinarySignature = {
   uploadUrl: string;
 };
 
+export async function uploadMediaBase64(payload: {
+  fileName: string;
+  mimeType: string;
+  contentBase64: string;
+}): Promise<MediaItem> {
+  const res = await fetchAPI('/media/upload', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+  return res.data;
+}
+
 export async function uploadImageToCloudinary(localUri: string): Promise<string> {
   const signatureRes = await fetchAPI('/media/cloudinary/signature', {
     method: 'POST',
