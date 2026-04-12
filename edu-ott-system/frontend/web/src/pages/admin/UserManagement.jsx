@@ -18,12 +18,12 @@ const UserManagement = () => {
     const fetchUsers = async () => {
       try {
         setIsLoading(true);
-        const res = await userService.getAllUsers(); 
-        
+        const res = await userService.getAllUsers();
+
         // Bóc đúng mảng users từ response của Backend
         const usersArray = res?.data?.users || res?.data?.data?.users || [];
         setUsers(usersArray);
-        
+
       } catch (error) {
         console.error('Lỗi khi lấy danh sách users:', error);
       } finally {
@@ -39,7 +39,7 @@ const UserManagement = () => {
     if (window.confirm('Bạn có chắc chắn muốn xóa tài khoản này không? Hành động này không thể hoàn tác.')) {
       try {
         await userService.deleteUser(userId);
-        
+
         // Cập nhật lại UI sau khi xóa thành công
         setUsers(users.filter(user => user._id !== userId));
         alert('Đã xóa người dùng thành công!');
@@ -79,14 +79,14 @@ const UserManagement = () => {
       };
 
       await userService.updateUser(editingUser._id, updateData);
-      
+
       // Cập nhật lại UI không cần load lại trang
-      setUsers(users.map(u => 
-        u._id === editingUser._id 
-          ? { ...u, fullName: editingUser.fullName, phoneNumber: editingUser.phoneNumber, isActive: editingUser.isActive } 
+      setUsers(users.map(u =>
+        u._id === editingUser._id
+          ? { ...u, fullName: editingUser.fullName, phoneNumber: editingUser.phoneNumber, isActive: editingUser.isActive }
           : u
       ));
-      
+
       alert('Cập nhật người dùng thành công!');
       setIsEditModalOpen(false);
     } catch (error) {
@@ -98,8 +98,8 @@ const UserManagement = () => {
   };
 
   // Logic lọc danh sách theo từ khóa
-  const filteredUsers = users.filter(user => 
-    (user.username && user.username.toLowerCase().includes(searchTerm.toLowerCase())) || 
+  const filteredUsers = users.filter(user =>
+    (user.username && user.username.toLowerCase().includes(searchTerm.toLowerCase())) ||
     (user.email && user.email.toLowerCase().includes(searchTerm.toLowerCase())) ||
     (user.fullName && user.fullName.toLowerCase().includes(searchTerm.toLowerCase())) ||
     (user.firstName && user.firstName.toLowerCase().includes(searchTerm.toLowerCase()))
@@ -107,14 +107,14 @@ const UserManagement = () => {
 
   return (
     <div style={{ animation: "fadeIn 0.3s ease-out", position: "relative" }}>
-      
+
       {/* Header */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: "32px" }}>
         <div>
           <h1 style={{ margin: "0 0 8px 0", color: "#0f172a", fontSize: "28px", fontWeight: 800 }}>Quản lý người dùng</h1>
           <p style={{ margin: 0, color: "#64748b", fontSize: "15px" }}>Quản trị viên hệ thống</p>
         </div>
-        <button 
+        <button
           onClick={() => alert("Chức năng thêm người dùng đang được phát triển!")}
           style={{ backgroundColor: "#2563eb", color: "white", padding: "12px 24px", borderRadius: "10px", border: "none", display: "flex", alignItems: "center", gap: "10px", cursor: "pointer", fontWeight: 600, fontSize: "15px", boxShadow: "0 4px 14px 0 rgba(37, 99, 235, 0.39)", transition: "all 0.2s" }}
         >
@@ -124,7 +124,7 @@ const UserManagement = () => {
 
       {/* Bảng dữ liệu */}
       <div style={{ backgroundColor: "white", borderRadius: "16px", boxShadow: "0 4px 20px -2px rgba(0,0,0,0.05)", border: "1px solid #f1f5f9", overflow: "hidden" }}>
-        
+
         {/* Thanh công cụ / Tìm kiếm */}
         <div style={{ padding: "20px 24px", borderBottom: "1px solid #f1f5f9", display: "flex", justifyContent: "space-between", alignItems: "center", backgroundColor: "#fff" }}>
           <div style={{ position: "relative", width: "400px" }}>
@@ -171,13 +171,13 @@ const UserManagement = () => {
               <tbody>
                 {filteredUsers.map((user, idx) => (
                   <tr key={user._id} style={{ borderBottom: "1px solid #f1f5f9", backgroundColor: idx % 2 === 0 ? "white" : "#fafafa", transition: "background 0.2s" }}>
-                    
+
                     <td style={{ padding: "16px 24px" }}>
                       <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
-                        <img 
-                          src={user.avatarUrl || user.avatar || 'https://i.pravatar.cc/150?img=11'} 
-                          alt="Avatar" 
-                          style={{ width: "44px", height: "44px", borderRadius: "50%", objectFit: "cover", backgroundColor: "#f1f5f9", border: "2px solid #fff", boxShadow: "0 2px 8px rgba(0,0,0,0.05)" }} 
+                        <img
+                          src={user.avatarUrl || user.avatar || 'https://i.pravatar.cc/150?img=11'}
+                          alt="Avatar"
+                          style={{ width: "44px", height: "44px", borderRadius: "50%", objectFit: "cover", backgroundColor: "#f1f5f9", border: "2px solid #fff", boxShadow: "0 2px 8px rgba(0,0,0,0.05)" }}
                         />
                         <div>
                           <p style={{ margin: "0 0 4px 0", fontWeight: 700, fontSize: "15px", color: "#0f172a" }}>
@@ -206,15 +206,15 @@ const UserManagement = () => {
 
                     <td style={{ padding: "16px 24px" }}>
                       <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: "10px" }}>
-                        <button 
+                        <button
                           onClick={() => openEditModal(user)}
                           style={{ padding: "8px", backgroundColor: "#f8fafc", color: "#64748b", borderRadius: "8px", border: "1px solid #e2e8f0", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
                           title="Chỉnh sửa"
                         >
                           <Edit size={16} />
                         </button>
-                        
-                        <button 
+
+                        <button
                           onClick={() => handleDelete(user._id)}
                           style={{ padding: "8px", backgroundColor: "#fef2f2", color: "#ef4444", borderRadius: "8px", border: "1px solid #fecaca", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
                           title="Xóa tài khoản"
@@ -236,7 +236,7 @@ const UserManagement = () => {
       {isEditModalOpen && editingUser && (
         <div style={{ position: "fixed", inset: 0, backgroundColor: "rgba(15, 23, 42, 0.6)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, animation: "fadeIn 0.2s ease-out" }}>
           <div style={{ backgroundColor: "white", width: "100%", maxWidth: "450px", borderRadius: "20px", boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.25)", overflow: "hidden" }}>
-            
+
             <div style={{ padding: "20px 24px", borderBottom: "1px solid #f1f5f9", display: "flex", justifyContent: "space-between", alignItems: "center", backgroundColor: "#f8fafc" }}>
               <h3 style={{ margin: 0, fontSize: "18px", color: "#0f172a", fontWeight: 700 }}>Chỉnh sửa thông tin</h3>
               <button onClick={() => setIsEditModalOpen(false)} style={{ background: "transparent", border: "none", color: "#94a3b8", cursor: "pointer" }}>
@@ -246,10 +246,10 @@ const UserManagement = () => {
 
             <div style={{ padding: "24px" }}>
               <form onSubmit={handleEditSubmit} style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
-                
+
                 <div>
                   <label style={{ display: "block", fontSize: "14px", fontWeight: 600, color: "#334155", marginBottom: "8px" }}>Họ và Tên</label>
-                  <input 
+                  <input
                     type="text" name="fullName" value={editingUser.fullName} onChange={handleEditChange} required
                     style={{ width: "100%", padding: "12px 16px", borderRadius: "10px", border: "1px solid #cbd5e1", fontSize: "15px", outline: "none", boxSizing: "border-box" }}
                   />
@@ -257,16 +257,16 @@ const UserManagement = () => {
 
                 <div>
                   <label style={{ display: "block", fontSize: "14px", fontWeight: 600, color: "#334155", marginBottom: "8px" }}>Số điện thoại</label>
-                  <input 
+                  <input
                     type="text" name="phoneNumber" value={editingUser.phoneNumber} onChange={handleEditChange}
                     style={{ width: "100%", padding: "12px 16px", borderRadius: "10px", border: "1px solid #cbd5e1", fontSize: "15px", outline: "none", boxSizing: "border-box" }}
                   />
                 </div>
 
                 <div style={{ display: "flex", alignItems: "center", gap: "10px", padding: "10px 0" }}>
-                  <input 
-                    type="checkbox" id="isActive" name="isActive" 
-                    checked={editingUser.isActive} onChange={handleEditChange} 
+                  <input
+                    type="checkbox" id="isActive" name="isActive"
+                    checked={editingUser.isActive} onChange={handleEditChange}
                     style={{ width: "18px", height: "18px", cursor: "pointer" }}
                   />
                   <label htmlFor="isActive" style={{ fontSize: "15px", fontWeight: 600, color: editingUser.isActive ? "#16a34a" : "#dc2626", cursor: "pointer" }}>
@@ -285,7 +285,7 @@ const UserManagement = () => {
 
               </form>
             </div>
-            
+
           </div>
         </div>
       )}

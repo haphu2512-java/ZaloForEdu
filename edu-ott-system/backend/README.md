@@ -8,7 +8,6 @@ Backend API cho hệ thống nhắn tin realtime theo chuẩn `/api/v1`.
 - MongoDB local (mặc định: `mongodb://127.0.0.1:27017/ott_messaging`)
 - Redis local (mặc định: `redis://127.0.0.1:6379`)
 
-<<<<<<< HEAD
 ```
 backend/
 ├── src/
@@ -80,11 +79,9 @@ Route (+ Swagger) → Controller (req/res) → Service (business logic) → Mode
 - **Model**: Schema definition, indexes, methods, virtuals
 
 ## Cài đặt
-=======
 ## 2) Cấu hình môi trường
 
 1. Tạo file `.env` từ `.env.example`:
->>>>>>> Refactor_Project
 
 ```bash
 cp .env.example .env
@@ -107,7 +104,6 @@ npm install
 npm run dev
 ```
 
-<<<<<<< HEAD
 6. Xem API Documentation:
 ```
 http://localhost:5000/api-docs
@@ -377,9 +373,7 @@ Hệ thống xác thực (Đăng ký, Quên mật khẩu) yêu cầu gửi email
 | isDeleted | Boolean | Đã xóa (soft delete) |
 
 ## Testing
-=======
 Health check:
->>>>>>> Refactor_Project
 
 ```bash
 GET http://localhost:5000/health

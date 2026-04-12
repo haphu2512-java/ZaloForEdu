@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Camera, Save, Mail, Phone, Calendar, Briefcase, MapPin, Sparkles, User, Image as ImageIcon, Lock, Bell, Shield, Info, Edit3, Eye, EyeOff } from 'lucide-react';
-
+import { useLanguage } from '../../contexts/LanguageContext';
 import { userService } from '../../services/userService'; 
 import { authService } from '../../services/authService'; 
 
 export default function ProfilePage() {
+  const { t } = useLanguage();
   const [profile, setProfile] = useState({
     firstName: '',
     lastName: '',
@@ -16,8 +17,8 @@ export default function ProfilePage() {
     bio: '',
     department: '',
     createdAt: '', 
-    location: 'Hồ Chí Minh, VN',
-    skills: 'Giao tiếp, Làm việc nhóm, Tiếng Anh'
+    location: '',
+    skills: ''
   });
 
   const [passwordForm, setPasswordForm] = useState({
@@ -175,59 +176,59 @@ export default function ProfilePage() {
 
   // --- CSS HỆ THỐNG ---
   const styles = {
-    scrollWrapper: { flex: 1, height: '100vh', overflowY: 'auto', backgroundColor: '#F3F4F6', boxSizing: 'border-box', fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif' },
+    scrollWrapper: { flex: 1, height: '100vh', overflowY: 'auto', backgroundColor: 'var(--bg-secondary)', boxSizing: 'border-box', fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif' },
     pageLayout: { display: 'flex', flexWrap: 'wrap', maxWidth: '1600px', margin: '0 auto', padding: '40px 40px 100px 40px', gap: '30px', alignItems: 'flex-start' },
-    mainContent: { flex: '1 1 600px', minWidth: 0, backgroundColor: '#fff', borderRadius: '24px', boxShadow: '0 4px 20px rgba(0,0,0,0.03)', padding: '50px' },
-    sidebar: { flexShrink: 0, width: '320px', backgroundColor: '#fff', borderRadius: '24px', padding: '24px', boxShadow: '0 4px 20px rgba(0,0,0,0.03)', position: 'sticky', top: '40px' },
+    mainContent: { flex: '1 1 600px', minWidth: 0, backgroundColor: 'var(--bg-primary)', borderRadius: '24px', boxShadow: '0 4px 20px rgba(0,0,0,0.03)', padding: '50px' },
+    sidebar: { flexShrink: 0, width: '320px', backgroundColor: 'var(--bg-primary)', borderRadius: '24px', padding: '24px', boxShadow: '0 4px 20px rgba(0,0,0,0.03)', position: 'sticky', top: '40px' },
     
     menuGroup: { marginBottom: '24px' },
-    menuTitle: { fontSize: '13px', fontWeight: '700', color: '#6B7280', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '12px', paddingLeft: '12px' },
-    menuItem: (isActive) => ({ display: 'flex', alignItems: 'center', gap: '14px', padding: '14px 16px', borderRadius: '12px', cursor: 'pointer', backgroundColor: isActive ? '#EEF2FF' : 'transparent', color: isActive ? '#4F46E5' : '#374151', fontWeight: isActive ? '700' : '600', transition: 'all 0.2s ease', marginBottom: '4px' }),
-    menuIcon: (isActive) => ({ color: isActive ? '#4F46E5' : '#9CA3AF' }),
+    menuTitle: { fontSize: '13px', fontWeight: '700', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '12px', paddingLeft: '12px' },
+    menuItem: (isActive) => ({ display: 'flex', alignItems: 'center', gap: '14px', padding: '14px 16px', borderRadius: '12px', cursor: 'pointer', backgroundColor: isActive ? 'var(--primary-light)' : 'transparent', color: isActive ? 'var(--primary-color)' : 'var(--text-primary)', fontWeight: isActive ? '700' : '600', transition: 'all 0.2s ease', marginBottom: '4px' }),
+    menuIcon: (isActive) => ({ color: isActive ? 'var(--primary-color)' : 'var(--text-tertiary)' }),
 
-    headerSection: { display: 'flex', gap: '40px', marginBottom: '40px', paddingBottom: '40px', borderBottom: '2px solid #F3F4F6' },
+    headerSection: { display: 'flex', gap: '40px', marginBottom: '40px', paddingBottom: '40px', borderBottom: '2px solid var(--border-color)' },
     avatarWrapper: { flexShrink: 0, width: '160px', height: '160px', position: 'relative', cursor: activeTab === 'edit_profile' ? 'pointer' : 'default' },
-    avatarImg: { width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover', border: '4px solid #F3F4F6', boxShadow: '0 4px 14px rgba(0,0,0,0.08)' },
-    avatarOverlay: { position: 'absolute', inset: 0, backgroundColor: 'rgba(0,0,0,0.4)', borderRadius: '50%', display: 'flex', justifyContent: 'center', alignItems: 'center', opacity: activeTab === 'edit_profile' ? 1 : 0, transition: '0.2s', color: '#fff' },
+    avatarImg: { width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover', border: '4px solid var(--border-color)', boxShadow: '0 4px 14px rgba(0,0,0,0.08)' },
+    avatarOverlay: { position: 'absolute', inset: 0, backgroundColor: 'rgba(0,0,0,0.4)', borderRadius: '50%', display: 'flex', justifyContent: 'center', alignItems: 'center', opacity: activeTab === 'edit_profile' ? 1 : 0, transition: '0.2s', color: 'white' },
     
     infoWrapper: { flex: 1, display: 'flex', flexDirection: 'column', paddingTop: '5px' },
     usernameRow: { display: 'flex', alignItems: 'center', gap: '20px', marginBottom: '15px' },
-    username: { fontSize: '28px', fontWeight: '700', margin: 0, color: '#111827' },
+    username: { fontSize: '28px', fontWeight: '700', margin: 0, color: 'var(--text-primary)' },
     
-    statsRow: { display: 'flex', gap: '40px', marginBottom: '24px', fontSize: '16px', color: '#111827' },
+    statsRow: { display: 'flex', gap: '40px', marginBottom: '24px', fontSize: '16px', color: 'var(--text-primary)' },
     statNumber: { fontWeight: '700', fontSize: '18px' },
     
     bioSection: { fontSize: '15px', lineHeight: '24px' },
-    fullNameText: { fontWeight: '700', color: '#111827', display: 'block', marginBottom: '8px', fontSize: '18px' },
+    fullNameText: { fontWeight: '700', color: 'var(--text-primary)', display: 'block', marginBottom: '8px', fontSize: '18px' },
     categoryRow: { display: 'flex', gap: '10px', marginBottom: '12px', flexWrap: 'wrap' },
-    roleTag: { backgroundColor: '#EEF2FF', color: '#4F46E5', padding: '6px 12px', borderRadius: '8px', fontSize: '13px', fontWeight: '700' },
-    deptTag: { backgroundColor: '#F3F4F6', color: '#4B5563', padding: '6px 12px', borderRadius: '8px', fontSize: '13px', fontWeight: '600' },
-    locationRow: { color: '#6B7280', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '14px', marginBottom: '12px', fontWeight: '500' },
-    bioText: { whiteSpace: 'pre-wrap', color: '#374151' },
+    roleTag: { backgroundColor: 'var(--primary-light)', color: 'var(--primary-color)', padding: '6px 12px', borderRadius: '8px', fontSize: '13px', fontWeight: '700' },
+    deptTag: { backgroundColor: 'var(--border-light)', color: 'var(--text-secondary)', padding: '6px 12px', borderRadius: '8px', fontSize: '13px', fontWeight: '600' },
+    locationRow: { color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '14px', marginBottom: '12px', fontWeight: '500' },
+    bioText: { whiteSpace: 'pre-wrap', color: 'var(--text-secondary)' },
     skillsRow: { display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '12px' },
-    skillPill: { border: '1px solid #E5E7EB', color: '#374151', padding: '6px 14px', borderRadius: '20px', fontSize: '13px', fontWeight: '500', backgroundColor: '#fff' },
+    skillPill: { border: '1px solid var(--border-color)', color: 'var(--text-secondary)', padding: '6px 14px', borderRadius: '20px', fontSize: '13px', fontWeight: '500', backgroundColor: 'var(--bg-primary)' },
 
-    sectionTitle: { fontSize: '18px', fontWeight: '700', color: '#111827', marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '8px' },
+    sectionTitle: { fontSize: '18px', fontWeight: '700', color: 'var(--text-primary)', marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '8px' },
     viewGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '24px' },
-    miniCard: { backgroundColor: '#F9FAFB', padding: '24px', borderRadius: '16px', border: '1px solid #F3F4F6', display: 'flex', alignItems: 'flex-start', gap: '16px' },
-    iconWrap: { backgroundColor: '#E0E7FF', color: '#4F46E5', padding: '14px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center' },
-    viewLabel: { fontSize: '13px', color: '#6B7280', margin: '0 0 6px 0', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' },
-    viewValue: { fontSize: '16px', color: '#111827', margin: 0, fontWeight: '600' },
+    miniCard: { backgroundColor: 'var(--input-bg)', padding: '24px', borderRadius: '16px', border: '1px solid var(--border-color)', display: 'flex', alignItems: 'flex-start', gap: '16px' },
+    iconWrap: { backgroundColor: 'var(--primary-light)', color: 'var(--primary-color)', padding: '14px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center' },
+    viewLabel: { fontSize: '13px', color: 'var(--text-tertiary)', margin: '0 0 6px 0', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' },
+    viewValue: { fontSize: '16px', color: 'var(--text-primary)', margin: 0, fontWeight: '600' },
 
     editGroup: { display: 'flex', flexDirection: 'column', gap: '8px' },
-    editLabel: { fontSize: '14px', fontWeight: '600', color: '#374151' },
+    editLabel: { fontSize: '14px', fontWeight: '600', color: 'var(--text-secondary)' },
     // Căn phải padding to hơn cho cái con mắt nó nằm
-    editInput: { padding: '16px 45px 16px 20px', borderRadius: '12px', border: '1px solid #D1D5DB', backgroundColor: '#FAFAFA', fontSize: '15px', outline: 'none', width: '100%', boxSizing: 'border-box', color: '#111827', transition: 'border 0.2s' },
+    editInput: { padding: '16px 45px 16px 20px', borderRadius: '12px', border: '1px solid var(--border-color)', backgroundColor: 'var(--input-bg)', fontSize: '15px', outline: 'none', width: '100%', boxSizing: 'border-box', color: 'var(--text-primary)', transition: 'border 0.2s' },
     editRow: { display: 'flex', gap: '24px', flexWrap: 'wrap' },
-    textarea: { padding: '16px 20px', borderRadius: '12px', border: '1px solid #D1D5DB', backgroundColor: '#FAFAFA', fontSize: '15px', outline: 'none', width: '100%', boxSizing: 'border-box', minHeight: '120px', resize: 'vertical', color: '#111827' },
+    textarea: { padding: '16px 20px', borderRadius: '12px', border: '1px solid var(--border-color)', backgroundColor: 'var(--input-bg)', fontSize: '15px', outline: 'none', width: '100%', boxSizing: 'border-box', minHeight: '120px', resize: 'vertical', color: 'var(--text-primary)' },
     
-    actionRow: { display: 'flex', justifyContent: 'flex-end', gap: '16px', marginTop: '20px', paddingTop: '30px', borderTop: '2px solid #F3F4F6' },
-    btnPrimary: { backgroundColor: '#4F46E5', color: '#fff', border: 'none', borderRadius: '12px', padding: '14px 28px', fontSize: '15px', fontWeight: '600', cursor: 'pointer', transition: '0.2s', display: 'flex', alignItems: 'center', gap: '8px', boxShadow: '0 4px 12px rgba(79, 70, 229, 0.3)' },
-    btnSecondary: { backgroundColor: '#F3F4F6', color: '#111827', border: 'none', borderRadius: '12px', padding: '14px 28px', fontSize: '15px', fontWeight: '600', cursor: 'pointer', transition: '0.2s' },
-    comingSoon: { height: '300px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#9CA3AF', gap: '16px' },
+    actionRow: { display: 'flex', justifyContent: 'flex-end', gap: '16px', marginTop: '20px', paddingTop: '30px', borderTop: '2px solid var(--border-color)' },
+    btnPrimary: { backgroundColor: 'var(--primary-color)', color: 'white', border: 'none', borderRadius: '12px', padding: '14px 28px', fontSize: '15px', fontWeight: '600', cursor: 'pointer', transition: '0.2s', display: 'flex', alignItems: 'center', gap: '8px', boxShadow: '0 4px 12px rgba(79, 70, 229, 0.3)' },
+    btnSecondary: { backgroundColor: 'var(--bg-secondary)', color: 'var(--text-primary)', border: 'none', borderRadius: '12px', padding: '14px 28px', fontSize: '15px', fontWeight: '600', cursor: 'pointer', transition: '0.2s' },
+    comingSoon: { height: '300px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary)', gap: '16px' },
     
     // Style cho con mắt
-    eyeIconWrap: { position: 'absolute', right: '16px', top: '50%', transform: 'translateY(-50%)', cursor: 'pointer', color: '#9CA3AF', display: 'flex', alignItems: 'center', justifyContent: 'center' }
+    eyeIconWrap: { position: 'absolute', right: '16px', top: '50%', transform: 'translateY(-50%)', cursor: 'pointer', color: 'var(--text-tertiary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }
   };
 
   if (isLoading) {
@@ -264,22 +265,22 @@ export default function ProfilePage() {
                   </div>
 
                   <div style={styles.statsRow}>
-                    <span><span style={styles.statNumber}>12</span> nhóm</span>
-                    <span><span style={styles.statNumber}>8</span> môn học</span>
-                    <span>Tham gia <span style={styles.statNumber}>{profile.createdAt}</span></span>
+                    <span><span style={styles.statNumber}>12</span> {t('profileGroups')}</span>
+                    <span><span style={styles.statNumber}>8</span> {t('profileCourses')}</span>
+                    <span>{t('profileJoined')} <span style={styles.statNumber}>{profile.createdAt}</span></span>
                   </div>
 
                   {activeTab === 'view_profile' && (
                     <div style={styles.bioSection}>
                       <span style={styles.fullNameText}>{profile.lastName} {profile.firstName}</span>
                       <div style={styles.categoryRow}>
-                        <span style={styles.roleTag}>{profile.role === 'student' ? 'Sinh viên' : profile.role}</span>
-                        <span style={styles.deptTag}>{profile.department || 'Chưa cập nhật khoa'}</span>
+                        <span style={styles.roleTag}>{profile.role === 'student' ? t('roleStudent') : profile.role === 'teacher' ? t('roleTeacher') : profile.role}</span>
+                        <span style={styles.deptTag}>{profile.department || t('notUpdated')}</span>
                       </div>
-                      <div style={styles.locationRow}><MapPin size={18} /> {profile.location}</div>
-                      <div style={styles.bioText}>{profile.bio || 'Chưa có giới thiệu bản thân.'}</div>
+                      <div style={styles.locationRow}><MapPin size={18} /> {profile.location || t('defaultLocation')}</div>
+                      <div style={styles.bioText}>{profile.bio || t('noBio')}</div>
                       <div style={styles.skillsRow}>
-                        {profile.skills.split(',').map((skill, idx) => (
+                        {(profile.skills || t('defaultSkills')).split(',').map((skill, idx) => (
                           <span key={idx} style={styles.skillPill}>{skill.trim()}</span>
                         ))}
                       </div>
@@ -292,34 +293,34 @@ export default function ProfilePage() {
               <div>
                 {activeTab === 'view_profile' ? (
                   <>
-                    <h3 style={styles.sectionTitle}><Sparkles size={22} color="#4F46E5" /> Thông tin liên hệ & Cơ bản</h3>
+                    <h3 style={styles.sectionTitle}><Sparkles size={22} color="#4F46E5" /> {t('contactInfo')}</h3>
                     <div style={styles.viewGrid}>
                       <div style={styles.miniCard}>
                         <div style={styles.iconWrap}><Mail size={24} /></div>
                         <div>
-                          <p style={styles.viewLabel}>Địa chỉ Email</p>
+                          <p style={styles.viewLabel}>{t('emailLabel')}</p>
                           <p style={styles.viewValue}>{profile.email}</p>
                         </div>
                       </div>
                       <div style={styles.miniCard}>
                         <div style={styles.iconWrap}><Phone size={24} /></div>
                         <div>
-                          <p style={styles.viewLabel}>Số điện thoại</p>
-                          <p style={styles.viewValue}>{profile.phoneNumber || 'Chưa cập nhật'}</p>
+                          <p style={styles.viewLabel}>{t('phoneLabel')}</p>
+                          <p style={styles.viewValue}>{profile.phoneNumber || t('notUpdated')}</p>
                         </div>
                       </div>
                       <div style={styles.miniCard}>
                         <div style={styles.iconWrap}><Calendar size={24} /></div>
                         <div>
-                          <p style={styles.viewLabel}>Ngày sinh</p>
-                          <p style={styles.viewValue}>{profile.dateOfBirth || 'Chưa cập nhật'}</p>
+                          <p style={styles.viewLabel}>{t('dobLabel')}</p>
+                          <p style={styles.viewValue}>{profile.dateOfBirth || t('notUpdated')}</p>
                         </div>
                       </div>
                       <div style={styles.miniCard}>
                         <div style={styles.iconWrap}><Briefcase size={24} /></div>
                         <div>
-                          <p style={styles.viewLabel}>Phòng ban / Khoa</p>
-                          <p style={styles.viewValue}>{profile.department || 'Chưa cập nhật'}</p>
+                          <p style={styles.viewLabel}>{t('deptLabel')}</p>
+                          <p style={styles.viewValue}>{profile.department || t('notUpdated')}</p>
                         </div>
                       </div>
                     </div>
@@ -466,45 +467,45 @@ export default function ProfilePage() {
         {/* ================= CỘT PHẢI: MENU SETTINGS ================= */}
         <div style={styles.sidebar}>
           <div style={styles.menuGroup}>
-            <div style={styles.menuTitle}>Tài khoản</div>
+            <div style={styles.menuTitle}>{t('menuAccount')}</div>
             
             <div style={styles.menuItem(activeTab === 'view_profile')} onClick={() => setActiveTab('view_profile')}>
               <User size={22} style={styles.menuIcon(activeTab === 'view_profile')} />
-              <div style={{fontSize: '15px'}}>Hồ sơ của tôi</div>
+              <div style={{fontSize: '15px'}}>{t('menuMyProfile')}</div>
             </div>
 
             <div style={styles.menuItem(activeTab === 'edit_profile')} onClick={() => setActiveTab('edit_profile')}>
               <Edit3 size={22} style={styles.menuIcon(activeTab === 'edit_profile')} />
-              <div style={{fontSize: '15px'}}>Chỉnh sửa hồ sơ</div>
+              <div style={{fontSize: '15px'}}>{t('menuEditProfile')}</div>
             </div>
 
             <div style={styles.menuItem(false)} onClick={() => { setActiveTab('edit_profile'); setTimeout(() => fileInputRef.current?.click(), 100); }}>
               <ImageIcon size={22} style={styles.menuIcon(false)} />
-              <div style={{fontSize: '15px'}}>Đổi ảnh đại diện</div>
+              <div style={{fontSize: '15px'}}>{t('menuChangeAvatar')}</div>
             </div>
 
             <div style={styles.menuItem(activeTab === 'password')} onClick={() => setActiveTab('password')}>
               <Lock size={22} style={styles.menuIcon(activeTab === 'password')} />
-              <div style={{fontSize: '15px'}}>Đổi mật khẩu</div>
+              <div style={{fontSize: '15px'}}>{t('menuChangePassword')}</div>
             </div>
           </div>
 
           <div style={styles.menuGroup}>
-            <div style={styles.menuTitle}>Khác</div>
+            <div style={styles.menuTitle}>{t('menuOther')}</div>
             
             <div style={styles.menuItem(activeTab === 'notifications')} onClick={() => setActiveTab('notifications')}>
               <Bell size={22} style={styles.menuIcon(activeTab === 'notifications')} />
-              <div style={{fontSize: '15px'}}>Thông báo</div>
+              <div style={{fontSize: '15px'}}>{t('menuNotifications')}</div>
             </div>
 
             <div style={styles.menuItem(activeTab === 'privacy')} onClick={() => setActiveTab('privacy')}>
               <Shield size={22} style={styles.menuIcon(activeTab === 'privacy')} />
-              <div style={{fontSize: '15px'}}>Quyền riêng tư</div>
+              <div style={{fontSize: '15px'}}>{t('menuPrivacy')}</div>
             </div>
 
             <div style={styles.menuItem(activeTab === 'about')} onClick={() => setActiveTab('about')}>
               <Info size={22} style={styles.menuIcon(activeTab === 'about')} />
-              <div style={{fontSize: '15px'}}>Về ứng dụng</div>
+              <div style={{fontSize: '15px'}}>{t('menuAbout')}</div>
             </div>
           </div>
         </div>

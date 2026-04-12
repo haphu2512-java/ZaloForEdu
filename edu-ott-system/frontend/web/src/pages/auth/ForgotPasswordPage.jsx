@@ -1,365 +1,415 @@
-import { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
+import { useState, useEffect, useRef } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import {
-  FaShieldAlt,
-  FaEnvelope,
-  FaArrowRight,
-  FaSpinner,
-  FaArrowLeft,
-  FaCheckCircle,
-  FaCheck,
-  FaExclamationTriangle,
-  FaLock,
-  FaClock,
-  FaFingerprint,
-  FaUserShield,
+  FaEnvelope, FaPhone, FaLock, FaEye, FaEyeSlash,
+  FaArrowRight, FaSpinner, FaCheckCircle, FaComments, FaQuestionCircle, FaRocket,
 } from "react-icons/fa";
-import { authService } from "../../services/authService";
+import { useAuthStore } from "../../store/authStore";
 import "./ForgotPasswordPage.css";
 
-const SECURITY_FEATURES = [
-  {
-    icon: <FaLock size={15} color="white" />,
-    text: "Mã đặt lại được mã hóa AES-256",
-  },
-  {
-    icon: <FaClock size={15} color="white" />,
-    text: "Token hết hạn sau 60 phút để bảo mật",
-  },
-  {
-    icon: <FaFingerprint size={15} color="white" />,
-    text: "Xác thực đa lớp trước khi đặt lại",
-  },
-  {
-    icon: <FaUserShield size={15} color="white" />,
-    text: "Thông báo tức thì khi mật khẩu thay đổi",
-  },
-];
+const OTP_LENGTH = 6;
+const RESEND_COUNTDOWN = 60;
 
 export default function ForgotPasswordPage() {
-  // Step 1: enter email, Step 2: email sent confirmation
+  const navigate = useNavigate();
+  const { forgotPassword, verifyForgotOtp, resetPassword, isLoading, clearError } = useAuthStore();
+
+  // step: 1 = nhập email/phone, 2 = nhập OTP, 3 = mật khẩu mới
   const [step, setStep] = useState(1);
-  const [email, setEmail] = useState("");
-  const [emailError, setEmailError] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
-  const [apiError, setApiError] = useState("");
+  const [tab, setTab] = useState("email");
+
+  // Step 1
+  const [identifier, setIdentifier] = useState("");
+  const [identifierError, setIdentifierError] = useState("");
+
+  // Step 2
+  const [digits, setDigits] = useState(Array(OTP_LENGTH).fill(""));
+  const [otpError, setOtpError] = useState("");
+  const [resetToken, setResetToken] = useState("");
+  const [countdown, setCountdown] = useState(RESEND_COUNTDOWN);
+  const inputRefs = useRef([]);
+
+  // Step 3
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showPass, setShowPass] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [passError, setPassError] = useState("");
+  const [done, setDone] = useState(false);
+
   const [mounted, setMounted] = useState(false);
-  const [visibleFeatures, setVisibleFeatures] = useState([]);
+  const [apiError, setApiError] = useState("");
 
-  // Resend cooldown
-  const [cooldown, setCooldown] = useState(0);
-
-  // Mount animation
   useEffect(() => {
-    const t = setTimeout(() => setMounted(true), 80);
+    const t = setTimeout(() => setMounted(true), 60);
     return () => clearTimeout(t);
   }, []);
 
-  // Feature stagger animation
+  // Countdown for resend
   useEffect(() => {
-    if (!mounted) return;
-    SECURITY_FEATURES.forEach((_, i) => {
-      setTimeout(() => {
-        setVisibleFeatures((prev) => [...prev, i]);
-      }, 400 + i * 130);
-    });
-  }, [mounted]);
+    if (step !== 2 || countdown <= 0) return;
+    const id = setInterval(() => setCountdown((c) => c - 1), 1000);
+    return () => clearInterval(id);
+  }, [step, countdown]);
 
-  // Cooldown timer
-  useEffect(() => {
-    if (cooldown <= 0) return;
-    const interval = setInterval(() => {
-      setCooldown((prev) => prev - 1);
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [cooldown]);
+  // ── Step 1: Gửi OTP ─────────────────────────────────────────
+  const handleStep1 = async (e) => {
+    e.preventDefault();
+    setApiError("");
+    setIdentifierError("");
 
-  const validate = () => {
-    if (!email.trim()) {
-      setEmailError("Vui lòng nhập địa chỉ email");
-      return false;
+    if (!identifier.trim()) {
+      setIdentifierError(tab === "email" ? "Vui lòng nhập email" : "Vui lòng nhập số điện thoại");
+      return;
     }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      setEmailError("Địa chỉ email không hợp lệ");
-      return false;
+    if (tab === "email" && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(identifier)) {
+      setIdentifierError("Email không hợp lệ");
+      return;
     }
-    setEmailError("");
-    return true;
+    if (tab === "phone" && !/^\+?\d{9,15}$/.test(identifier.replace(/\s/g, ""))) {
+      setIdentifierError("Số điện thoại không hợp lệ");
+      return;
+    }
+
+    const payload = tab === "email"
+      ? { email: identifier.toLowerCase() }
+      : { phone: identifier.replace(/\s/g, "") };
+
+    const result = await forgotPassword(payload);
+    if (result.success) {
+      setStep(2);
+      setCountdown(RESEND_COUNTDOWN);
+    } else {
+      setApiError(result.error || "Gửi OTP thất bại");
+    }
   };
 
-  const handleSubmit = async (e) => {
+  // ── Step 2: Xác thực OTP ────────────────────────────────────
+  const handleDigitChange = (i, value) => {
+    if (!/^\d*$/.test(value)) return;
+    const v = value.slice(-1);
+    const next = [...digits];
+    next[i] = v;
+    setDigits(next);
+    setOtpError("");
+    if (v && i < OTP_LENGTH - 1) inputRefs.current[i + 1]?.focus();
+  };
+
+  const handleKeyDown = (i, e) => {
+    if (e.key === "Backspace" && !digits[i] && i > 0) {
+      inputRefs.current[i - 1]?.focus();
+    }
+  };
+
+  const handlePaste = (e) => {
+    const pasted = e.clipboardData.getData("text").replace(/\D/g, "").slice(0, OTP_LENGTH);
+    if (pasted.length === OTP_LENGTH) {
+      setDigits(pasted.split(""));
+      inputRefs.current[OTP_LENGTH - 1]?.focus();
+    }
     e.preventDefault();
-    if (!validate()) return;
+  };
 
-    setIsLoading(true);
-    setApiError("");
-
-    try {
-      await authService.forgotPassword(email);
-      setStep(2);
-      setCooldown(60); // 60 second cooldown before can resend
-    } catch (err) {
-      const msg =
-        err.response?.data?.message ||
-        "Không thể gửi email đặt lại. Vui lòng thử lại.";
-      setApiError(msg);
-    } finally {
-      setIsLoading(false);
+  const handleStep2 = async (e) => {
+    e.preventDefault();
+    const otp = digits.join("");
+    if (otp.length < OTP_LENGTH) {
+      setOtpError("Vui lòng nhập đủ 6 chữ số");
+      return;
+    }
+    const payload = {
+      otp,
+      ...(tab === "email" ? { email: identifier.toLowerCase() } : { phone: identifier.replace(/\s/g, "") }),
+    };
+    const result = await verifyForgotOtp(payload);
+    if (result.success) {
+      setResetToken(result.resetToken);
+      setStep(3);
+    } else {
+      setOtpError(result.error || "Mã OTP không hợp lệ");
+      setDigits(Array(OTP_LENGTH).fill(""));
+      inputRefs.current[0]?.focus();
     }
   };
 
   const handleResend = async () => {
-    if (cooldown > 0) return;
-
-    setIsLoading(true);
-    setApiError("");
-
-    try {
-      await authService.forgotPassword(email);
-      setCooldown(60);
-    } catch (err) {
-      setApiError(
-        err.response?.data?.message || "Không thể gửi lại. Vui lòng thử lại."
-      );
-    } finally {
-      setIsLoading(false);
+    if (countdown > 0) return;
+    clearError();
+    const payload = tab === "email"
+      ? { email: identifier.toLowerCase() }
+      : { phone: identifier.replace(/\s/g, "") };
+    const result = await forgotPassword(payload);
+    if (result.success) {
+      setCountdown(RESEND_COUNTDOWN);
+      setOtpError("");
+    } else {
+      setOtpError(result.error || "Gửi lại thất bại");
     }
   };
 
-  const maskEmail = (e) => {
-    const [name, domain] = e.split("@");
-    if (name.length <= 2) return `${name[0]}***@${domain}`;
-    return `${name.slice(0, 2)}${"*".repeat(Math.min(name.length - 2, 6))}@${domain}`;
+  // ── Step 3: Đặt mật khẩu mới ────────────────────────────────
+  const handleStep3 = async (e) => {
+    e.preventDefault();
+    setPassError("");
+    if (!newPassword || newPassword.length < 6) {
+      setPassError("Mật khẩu tối thiểu 6 ký tự");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setPassError("Mật khẩu không khớp");
+      return;
+    }
+    const result = await resetPassword(resetToken, newPassword);
+    if (result.success) {
+      setDone(true);
+      setTimeout(() => navigate("/login"), 2500);
+    } else {
+      setPassError(result.error || "Đặt lại mật khẩu thất bại");
+    }
   };
 
+  // ── Step indicator ────────────────────────────────────────────
+  const renderSteps = () => (
+    <div className="auth-steps">
+      {[1, 2, 3].map((s) => (
+        <div
+          key={s}
+          className={`auth-step-dot ${s === step ? "active" : s < step ? "done" : ""}`}
+        />
+      ))}
+    </div>
+  );
+
   return (
-    <div className="forgot-page">
+    <div className="auth-page">
       {/* ═══ LEFT PANEL ═══ */}
-      <div className="forgot-left">
-        <div className="forgot-left-dots" />
-        <div className="forgot-orb forgot-orb-1" />
-        <div className="forgot-orb forgot-orb-2" />
-        <div className="forgot-orb forgot-orb-3" />
+      <div className="auth-left">
+        <div className="auth-blob auth-blob-1" />
+        <div className="auth-blob auth-blob-2" />
+        <div className="auth-blob auth-blob-3" />
+        
+        {/* Decor Chat Bubbles */}
+        <div className="decor-bubble decor-bubble-1" style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+          Hội não cá vàng? <FaQuestionCircle color="#f59e0b" />
+        </div>
+        <div className="decor-bubble decor-bubble-2" style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+          Lấy lại mật khẩu <FaRocket color="#cbd5e1" />
+        </div>
 
-        <div className={`forgot-left-content ${mounted ? "visible" : ""}`}>
-          {/* Shield animation */}
-          <div className="forgot-shield-wrap">
-            <div className="forgot-shield-ring" />
-            <div className="forgot-shield-ring" />
-            <div className="forgot-shield-ring" />
-            <div className="forgot-shield-icon">
-              <FaShieldAlt size={42} color="#60a5fa" />
-            </div>
-          </div>
-
-          <h1 className="forgot-left-title">
-            Bảo mật
-            <br />
-            <span>tài khoản</span>
+        <div className="auth-left-content">
+          <div className="auth-left-badge">🆘 TRUNG TÂM HỖ TRỢ</div>
+          <h1 className="auth-left-heading">
+            Giải cứu tài khoản<br />
+            <span className="auth-gradient-text">trong nháy mắt</span>
           </h1>
-
-          <p className="forgot-left-desc">
-            Hệ thống xác minh danh tính đa lớp giúp bảo vệ tài khoản của bạn
-            an toàn tuyệt đối trong mọi tình huống.
+          <p className="auth-left-desc">
+            Đừng lo lắng! Cứ để ZaloApp lo. Chúng tôi sẽ giúp bạn lấy lại quyền truy cập an toàn chỉ sau vài cú click chuột.
           </p>
-
-          <div className="forgot-security-features">
-            {SECURITY_FEATURES.map((f, i) => (
-              <div
-                key={i}
-                className={`forgot-sec-item ${visibleFeatures.includes(i) ? "visible" : ""}`}
-              >
-                <div className="forgot-sec-icon">{f.icon}</div>
-                <span className="forgot-sec-text">{f.text}</span>
-              </div>
-            ))}
-          </div>
         </div>
       </div>
 
       {/* ═══ RIGHT PANEL ═══ */}
-      <div className="forgot-right">
-        <div className="forgot-right-topbar" />
-
-        <div className={`forgot-form-wrap ${mounted ? "visible" : ""}`}>
-          {/* Steps indicator */}
-          <div className="forgot-steps">
-            <div className={`forgot-step-dot ${step >= 1 ? "active" : ""} ${step > 1 ? "done" : ""}`}>
-              {step > 1 ? <FaCheck size={12} /> : "1"}
-            </div>
-            <div className={`forgot-step-line ${step > 1 ? "active" : ""}`} />
-            <div className={`forgot-step-dot ${step >= 2 ? "active" : ""}`}>
-              2
-            </div>
+      <div className="auth-right">
+        <div className={`auth-card ${mounted ? "visible" : ""}`}>
+        <div className="auth-logo">
+          <div className="auth-logo-icon">
+            <FaComments size={22} color="white" />
           </div>
-
-          {/* ── STEP 1: Enter Email ── */}
-          {step === 1 && (
-            <div className="forgot-step-content" key="step1">
-              <div className="forgot-logo-wrap">
-                <div className="forgot-logo-box">
-                  <FaLock size={24} color="white" />
-                </div>
-                <h2 className="forgot-form-title">Quên mật khẩu?</h2>
-                <p className="forgot-form-sub">
-                  Đừng lo, nhập email đã đăng ký và chúng tôi sẽ gửi
-                  hướng dẫn đặt lại mật khẩu cho bạn.
-                </p>
-              </div>
-
-              {apiError && (
-                <div className="forgot-error-box">
-                  <FaExclamationTriangle size={14} />
-                  {apiError}
-                </div>
-              )}
-
-              <form className="forgot-form" onSubmit={handleSubmit}>
-                <div className="form-group">
-                  <label>Email đã đăng ký</label>
-                  <div className="input-wrapper">
-                    <input
-                      type="email"
-                      placeholder="name@university.edu.vn"
-                      value={email}
-                      onChange={(e) => {
-                        setEmail(e.target.value);
-                        setEmailError("");
-                        setApiError("");
-                      }}
-                      className={`form-input ${emailError ? "has-error" : ""}`}
-                      autoComplete="email"
-                      autoFocus
-                    />
-                  </div>
-                  {emailError && <p className="input-error">{emailError}</p>}
-                </div>
-
-                {/* Security notice */}
-                <div className="forgot-security-notice">
-                  <FaShieldAlt
-                    size={14}
-                    color="#d97706"
-                    className="forgot-security-notice-icon"
-                  />
-                  <span className="forgot-security-notice-text">
-                    Link đặt lại mật khẩu sẽ có hiệu lực trong <strong>60 phút</strong>.
-                    Vui lòng kiểm tra cả hộp thư spam nếu chưa nhận được email.
-                  </span>
-                </div>
-
-                <button
-                  type="submit"
-                  className="btn-forgot"
-                  disabled={isLoading}
-                >
-                  {isLoading ? (
-                    <>
-                      <FaSpinner size={15} className="spin" />
-                      Đang gửi...
-                    </>
-                  ) : (
-                    <>
-                      Gửi hướng dẫn đặt lại
-                      <FaArrowRight size={14} />
-                    </>
-                  )}
-                </button>
-              </form>
-
-              <div className="forgot-divider">
-                <div className="forgot-divider-line" />
-                <span className="forgot-divider-text">HOẶC</span>
-                <div className="forgot-divider-line" />
-              </div>
-
-              <p className="forgot-back-text">
-                Đã nhớ mật khẩu?{" "}
-                <Link to="/login">
-                  <FaArrowLeft size={11} /> Quay lại đăng nhập
-                </Link>
-              </p>
-            </div>
-          )}
-
-          {/* ── STEP 2: Email Sent ── */}
-          {step === 2 && (
-            <div className="forgot-step-content" key="step2">
-              <div className="forgot-email-sent">
-                {/* Animated check icon */}
-                <div className="forgot-email-visual">
-                  <div className="forgot-email-circle">
-                    <FaEnvelope size={34} color="#10b981" />
-                  </div>
-                  <div className="forgot-email-circle-ring" />
-                  <div className="forgot-check-badge">
-                    <FaCheck size={12} color="white" />
-                  </div>
-                </div>
-
-                <h3 className="forgot-email-title">Kiểm tra email của bạn!</h3>
-                <p className="forgot-email-desc">
-                  Chúng tôi đã gửi hướng dẫn đặt lại mật khẩu đến:
-                </p>
-                <div className="forgot-email-highlight">
-                  {maskEmail(email)}
-                </div>
-                <p className="forgot-email-desc">
-                  Vui lòng mở email và nhấn vào link để tạo mật khẩu mới. Link
-                  sẽ hết hạn sau <strong>60 phút</strong>.
-                </p>
-
-                {/* Resend section */}
-                <div className="forgot-resend-wrap">
-                  {cooldown > 0 ? (
-                    <p className="forgot-timer">
-                      Gửi lại sau <span>{cooldown}s</span>
-                    </p>
-                  ) : (
-                    <button
-                      className="forgot-resend-btn"
-                      onClick={handleResend}
-                      disabled={isLoading}
-                    >
-                      {isLoading ? "Đang gửi..." : "Gửi lại email"}
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              {apiError && (
-                <div className="forgot-error-box" style={{ marginTop: 16 }}>
-                  <FaExclamationTriangle size={14} />
-                  {apiError}
-                </div>
-              )}
-
-              <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 16 }}>
-                <Link to="/login" style={{ textDecoration: "none" }}>
-                  <button className="btn-forgot-outline" type="button">
-                    <FaArrowLeft size={13} />
-                    Quay lại đăng nhập
-                  </button>
-                </Link>
-              </div>
-
-              {/* Security tip */}
-              <div className="forgot-security-notice" style={{ marginTop: 18 }}>
-                <FaShieldAlt
-                  size={14}
-                  color="#d97706"
-                  className="forgot-security-notice-icon"
-                />
-                <span className="forgot-security-notice-text">
-                  Nếu bạn không yêu cầu đặt lại mật khẩu, vui lòng bỏ qua
-                  email này. Tài khoản của bạn vẫn an toàn.
-                </span>
-              </div>
-            </div>
-          )}
+          <h1 className="auth-logo-title">ZaloApp</h1>
         </div>
 
-        <p className="forgot-footer">© 2024 Zalo Edu · IUH · Nhóm 3</p>
+        {/* ── STEP 1 ── */}
+        {step === 1 && (
+          <>
+            {renderSteps()}
+            <p className="auth-step-title">Quên mật khẩu?</p>
+            <p className="auth-step-sub">
+              Nhập email hoặc số điện thoại để nhận mã OTP xác thực.
+            </p>
+
+            <div className="auth-tabs">
+              <button
+                className={`auth-tab ${tab === "email" ? "active" : ""}`}
+                onClick={() => { setTab("email"); setIdentifier(""); setIdentifierError(""); }}
+                type="button"
+              >
+                <FaEnvelope size={13} /> Email
+              </button>
+              <button
+                className={`auth-tab ${tab === "phone" ? "active" : ""}`}
+                onClick={() => { setTab("phone"); setIdentifier(""); setIdentifierError(""); }}
+                type="button"
+              >
+                <FaPhone size={13} /> Số điện thoại
+              </button>
+            </div>
+
+            {apiError && <div className="auth-error">{apiError}</div>}
+
+            <form onSubmit={handleStep1} className="auth-form">
+              <div className="auth-field">
+                <label>{tab === "email" ? "Email" : "Số điện thoại"}</label>
+                <div className="auth-input-wrap">
+                  <span className="auth-input-icon">
+                    {tab === "email" ? <FaEnvelope size={14} /> : <FaPhone size={14} />}
+                  </span>
+                  <input
+                    type={tab === "email" ? "email" : "tel"}
+                    placeholder={tab === "email" ? "you@example.com" : "0912 345 678"}
+                    value={identifier}
+                    onChange={(e) => { setIdentifier(e.target.value); setIdentifierError(""); }}
+                    className={identifierError ? "has-error" : ""}
+                    autoFocus
+                  />
+                </div>
+                {identifierError && <p className="auth-field-error">{identifierError}</p>}
+              </div>
+
+              <button type="submit" className="auth-btn-primary" disabled={isLoading}>
+                {isLoading ? (
+                  <><FaSpinner className="spin" size={14} /> Đang gửi...</>
+                ) : (
+                  <>Gửi mã OTP <FaArrowRight size={13} /></>
+                )}
+              </button>
+            </form>
+          </>
+        )}
+
+        {/* ── STEP 2 ── */}
+        {step === 2 && (
+          <>
+            {renderSteps()}
+            <p className="auth-step-title">Nhập mã xác thực</p>
+            <p className="auth-step-sub">
+              Mã OTP đã gửi tới <strong>{tab === "phone" ? `SĐT ${identifier}` : identifier}</strong>.
+              {tab === "phone" && (
+                <><br /><span style={{ color: "#3b82f6", fontSize: 12 }}>💡 Xem mã trong Terminal Backend</span></>
+              )}
+            </p>
+
+            {otpError && <div className="auth-error">{otpError}</div>}
+
+            <form onSubmit={handleStep2} className="auth-form">
+              <div className="otp-inputs" onPaste={handlePaste}>
+                {digits.map((d, i) => (
+                  <input
+                    key={i}
+                    ref={(el) => (inputRefs.current[i] = el)}
+                    className={`otp-input ${otpError ? "has-error" : ""}`}
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={1}
+                    value={d}
+                    onChange={(e) => handleDigitChange(i, e.target.value)}
+                    onKeyDown={(e) => handleKeyDown(i, e)}
+                    autoFocus={i === 0}
+                  />
+                ))}
+              </div>
+
+              <button type="submit" className="auth-btn-primary" disabled={isLoading}>
+                {isLoading ? (
+                  <><FaSpinner className="spin" size={14} /> Đang xác thực...</>
+                ) : (
+                  <>Xác nhận <FaArrowRight size={13} /></>
+                )}
+              </button>
+            </form>
+
+            <div style={{ textAlign: "center", marginTop: 14 }}>
+              {countdown > 0 ? (
+                <p style={{ color: "#475569", fontSize: 13 }}>
+                  Gửi lại sau <strong style={{ color: "#60a5fa" }}>{countdown}s</strong>
+                </p>
+              ) : (
+                <button
+                  type="button" onClick={handleResend}
+                  style={{ background: "none", border: "none", color: "#60a5fa", fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}
+                >
+                  Gửi lại mã OTP
+                </button>
+              )}
+              <button
+                type="button" onClick={() => { setStep(1); setDigits(Array(OTP_LENGTH).fill("")); setOtpError(""); }}
+                style={{ display: "block", margin: "8px auto 0", background: "none", border: "none", color: "#64748b", fontSize: 12, cursor: "pointer", fontFamily: "inherit" }}
+              >
+                ← Nhập lại thông tin
+              </button>
+            </div>
+          </>
+        )}
+
+        {/* ── STEP 3 ── */}
+        {step === 3 && !done && (
+          <>
+            {renderSteps()}
+            <p className="auth-step-title">Đặt mật khẩu mới</p>
+            <p className="auth-step-sub">Mật khẩu mới phải có ít nhất 6 ký tự.</p>
+
+            {passError && <div className="auth-error">{passError}</div>}
+
+            <form onSubmit={handleStep3} className="auth-form">
+              <div className="auth-field">
+                <label>Mật khẩu mới</label>
+                <div className="auth-input-wrap">
+                  <span className="auth-input-icon"><FaLock size={14} /></span>
+                  <input
+                    type={showPass ? "text" : "password"}
+                    placeholder="Tối thiểu 6 ký tự"
+                    value={newPassword}
+                    onChange={(e) => { setNewPassword(e.target.value); setPassError(""); }}
+                    className={passError ? "has-error" : ""}
+                    autoFocus
+                  />
+                  <button type="button" className="auth-toggle-pass" onClick={() => setShowPass(!showPass)}>
+                    {showPass ? <FaEyeSlash size={15} /> : <FaEye size={15} />}
+                  </button>
+                </div>
+              </div>
+
+              <div className="auth-field">
+                <label>Xác nhận mật khẩu</label>
+                <div className="auth-input-wrap">
+                  <span className="auth-input-icon"><FaLock size={14} /></span>
+                  <input
+                    type={showConfirm ? "text" : "password"}
+                    placeholder="Nhập lại mật khẩu"
+                    value={confirmPassword}
+                    onChange={(e) => { setConfirmPassword(e.target.value); setPassError(""); }}
+                    className={passError ? "has-error" : ""}
+                  />
+                  <button type="button" className="auth-toggle-pass" onClick={() => setShowConfirm(!showConfirm)}>
+                    {showConfirm ? <FaEyeSlash size={15} /> : <FaEye size={15} />}
+                  </button>
+                </div>
+              </div>
+
+              <button type="submit" className="auth-btn-primary" disabled={isLoading}>
+                {isLoading ? (
+                  <><FaSpinner className="spin" size={14} /> Đang lưu...</>
+                ) : (
+                  <>Đặt lại mật khẩu <FaArrowRight size={13} /></>
+                )}
+              </button>
+            </form>
+          </>
+        )}
+
+        {/* ── DONE ── */}
+        {done && (
+          <div style={{ textAlign: "center", padding: "20px 0" }}>
+            <FaCheckCircle size={52} color="#22c55e" style={{ marginBottom: 14 }} />
+            <p className="auth-step-title">Đặt lại thành công!</p>
+            <p className="auth-step-sub">Đang chuyển hướng đến đăng nhập...</p>
+          </div>
+        )}
+
+        <p className="auth-switch-text">
+          <Link to="/login">← Quay lại đăng nhập</Link>
+        </p>
+        <p className="auth-footer">© 2026 ZaloApp · Nhóm 3 · IUH</p>
+        </div>
       </div>
     </div>
   );

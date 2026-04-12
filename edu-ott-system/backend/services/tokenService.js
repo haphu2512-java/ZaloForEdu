@@ -4,12 +4,24 @@ const jwt = require('jsonwebtoken');
 
 const env = require('../config/env');
 
-const signAccessToken = (user) => {
+/**
+ * Get the device-specific tokenVersion from the user model.
+ * Falls back to global tokenVersion for backward compatibility.
+ */
+const getDeviceTokenVersion = (user, device) => {
+  if (device === 'web') return user.webTokenVersion ?? user.tokenVersion ?? 0;
+  if (device === 'mobile') return user.mobileTokenVersion ?? user.tokenVersion ?? 0;
+  return user.tokenVersion ?? 0;
+};
+
+const signAccessToken = (user, device = 'web') => {
   const jti = crypto.randomUUID();
+  const tokenVersion = getDeviceTokenVersion(user, device);
   const payload = {
     sub: user._id.toString(),
     type: 'access',
-    tokenVersion: user.tokenVersion,
+    tokenVersion,
+    device,
     jti,
   };
 
@@ -20,11 +32,13 @@ const signAccessToken = (user) => {
   return { token, jti };
 };
 
-const signRefreshToken = (user, tokenId) => {
+const signRefreshToken = (user, tokenId, device = 'web') => {
+  const tokenVersion = getDeviceTokenVersion(user, device);
   const payload = {
     sub: user._id.toString(),
     type: 'refresh',
-    tokenVersion: user.tokenVersion,
+    tokenVersion,
+    device,
     jti: tokenId,
   };
 
@@ -41,4 +55,5 @@ module.exports = {
   signRefreshToken,
   verifyAccessToken,
   verifyRefreshToken,
+  getDeviceTokenVersion,
 };

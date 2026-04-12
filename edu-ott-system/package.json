@@ -5,16 +5,15 @@
   "private": true,
   "workspaces": [
     "backend",
-    "web",
-    "mobile",
-    "shared"
+    "frontend/web",
+    "frontend/mobile"
   ],
   "scripts": {
     "backend": "cd backend && npm run dev",
-    "web": "cd web && npm start",
-    "mobile": "cd mobile && npm start",
-    "install:all": "npm install && cd backend && npm install && cd ../web && npm install && cd ../mobile && npm install && cd ../shared && npm install",
-    "clean": "rm -rf node_modules backend/node_modules web/node_modules mobile/node_modules shared/node_modules",
+    "web": "cd frontend/web && npm run dev",
+    "mobile": "cd frontend/mobile && npm start",
+    "install:all": "npm install && cd backend && npm install && cd ../frontend/web && npm install && cd ../mobile && npm install",
+    "clean": "rm -rf node_modules backend/node_modules frontend/web/node_modules frontend/mobile/node_modules",
     "test": "npm run test --workspaces",
     "lint": "npm run lint --workspaces"
   },

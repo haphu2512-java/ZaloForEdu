@@ -1,4 +1,5 @@
 const express = require('express');
+const { z } = require('zod');
 
 const authController = require('../controllers/authController');
 const auth = require('../middlewares/auth');
@@ -11,207 +12,89 @@ const {
   forgotPasswordSchema,
   resetPasswordSchema,
   changePasswordSchema,
-  verifyEmailSchema,
-  resendVerificationSchema,
 } = require('../validators/authSchemas');
 
 const router = express.Router();
 
+// ─── Rate limiters ────────────────────────────────────────────
 const authLimiter = createRateLimiter({
   windowMs: 60 * 1000,
   max: 10,
   code: 'AUTH_RATE_LIMITED',
-  message: 'Too many auth requests. Please try again in a minute.',
+  message: 'Quá nhiều yêu cầu. Vui lòng thử lại sau 1 phút.',
 });
 
-/**
- * @openapi
- * /auth/register:
- *   post:
- *     tags: [Auth]
- *     summary: Register account (email or phone)
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             $ref: '#/components/schemas/RegisterInput'
- *     responses:
- *       201:
- *         description: Register success
- *       400:
- *         description: Validation error
- *       409:
- *         description: Email/phone/username already exists
- */
-router.post('/register', authLimiter, validate({ body: registerSchema }), authController.register);
-/**
- * @openapi
- * /auth/login:
- *   post:
- *     tags: [Auth]
- *     summary: Login by email, username or phone
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             $ref: '#/components/schemas/LoginInput'
- *     responses:
- *       200:
- *         description: Login success
- *       401:
- *         description: Invalid credentials
- */
+// Strict limiter for OTP sends (register, resend, forgot)
+const otpLimiter = createRateLimiter({
+  windowMs: 60 * 1000,    // 1 minute window
+  max: 2,                  // max 2 OTP sends per minute per IP
+  code: 'OTP_RATE_LIMITED',
+  message: 'Bạn đã gửi quá nhiều mã OTP. Vui lòng chờ 1 phút.',
+});
+
+// Very strict for register (prevent spam account creation)
+const registerLimiter = createRateLimiter({
+  windowMs: 60 * 60 * 1000, // 1 hour window
+  max: 5,                    // max 5 accounts per hour per IP
+  code: 'REGISTER_RATE_LIMITED',
+  message: 'Quá nhiều lần đăng ký. Vui lòng thử lại sau 1 giờ.',
+});
+
+// Inline schemas for new endpoints
+const verifyOtpSchema = z.object({
+  token: z.string().trim().regex(/^\d{6}$/, 'OTP phải là 6 chữ số'),
+  email: z.string().trim().email().optional(),
+  phone: z.string().trim().regex(/^\+?\d{8,15}$/).optional(),
+}).refine((d) => d.email || d.phone, { message: 'Cần email hoặc số điện thoại' });
+
+const resendOtpSchema = z.object({
+  email: z.string().trim().email().optional(),
+  phone: z.string().trim().regex(/^\+?\d{8,15}$/).optional(),
+}).refine((d) => d.email || d.phone, { message: 'Cần email hoặc số điện thoại' });
+
+const verifyForgotOtpSchema = z.object({
+  otp: z.string().trim().regex(/^\d{6}$/, 'OTP phải là 6 chữ số'),
+  email: z.string().trim().email().optional(),
+  phone: z.string().trim().regex(/^\+?\d{8,15}$/).optional(),
+}).refine((d) => d.email || d.phone, { message: 'Cần email hoặc số điện thoại' });
+
+// loginSchema accepts email/username/phone — device is handled in controller (not validated strictly)
+
+// ─── Routes ──────────────────────────────────────────────────
+
+// Register
+router.post('/register', registerLimiter, otpLimiter, validate({ body: registerSchema }), authController.register);
+
+// Login (device field is passed in body, controller handles default 'web')
 router.post('/login', authLimiter, validate({ body: loginSchema }), authController.login);
-/**
- * @openapi
- * /auth/refresh-token:
- *   post:
- *     tags: [Auth]
- *     summary: Rotate refresh token
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             $ref: '#/components/schemas/RefreshInput'
- *     responses:
- *       200:
- *         description: Token refreshed
- *       401:
- *         description: Invalid refresh token
- */
+
+// Token management
 router.post('/refresh-token', validate({ body: refreshSchema }), authController.refreshToken);
-/**
- * @openapi
- * /auth/logout:
- *   post:
- *     tags: [Auth]
- *     summary: Logout one device by refresh token
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             $ref: '#/components/schemas/RefreshInput'
- *     responses:
- *       200:
- *         description: Logout success
- */
 router.post('/logout', validate({ body: refreshSchema }), authController.logout);
-/**
- * @openapi
- * /auth/logout-all:
- *   post:
- *     tags: [Auth]
- *     summary: Logout all devices
- *     security:
- *       - bearerAuth: []
- *     responses:
- *       200:
- *         description: Logged out all devices
- *       401:
- *         $ref: '#/components/responses/Unauthorized'
- */
 router.post('/logout-all', auth, authController.logoutAll);
 
-// New auth flows
-/**
- * @openapi
- * /auth/verify-email:
- *   post:
- *     tags: [Auth]
- *     summary: Verify email by token
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             $ref: '#/components/schemas/VerifyEmailInput'
- *     responses:
- *       200:
- *         description: Email verified
- *       400:
- *         description: Invalid or expired token
- */
-router.post('/verify-email', authLimiter, validate({ body: verifyEmailSchema }), authController.verifyEmail);
-/**
- * @openapi
- * /auth/resend-verification:
- *   post:
- *     tags: [Auth]
- *     summary: Resend email verification OTP for current user
- *     security:
- *       - bearerAuth: []
- *     responses:
- *       200:
- *         description: Verification OTP sent
- */
-router.post(
-  '/resend-verification',
-  authLimiter,
-  validate({ body: resendVerificationSchema }),
-  authController.resendVerificationEmail,
-);
-/**
- * @openapi
- * /auth/forgot-password:
- *   post:
- *     tags: [Auth]
- *     summary: Request password reset token by email or phone
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             $ref: '#/components/schemas/ForgotPasswordInput'
- *     responses:
- *       200:
- *         description: Reset instruction sent (or silently ignored if account not found)
- */
-router.post('/forgot-password', authLimiter, validate({ body: forgotPasswordSchema }), authController.forgotPassword);
-/**
- * @openapi
- * /auth/reset-password:
- *   post:
- *     tags: [Auth]
- *     summary: Reset password by reset token
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             $ref: '#/components/schemas/ResetPasswordInput'
- *     responses:
- *       200:
- *         description: Password reset success
- *       400:
- *         description: Invalid or expired reset token
- */
+// Get current user
+router.get('/me', auth, authController.getMe);
+
+// OTP verification (email or phone)
+router.post('/verify-otp', authLimiter, validate({ body: verifyOtpSchema }), authController.verifyOtp);
+// Backward compat alias
+router.post('/verify-email', authLimiter, validate({ body: verifyOtpSchema }), authController.verifyOtp);
+
+// Resend OTP
+router.post('/resend-otp', otpLimiter, validate({ body: resendOtpSchema }), authController.resendOtp);
+// Backward compat alias
+router.post('/resend-verification', otpLimiter, validate({ body: resendOtpSchema }), authController.resendOtp);
+
+// Forgot password – 3-step flow
+// Step 1: Send OTP to email/phone
+router.post('/forgot-password', otpLimiter, validate({ body: forgotPasswordSchema }), authController.forgotPassword);
+// Step 2: Verify OTP → get resetToken
+router.post('/verify-forgot-otp', authLimiter, validate({ body: verifyForgotOtpSchema }), authController.verifyForgotOtp);
+// Step 3: Use resetToken to set new password
 router.post('/reset-password', authLimiter, validate({ body: resetPasswordSchema }), authController.resetPassword);
 
-// Changing password requires authentication
-/**
- * @openapi
- * /auth/change-password:
- *   post:
- *     tags: [Auth]
- *     summary: Change password for current user
- *     security:
- *       - bearerAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             $ref: '#/components/schemas/ChangePasswordInput'
- *     responses:
- *       200:
- *         description: Password changed
- *       401:
- *         $ref: '#/components/responses/Unauthorized'
- */
+// Change password (authenticated)
 router.post('/change-password', auth, authLimiter, validate({ body: changePasswordSchema }), authController.changePassword);
 
 module.exports = router;
