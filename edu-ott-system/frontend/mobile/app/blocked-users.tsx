@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
+import { useFocusEffect } from 'expo-router';
 import {
     View,
     Text,
@@ -38,14 +39,20 @@ export default function BlockedUsersScreen() {
         }
     }, []);
 
-    useEffect(() => {
-        const init = async () => {
-            setLoading(true);
-            await loadBlockedUsers();
-            setLoading(false);
-        };
-        init();
-    }, [loadBlockedUsers]);
+    useFocusEffect(
+        useCallback(() => {
+            let isActive = true;
+            const init = async () => {
+                if (blockedUsers.length === 0) setLoading(true);
+                await loadBlockedUsers();
+                if (isActive) setLoading(false);
+            };
+            init();
+            return () => {
+                isActive = false;
+            };
+        }, [loadBlockedUsers])
+    );
 
     const onRefresh = useCallback(async () => {
         setRefreshing(true);

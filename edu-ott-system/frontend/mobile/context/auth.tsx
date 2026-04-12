@@ -1,4 +1,4 @@
-﻿import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { useRouter, useSegments } from 'expo-router';
 import * as authService from '../utils/authService';
 import type { User, LoginPayload, RegisterPayload, UpdateProfilePayload } from '../types/auth';
@@ -104,38 +104,38 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [user, segments, isLoading]);
 
-  const login = async (payload: LoginPayload) => {
+  const login = useCallback(async (payload: LoginPayload) => {
     const res = await authService.login(payload);
     if (!res.user) throw new Error('Đăng nhập thất bại');
     setUser(res.user);
     await syncThemeSettings();
     return res.user;
-  };
+  }, []);
 
-  const register = async (payload: RegisterPayload) => {
+  const register = useCallback(async (payload: RegisterPayload) => {
     const res = await authService.register(payload);
     if (!res.user) throw new Error('Đăng ký thất bại');
     // Do not auto-login after register. User verifies email first, then logs in.
     setUser(null);
-  };
+  }, []);
 
-  const logout = async () => {
+  const logout = useCallback(async () => {
     await authService.logout();
     setUser(null);
-  };
+  }, []);
 
   /** Cập nhật profile cho user hiện tại */
-  const updateUser = async (data: UpdateProfilePayload) => {
-    if (!user) throw new Error('Chưa đăng nhập');
+  const updateUser = useCallback(async (data: UpdateProfilePayload) => {
+    if (!user?.id) throw new Error('Chưa đăng nhập');
     const updatedUser = await authService.updateProfile(user.id, data);
     if (updatedUser) {
       setUser(updatedUser);
     }
-  };
+  }, [user?.id]);
 
   /** Refresh thông tin user từ server */
-  const refreshUser = async () => {
-    if (!user) return;
+  const refreshUser = useCallback(async () => {
+    if (!user?.id) return;
     try {
       const freshUser = await getUserById(user.id);
       if (freshUser) {
@@ -145,10 +145,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch (error) {
       console.warn('Failed to refresh user:', error);
     }
-  };
+  }, [user?.id]);
+
+  const contextValue = React.useMemo(
+    () => ({ user, isLoading, login, register, logout, updateUser, refreshUser, setUser }),
+    [user, isLoading, login, register, logout, updateUser, refreshUser]
+  );
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, login, register, logout, updateUser, refreshUser, setUser }}>
+    <AuthContext.Provider value={contextValue}>
       {children}
     </AuthContext.Provider>
   );

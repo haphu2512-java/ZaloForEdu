@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useFocusEffect } from 'expo-router';
 import {
   StyleSheet,
   SectionList,
@@ -102,14 +103,20 @@ export default function ContactsScreen() {
     }
   }, []);
 
-  useEffect(() => {
-    const init = async () => {
-      setLoading(true);
-      await loadContacts();
-      setLoading(false);
-    };
-    init();
-  }, [loadContacts]);
+  useFocusEffect(
+    useCallback(() => {
+      let isActive = true;
+      const init = async () => {
+        if (friends.length === 0 && groups.length === 0) setLoading(true); // Don't block UI if we already have data
+        await loadContacts();
+        if (isActive) setLoading(false);
+      };
+      init();
+      return () => {
+        isActive = false;
+      };
+    }, [loadContacts])
+  );
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -260,8 +267,7 @@ export default function ContactsScreen() {
   }, []);
 
   const openManageGroup = (group: Conversation) => {
-    setSelectedGroup(group);
-    setGroupManageVisible(true);
+    router.push({ pathname: '/conversation-details', params: { id: group._id } });
   };
 
   const toggleMemberSelection = (friendId: string) => {
