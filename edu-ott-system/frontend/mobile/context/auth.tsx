@@ -34,8 +34,8 @@ export function useAuth() {
 }
 
 // ============================================================
-// AuthProvider - Quáº£n lÃ½ tráº¡ng thÃ¡i Current User toÃ n á»©ng dá»¥ng
-// Cháº·n User chÆ°a Ä‘Äƒng nháº­p vÃ o á»©ng dá»¥ng
+// Auth Service Functions
+// Các hàm này gọi trực tiếp API và quản lý token, user info trong storage.
 // ============================================================
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -106,7 +106,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const login = async (payload: LoginPayload) => {
     const res = await authService.login(payload);
-    if (!res.user) throw new Error('ÄÄƒng nháº­p tháº¥t báº¡i');
+    if (!res.user) throw new Error('Đăng nhập thất bại');
     setUser(res.user);
     await syncThemeSettings();
     return res.user;
@@ -114,7 +114,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const register = async (payload: RegisterPayload) => {
     const res = await authService.register(payload);
-    if (!res.user) throw new Error('ÄÄƒng kÃ½ tháº¥t báº¡i');
+    if (!res.user) throw new Error('Đăng ký thất bại');
     // Do not auto-login after register. User verifies email first, then logs in.
     setUser(null);
   };
@@ -124,16 +124,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(null);
   };
 
-  /** Cáº­p nháº­t profile cho user hiá»‡n táº¡i */
+  /** Cập nhật profile cho user hiện tại */
   const updateUser = async (data: UpdateProfilePayload) => {
-    if (!user) throw new Error('ChÆ°a Ä‘Äƒng nháº­p');
+    if (!user) throw new Error('Chưa đăng nhập');
     const updatedUser = await authService.updateProfile(user.id, data);
     if (updatedUser) {
       setUser(updatedUser);
     }
   };
 
-  /** Refresh láº¡i thÃ´ng tin user tá»« server */
+  /** Refresh thông tin user từ server */
   const refreshUser = async () => {
     if (!user) return;
     try {
