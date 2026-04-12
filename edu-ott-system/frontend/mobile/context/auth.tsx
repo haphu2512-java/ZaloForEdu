@@ -3,6 +3,7 @@ import { useRouter, useSegments } from 'expo-router';
 import * as authService from '../utils/authService';
 import type { User, LoginPayload, RegisterPayload, UpdateProfilePayload } from '../types/auth';
 import { getMySettings } from '../utils/settingsService';
+import { getUserById } from '../utils/userService';
 
 interface AuthContextType {
   user: User | null;
@@ -136,7 +137,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const refreshUser = async () => {
     if (!user) return;
     try {
-      const freshUser = await authService.getUserById(user.id);
+      const freshUser = await getUserById(user.id);
       if (freshUser) {
         setUser(freshUser);
         await authService.storeUserInfo(freshUser);
