@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useFocusEffect } from 'expo-router';
 import {
   StyleSheet,
   Image,
@@ -26,6 +27,7 @@ import { uploadImageToCloudinary } from '@/utils/mediaService';
 import { deleteMyAccount } from '@/utils/userService';
 import { getMySettings, updateMySettings, type UserSettings, type ThemeMode } from '@/utils/settingsService';
 import { useRouter } from 'expo-router';
+import EditProfileModal from '@/components/profile/EditProfileModal';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -53,14 +55,8 @@ export default function ProfileScreen() {
   const [isChangingPassword, setIsChangingPassword] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
-  // Edit Profile fields
-  const [editFields, setEditFields] = useState<EditableFields>({
-    username: '',
-    phone: '',
-    email: '',
-    avatarUrl: '',
-  });
-  const [isUpdating, setIsUpdating] = useState(false);
+  // Edit Profile fields (moved to EditProfileModal)
+
 
   // Avatar URL input
   const [avatarUrl, setAvatarUrl] = useState('');
@@ -72,53 +68,55 @@ export default function ProfileScreen() {
   const [isSavingSettings, setIsSavingSettings] = useState(false);
 
   useEffect(() => {
-    if (user) {
-      setEditFields({
-        username: user.username || '',
-        phone: user.phone || '',
-        email: user.email || '',
-        avatarUrl: user.avatarUrl || '',
-      });
-    }
+    // Other simple syncing logic if needed
   }, [user]);
 
-  useEffect(() => {
-    const loadSettings = async () => {
-      setIsLoadingSettings(true);
-      try {
-        const data = await getMySettings();
-        setSettings(data);
-      } catch (error: any) {
-        console.log('Failed to load settings:', error.message);
-      } finally {
-        setIsLoadingSettings(false);
-      }
-    };
-    void loadSettings();
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      let isActive = true;
+      const load = async () => {
+        try {
+          if (!settings) setIsLoadingSettings(true);
+          await Promise.all([
+            refreshUser(),
+            getMySettings().then((s) => {
+              if (isActive) setSettings(s);
+            }),
+          ]);
+        } catch (e: any) {
+          console.log('Failed to load profile settings:', e.message);
+        } finally {
+          if (isActive) setIsLoadingSettings(false);
+        }
+      };
+      load();
+      return () => {
+        isActive = false;
+      };
+    }, [refreshUser])
+  );
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     await Promise.all([
       refreshUser(),
-      getMySettings()
-        .then(setSettings)
-        .catch((error: any) => console.log('Failed to refresh settings:', error.message)),
+      getMySettings().then(setSettings).catch((error: any) => console.log('Failed to refresh settings:', error.message)),
     ]);
     setRefreshing(false);
   }, [refreshUser]);
 
   const handleUpdateTheme = async (theme: ThemeMode) => {
     if (!settings || isSavingSettings) return;
+    if (settings.theme === theme) return; // no change
     const previous = settings;
     const next = { ...settings, theme };
-    setSettings(next);
+    setSettings(next); // optimistic update
     setIsSavingSettings(true);
     try {
       await updateMySettings({ theme });
-      Alert.alert('Thành công', 'Đã lưu cài đặt giao diện');
+      // Theme changes silently - the color scheme hook reacts immediately
     } catch (error: any) {
-      setSettings(previous);
+      setSettings(previous); // rollback on error
       Alert.alert('Lỗi', error.message || 'Không thể lưu cài đặt giao diện');
     } finally {
       setIsSavingSettings(false);
@@ -158,64 +156,6 @@ export default function ProfileScreen() {
     }
     return false;
   }, [user?.email, user?.isEmailVerified, router]);
-
-  // ==================== EDIT PROFILE ====================
-  const handleSaveProfile = async () => {
-    const nextUsername = editFields.username.trim();
-    const nextPhone = editFields.phone.trim();
-    const nextEmail = editFields.email.trim().toLowerCase();
-
-    if (!nextUsername || nextUsername.length < 3) {
-      Alert.alert('Lỗi', 'Username phải có ít nhất 3 ký tự');
-      return;
-    }
-
-    if (nextEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(nextEmail)) {
-      Alert.alert('Lỗi', 'Email không đúng định dạng');
-      return;
-    }
-
-    if (nextPhone && !/^\d{8,20}$/.test(nextPhone)) {
-      Alert.alert('Lỗi', 'Số điện thoại phải từ 8-20 chữ số');
-      return;
-    }
-
-    const currentUsername = (user?.username || '').trim();
-    const currentPhone = (user?.phone || '').trim();
-    const currentEmail = (user?.email || '').trim().toLowerCase();
-
-    if (
-      nextUsername === currentUsername &&
-      nextPhone === currentPhone &&
-      nextEmail === currentEmail
-    ) {
-      Alert.alert('Thông báo', 'Không có thay đổi để cập nhật');
-      return;
-    }
-
-    const payload: any = {};
-    if (nextUsername !== currentUsername) payload.username = nextUsername;
-    if (nextPhone !== currentPhone) payload.phone = nextPhone || null;
-    if (nextEmail !== currentEmail) payload.email = nextEmail || null;
-
-    if (payload.email) {
-      Alert.alert(
-        'Lưu ý',
-        'Bạn đang thay đổi email. Sau khi cập nhật, hãy xác thực email mới để đảm bảo bảo mật.',
-      );
-    }
-
-    setIsUpdating(true);
-    try {
-      await updateUser(payload);
-      setEditModalVisible(false);
-      Alert.alert('Thành công ✅', 'Hồ sơ đã được cập nhật!');
-    } catch (error: any) {
-      Alert.alert('Lỗi', error.message || 'Cập nhật thất bại');
-    } finally {
-      setIsUpdating(false);
-    }
-  };
 
   // ==================== CHANGE AVATAR ====================
   const handleChangeAvatar = async () => {
@@ -320,7 +260,9 @@ export default function ProfileScreen() {
         {
           text: 'Đăng xuất',
           style: 'destructive',
-          onPress: async () => { await logout(); },
+          onPress: async () => {
+            await logout();
+          },
         },
       ]
     );
@@ -380,37 +322,6 @@ export default function ProfileScreen() {
     );
   }
 
-  // ==================== MENU ITEM COMPONENT ====================
-  const MenuItem = ({
-    ionIcon,
-    title,
-    subtitle,
-    onPress,
-    color = colors.text,
-    showChevron = true,
-  }: {
-    ionIcon?: keyof typeof Ionicons.glyphMap;
-    title: string;
-    subtitle?: string;
-    onPress?: () => void;
-    color?: string;
-    showChevron?: boolean;
-  }) => (
-    <TouchableOpacity
-      style={[styles.menuItem, { borderBottomColor: colors.border }]}
-      onPress={onPress}
-      activeOpacity={0.6}
-    >
-      <View style={[styles.menuIcon, { backgroundColor: color + '15' }]}>
-        {ionIcon && <Ionicons name={ionIcon} size={20} color={color} />}
-      </View>
-      <View style={{ flex: 1, backgroundColor: 'transparent' }}>
-        <Text style={[styles.menuText, { color }]}>{title}</Text>
-        {subtitle ? <Text style={{ fontSize: 12, color: colors.muted, marginTop: 2 }}>{subtitle}</Text> : null}
-      </View>
-      {showChevron && <FontAwesome name="chevron-right" size={14} color={colors.muted} />}
-    </TouchableOpacity>
-  );
 
   return (
     <ScrollView
@@ -543,31 +454,25 @@ export default function ProfileScreen() {
           ionIcon="create-outline"
           title="Chỉnh sửa hồ sơ"
           subtitle="Cập nhật username và số điện thoại"
-          onPress={() => {
-            if (requireEmailVerification()) return;
-            setEditModalVisible(true);
-          }}
+          onPress={() => setEditModalVisible(true)}
           color="#6366F1"
+          colors={colors}
         />
         <MenuItem
           ionIcon="lock-closed-outline"
           title="Đổi mật khẩu"
           subtitle="Cập nhật mật khẩu an toàn"
-          onPress={() => {
-            if (requireEmailVerification()) return;
-            setPasswordModalVisible(true);
-          }}
+          onPress={() => setPasswordModalVisible(true)}
           color="#10B981"
+          colors={colors}
         />
         <MenuItem
           ionIcon="image-outline"
           title="Đổi ảnh đại diện"
           subtitle="Thay đổi hình ảnh tài khoản"
-          onPress={() => {
-            if (requireEmailVerification()) return;
-            setAvatarModalVisible(true);
-          }}
+          onPress={() => setAvatarModalVisible(true)}
           color="#F59E0B"
+          colors={colors}
         />
         <MenuItem
           ionIcon="folder-open-outline"
@@ -575,6 +480,23 @@ export default function ProfileScreen() {
           subtitle="Tra cứu và xóa media theo ID"
           onPress={() => router.push('/media-manager' as any)}
           color="#0EA5E9"
+          colors={colors}
+        />
+        <MenuItem
+          ionIcon="archive-outline"
+          title="Tin nhắn lưu trữ"
+          subtitle="Xem các cuộc trò chuyện đã ẩn"
+          onPress={() => router.push('/archived-conversations' as any)}
+          color="#8B5CF6"
+          colors={colors}
+        />
+        <MenuItem
+          ionIcon="ban-outline"
+          title="Danh sách chặn"
+          subtitle="Quản lý người dùng đã chặn"
+          onPress={() => router.push('/blocked-users' as any)}
+          color="#EF4444"
+          colors={colors}
         />
       </View>
 
@@ -584,13 +506,17 @@ export default function ProfileScreen() {
 
         <View style={[styles.preferenceWrap, { borderBottomColor: colors.border }]}>
           <View style={{ flex: 1, backgroundColor: 'transparent' }}>
-            <Text style={[styles.menuText, { color: colors.text }]}>Theme</Text>
+            <Text style={[styles.menuText, { color: colors.text }]}>Giao diện (Theme)</Text>
             <Text style={{ fontSize: 12, color: colors.muted, marginTop: 2 }}>
-              Chọn giao diện ứng dụng
+              Hiện tại: {settings?.theme === 'light' ? '☀️ Sáng' : settings?.theme === 'dark' ? '🌙 Tối' : '📱 Hệ thống'}
             </Text>
           </View>
-          <View style={{ flexDirection: 'row', gap: 8, backgroundColor: 'transparent' }}>
-            {(['light', 'dark', 'system'] as ThemeMode[]).map((mode) => {
+          <View style={{ flexDirection: 'row', gap: 6, backgroundColor: 'transparent' }}>
+            {([
+              { mode: 'light', label: 'Sáng', icon: 'sunny' },
+              { mode: 'dark', label: 'Tối', icon: 'moon' },
+              { mode: 'system', label: 'Auto', icon: 'phone-portrait' },
+            ] as { mode: ThemeMode; label: string; icon: any }[]).map(({ mode, label, icon }) => {
               const active = settings?.theme === mode;
               return (
                 <TouchableOpacity
@@ -601,12 +527,13 @@ export default function ProfileScreen() {
                     styles.themeChip,
                     {
                       borderColor: active ? colors.tint : colors.border,
-                      backgroundColor: active ? colors.tint + '20' : 'transparent',
+                      backgroundColor: active ? colors.tint : 'transparent',
                     },
                   ]}
                 >
-                  <Text style={{ color: active ? colors.tint : colors.muted, fontWeight: '700', fontSize: 12 }}>
-                    {mode === 'light' ? 'Sáng' : mode === 'dark' ? 'Tối' : 'System'}
+                  <Ionicons name={icon} size={13} color={active ? '#fff' : colors.muted} />
+                  <Text style={{ color: active ? '#fff' : colors.muted, fontWeight: '700', fontSize: 11, marginTop: 2 }}>
+                    {label}
                   </Text>
                 </TouchableOpacity>
               );
@@ -653,6 +580,7 @@ export default function ProfileScreen() {
           subtitle="Xem và đánh dấu đã đọc"
           onPress={() => router.push('/notifications' as any)}
           color={colors.text}
+          colors={colors}
         />
         <MenuItem
           ionIcon="information-circle-outline"
@@ -665,6 +593,7 @@ export default function ProfileScreen() {
             )
           }
           color={colors.text}
+          colors={colors}
         />
       </View>
 
@@ -676,6 +605,7 @@ export default function ProfileScreen() {
           onPress={handleLogout}
           color={colors.error}
           showChevron={false}
+          colors={colors}
         />
         <MenuItem
           ionIcon="log-out"
@@ -683,6 +613,7 @@ export default function ProfileScreen() {
           onPress={handleLogoutAll}
           color="#B91C1C"
           showChevron={false}
+          colors={colors}
         />
         <MenuItem
           ionIcon="trash-outline"
@@ -691,70 +622,24 @@ export default function ProfileScreen() {
           onPress={isDeletingAccount ? undefined : handleDeleteAccount}
           color="#DC2626"
           showChevron={false}
+          colors={colors}
         />
       </View>
 
       {/* ==================== EDIT PROFILE MODAL ==================== */}
-      <Modal
+      <EditProfileModal
         visible={editModalVisible}
-        animationType="slide"
-        presentationStyle="formSheet"
-        onRequestClose={() => setEditModalVisible(false)}
-      >
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          style={{ flex: 1, backgroundColor: colors.background }}
-        >
-          {/* Modal Header */}
-          <View style={[styles.modalHeader, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
-            <TouchableOpacity onPress={() => setEditModalVisible(false)}>
-              <Text style={{ color: colors.error, fontSize: 16, fontWeight: '600' }}>Hủy</Text>
-            </TouchableOpacity>
-            <Text style={[styles.modalTitle, { color: colors.text }]}>Chỉnh sửa hồ sơ</Text>
-            <TouchableOpacity onPress={handleSaveProfile} disabled={isUpdating}>
-              {isUpdating ? (
-                <ActivityIndicator size="small" color={colors.tint} />
-              ) : (
-                <Text style={{ color: colors.tint, fontSize: 16, fontWeight: '700' }}>Lưu</Text>
-              )}
-            </TouchableOpacity>
-          </View>
+        onClose={() => setEditModalVisible(false)}
+        user={user}
+        updateUser={updateUser}
+        colors={colors}
+      />
 
-          <ScrollView style={{ padding: 20 }}>
-            <ModalInput
-              label="Username *"
-              value={editFields.username}
-              onChangeText={(v: string) => setEditFields({ ...editFields, username: v })}
-              placeholder="Nhập username (ít nhất 3 ký tự)"
-              autoCapitalize="none"
-              colors={colors}
-            />
-            <ModalInput
-              label="Email"
-              value={editFields.email}
-              onChangeText={(v: string) => setEditFields({ ...editFields, email: v })}
-              placeholder="Nhập email"
-              keyboardType="email-address"
-              autoCapitalize="none"
-              colors={colors}
-            />
-            <ModalInput
-              label="Số điện thoại"
-              value={editFields.phone}
-              onChangeText={(v: string) => setEditFields({ ...editFields, phone: v })}
-              placeholder="0901234567"
-              keyboardType="phone-pad"
-              colors={colors}
-            />
-          </ScrollView>
-        </KeyboardAvoidingView>
-      </Modal>
 
       {/* ==================== CHANGE AVATAR MODAL ==================== */}
       <Modal
         visible={avatarModalVisible}
         animationType="slide"
-        presentationStyle="formSheet"
         onRequestClose={() => setAvatarModalVisible(false)}
       >
         <KeyboardAvoidingView
@@ -861,7 +746,6 @@ export default function ProfileScreen() {
       <Modal
         visible={passwordModalVisible}
         animationType="slide"
-        presentationStyle="formSheet"
         onRequestClose={() => setPasswordModalVisible(false)}
       >
         <KeyboardAvoidingView
@@ -925,6 +809,41 @@ export default function ProfileScreen() {
 
 // ==================== SUB COMPONENTS ====================
 
+function MenuItem({
+  ionIcon,
+  title,
+  subtitle,
+  onPress,
+  color,
+  showChevron = true,
+  colors,
+}: {
+  ionIcon?: keyof typeof Ionicons.glyphMap;
+  title: string;
+  subtitle?: string;
+  onPress?: () => void;
+  color?: string;
+  showChevron?: boolean;
+  colors: any;
+}) {
+  return (
+    <TouchableOpacity
+      style={[styles.menuItem, { borderBottomColor: colors.border }]}
+      onPress={onPress}
+      activeOpacity={0.6}
+    >
+      <View style={[styles.menuIcon, { backgroundColor: (color || colors.text) + '15' }]}>
+        {ionIcon && <Ionicons name={ionIcon} size={20} color={color || colors.text} />}
+      </View>
+      <View style={{ flex: 1, backgroundColor: 'transparent' }}>
+        <Text style={[styles.menuText, { color: color || colors.text }]}>{title}</Text>
+        {subtitle ? <Text style={{ fontSize: 12, color: colors.muted, marginTop: 2 }}>{subtitle}</Text> : null}
+      </View>
+      {showChevron && <FontAwesome name="chevron-right" size={14} color={colors.muted} />}
+    </TouchableOpacity>
+  );
+}
+
 function ProfileRow({
   icon,
   label,
@@ -949,46 +868,6 @@ function ProfileRow({
           {value}
         </Text>
       </View>
-    </View>
-  );
-}
-
-function ModalInput({
-  label,
-  value,
-  onChangeText,
-  placeholder,
-  keyboardType,
-  autoCapitalize,
-  colors,
-}: {
-  label: string;
-  value: string;
-  onChangeText: (v: string) => void;
-  placeholder: string;
-  keyboardType?: 'default' | 'phone-pad' | 'email-address' | 'url';
-  autoCapitalize?: 'none' | 'sentences';
-  colors: any;
-}) {
-  return (
-    <View style={{ marginBottom: 20 }}>
-      <Text style={[styles.inputLabel, { color: colors.text }]}>{label}</Text>
-      <TextInput
-        value={value}
-        onChangeText={onChangeText}
-        placeholder={placeholder}
-        placeholderTextColor={colors.muted}
-        keyboardType={keyboardType}
-        autoCapitalize={autoCapitalize}
-        style={[
-          styles.modalTextInput,
-          {
-            color: colors.text,
-            borderColor: colors.border,
-            backgroundColor: colors.background,
-          },
-        ]}
-      />
     </View>
   );
 }
@@ -1081,10 +960,12 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   themeChip: {
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderRadius: 10,
-    paddingHorizontal: 10,
+    paddingHorizontal: 8,
     paddingVertical: 6,
+    alignItems: 'center',
+    minWidth: 48,
   },
 
   profileRow: {

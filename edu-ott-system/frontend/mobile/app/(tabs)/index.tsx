@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useFocusEffect } from 'expo-router';
 import {
   FlatList,
   View,
@@ -6,10 +7,14 @@ import {
   RefreshControl,
   ActivityIndicator,
   StyleSheet,
+  Modal,
+  TouchableOpacity,
+  TouchableWithoutFeedback,
+  ScrollView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { getConversations } from '@/utils/messageService';
-import { connectSocket, getSocket } from '@/utils/socketService';
+import { connectSocket } from '@/utils/socketService';
 import { useAuth } from '@/context/auth';
 import Colors from '@/constants/Colors';
 import { useColorScheme } from '@/components/useColorScheme';
@@ -18,6 +23,8 @@ import { useRouter } from 'expo-router';
 import { Alert } from 'react-native';
 import { updateConversationPreference } from '@/utils/messageService';
 import { ChatListItem } from '@/components/chat/ChatListItem';
+
+type FilterTab = 'all' | 'work' | 'family';
 
 function formatTime(dateStr?: string | null): string {
   if (!dateStr) return '';
@@ -38,15 +45,12 @@ function formatTime(dateStr?: string | null): string {
   return `${date.getDate()}/${date.getMonth() + 1}`;
 }
 
-/** Get display name for a conversation */
 function getDisplayName(conv: Conversation, currentUserId: string): string {
   if (conv.type === 'group' && conv.name) return conv.name;
-  // For direct chats, show the other participant's username
   const otherUser = conv.participants?.find((p) => (p._id || p.id || '') !== currentUserId);
   return otherUser?.username || 'Cuộc trò chuyện';
 }
 
-/** Get display avatar for a conversation */
 function getDisplayAvatar(conv: Conversation, currentUserId: string): string {
   if (conv.type === 'group') {
     if (conv.avatarUrl) return conv.avatarUrl;
@@ -66,14 +70,23 @@ function getSenderName(sender: any): string | undefined {
   return sender.username;
 }
 
+const TABS: { key: FilterTab; label: string; icon: any }[] = [
+  { key: 'all', label: 'Tất cả', icon: 'chatbubbles-outline' },
+  { key: 'work', label: 'Công việc', icon: 'briefcase-outline' },
+  { key: 'family', label: 'Gia đình', icon: 'home-outline' },
+];
+
 export default function MessagesScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const colors = Colors[colorScheme === 'dark' ? 'dark' : 'light'];
   const { user } = useAuth();
+  const router = useRouter();
 
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null);
+  const [activeTab, setActiveTab] = useState<FilterTab>('all');
 
   const loadConversations = useCallback(async () => {
     try {
@@ -99,17 +112,13 @@ export default function MessagesScreen() {
         if (!conversationId) return;
         setConversations((prev) => {
           const idx = prev.findIndex((conv) => conv._id === conversationId || conv.id === conversationId);
-          if (idx < 0) {
-            void loadConversations();
-            return prev;
-          }
+          if (idx < 0) { void loadConversations(); return prev; }
           const updated = {
             ...prev[idx],
             latestMessage: payload.latestMessage || prev[idx].latestMessage,
             lastMessageAt: payload.latestMessage?.createdAt || new Date().toISOString(),
           };
-          const next = [updated, ...prev.filter((_, i) => i !== idx)];
-          return next;
+          return [updated, ...prev.filter((_, i) => i !== idx)];
         });
       };
 
@@ -124,14 +133,18 @@ export default function MessagesScreen() {
     };
   }, [loadConversations]);
 
-  useEffect(() => {
-    const init = async () => {
-      setLoading(true);
-      await loadConversations();
-      setLoading(false);
-    };
-    init();
-  }, [loadConversations]);
+  useFocusEffect(
+    useCallback(() => {
+      let isActive = true;
+      const init = async () => {
+        if (conversations.length === 0) setLoading(true);
+        await loadConversations();
+        if (isActive) setLoading(false);
+      };
+      init();
+      return () => { isActive = false; };
+    }, [loadConversations])
+  );
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -139,46 +152,45 @@ export default function MessagesScreen() {
     setRefreshing(false);
   }, [loadConversations]);
 
-  const router = useRouter();
+  const handlePress = (item: Conversation) => { router.push(`/chat/${item._id}`); };
+  const handleLongPress = (item: Conversation) => { setSelectedConversation(item); };
+  const closeActionSheet = () => { setSelectedConversation(null); };
 
-  const handlePress = (item: Conversation) => {
-    router.push(`/chat/${item._id}`);
+  const handleAction = async (actionType: string, item: Conversation) => {
+    closeActionSheet();
+    try {
+      if (actionType === 'work') {
+        await updateConversationPreference(item._id, { category: 'work' });
+        await loadConversations();
+        Alert.alert('✅', 'Đã phân loại Công việc');
+      } else if (actionType === 'family') {
+        await updateConversationPreference(item._id, { category: 'family' });
+        await loadConversations();
+        Alert.alert('✅', 'Đã phân loại Gia đình');
+      } else if (actionType === 'primary') {
+        await updateConversationPreference(item._id, { category: 'primary' });
+        await loadConversations();
+        Alert.alert('✅', 'Đã chuyển về Tất cả');
+      } else if (actionType === 'archive') {
+        await updateConversationPreference(item._id, { isHidden: true });
+        await loadConversations();
+        Alert.alert('Đã lưu trữ', 'Xem lại trong Cá nhân > Tin nhắn lưu trữ');
+      } else if (actionType === 'delete') {
+        await updateConversationPreference(item._id, { isDeleted: true });
+        await loadConversations();
+      } else if (actionType === 'details') {
+        router.push({ pathname: '/conversation-details', params: { id: item._id } });
+      }
+    } catch (error: any) {
+      Alert.alert('Lỗi', error.message || 'Thao tác thất bại');
+    }
   };
 
-  const handleLongPress = (item: Conversation) => {
-    Alert.alert('Tùy chọn cuộc trò chuyện', 'Chọn thao tác', [
-      {
-        text: 'Phân loại: Công việc',
-        onPress: async () => {
-          await updateConversationPreference(item._id, { category: 'work' });
-          await loadConversations();
-        },
-      },
-      {
-        text: 'Phân loại: Gia đình',
-        onPress: async () => {
-          await updateConversationPreference(item._id, { category: 'family' });
-          await loadConversations();
-        },
-      },
-      {
-        text: 'Ẩn cuộc trò chuyện',
-        onPress: async () => {
-          await updateConversationPreference(item._id, { isHidden: true });
-          await loadConversations();
-        },
-      },
-      {
-        text: 'Xóa khỏi danh sách',
-        style: 'destructive',
-        onPress: async () => {
-          await updateConversationPreference(item._id, { isDeleted: true });
-          await loadConversations();
-        },
-      },
-      { text: 'Hủy', style: 'cancel' },
-    ]);
-  };
+  // Filter conversations based on active tab
+  const filteredConversations = conversations.filter((conv) => {
+    if (activeTab === 'all') return true;
+    return conv.preference?.category === activeTab;
+  });
 
   const renderItem = ({ item }: { item: Conversation }) => {
     const currentUserId = user?.id || '';
@@ -189,12 +201,11 @@ export default function MessagesScreen() {
     const lastMessageText = latestMsg?.content || 'Chưa có tin nhắn';
     const lastMessageTime = latestMsg?.createdAt || item.lastMessageAt;
     const senderName = getSenderName(latestMsg?.senderId);
-
-    // Check if the other user is online (for direct chats)
-    const otherUser = !isGroup
-      ? item.participants?.find((p) => (p._id || p.id || '') !== currentUserId)
-      : null;
+    const otherUser = !isGroup ? item.participants?.find((p) => (p._id || p.id || '') !== (user?.id || '')) : null;
     const isOnline = otherUser?.isOnline;
+
+    // Category badge color
+    const catColor = item.preference?.category === 'work' ? '#F59E0B' : item.preference?.category === 'family' ? '#10B981' : null;
 
     return (
       <ChatListItem
@@ -215,11 +226,13 @@ export default function MessagesScreen() {
   const renderEmpty = () => (
     <View style={styles.emptyContainer}>
       <View style={[styles.emptyIcon, { backgroundColor: colors.tint + '15' }]}>
-        <Ionicons name="chatbubbles-outline" size={48} color={colors.tint} />
+        <Ionicons name={activeTab === 'all' ? 'chatbubbles-outline' : activeTab === 'work' ? 'briefcase-outline' : 'home-outline'} size={48} color={colors.tint} />
       </View>
-      <Text style={[styles.emptyTitle, { color: colors.text }]}>Chưa có cuộc trò chuyện</Text>
+      <Text style={[styles.emptyTitle, { color: colors.text }]}>
+        {activeTab === 'all' ? 'Chưa có cuộc trò chuyện' : `Không có tin nhắn ${activeTab === 'work' ? 'Công việc' : 'Gia đình'}`}
+      </Text>
       <Text style={[styles.emptySubtitle, { color: colors.muted }]}>
-        Hãy thêm bạn bè để bắt đầu trò chuyện
+        {activeTab === 'all' ? 'Hãy thêm bạn bè để bắt đầu trò chuyện' : 'Nhấn giữ vào tin nhắn để phân loại'}
       </Text>
     </View>
   );
@@ -228,25 +241,123 @@ export default function MessagesScreen() {
     return (
       <View style={[styles.loadingContainer, { backgroundColor: colors.background }]}>
         <ActivityIndicator size="large" color={colors.tint} />
-        <Text style={{ marginTop: 12, color: colors.muted }}>Đang tải...</Text>
       </View>
     );
   }
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
+      {/* Category Filter Tabs */}
+      <View style={[styles.tabBar, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
+        {TABS.map((tab) => {
+          const isActive = activeTab === tab.key;
+          const count = tab.key === 'all'
+            ? conversations.length
+            : conversations.filter((c) => c.preference?.category === tab.key).length;
+          return (
+            <TouchableOpacity
+              key={tab.key}
+              style={[styles.tabBtn, isActive && { borderBottomColor: colors.tint, borderBottomWidth: 2 }]}
+              onPress={() => setActiveTab(tab.key)}
+            >
+              <Ionicons name={tab.icon} size={16} color={isActive ? colors.tint : colors.muted} />
+              <Text style={[styles.tabLabel, { color: isActive ? colors.tint : colors.muted }]}>{tab.label}</Text>
+              {count > 0 && (
+                <View style={[styles.tabBadge, { backgroundColor: isActive ? colors.tint : colors.muted }]}>
+                  <Text style={{ color: '#fff', fontSize: 10, fontWeight: '700' }}>{count}</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+
       <FlatList
-        data={conversations}
+        data={filteredConversations}
         keyExtractor={(item) => item._id}
         renderItem={renderItem}
         ListEmptyComponent={renderEmpty}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.tint} />
-        }
-        contentContainerStyle={conversations.length === 0 ? { flex: 1 } : undefined}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.tint} />}
+        contentContainerStyle={filteredConversations.length === 0 ? { flex: 1 } : undefined}
         showsVerticalScrollIndicator={false}
-        ItemSeparatorComponent={() => <View style={{ height: 10, backgroundColor: colors.background }} />}
+        ItemSeparatorComponent={() => <View style={{ height: 1, backgroundColor: colors.border, marginLeft: 76 }} />}
       />
+
+      {/* Action Sheet Modal */}
+      <Modal
+        visible={!!selectedConversation}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={closeActionSheet}
+      >
+        <TouchableWithoutFeedback onPress={closeActionSheet}>
+          <View style={styles.modalOverlay}>
+            <TouchableWithoutFeedback>
+              <View style={[styles.actionSheet, { backgroundColor: colors.background }]}>
+                {/* Handle bar */}
+                <View style={{ alignItems: 'center', paddingTop: 10, paddingBottom: 4 }}>
+                  <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: colors.border }} />
+                </View>
+                <View style={styles.actionSheetHeader}>
+                  <Text style={[styles.actionSheetTitle, { color: colors.text }]}>Tùy chọn</Text>
+                </View>
+
+                {selectedConversation && (
+                  <View style={styles.actionSheetOptions}>
+                    {selectedConversation.preference?.category !== 'work' && (
+                      <TouchableOpacity style={styles.actionOption} onPress={() => handleAction('work', selectedConversation)}>
+                        <View style={[styles.actionIconWrap, { backgroundColor: '#FEF3C7' }]}>
+                          <Ionicons name="briefcase-outline" size={20} color="#D97706" />
+                        </View>
+                        <Text style={[styles.actionOptionText, { color: colors.text }]}>Phân loại: Công việc</Text>
+                      </TouchableOpacity>
+                    )}
+                    {selectedConversation.preference?.category !== 'family' && (
+                      <TouchableOpacity style={styles.actionOption} onPress={() => handleAction('family', selectedConversation)}>
+                        <View style={[styles.actionIconWrap, { backgroundColor: '#DCFCE7' }]}>
+                          <Ionicons name="home-outline" size={20} color="#16A34A" />
+                        </View>
+                        <Text style={[styles.actionOptionText, { color: colors.text }]}>Phân loại: Gia đình</Text>
+                      </TouchableOpacity>
+                    )}
+                    {selectedConversation.preference?.category && selectedConversation.preference.category !== 'primary' && (
+                      <TouchableOpacity style={styles.actionOption} onPress={() => handleAction('primary', selectedConversation)}>
+                        <View style={[styles.actionIconWrap, { backgroundColor: '#E0E7FF' }]}>
+                          <Ionicons name="chatbubbles-outline" size={20} color="#4F46E5" />
+                        </View>
+                        <Text style={[styles.actionOptionText, { color: colors.text }]}>Chuyển về Tất cả</Text>
+                      </TouchableOpacity>
+                    )}
+                    {selectedConversation.type === 'group' && (
+                      <TouchableOpacity style={styles.actionOption} onPress={() => handleAction('details', selectedConversation)}>
+                        <View style={[styles.actionIconWrap, { backgroundColor: '#E0F2FE' }]}>
+                          <Ionicons name="settings-outline" size={20} color="#0284C7" />
+                        </View>
+                        <Text style={[styles.actionOptionText, { color: colors.text }]}>Quản lý nhóm</Text>
+                      </TouchableOpacity>
+                    )}
+                    <TouchableOpacity style={styles.actionOption} onPress={() => handleAction('archive', selectedConversation)}>
+                      <View style={[styles.actionIconWrap, { backgroundColor: '#F3E8FF' }]}>
+                        <Ionicons name="archive-outline" size={20} color="#9333EA" />
+                      </View>
+                      <Text style={[styles.actionOptionText, { color: colors.text }]}>Lưu trữ tin nhắn</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.actionOption} onPress={() => handleAction('delete', selectedConversation)}>
+                      <View style={[styles.actionIconWrap, { backgroundColor: '#FEE2E2' }]}>
+                        <Ionicons name="trash-outline" size={20} color="#EF4444" />
+                      </View>
+                      <Text style={[styles.actionOptionText, { color: '#EF4444' }]}>Xóa khỏi danh sách</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={[styles.actionOption, { paddingBottom: 16 }]} onPress={closeActionSheet}>
+                      <Text style={[styles.actionOptionText, { color: colors.muted, textAlign: 'center', width: '100%' }]}>Hủy</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+              </View>
+            </TouchableWithoutFeedback>
+          </View>
+        </TouchableWithoutFeedback>
+      </Modal>
     </View>
   );
 }
@@ -255,8 +366,23 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
 
+  // Tabs
+  tabBar: { flexDirection: 'row', borderBottomWidth: StyleSheet.hairlineWidth },
+  tabBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 11, gap: 5, borderBottomWidth: 2, borderBottomColor: 'transparent' },
+  tabLabel: { fontSize: 13, fontWeight: '600' },
+  tabBadge: { paddingHorizontal: 5, paddingVertical: 1, borderRadius: 8, minWidth: 18, alignItems: 'center' },
+
   emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 40 },
   emptyIcon: { width: 96, height: 96, borderRadius: 48, alignItems: 'center', justifyContent: 'center', marginBottom: 20 },
   emptyTitle: { fontSize: 20, fontWeight: '700', marginBottom: 8 },
   emptySubtitle: { fontSize: 14, textAlign: 'center', lineHeight: 20 },
+
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.4)', justifyContent: 'flex-end' },
+  actionSheet: { borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingBottom: 8 },
+  actionSheetHeader: { paddingHorizontal: 16, paddingVertical: 10 },
+  actionSheetTitle: { fontSize: 16, fontWeight: '700' },
+  actionSheetOptions: {},
+  actionOption: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 13, gap: 14 },
+  actionIconWrap: { width: 38, height: 38, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  actionOptionText: { fontSize: 15, fontWeight: '500' },
 });

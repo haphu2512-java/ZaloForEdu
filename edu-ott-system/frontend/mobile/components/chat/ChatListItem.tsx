@@ -72,7 +72,7 @@ export const ChatListItem: React.FC<ChatListItemProps> = ({
             <Ionicons name={badge.icon} size={10} color="#fff" />
           </View>
         )}
-        {isOnline && <View style={[styles.onlineDot, { borderColor: colors?.surface || '#fff' }]} />}
+        {isOnline && <View style={[styles.onlineDot, { borderColor: colors?.surface || colors?.background || '#fff' }]} />}
       </View>
 
       {/* Content */}
@@ -146,7 +146,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
-    borderColor: '#fff',
+    borderColor: '#fff', // This fallback is okay but better use a passed prop if needed
   },
 
   content: { flex: 1 },

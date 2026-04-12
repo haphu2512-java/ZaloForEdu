@@ -56,6 +56,18 @@ export async function getConversations(
 }
 
 /**
+ * Lấy danh sách tin nhắn đã lưu trữ / ẩn
+ * GET /conversations/archived
+ */
+export async function getArchivedConversations(): Promise<PaginatedResponse<Conversation>> {
+  const res = await fetchAPI(`${CONVERSATIONS_ENDPOINT}/archived`);
+  return {
+    ...res.data,
+    items: (res.data?.items || []).map(normalizeConversation),
+  };
+}
+
+/**
  * Tạo conversation mới (direct hoặc group)
  * POST /conversations { type, name?, participantIds }
  */

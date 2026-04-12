@@ -174,16 +174,6 @@ export async function refreshAccessToken(): Promise<AuthResponse | null> {
 }
 
 /**
- * Lấy user profile theo id
- * GET /users/:id
- * Response: { success, data: User, message }
- */
-export async function getUserById(userId: string): Promise<User> {
-  const res = await fetchAPI(`${USERS_ENDPOINT}/${userId}`);
-  return res.data;
-}
-
-/**
  * Cập nhật Profile
  * PUT /users/:id { username?, phone?, avatarUrl? }
  */

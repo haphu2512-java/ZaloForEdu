@@ -127,9 +127,22 @@ const blockOrUnblockUser = asyncHandler(async (req, res) => {
   );
 });
 
+const getBlockedUsers = asyncHandler(async (req, res) => {
+  const currentUser = await User.findById(req.user._id)
+    .populate('blockedUsers', 'username avatarUrl email isOnline lastSeen')
+    .select('blockedUsers');
+
+  if (!currentUser) {
+    throw new ApiError(404, 'USER_NOT_FOUND', 'User not found');
+  }
+
+  return successResponse(res, { blockedUsers: currentUser.blockedUsers }, 'Blocked users fetched');
+});
+
 module.exports = {
   getUserById,
   updateUserById,
   deleteUserById,
   blockOrUnblockUser,
+  getBlockedUsers,
 };

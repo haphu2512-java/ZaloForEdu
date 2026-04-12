@@ -23,6 +23,11 @@ export default function TabLayout() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
+  // Header bg: tint color for light, dark surface for dark mode
+  const headerBg = resolvedScheme === 'dark' ? colors.surface : colors.tint;
+  const headerTitleColor = resolvedScheme === 'dark' ? colors.text : '#FFFFFF';
+  const headerIconColor = resolvedScheme === 'dark' ? colors.text : '#FFFFFF';
+
   return (
     <Tabs
       screenOptions={{
@@ -40,14 +45,14 @@ export default function TabLayout() {
           fontWeight: '600',
         },
         headerStyle: {
-          backgroundColor: colors.tint,
+          backgroundColor: headerBg,
           shadowColor: 'transparent',
           elevation: 0,
         },
         headerTitleStyle: {
           fontWeight: '700',
           fontSize: 18,
-          color: '#FFFFFF',
+          color: headerTitleColor,
         },
         headerShown: useClientOnlyValue(false, true),
       }}>
@@ -61,10 +66,10 @@ export default function TabLayout() {
           headerRight: () => (
             <View style={{ flexDirection: 'row', paddingRight: 16, gap: 18 }}>
               <TouchableOpacity onPress={() => router.push('/search-messages' as any)}>
-                <Ionicons name="search-outline" size={22} color="#FFFFFF" />
+                <Ionicons name="search-outline" size={22} color={headerIconColor} />
               </TouchableOpacity>
               <TouchableOpacity onPress={() => router.push('/create-group' as any)}>
-                <Ionicons name="create-outline" size={22} color="#FFFFFF" />
+                <Ionicons name="create-outline" size={22} color={headerIconColor} />
               </TouchableOpacity>
             </View>
           ),
@@ -79,7 +84,7 @@ export default function TabLayout() {
           ),
         }}
       />
-       <Tabs.Screen
+      <Tabs.Screen
         name="chatbot"
         options={{
           title: 'ChatBot AI',

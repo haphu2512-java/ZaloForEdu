@@ -32,7 +32,7 @@ const sendVerificationOtp = async ({ email, otp }) => {
 
 const register = asyncHandler(async (req, res) => {
   const { username, email, password, phone } = req.body;
-  
+
   const query = [];
   if (email) query.push({ email: email.toLowerCase() });
   if (phone) query.push({ phone });
@@ -49,7 +49,7 @@ const register = asyncHandler(async (req, res) => {
 
   const finalUsername = username || generateUsername(email || phone || 'user');
   const passwordHash = await bcrypt.hash(password, 10);
-  
+
   // Verification OTP (6 digits) for email
   let emailVerificationToken = null;
   let emailVerificationExpires = null;
@@ -79,14 +79,13 @@ const register = asyncHandler(async (req, res) => {
 
 const login = asyncHandler(async (req, res) => {
   const { email, username, phone, password } = req.body;
-  
+
   const query = [];
   if (email) query.push({ email: email.toLowerCase() });
   if (username) query.push({ username });
   if (phone) query.push({ phone });
 
   const user = await User.findOne({ $or: query });
-  
   if (!user || user.deletedAt) {
     throw new ApiError(401, 'INVALID_CREDENTIALS', 'Invalid credentials');
   }
@@ -123,7 +122,7 @@ const logoutAll = asyncHandler(async (req, res) => {
 
 const verifyEmail = asyncHandler(async (req, res) => {
   const { token } = req.body;
-  
+
   const user = await User.findOne({
     emailVerificationToken: token,
     emailVerificationExpires: { $gt: Date.now() }
@@ -167,7 +166,7 @@ const resendVerificationEmail = asyncHandler(async (req, res) => {
 
 const forgotPassword = asyncHandler(async (req, res) => {
   const { email, phone } = req.body;
-  
+
   const query = [];
   if (email) query.push({ email: email.toLowerCase() });
   if (phone) query.push({ phone });
@@ -227,7 +226,7 @@ const resetPassword = asyncHandler(async (req, res) => {
 const changePassword = asyncHandler(async (req, res) => {
   const { currentPassword, newPassword } = req.body;
   const user = await User.findById(req.user._id);
-  
+
   if (!user) throw new ApiError(404, 'USER_NOT_FOUND', 'User not found');
 
   const isValid = await bcrypt.compare(currentPassword, user.passwordHash);

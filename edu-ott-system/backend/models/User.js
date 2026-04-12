@@ -14,8 +14,6 @@ const userSchema = new mongoose.Schema(
       type: String,
       trim: true,
       lowercase: true,
-      unique: true,
-      sparse: true,
     },
     passwordHash: {
       type: String,
@@ -23,8 +21,6 @@ const userSchema = new mongoose.Schema(
     },
     phone: {
       type: String,
-      unique: true,
-      sparse: true,
     },
     avatarUrl: {
       type: String,
@@ -94,6 +90,23 @@ const userSchema = new mongoose.Schema(
         return ret;
       },
     },
+  },
+);
+
+// Allow many users without email/phone (or with null), but keep uniqueness when value is a string.
+userSchema.index(
+  { email: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { email: { $type: 'string' } },
+  },
+);
+
+userSchema.index(
+  { phone: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { phone: { $type: 'string' } },
   },
 );
 
