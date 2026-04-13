@@ -10,6 +10,11 @@ const userSchema = new mongoose.Schema(
       unique: true,
       sparse: true,
     },
+    role: {
+      type: String,
+      enum: ['user', 'admin'],
+      default: 'user',
+    },
     email: {
       type: String,
       trim: true,
@@ -72,6 +77,14 @@ const userSchema = new mongoose.Schema(
     },
     deletedAt: {
       type: Date,
+      default: null,
+    },
+    isActive: {
+      type: Boolean,
+      default: true,
+    },
+    banReason: {
+      type: String,
       default: null,
     },
   },

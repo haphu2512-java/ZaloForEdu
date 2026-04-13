@@ -80,5 +80,3 @@
 - [ ] **Huy hiệu vai trò:** Icon đặc biệt cho Giáo viên, Phụ huynh, Học sinh
 
 ---
-
-*Bản tài liệu này được tạo và cập nhật tự động bởi Antigravity AI Assistant.*

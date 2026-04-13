@@ -116,6 +116,10 @@ export default function ChatScreen() {
     conversation?.preference?.nickname ||
     (conversation ? getConversationTitle(conversation, currentUserId) : 'Trò chuyện');
 
+  const headerAvatarUrl = conversation?.type === 'group'
+    ? conversation.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(conversationTitle)}&background=8B5CF6&color=fff&size=150&bold=true`
+    : otherParticipant?.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(conversationTitle)}&background=2563EB&color=fff&size=150&bold=true`;
+
   const ensureMediaLoaded = useCallback(async (mediaIds: string[]) => {
     const uniqueIds = Array.from(new Set((mediaIds || []).filter(Boolean)));
     const missingIds = uniqueIds.filter((id) => !mediaById[id]);
@@ -159,6 +163,30 @@ export default function ChatScreen() {
     loadInitialMessages();
   }, [loadInitialMessages]);
 
+  const markedMessageIds = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (messages.length > 0 && currentUserId) {
+      const getMessageIdStr = (m: any) => typeof m._id === 'string' ? m._id : m.id;
+      const unreadMessages = messages.filter((m) => {
+        const mid = getMessageIdStr(m);
+        if (markedMessageIds.current.has(mid)) return false;
+        
+        const senderId = typeof m.senderId === 'string' ? m.senderId : m.senderId?._id || m.senderId?.id;
+        // Don't mark our own messages as read
+        if (senderId === currentUserId) return false;
+
+        const seenList = (m.seenBy || []).map((u: any) => typeof u === 'string' ? u : u._id || u.id);
+        return !seenList.includes(currentUserId);
+      });
+
+      if (unreadMessages.length > 0) {
+        unreadMessages.forEach(m => markedMessageIds.current.add(getMessageIdStr(m)));
+        Promise.all(unreadMessages.map((m) => markMessageRead(getMessageIdStr(m)))).catch(() => null);
+      }
+    }
+  }, [messages, currentUserId]);
+
   useEffect(() => {
     const ids = messages.flatMap((m) => m.mediaIds || []);
     if (ids.length) {
@@ -183,9 +211,15 @@ export default function ChatScreen() {
       const onNewMessage = (message: Message) => {
         const msgConvId = getConversationIdFromMessage(message);
         if (msgConvId !== conversationId) return;
-        setMessages((prev) =>
-          prev.some((m) => getMessageId(m) === getMessageId(message)) ? prev : [message, ...prev],
-        );
+        setMessages((prev) => {
+          if (prev.some((m) => getMessageId(m) === getMessageId(message))) return prev;
+          let enhancedMessage = { ...message };
+          if (enhancedMessage.replyTo && typeof enhancedMessage.replyTo === 'string') {
+            const originalMsg = prev.find((m) => getMessageId(m) === enhancedMessage.replyTo);
+            if (originalMsg) enhancedMessage.replyTo = originalMsg;
+          }
+          return [enhancedMessage, ...prev];
+        });
         if (getMessageSenderId(message) !== currentUserId) {
           markMessageRead(getMessageId(message)).catch(() => null);
         }
@@ -278,9 +312,14 @@ export default function ChatScreen() {
     setReplyTo(null);
     try {
       const newMsg = await sendMessage({ conversationId, content: text, replyTo: replyId });
-      setMessages((prev) =>
-        prev.some((m) => getMessageId(m) === getMessageId(newMsg)) ? prev : [newMsg, ...prev],
-      );
+      setMessages((prev) => {
+        if (prev.some((m) => getMessageId(m) === getMessageId(newMsg))) return prev;
+        let enhancedMessage = { ...newMsg };
+        if (enhancedMessage.replyTo && typeof enhancedMessage.replyTo === 'string' && replyTo) {
+          enhancedMessage.replyTo = replyTo;
+        }
+        return [enhancedMessage, ...prev];
+      });
       setInputText('');
       setShowEmojiPanel(false);
     } catch (error) {
@@ -469,11 +508,12 @@ export default function ChatScreen() {
   const renderMessage = ({ item }: { item: Message }) => {
     const isMine = getMessageSenderId(item) === currentUserId;
     const senderName = typeof item.senderId === 'string' ? '' : item.senderId?.username || '';
+    const senderAvatarUrl = typeof item.senderId === 'string' ? null : item.senderId?.avatarUrl;
 
     if (item.isRecalled) {
       return (
         <View style={[styles.bubbleWrapper, isMine ? styles.myWrapper : styles.theirWrapper]}>
-          <View style={[styles.bubble, { backgroundColor: colors.surface }]}>
+          <View style={[styles.bubble, { backgroundColor: colorScheme === 'dark' ? '#374151' : '#F1F5F9' }]}>
             <Text style={{ color: '#94A3B8', fontStyle: 'italic', fontSize: 14 }}>Tin nhắn đã bị thu hồi</Text>
           </View>
         </View>
@@ -486,9 +526,9 @@ export default function ChatScreen() {
     return (
       <Pressable onLongPress={() => handleMessageLongPress(item)} style={[styles.bubbleWrapper, isMine ? styles.myWrapper : styles.theirWrapper]}>
         {/* Avatar for their messages */}
-        {!isMine && conversation?.type === 'group' && (
+        {!isMine && (
           <Image
-            source={{ uri: `https://ui-avatars.com/api/?name=${encodeURIComponent(senderName || 'U')}&background=0EA5E9&color=fff&size=60&bold=true` }}
+            source={{ uri: senderAvatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(senderName || 'U')}&background=0EA5E9&color=fff&size=60&bold=true` }}
             style={styles.senderAvatar}
           />
         )}
@@ -498,7 +538,7 @@ export default function ChatScreen() {
             <Text style={{ fontSize: 11, color: colors.tint, fontWeight: '600', marginBottom: 2, marginLeft: 4 }}>{senderName}</Text>
           ) : null}
 
-          <View style={[styles.bubble, isMine ? { backgroundColor: '#0068FF' } : { backgroundColor: colors.surface }]}>
+          <View style={[styles.bubble, isMine ? { backgroundColor: '#0068FF' } : { backgroundColor: colorScheme === 'dark' ? '#374151' : '#F1F5F9' }]}>
             {/* Reply quote */}
             {replyMsg && (
               <View style={[styles.replyQuote, { borderLeftColor: isMine ? 'rgba(255,255,255,0.5)' : colors.tint }]}>
@@ -595,7 +635,14 @@ export default function ChatScreen() {
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
       <Stack.Screen
         options={{
-          title: conversationTitle,
+          headerTitle: () => (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+              <Image source={{ uri: headerAvatarUrl }} style={{ width: 34, height: 34, borderRadius: 17 }} />
+              <Text style={{ fontSize: 17, fontWeight: '600', color: colors.text }} numberOfLines={1}>
+                {conversationTitle}
+              </Text>
+            </View>
+          ),
           headerShown: true,
           headerBackVisible: false,
           headerLeft: () => (

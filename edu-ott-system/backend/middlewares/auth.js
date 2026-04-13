@@ -32,6 +32,10 @@ const auth = asyncHandler(async (req, _res, next) => {
     throw new ApiError(401, 'UNAUTHORIZED', 'User not found');
   }
 
+  if (!user.isActive) {
+    throw new ApiError(403, 'ACCOUNT_DISABLED', user.banReason || 'Your account has been disabled. Please contact support.');
+  }
+
   if (user.tokenVersion !== payload.tokenVersion) {
     throw new ApiError(401, 'UNAUTHORIZED', 'Token has been revoked');
   }

@@ -200,10 +200,16 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
     <View className={`flex-row ${isMe ? 'justify-end' : 'justify-start'} my-0.5 px-4`}>
       {/* Avatar for other user */}
       {!isMe && (
-        <Image
-          source={{ uri: sender?.avatar || 'https://i.pravatar.cc/150' }}
-          className="w-8 h-8 rounded-full mr-2 mt-1"
-        />
+        <View className="relative">
+          <Image
+            source={{ uri: sender?.avatar || sender?.avatarUrl || 'https://i.pravatar.cc/150' }}
+            className={`w-8 h-8 rounded-full mr-2 mt-1 ${sender?.isActive === false ? 'opacity-40' : ''}`}
+            style={sender?.isActive === false ? { tintColor: 'gray' as any } : undefined}
+          />
+          {sender?.isActive === false && (
+            <View className="absolute bottom-0 right-1 w-2.5 h-2.5 bg-gray-400 rounded-full border border-white" />
+          )}
+        </View>
       )}
 
       <Pressable
@@ -211,10 +217,17 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
         className="max-w-[75%]"
       >
         {/* Sender name (group chat) */}
-        {!isMe && sender?.fullName && (
-          <Text className="text-[11px] text-gray-500 font-medium ml-1 mb-0.5">
-            {sender.fullName}
-          </Text>
+        {!isMe && sender && (
+          <View className="flex-row items-center ml-1 mb-0.5">
+            <Text className="text-[11px] text-gray-500 font-medium">
+              {sender.fullName || sender.username}
+            </Text>
+            {sender.isActive === false && (
+              <Text className="text-[9px] text-red-400 font-bold ml-1.5 uppercase">
+                (Vô hiệu hóa)
+              </Text>
+            )}
+          </View>
         )}
 
         <View
