@@ -1,5 +1,5 @@
 const User = require('../models/User');
-const { verifyAccessToken } = require('../services/tokenService');
+const { verifyAccessToken, getDeviceTokenVersion } = require('../services/tokenService');
 const { isTokenBlacklisted } = require('../services/tokenStore');
 const ApiError = require('../utils/apiError');
 const asyncHandler = require('../utils/asyncHandler');
@@ -32,16 +32,19 @@ const auth = asyncHandler(async (req, _res, next) => {
     throw new ApiError(401, 'UNAUTHORIZED', 'User not found');
   }
 
-  if (!user.isActive) {
-    throw new ApiError(403, 'ACCOUNT_DISABLED', user.banReason || 'Your account has been disabled. Please contact support.');
+  if (user.isActive === false) {
+    throw new ApiError(403, 'ACCOUNT_DISABLED', user.banReason || 'Tài khoản của bạn đã bị vô hiệu hóa. Vui lòng liên hệ hỗ trợ.');
   }
 
-  if (user.tokenVersion !== payload.tokenVersion) {
-    throw new ApiError(401, 'UNAUTHORIZED', 'Token has been revoked');
+  // Device-specific token version check (Zalo-style single session per device type)
+  const device = payload.device || 'web';
+  const expectedVersion = getDeviceTokenVersion(user, device);
+  if (expectedVersion !== payload.tokenVersion) {
+    throw new ApiError(401, 'SESSION_EXPIRED', 'Your session has been terminated. Please log in again.');
   }
 
   req.user = user;
-  req.auth = payload;
+  req.auth = { ...payload, device };
   next();
 });
 

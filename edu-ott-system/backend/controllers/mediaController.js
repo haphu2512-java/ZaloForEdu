@@ -103,10 +103,30 @@ const deleteMediaById = asyncHandler(async (req, res) => {
   return successResponse(res, {}, 'Media deleted');
 });
 
+const getMyMedia = asyncHandler(async (req, res) => {
+  const page = Math.max(1, parseInt(req.query.page) || 1);
+  const limit = Math.min(50, parseInt(req.query.limit) || 20);
+  const skip = (page - 1) * limit;
+
+  const [media, total] = await Promise.all([
+    Media.find({ uploaderId: req.user._id })
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit),
+    Media.countDocuments({ uploaderId: req.user._id }),
+  ]);
+
+  return successResponse(res, {
+    media,
+    pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
+  }, 'My media fetched');
+});
+
 module.exports = {
   uploadMedia,
   getCloudinarySignature,
   registerCloudinaryMedia,
+  getMyMedia,
   getMediaById,
   deleteMediaById,
 };

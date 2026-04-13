@@ -3,6 +3,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 import Constants from 'expo-constants';
 
+<<<<<<< HEAD:edu-ott-system/frontend/mobile-app/utils/socketService.ts
+=======
 // ============================================================
 // Socket Service - Kết nối Socket.IO với Backend
 // Backend events: join_conversation, send_message, typing,
@@ -10,6 +12,7 @@ import Constants from 'expo-constants';
 //   new_message, user_online, user_offline
 // ============================================================
 
+>>>>>>> Refactor_Project:edu-ott-system/frontend/mobile/utils/socketService.ts
 // Derive the base socket URL (same logic as api.ts)
 const hostUri = Constants.expoConfig?.hostUri;
 const localhost = hostUri ? hostUri.split(':')[0] : '10.126.202.133';
@@ -64,10 +67,13 @@ export async function connectSocket(): Promise<Socket | null> {
       console.log('[Socket] Disconnected:', reason);
     });
 
+<<<<<<< HEAD:edu-ott-system/frontend/mobile-app/utils/socketService.ts
+=======
     socket.on('socket_error', (data) => {
       console.warn('[Socket] Server error:', data.message);
     });
 
+>>>>>>> Refactor_Project:edu-ott-system/frontend/mobile/utils/socketService.ts
     return socket;
   } catch (error) {
     console.error('[Socket] Failed to connect:', error);
@@ -94,6 +100,33 @@ export function disconnectSocket(): void {
 }
 
 /**
+<<<<<<< HEAD:edu-ott-system/frontend/mobile-app/utils/socketService.ts
+ * Join a chat room (class, group, or conversation).
+ */
+export function joinRoom(roomId: string): void {
+  socket?.emit('join:room', roomId);
+}
+
+/**
+ * Leave a chat room.
+ */
+export function leaveRoom(roomId: string): void {
+  socket?.emit('leave:room', roomId);
+}
+
+/**
+ * Emit typing start event.
+ */
+export function emitTypingStart(roomId: string): void {
+  socket?.emit('typing:start', { roomId });
+}
+
+/**
+ * Emit typing stop event.
+ */
+export function emitTypingStop(roomId: string): void {
+  socket?.emit('typing:stop', { roomId });
+=======
  * Join a conversation room.
  * Backend event: 'join_conversation' { conversationId }
  */
@@ -145,4 +178,5 @@ export function emitMessageDelivered(messageId: string): void {
  */
 export function emitMessageSeen(messageId: string): void {
   socket?.emit('message_seen', { messageId });
+>>>>>>> Refactor_Project:edu-ott-system/frontend/mobile/utils/socketService.ts
 }

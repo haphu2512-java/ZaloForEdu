@@ -3,9 +3,11 @@ const crypto = require('node:crypto');
 const env = require('../config/env');
 const RefreshToken = require('../models/RefreshToken');
 const User = require('../models/User');
-const { signAccessToken, signRefreshToken, verifyRefreshToken } = require('./tokenService');
+const { signAccessToken, signRefreshToken, verifyRefreshToken, getDeviceTokenVersion } = require('./tokenService');
 const { setBlacklistedToken } = require('./tokenStore');
 const ApiError = require('../utils/apiError');
+
+const VALID_DEVICES = ['web', 'mobile'];
 
 const refreshDurationMs = () => {
   const raw = env.refreshTokenExpiresIn;
@@ -26,20 +28,35 @@ const refreshDurationMs = () => {
   return value * unitMap[unit];
 };
 
-const issueTokenPair = async (user) => {
+/**
+ * Issue an access+refresh token pair for a user on a specific device.
+ * Bumps the device-specific tokenVersion first, invalidating any existing
+ * tokens on that device type (Zalo-style forced logout of previous session).
+ */
+const issueTokenPair = async (user, device = 'web') => {
+  const safeDevice = VALID_DEVICES.includes(device) ? device : 'web';
+
+  // Bump device version to force-logout the old session on this device type
+  const versionField = safeDevice === 'web' ? 'webTokenVersion' : 'mobileTokenVersion';
+  await User.findByIdAndUpdate(user._id, { $inc: { [versionField]: 1 } });
+
+  // Reload fresh user so token version is correct
+  const freshUser = await User.findById(user._id);
+
   const refreshJti = crypto.randomUUID();
-  const { token: accessToken, jti: accessJti } = signAccessToken(user);
-  const refreshToken = signRefreshToken(user, refreshJti);
+  const { token: accessToken, jti: accessJti } = signAccessToken(freshUser, safeDevice);
+  const refreshToken = signRefreshToken(freshUser, refreshJti, safeDevice);
   const expiresAt = new Date(Date.now() + refreshDurationMs());
 
   await RefreshToken.create({
-    userId: user._id,
+    userId: freshUser._id,
     jti: refreshJti,
+    device: safeDevice,
     expiresAt,
   });
 
   return {
-    userId: user._id,
+    userId: freshUser._id,
     accessToken,
     refreshToken,
     accessJti,
@@ -75,8 +92,10 @@ const rotateRefreshToken = async (token) => {
     throw new ApiError(401, 'UNAUTHORIZED', 'User not found');
   }
 
-  if (user.tokenVersion !== payload.tokenVersion) {
-    throw new ApiError(401, 'UNAUTHORIZED', 'Token version mismatch');
+  // Validate device-specific token version
+  const expectedVersion = getDeviceTokenVersion(user, payload.device || 'web');
+  if (expectedVersion !== payload.tokenVersion) {
+    throw new ApiError(401, 'SESSION_EXPIRED', 'You have been logged out from this device');
   }
 
   dbToken.revokedAt = new Date();
@@ -84,7 +103,27 @@ const rotateRefreshToken = async (token) => {
 
   await setBlacklistedToken({ jti: payload.jti, expiresAt: dbToken.expiresAt });
 
-  return issueTokenPair(user);
+  // Re-issue WITHOUT bumping version (it's a normal rotation, not a new login)
+  const refreshJti = crypto.randomUUID();
+  const { token: accessToken, jti: accessJti } = signAccessToken(user, payload.device || 'web');
+  const newRefreshToken = signRefreshToken(user, refreshJti, payload.device || 'web');
+  const expiresAt = new Date(Date.now() + refreshDurationMs());
+
+  await RefreshToken.create({
+    userId: user._id,
+    jti: refreshJti,
+    device: payload.device || 'web',
+    expiresAt,
+  });
+
+  return {
+    userId: user._id,
+    accessToken,
+    refreshToken: newRefreshToken,
+    accessJti,
+    refreshJti,
+    refreshExpiresAt: expiresAt,
+  };
 };
 
 const revokeRefreshToken = async (token) => {
@@ -109,7 +148,9 @@ const revokeRefreshToken = async (token) => {
 
 const revokeAllSessions = async (userId) => {
   await RefreshToken.updateMany({ userId, revokedAt: null }, { revokedAt: new Date() });
-  await User.findByIdAndUpdate(userId, { $inc: { tokenVersion: 1 } });
+  await User.findByIdAndUpdate(userId, {
+    $inc: { tokenVersion: 1, webTokenVersion: 1, mobileTokenVersion: 1 },
+  });
 };
 
 module.exports = {

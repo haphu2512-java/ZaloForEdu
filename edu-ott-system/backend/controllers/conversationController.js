@@ -142,18 +142,23 @@ const listConversations = asyncHandler(async (req, res) => {
 
 const createConversation = asyncHandler(async (req, res) => {
   const { type, name, participantIds } = req.body;
-  const uniqueParticipants = [...new Set([...participantIds, req.user._id.toString()])];
+  const myId = req.user._id.toString();
+  const uniqueParticipants = [...new Set([...participantIds, myId])];
 
-  if (type === 'direct' && uniqueParticipants.length !== 2) {
+  // Self-conversation: direct với chính mình (My Documents)
+  const isSelfConv = type === 'direct' && uniqueParticipants.length === 1;
+
+  if (type === 'direct' && !isSelfConv && uniqueParticipants.length !== 2) {
     throw new ApiError(400, 'INVALID_PARTICIPANTS', 'Direct conversation must contain exactly 2 participants');
   }
 
   if (type === 'direct') {
-    const existing = await Conversation.findOne({
-      type: 'direct',
-      participants: { $all: uniqueParticipants, $size: 2 },
-    });
-
+    // Check existing
+    const existing = await Conversation.findOne(
+      isSelfConv
+        ? { type: 'direct', participants: { $all: [myId], $size: 1 } }
+        : { type: 'direct', participants: { $all: uniqueParticipants, $size: 2 } }
+    );
     if (existing) {
       return successResponse(res, existing, 'Conversation already exists');
     }
@@ -162,7 +167,7 @@ const createConversation = asyncHandler(async (req, res) => {
   const conversation = await Conversation.create({
     type,
     name: type === 'group' ? name || 'Group chat' : null,
-    participants: uniqueParticipants,
+    participants: isSelfConv ? [myId] : uniqueParticipants,
     createdBy: req.user._id,
     ownerId: req.user._id,
     adminIds: type === 'group' ? [req.user._id] : [],

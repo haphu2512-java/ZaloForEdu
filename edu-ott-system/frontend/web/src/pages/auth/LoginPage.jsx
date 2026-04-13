@@ -1,77 +1,33 @@
 import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
-  FaEnvelope,
-  FaLock,
-  FaEye,
-  FaEyeSlash,
-  FaGraduationCap,
-  FaArrowRight,
-  FaSpinner,
-  FaComments,
-  FaBookOpen,
-  FaRobot,
-  FaChartBar,
-  FaHandPeace,
+  FaEnvelope, FaLock, FaEye, FaEyeSlash, FaPhone,
+  FaArrowRight, FaSpinner, FaComments, FaHandPeace, FaHeart,
 } from "react-icons/fa";
 import { useAuthStore } from "../../store/authStore";
 import "./LoginPage.css";
-
-const FEATURES = [
-  {
-    icon: <FaComments size={17} color="white" />,
-    text: "Chat real-time với lớp học & nhóm",
-  },
-  {
-    icon: <FaBookOpen size={17} color="white" />,
-    text: "Quản lý lớp học & tài liệu thông minh",
-  },
-  {
-    icon: <FaRobot size={17} color="white" />,
-    text: "AI Chatbot hỗ trợ học tập 24/7",
-  },
-  {
-    icon: <FaChartBar size={17} color="white" />,
-    text: "Thống kê hoạt động học tập chi tiết",
-  },
-];
-
-const STATS = [
-  { num: "10K+", label: "Sinh viên" },
-  { num: "500+", label: "Lớp học" },
-  { num: "98%", label: "Hài lòng" },
-];
 
 export default function LoginPage() {
   const navigate = useNavigate();
   const { login, isLoading, error, clearError } = useAuthStore();
 
-  const [form, setForm] = useState({ email: "", password: "" });
+  const [tab, setTab] = useState("email"); // "email" | "phone"
+  const [form, setForm] = useState({ identifier: "", password: "" });
   const [showPass, setShowPass] = useState(false);
   const [fieldErrors, setFieldErrors] = useState({});
   const [mounted, setMounted] = useState(false);
-  const [visibleFeatures, setVisibleFeatures] = useState([]);
-  const [unverifiedEmail, setUnverifiedEmail] = useState("");
-  const [authErrorCode, setAuthErrorCode] = useState("");
 
-  // Mount animation
   useEffect(() => {
-    const t = setTimeout(() => setMounted(true), 80);
+    const t = setTimeout(() => setMounted(true), 60);
     return () => clearTimeout(t);
   }, []);
 
-  // Feature stagger animation
-  useEffect(() => {
-    if (!mounted) return;
-    FEATURES.forEach((_, i) => {
-      setTimeout(
-        () => {
-          setVisibleFeatures((prev) => [...prev, i]);
-        },
-        400 + i * 130,
-      );
-    });
-  }, [mounted]);
+  const handleTabChange = (t) => {
+    setTab(t);
+    setForm({ identifier: "", password: "" });
+    setFieldErrors({});
+    clearError();
+  };
 
   const handleChange = (field, value) => {
     setForm((prev) => ({ ...prev, [field]: value }));
@@ -81,12 +37,15 @@ export default function LoginPage() {
 
   const validate = () => {
     const errs = {};
-    if (!form.email) errs.email = "Vui lòng nhập email";
-    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email))
-      errs.email = "Email không hợp lệ";
+    if (!form.identifier.trim()) {
+      errs.identifier = tab === "email" ? "Vui lòng nhập email" : "Vui lòng nhập số điện thoại";
+    } else if (tab === "email" && !/^[^\s@]+@gmail\.com$/.test(form.identifier)) {
+      errs.identifier = "Chỉ hỗ trợ đăng nhập bằng tài khoản @gmail.com";
+    } else if (tab === "phone" && !/^\+?\d{9,15}$/.test(form.identifier.replace(/\s/g, ""))) {
+      errs.identifier = "Số điện thoại không hợp lệ";
+    }
     if (!form.password) errs.password = "Vui lòng nhập mật khẩu";
-    else if (form.password.length < 6)
-      errs.password = "Mật khẩu tối thiểu 6 ký tự";
+    else if (form.password.length < 6) errs.password = "Mật khẩu tối thiểu 6 ký tự";
     setFieldErrors(errs);
     return Object.keys(errs).length === 0;
   };
@@ -94,218 +53,135 @@ export default function LoginPage() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!validate()) return;
-    setUnverifiedEmail("");
-    setAuthErrorCode("");
-    const result = await login(form.email, form.password);
+    const payload =
+      tab === "email"
+        ? { email: form.identifier, password: form.password }
+        : { phone: form.identifier.replace(/\s/g, ""), password: form.password };
+    const result = await login(payload);
     if (result.success) {
-      if (result.role === 'admin') {
-        navigate("/admin");
-      } else if (result.role === 'teacher') {
-        navigate("/classes");
-      } else {
-        navigate("/chat");
-      }
-    } else {
-      setAuthErrorCode(result.errorCode);
-      if (result.errorCode === "EMAIL_NOT_VERIFIED") {
-        setUnverifiedEmail(result.email);
-      }
+      navigate(result.role === "admin" ? "/admin" : "/chat");
     }
   };
 
   return (
-    <div className="login-page">
-      {/* ═══ LEFT ═══ */}
-      <div className="login-left">
-        <div className="login-left-dots" />
-        <div className="login-orb login-orb-1" />
-        <div className="login-orb login-orb-2" />
-        <div className="login-orb login-orb-3" />
-
-        <div className={`login-left-content ${mounted ? "visible" : ""}`}>
-          <div className="login-badge">✦ EDUCATION OTT PLATFORM</div>
-
-          <h1 className="login-heading">
-            Học tập không
-            <br />
-            <span className="login-heading-gradient">giới hạn</span>
-          </h1>
-
-          <p className="login-desc">
-            Nền tảng giao tiếp giáo dục thế hệ mới — kết nối sinh viên và giảng
-            viên trong không gian học tập số.
-          </p>
-
-          <div className="login-features">
-            {FEATURES.map((f, i) => (
-              <div
-                key={i}
-                className={`login-feature-item ${visibleFeatures.includes(i) ? "visible" : ""}`}
-              >
-                <div className="login-feature-icon">{f.icon}</div>{" "}
-                {/* ← chỗ này, không cần sửa */}
-                <span className="login-feature-text">{f.text}</span>
-              </div>
-            ))}
-          </div>
-
-          <div className="login-stats">
-            {STATS.map((s) => (
-              <div key={s.label}>
-                <div className="login-stat-num">{s.num}</div>
-                <div className="login-stat-label">{s.label}</div>
-              </div>
-            ))}
-          </div>
+    <div className="auth-page">
+      {/* ═══ LEFT PANEL ═══ */}
+      <div className="auth-left">
+        <div className="auth-blob auth-blob-1" />
+        <div className="auth-blob auth-blob-2" />
+        <div className="auth-blob auth-blob-3" />
+        
+        {/* Decor Chat Bubbles */}
+        <div className="decor-bubble decor-bubble-1" style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+          Chào bạn! Mới tới à <FaHandPeace color="#f59e0b" />
+        </div>
+        <div className="decor-bubble decor-bubble-2" style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+          ZaloApp gửi ngàn lời yêu thương <FaHeart color="#fda4af" />
         </div>
 
-        {/* Floating card */}
-        <div className="login-float-card">
-          <div className="login-float-card-icon">
-            <FaGraduationCap size={18} color="white" />
-          </div>
-          <div>
-            <div className="login-float-card-title">IUH · Nhóm 3</div>
-            <div className="login-float-card-sub">Zalo Education</div>
-          </div>
+        <div className="auth-left-content">
+          <div className="auth-left-badge">🚀 TRẢI NGHIỆM ĐỈNH CAO</div>
+          <h1 className="auth-left-heading">
+            Trò chuyện<br />
+            <span className="auth-gradient-text">đầy màu sắc</span>
+          </h1>
+          <p className="auth-left-desc">
+            Không khoảng cách — Không giới hạn. Cùng ZaloApp xoá nhoà ranh giới, kết nối bạn bè khắp bốn phương trong nháy mắt!
+          </p>
         </div>
       </div>
 
-      {/* ═══ RIGHT ═══ */}
-      <div className="login-right">
-        <div className="login-right-topbar" />
-
-        <div className={`login-form-wrap ${mounted ? "visible" : ""}`}>
-          {/* Logo */}
-          <div className="login-logo-wrap">
-            <div className="login-logo-box">
-              <FaGraduationCap size={26} color="white" />
-            </div>
-            <h2 className="login-form-title">Đăng nhập</h2>
-            <p className="login-form-sub">
-              Chào mừng bạn quay trở lại{" "}
-              <FaHandPeace
-                size={14}
-                color="#1B6EF3"
-                style={{ display: "inline", marginLeft: 4 }}
-              />
-            </p>
+      {/* ═══ RIGHT PANEL ═══ */}
+      <div className="auth-right">
+        <div className={`auth-card ${mounted ? "visible" : ""}`}>
+        {/* Logo */}
+        <div className="auth-logo">
+          <div className="auth-logo-icon">
+            <FaComments size={22} color="white" />
           </div>
+          <h1 className="auth-logo-title">ZaloApp</h1>
+        </div>
+        <p className="auth-tagline">Chào mừng bạn quay trở lại 👋</p>
 
-          {/* API error */}
-          {error && (
-            <div 
-              className="login-error-box" 
-              style={
-                authErrorCode && authErrorCode.startsWith("ACCOUNT_LOCKED") 
-                  ? { backgroundColor: "#fee2e2", borderLeft: "4px solid #ef4444", color: "#991b1b" } 
-                  : {}
-              }
-            >
-              {authErrorCode && authErrorCode.startsWith("ACCOUNT_LOCKED") ? (
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <FaLock size={14} color="#ef4444" />
-                  <strong>Tạm thời khóa: </strong> {error}
-                </div>
-              ) : (
-                error
-              )}
-
-              {unverifiedEmail && (
-                <div style={{ marginTop: 10 }}>
-                  <Link
-                    to={`/verify-email?email=${encodeURIComponent(unverifiedEmail)}`}
-                    style={{
-                      color: "#b91c1c",
-                      fontWeight: 700,
-                      textDecoration: "underline",
-                      fontSize: 13,
-                    }}
-                  >
-                    Bấm vào đây để xác thực ngay →
-                  </Link>
-                </div>
-              )}
-            </div>
-          )}
-
-          <form className="login-form" onSubmit={handleSubmit}>
-            {/* Email */}
-            <div className="form-group">
-              <label>Email</label>
-              <div className="input-wrapper">
-                <input
-                  type="email"
-                  placeholder="name@university.edu"
-                  value={form.email}
-                  onChange={(e) => handleChange("email", e.target.value)}
-                  className={`form-input ${fieldErrors.email ? "has-error" : ""}`}
-                  autoComplete="email"
-                />
-              </div>
-              {fieldErrors.email && (
-                <p className="input-error">{fieldErrors.email}</p>
-              )}
-            </div>
-
-            {/* Password */}
-            <div className="form-group">
-              <label>Mật khẩu</label>
-              <div className="input-wrapper">
-                <input
-                  type={showPass ? "text" : "password"}
-                  placeholder="Nhập mật khẩu"
-                  value={form.password}
-                  onChange={(e) => handleChange("password", e.target.value)}
-                  className={`form-input form-input-pr ${fieldErrors.password ? "has-error" : ""}`}
-                  autoComplete="current-password"
-                />
-                <button
-                  type="button"
-                  className="toggle-pass-btn"
-                  onClick={() => setShowPass(!showPass)}
-                >
-                  {showPass ? <FaEyeSlash size={15} /> : <FaEye size={15} />}
-                </button>
-              </div>
-              {fieldErrors.password && (
-                <p className="input-error">{fieldErrors.password}</p>
-              )}
-            </div>
-
-            {/* Forgot */}
-            <div className="forgot-link">
-              <Link to="/forgot-password">Quên mật khẩu?</Link>
-            </div>
-
-            {/* Submit */}
-            <button type="submit" className="btn-login" disabled={isLoading}>
-              {isLoading ? (
-                <>
-                  <FaSpinner size={15} className="spin" />
-                  Đang đăng nhập...
-                </>
-              ) : (
-                <>
-                  Đăng nhập
-                  <FaArrowRight size={14} />
-                </>
-              )}
-            </button>
-          </form>
-
-          <div className="divider">
-            <div className="divider-line" />
-            <span className="divider-text">HOẶC</span>
-            <div className="divider-line" />
-          </div>
-
-          <p className="login-register-text">
-            Chưa có tài khoản? <Link to="/register">Đăng ký ngay →</Link>
-          </p>
+        {/* Tab switcher */}
+        <div className="auth-tabs">
+          <button
+            className={`auth-tab ${tab === "email" ? "active" : ""}`}
+            onClick={() => handleTabChange("email")}
+            type="button"
+          >
+            <FaEnvelope size={13} /> Email
+          </button>
+          <button
+            className={`auth-tab ${tab === "phone" ? "active" : ""}`}
+            onClick={() => handleTabChange("phone")}
+            type="button"
+          >
+            <FaPhone size={13} /> Số điện thoại
+          </button>
         </div>
 
-        <p className="login-footer">© 2026 Zalo Edu · IUH · Nhóm 3</p>
+        {/* Error */}
+        {error && <div className="auth-error">{error}</div>}
+
+        <form onSubmit={handleSubmit} className="auth-form">
+          {/* Identifier */}
+          <div className="auth-field">
+            <label>{tab === "email" ? "Email" : "Số điện thoại"}</label>
+            <div className="auth-input-wrap">
+              <span className="auth-input-icon">
+                {tab === "email" ? <FaEnvelope size={14} /> : <FaPhone size={14} />}
+              </span>
+              <input
+                type={tab === "email" ? "email" : "tel"}
+                placeholder={tab === "email" ? "you@example.com" : "0912 345 678"}
+                value={form.identifier}
+                onChange={(e) => handleChange("identifier", e.target.value)}
+                className={fieldErrors.identifier ? "has-error" : ""}
+                autoComplete={tab === "email" ? "email" : "tel"}
+              />
+            </div>
+            {fieldErrors.identifier && <p className="auth-field-error">{fieldErrors.identifier}</p>}
+          </div>
+
+          {/* Password */}
+          <div className="auth-field">
+            <div className="auth-field-header">
+              <label>Mật khẩu</label>
+              <Link to="/forgot-password" className="auth-forgot-link">Quên mật khẩu?</Link>
+            </div>
+            <div className="auth-input-wrap">
+              <span className="auth-input-icon"><FaLock size={14} /></span>
+              <input
+                type={showPass ? "text" : "password"}
+                placeholder="Mật khẩu của bạn"
+                value={form.password}
+                onChange={(e) => handleChange("password", e.target.value)}
+                className={fieldErrors.password ? "has-error" : ""}
+                autoComplete="current-password"
+              />
+              <button type="button" className="auth-toggle-pass" onClick={() => setShowPass(!showPass)}>
+                {showPass ? <FaEyeSlash size={15} /> : <FaEye size={15} />}
+              </button>
+            </div>
+            {fieldErrors.password && <p className="auth-field-error">{fieldErrors.password}</p>}
+          </div>
+
+          <button type="submit" className="auth-btn-primary" disabled={isLoading}>
+            {isLoading ? (
+              <><FaSpinner className="spin" size={15} /> Đang đăng nhập...</>
+            ) : (
+              <>Đăng nhập <FaArrowRight size={13} /></>
+            )}
+          </button>
+        </form>
+
+        <p className="auth-switch-text">
+          Chưa có tài khoản? <Link to="/register">Đăng ký ngay →</Link>
+        </p>
+
+        <p className="auth-footer">© 2026 ZaloApp · Nhóm 3 · IUH</p>
+        </div>
       </div>
     </div>
   );

@@ -14,6 +14,11 @@ const refreshTokenSchema = new mongoose.Schema(
       unique: true,
       index: true,
     },
+    device: {
+      type: String,
+      enum: ['web', 'mobile'],
+      default: 'web',
+    },
     expiresAt: {
       type: Date,
       required: true,
