@@ -1,24 +1,16 @@
 import { fetchAPI } from './api';
 import type {
-  FriendRequest,
-  SendFriendRequestPayload,
   PaginatedResponse,
   UserInfo,
 } from '../types/chat';
+import type { FriendRequest, SendFriendRequestPayload } from '../types/friend';
+import { normalizeUser } from './normalizers';
 
 // ============================================================
 // Friend Service - Backend endpoints: /api/v1/friends/*
 // ============================================================
 
 const FRIENDS_ENDPOINT = '/friends';
-
-function normalizeUser(user: UserInfo): UserInfo {
-  return {
-    ...user,
-    _id: user._id || user.id || '',
-    id: user.id || user._id || '',
-  };
-}
 
 /**
  * Gửi lời mời kết bạn

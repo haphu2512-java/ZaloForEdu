@@ -5,6 +5,7 @@ const Message = require('../models/Message');
 const asyncHandler = require('../utils/asyncHandler');
 const ApiError = require('../utils/apiError');
 const { successResponse } = require('../utils/apiResponse');
+const socketService = require('../services/socketService');
 
 const toStr = (id) => id?.toString();
 
@@ -31,7 +32,7 @@ const pinMessage = asyncHandler(async (req, res) => {
 
   const conversation = await Conversation.findById(id);
   if (!conversation) throw new ApiError(404, 'CONVERSATION_NOT_FOUND', 'Conversation not found');
-  ensureAdminOrOwner(conversation, req.user._id);
+  ensureGroupMember(conversation, req.user._id);
 
   const message = await Message.findById(messageId);
   if (!message || toStr(message.conversationId) !== toStr(id)) {
@@ -55,6 +56,15 @@ const pinMessage = asyncHandler(async (req, res) => {
     pinnedAt: new Date(),
   });
   await conversation.save();
+  await conversation.populate([
+    { 
+      path: 'pinnedItems.messageId',
+      populate: { path: 'senderId', select: 'username avatarUrl' }
+    },
+    { path: 'pinnedItems.pinnedBy', select: 'username avatarUrl' }
+  ]);
+
+  socketService.emitToConversation(id, 'pinned_items_updated', conversation.pinnedItems);
 
   return successResponse(res, conversation.pinnedItems, 'Message pinned');
 });
@@ -68,7 +78,7 @@ const unpinMessage = asyncHandler(async (req, res) => {
 
   const conversation = await Conversation.findById(id);
   if (!conversation) throw new ApiError(404, 'CONVERSATION_NOT_FOUND', 'Conversation not found');
-  ensureAdminOrOwner(conversation, req.user._id);
+  ensureGroupMember(conversation, req.user._id);
 
   const prevLen = (conversation.pinnedItems || []).length;
   conversation.pinnedItems = (conversation.pinnedItems || []).filter(
@@ -80,6 +90,16 @@ const unpinMessage = asyncHandler(async (req, res) => {
   }
 
   await conversation.save();
+  await conversation.populate([
+    { 
+      path: 'pinnedItems.messageId',
+      populate: { path: 'senderId', select: 'username avatarUrl' }
+    },
+    { path: 'pinnedItems.pinnedBy', select: 'username avatarUrl' }
+  ]);
+  
+  socketService.emitToConversation(id, 'pinned_items_updated', conversation.pinnedItems);
+
   return successResponse(res, conversation.pinnedItems, 'Message unpinned');
 });
 
@@ -91,7 +111,10 @@ const getPinnedMessages = asyncHandler(async (req, res) => {
   const { id } = req.params;
 
   const conversation = await Conversation.findById(id)
-    .populate('pinnedItems.messageId')
+    .populate({
+      path: 'pinnedItems.messageId',
+      populate: { path: 'senderId', select: 'username avatarUrl' }
+    })
     .populate('pinnedItems.pinnedBy', 'username avatarUrl');
 
   if (!conversation) throw new ApiError(404, 'CONVERSATION_NOT_FOUND', 'Conversation not found');

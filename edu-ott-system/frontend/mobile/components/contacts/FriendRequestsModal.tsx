@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, Modal, FlatList, Image } from 'react-native';
-import type { FriendRequest, UserInfo } from '@/types/chat';
+import type { UserInfo } from '@/types/chat';
+import type { FriendRequest } from '@/types/friend';
 
 type FriendRequestsModalProps = {
   visible: boolean;

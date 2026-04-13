@@ -30,15 +30,24 @@ import {
   recallMessage,
   reactToMessage,
   getConversations,
-  createConversation,
-  pinGroupMessage,
-  unpinGroupMessage,
 } from '../../utils/messageService';
+import { getPinnedMessages, pinMessage, unpinMessage } from '../../utils/groupFeatureService';
 import { uploadMediaBase64, getMediaById, uploadImageToCloudinary } from '../../utils/mediaService';
-import { connectSocket, getSocket, joinConversation } from '../../utils/socketService';
+import {
+  connectSocket,
+  joinConversation,
+  emitTyping,
+  emitStopTyping,
+  emitMessageDelivered,
+  emitMessageSeen,
+} from '../../utils/socketService';
 import type { Message, Conversation, MediaItem } from '../../types/chat';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
+
+import PinnedBar from '@/components/chat/PinnedBar';
+import PollBubble from '@/components/chat/PollBubble';
+import { TypingIndicator } from '@/components/chat/TypingIndicator';
 
 const QUICK_EMOJIS = ['😀', '😂', '😍', '🥰', '👍', '❤️', '🔥', '😭', '🙏', '🎉'];
 
@@ -85,6 +94,7 @@ export default function ChatScreen() {
   const [isSocketReady, setIsSocketReady] = useState(false);
   const [showEmojiPanel, setShowEmojiPanel] = useState(false);
   const [showMediaMenu, setShowMediaMenu] = useState(false);
+  const [typingUserIds, setTypingUserIds] = useState<string[]>([]);
 
   // Reply
   const [replyTo, setReplyTo] = useState<Message | null>(null);
@@ -96,7 +106,11 @@ export default function ChatScreen() {
   const [isForwarding, setIsForwarding] = useState(false);
 
   const [conversation, setConversation] = useState<Conversation | null>(null);
+  const [pinnedItems, setPinnedItems] = useState<any[]>([]); // Bảng tin
   const [mediaById, setMediaById] = useState<Record<string, MediaItem>>({});
+
+  // Action Menu
+  const [actionMenu, setActionMenu] = useState<{ visible: boolean; options: { text: string, onPress: () => void, isDestructive?: boolean }[] }>({ visible: false, options: [] });
 
   // Image viewer
   const [viewImageUrl, setViewImageUrl] = useState<string | null>(null);
@@ -105,6 +119,13 @@ export default function ChatScreen() {
     if (!value) return '';
     if (typeof value === 'string') return value;
     return value._id || value.id || '';
+  };
+
+  const getPinnedMessageId = (pinnedItem: any): string => {
+    const messageRef = pinnedItem?.messageId;
+    if (!messageRef) return '';
+    if (typeof messageRef === 'string') return messageRef;
+    return messageRef._id || messageRef.id || '';
   };
 
   const otherParticipant =
@@ -151,6 +172,9 @@ export default function ChatScreen() {
       const convRes = await getConversations(null, 100);
       const matched = (convRes.items || []).find((item) => (item._id || item.id) === conversationId) || null;
       setConversation(matched);
+      if (matched && matched.type === 'group') {
+        getPinnedMessages(conversationId).then(setPinnedItems).catch(console.error);
+      }
     } catch (error) {
       console.log('Error loading messages', error);
       Alert.alert('Lỗi', 'Không thể tải tin nhắn');
@@ -164,6 +188,46 @@ export default function ChatScreen() {
   }, [loadInitialMessages]);
 
   const markedMessageIds = useRef<Set<string>>(new Set());
+  const isTypingRef = useRef(false);
+  const typingStopTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const getNormalizedUserIds = useCallback((ids: any[] = []): string[] => (
+    ids
+      .map((u: any) => (typeof u === 'string' ? u : u?._id || u?.id || ''))
+      .filter(Boolean)
+  ), []);
+
+  const stopTypingWithEmit = useCallback(() => {
+    if (typingStopTimeoutRef.current) {
+      clearTimeout(typingStopTimeoutRef.current);
+      typingStopTimeoutRef.current = null;
+    }
+    if (!isTypingRef.current) return;
+    emitStopTyping(conversationId);
+    isTypingRef.current = false;
+  }, [conversationId]);
+
+  const handleInputChange = useCallback((text: string) => {
+    setInputText(text);
+
+    if (!isSocketReady) return;
+    if (!text.trim()) {
+      stopTypingWithEmit();
+      return;
+    }
+
+    if (!isTypingRef.current) {
+      emitTyping(conversationId);
+      isTypingRef.current = true;
+    }
+
+    if (typingStopTimeoutRef.current) {
+      clearTimeout(typingStopTimeoutRef.current);
+    }
+    typingStopTimeoutRef.current = setTimeout(() => {
+      stopTypingWithEmit();
+    }, 1500);
+  }, [conversationId, isSocketReady, stopTypingWithEmit]);
 
   useEffect(() => {
     if (messages.length > 0 && currentUserId) {
@@ -171,21 +235,34 @@ export default function ChatScreen() {
       const unreadMessages = messages.filter((m) => {
         const mid = getMessageIdStr(m);
         if (markedMessageIds.current.has(mid)) return false;
-        
+
         const senderId = typeof m.senderId === 'string' ? m.senderId : m.senderId?._id || m.senderId?.id;
         // Don't mark our own messages as read
         if (senderId === currentUserId) return false;
 
-        const seenList = (m.seenBy || []).map((u: any) => typeof u === 'string' ? u : u._id || u.id);
+        const seenList = getNormalizedUserIds(m.seenBy || []);
         return !seenList.includes(currentUserId);
       });
 
       if (unreadMessages.length > 0) {
         unreadMessages.forEach(m => markedMessageIds.current.add(getMessageIdStr(m)));
-        Promise.all(unreadMessages.map((m) => markMessageRead(getMessageIdStr(m)))).catch(() => null);
+        Promise.all(
+          unreadMessages.map(async (m) => {
+            const messageId = getMessageIdStr(m);
+            emitMessageDelivered(messageId);
+            try {
+              await markMessageRead(messageId);
+            } catch {
+              // Keep socket read receipt even if HTTP call fails.
+            }
+            emitMessageSeen(messageId);
+          }),
+        ).catch(() => null);
       }
     }
-  }, [messages, currentUserId]);
+  }, [messages, currentUserId, getNormalizedUserIds]);
+
+  useEffect(() => () => stopTypingWithEmit(), [stopTypingWithEmit]);
 
   useEffect(() => {
     const ids = messages.flatMap((m) => m.mediaIds || []);
@@ -221,7 +298,12 @@ export default function ChatScreen() {
           return [enhancedMessage, ...prev];
         });
         if (getMessageSenderId(message) !== currentUserId) {
-          markMessageRead(getMessageId(message)).catch(() => null);
+          const messageId = getMessageId(message);
+          emitMessageDelivered(messageId);
+          markMessageRead(messageId)
+            .catch(() => null)
+            .finally(() => emitMessageSeen(messageId));
+          setTypingUserIds((prev) => prev.filter((id) => id !== getMessageSenderId(message)));
         }
       };
 
@@ -252,11 +334,23 @@ export default function ChatScreen() {
         );
       };
 
-      const onMessageReacted = (payload: { messageId: string; reactions: Message['reactions'] }) => {
+      const onTyping = (payload: { conversationId: string; userId: string }) => {
+        if (payload.conversationId !== conversationId || payload.userId === currentUserId) return;
+        setTypingUserIds((prev) => (prev.includes(payload.userId) ? prev : [...prev, payload.userId]));
+      };
+
+      const onStopTyping = (payload: { conversationId: string; userId: string }) => {
+        if (payload.conversationId !== conversationId || payload.userId === currentUserId) return;
+        setTypingUserIds((prev) => prev.filter((id) => id !== payload.userId));
+      };
+
+      const onPinnedItemsUpdated = (items: any[]) => {
+        setPinnedItems(items);
+      };
+
+      const onMessageReacted = (payload: { messageId: string; reactions: any[] }) => {
         setMessages((prev) =>
-          prev.map((m) =>
-            getMessageId(m) === payload.messageId ? { ...m, reactions: payload.reactions || [] } : m,
-          ),
+          prev.map((m) => (getMessageId(m) === payload.messageId ? { ...m, reactions: payload.reactions } : m)),
         );
       };
 
@@ -266,6 +360,9 @@ export default function ChatScreen() {
       socket.on('message_recalled', onMessageRecalled);
       socket.on('message_seen', onMessageSeen);
       socket.on('message_delivered', onMessageDelivered);
+      socket.on('typing', onTyping);
+      socket.on('stop_typing', onStopTyping);
+      socket.on('pinned_items_updated', onPinnedItemsUpdated);
       socket.on('message_reacted', onMessageReacted);
 
       return () => {
@@ -275,6 +372,9 @@ export default function ChatScreen() {
         socket.off('message_recalled', onMessageRecalled);
         socket.off('message_seen', onMessageSeen);
         socket.off('message_delivered', onMessageDelivered);
+        socket.off('typing', onTyping);
+        socket.off('stop_typing', onStopTyping);
+        socket.off('pinned_items_updated', onPinnedItemsUpdated);
         socket.off('message_reacted', onMessageReacted);
       };
     };
@@ -307,6 +407,7 @@ export default function ChatScreen() {
   const handleSendText = async () => {
     const text = inputText.trim();
     if (!text) return;
+    stopTypingWithEmit();
     setIsSending(true);
     const replyId = replyTo ? getMessageId(replyTo) : undefined;
     setReplyTo(null);
@@ -426,12 +527,12 @@ export default function ChatScreen() {
   const handleReactToMessage = async (msg: Message) => {
     Alert.alert(
       'Chọn cảm xúc', '',
-      [...QUICK_EMOJIS, 'Gỡ cảm xúc', 'Hủy'].map((emoji) => ({
+      [...QUICK_EMOJIS, 'Gửi cảm xúc', 'Hủy'].map((emoji) => ({
         text: emoji,
         onPress: async () => {
           if (emoji === 'Hủy') return;
           try {
-            const reactions = await reactToMessage(getMessageId(msg), emoji === 'Gỡ cảm xúc' ? undefined : emoji);
+            const reactions = await reactToMessage(getMessageId(msg), emoji === 'Gửi cảm xúc' ? undefined : emoji);
             setMessages((prev) =>
               prev.map((m) => getMessageId(m) === getMessageId(msg) ? { ...m, reactions: reactions || [] } : m),
             );
@@ -451,10 +552,12 @@ export default function ChatScreen() {
   const handleMessageLongPress = (msg: Message) => {
     const isMine = getMessageSenderId(msg) === currentUserId;
     const isGroup = conversation?.type === 'group';
-    const buttons: any[] = [{ text: 'Hủy', style: 'cancel' }];
+    const messageId = getMessageId(msg);
+    const isPinned = pinnedItems.some((item) => getPinnedMessageId(item) === messageId);
+    const buttons: any[] = [{ text: 'Hủy', style: 'cancel', onPress: () => {} }];
 
     if (!msg.isRecalled) {
-      buttons.push({ text: '↩️ Trả lời', onPress: () => setReplyTo(msg) });
+      buttons.push({ text: '↩ Trả lời', onPress: () => setReplyTo(msg) });
     }
     if (isMine && !msg.isRecalled) {
       buttons.push({
@@ -469,7 +572,8 @@ export default function ChatScreen() {
     }
     if (!msg.isRecalled) {
       buttons.push({
-        text: '🗑️ Xóa phía tôi',
+        text: '✕ Xóa phía tôi',
+        isDestructive: true,
         onPress: async () => {
           try {
             await deleteMessage(getMessageId(msg));
@@ -477,33 +581,45 @@ export default function ChatScreen() {
           } catch { Alert.alert('Lỗi', 'Không thể xóa'); }
         },
       });
-      buttons.push({ text: '😊 Thả cảm xúc', onPress: () => handleReactToMessage(msg) });
-      buttons.push({ text: '↗️ Chuyển tiếp', onPress: () => openForwardModal(msg) });
+      buttons.push({ text: '😊 thả cảm xúc', onPress: () => handleReactToMessage(msg) });
+      buttons.push({ text: '↗ Chuyển tiếp', onPress: () => openForwardModal(msg) });
     }
     if (isGroup && !msg.isRecalled) {
       buttons.push({
-        text: '📌 Ghim tin nhắn',
+        text: isPinned ? 'Bỏ ghim' : 'Ghim tin nhắn',
         onPress: async () => {
           try {
-            const updated = await pinGroupMessage(conversationId, getMessageId(msg));
-            setConversation(updated);
-            Alert.alert('Thành công', 'Đã ghim tin nhắn');
-          } catch { Alert.alert('Lỗi', 'Không thể ghim'); }
+            const updatedItems = isPinned ? await unpinMessage(conversationId, messageId) : await pinMessage(conversationId, messageId);
+            setPinnedItems(updatedItems);
+            Alert.alert('Thành công', isPinned ? 'Đã gỡ ghim tin nhắn' : 'Đã ghim tin nhắn');
+          } catch (err: any) {
+            Alert.alert('Lỗi', err.message || (isPinned ? 'Không thể gỡ ghim tin nhắn' : 'Không thể ghim tin nhắn'));
+          }
         },
       });
     }
-    Alert.alert('Tùy chọn', '', buttons);
+    setActionMenu({ visible: true, options: buttons });
   };
 
   /** Render message status icon for my messages */
   const renderMessageStatus = (item: Message) => {
     if (item.status === 'sending') return <Ionicons name="time-outline" size={11} color="rgba(255,255,255,0.6)" />;
-    const seenBy = (item.seenBy || []).filter((id) => id !== currentUserId);
+    const seenBy = getNormalizedUserIds(item.seenBy || []).filter((id) => id !== currentUserId);
     if (seenBy.length > 0) return <Ionicons name="checkmark-done" size={11} color="#60EFFF" />;
-    const deliveredTo = (item.deliveredTo || []).filter((id) => id !== currentUserId);
+    const deliveredTo = getNormalizedUserIds(item.deliveredTo || []).filter((id) => id !== currentUserId);
     if (deliveredTo.length > 0) return <Ionicons name="checkmark-done" size={11} color="rgba(255,255,255,0.7)" />;
     return <Ionicons name="checkmark" size={11} color="rgba(255,255,255,0.6)" />;
   };
+
+  const typingParticipants = typingUserIds
+    .map((uid) => conversation?.participants?.find((p) => (p._id || p.id || '') === uid)?.username || 'Ai đó')
+    .filter(Boolean);
+  const typingText =
+    typingParticipants.length === 0
+      ? ''
+      : typingParticipants.length === 1
+        ? `${typingParticipants[0]} đang nhập...`
+        : `${typingParticipants[0]} và ${typingParticipants.length - 1} người khác đang nhập...`;
 
   const renderMessage = ({ item }: { item: Message }) => {
     const isMine = getMessageSenderId(item) === currentUserId;
@@ -516,6 +632,21 @@ export default function ChatScreen() {
           <View style={[styles.bubble, { backgroundColor: colorScheme === 'dark' ? '#374151' : '#F1F5F9' }]}>
             <Text style={{ color: '#94A3B8', fontStyle: 'italic', fontSize: 14 }}>Tin nhắn đã bị thu hồi</Text>
           </View>
+        </View>
+      );
+    }
+
+    // Is it a poll?
+    if (item.type === 'poll' && item.pollId) {
+      return (
+        <View style={{ marginBottom: 8 }}>
+          <PollBubble
+            poll={item.pollId as any}
+            currentUserId={currentUserId}
+            colors={colors}
+            brand="#0068FF"
+            isMyMessage={isMine}
+          />
         </View>
       );
     }
@@ -546,14 +677,14 @@ export default function ChatScreen() {
                   {typeof (replyMsg as any).senderId === 'object' ? (replyMsg as any).senderId?.username : 'Tin nhắn'}
                 </Text>
                 <Text style={{ color: isMine ? 'rgba(255,255,255,0.7)' : colors.muted, fontSize: 12 }} numberOfLines={2}>
-                  {(replyMsg as any).content || 'File đính kèm'}
+                  {(replyMsg as any).content || 'File đính kèm...'}
                 </Text>
               </View>
             )}
 
             {/* Forward tag */}
             {item.forwardFrom && (
-              <Text style={{ color: isMine ? '#DBEAFE' : colors.muted, fontSize: 11, marginBottom: 4, fontStyle: 'italic' }}>↗ Chuyển tiếp</Text>
+              <Text style={{ color: isMine ? '#DBEAFE' : colors.muted, fontSize: 11, marginBottom: 4, fontStyle: 'italic' }}>↪ Chuyển tiếp</Text>
             )}
 
             {/* Text content */}
@@ -595,7 +726,7 @@ export default function ChatScreen() {
                         if (!media?.url) return;
                         const supported = await Linking.canOpenURL(media.url);
                         if (supported) await Linking.openURL(media.url);
-                        else Alert.alert('Lỗi', 'Không thể mở tệp');
+                        else Alert.alert('Lỗi', 'Không thể mở tập');
                       }}
                       style={[styles.fileAttachment, { backgroundColor: isMine ? '#1D4ED8' : colors.border }]}
                     >
@@ -644,6 +775,9 @@ export default function ChatScreen() {
             </View>
           ),
           headerShown: true,
+          headerStyle: { backgroundColor: colors.surface },
+          headerShadowVisible: true,
+          headerTitleAlign: 'left',
           headerBackVisible: false,
           headerLeft: () => (
             <TouchableOpacity onPress={() => router.back()} style={{ padding: 8, marginLeft: 4 }}>
@@ -666,17 +800,13 @@ export default function ChatScreen() {
       )}
 
       {/* Pinned message */}
-      {conversation?.type === 'group' && conversation?.pinnedMessageId && (
-        <View style={{ paddingVertical: 7, backgroundColor: colorScheme === 'dark' ? '#1E3A5F' : '#EEF4FF', alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 8 }}>
-          <Ionicons name="pin" size={13} color={colors.tint} />
-          <Text style={{ color: colors.tint, fontSize: 12 }}>Nhóm đang có tin nhắn ghim</Text>
-          <TouchableOpacity onPress={async () => {
-            try { const updated = await unpinGroupMessage(conversationId); setConversation(updated); }
-            catch { Alert.alert('Lỗi', 'Không thể bỏ ghim'); }
-          }}>
-            <Text style={{ color: colors.tint, fontWeight: '700', fontSize: 12 }}>Bỏ ghim</Text>
-          </TouchableOpacity>
-        </View>
+      {conversation?.type === 'group' && pinnedItems.length > 0 && (
+        <PinnedBar
+          pinnedItems={pinnedItems}
+          colors={colors}
+          brand="#0068FF"
+          onPress={() => router.push({ pathname: '/pinned-messages', params: { id: conversationId } } as any)}
+        />
       )}
 
       <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding" keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}>
@@ -691,6 +821,7 @@ export default function ChatScreen() {
           ListFooterComponent={isFetchingMore ? <ActivityIndicator style={{ margin: 16 }} /> : null}
           contentContainerStyle={{ paddingVertical: 8 }}
         />
+        <TypingIndicator isVisible={typingParticipants.length > 0} text={typingText} />
 
         {/* Emoji panel */}
         {showEmojiPanel && (
@@ -735,8 +866,9 @@ export default function ChatScreen() {
             placeholder="Nhắn tin..."
             placeholderTextColor={colors.muted}
             value={inputText}
-            onChangeText={setInputText}
+            onChangeText={handleInputChange}
             multiline
+            onBlur={stopTypingWithEmit}
           />
 
           <TouchableOpacity
@@ -765,6 +897,21 @@ export default function ChatScreen() {
               </View>
               <Text style={{ color: colors.text, fontSize: 13, fontWeight: '600', marginTop: 4 }}>Tệp tài liệu</Text>
             </TouchableOpacity>
+
+            {conversation?.type === 'group' && (
+              <TouchableOpacity
+                style={styles.mediaMenuItem}
+                onPress={() => {
+                  setShowMediaMenu(false);
+                  router.push({ pathname: '/create-poll', params: { conversationId } } as any);
+                }}
+              >
+                <View style={[styles.mediaMenuIcon, { backgroundColor: '#FEF3C7' }]}>
+                  <Ionicons name="stats-chart" size={26} color="#D97706" />
+                </View>
+                <Text style={{ color: colors.text, fontSize: 13, fontWeight: '600', marginTop: 4 }}>Bình chọn</Text>
+              </TouchableOpacity>
+            )}
           </View>
         </TouchableOpacity>
       </Modal>
@@ -806,6 +953,28 @@ export default function ChatScreen() {
           />
         </SafeAreaView>
       </Modal>
+
+      {/* Custom Action Menu for Message Long Press */}
+      <Modal visible={actionMenu.visible} transparent animationType="fade" onRequestClose={() => setActionMenu({ visible: false, options: [] })}>
+        <TouchableOpacity style={styles.actionMenuOverlay} activeOpacity={1} onPress={() => setActionMenu({ visible: false, options: [] })}>
+          <View style={[styles.actionMenuContainer, { backgroundColor: colors.surface }]}>
+            {actionMenu.options.map((opt, index) => (
+              <TouchableOpacity
+                key={index}
+                style={[styles.actionMenuBtn, index > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border }]}
+                onPress={() => {
+                  setActionMenu({ visible: false, options: [] });
+                  opt.onPress?.();
+                }}
+              >
+                <Text style={{ fontSize: 16, color: opt.isDestructive ? '#EF4444' : colors.text, fontWeight: opt.style === 'cancel' ? '700' : '400' }}>
+                  {opt.text}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -833,4 +1002,9 @@ const styles = StyleSheet.create({
   imageViewerOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.95)', justifyContent: 'center', alignItems: 'center' },
   imageViewerClose: { position: 'absolute', top: 50, right: 20, zIndex: 10, padding: 8 },
   imageViewerImg: { width: '100%', height: '80%' },
+  actionMenuOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end', padding: 16 },
+  actionMenuContainer: { borderRadius: 14, overflow: 'hidden', paddingBottom: Platform.OS === 'ios' ? 20 : 0 },
+  actionMenuBtn: { paddingVertical: 16, alignItems: 'center', justifyContent: 'center' },
 });
+
+

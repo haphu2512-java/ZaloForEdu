@@ -69,7 +69,11 @@ const listMessagesByConversation = asyncHandler(async (req, res) => {
     .populate('senderId', 'username avatarUrl')
     .populate('mediaIds', 'fileName url size mimeType providerResourceType')
     .populate('replyTo')
-    .populate('forwardFrom');
+    .populate('forwardFrom')
+    .populate({
+      path: 'pollId',
+      populate: { path: 'createdBy', select: 'username avatarUrl' }
+    });
 
   let nextCursor = null;
   let finalItems = messages;

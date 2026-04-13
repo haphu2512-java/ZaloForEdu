@@ -77,9 +77,8 @@ function RootLayoutNav() {
             <Stack.Screen name="(auth)" options={{ headerShown: false }} />
             <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
             <Stack.Screen name="chat/[id]" options={{ headerShown: true, title: 'Trò chuyện' }} />
-            <Stack.Screen name="blocked-users" options={{ headerShown: false }} />
-            <Stack.Screen name="archived-conversations" options={{ headerShown: false }} />
-            <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
+            <Stack.Screen name="(settings)/blocked-users" options={{ headerShown: false }} />
+            <Stack.Screen name="(settings)/archived-conversations" options={{ headerShown: false }} />
           </Stack>
         </AuthProvider>
       </ThemeProvider>

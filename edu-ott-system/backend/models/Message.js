@@ -52,6 +52,16 @@ const messageSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    type: {
+      type: String,
+      enum: ['text', 'poll', 'system'],
+      default: 'text',
+    },
+    pollId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Poll',
+      default: null,
+    },
     deletedBy: [
       {
         type: mongoose.Schema.Types.ObjectId,

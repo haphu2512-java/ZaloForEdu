@@ -11,9 +11,8 @@ import {
     Alert,
     RefreshControl,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
 import { getArchivedConversations, updateConversationPreference } from '@/utils/messageService';
@@ -43,7 +42,6 @@ export default function ArchivedConversationsScreen() {
     const colorScheme = useColorScheme() ?? 'light';
     const colors = Colors[colorScheme];
     const router = useRouter();
-    const insets = useSafeAreaInsets();
     const { user } = useAuth();
 
     const [conversations, setConversations] = useState<Conversation[]>([]);
@@ -183,14 +181,20 @@ export default function ArchivedConversationsScreen() {
 
     return (
         <View style={[styles.container, { backgroundColor: colors.background }]}>
-            {/* Header */}
-            <View style={[styles.header, { backgroundColor: colorScheme === 'dark' ? colors.surface : colors.tint, paddingTop: insets.top + 8 }]}>
-                <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-                    <Ionicons name="arrow-back" size={24} color={colorScheme === 'dark' ? colors.text : "#fff"} />
-                </TouchableOpacity>
-                <Text style={[styles.headerTitle, { color: colorScheme === 'dark' ? colors.text : "#fff" }]}>Tin nhắn lưu trữ</Text>
-                <View style={{ width: 40 }} />
-            </View>
+            <Stack.Screen
+                options={{
+                    title: 'Tin nhắn lưu trữ',
+                    headerStyle: {
+                        backgroundColor: colorScheme === 'dark' ? colors.surface : colors.tint,
+                    },
+                    headerTintColor: colorScheme === 'dark' ? colors.text : '#fff',
+                    headerTitleStyle: {
+                        fontSize: 18,
+                        fontWeight: '700',
+                        color: colorScheme === 'dark' ? colors.text : '#fff',
+                    },
+                }}
+            />
 
             {/* Info banner */}
             {!loading && conversations.length > 0 && (
@@ -231,16 +235,6 @@ export default function ArchivedConversationsScreen() {
 
 const styles = StyleSheet.create({
     container: { flex: 1 },
-
-    header: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        paddingHorizontal: 16,
-        paddingBottom: 14,
-    },
-    backBtn: { width: 40 },
-    headerTitle: { fontSize: 18, fontWeight: '700', color: '#fff' },
 
     infoBanner: {
         flexDirection: 'row',

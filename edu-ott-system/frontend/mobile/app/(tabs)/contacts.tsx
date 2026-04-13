@@ -42,7 +42,8 @@ import {
 } from '@/utils/friendService';
 import { searchUsers } from '@/utils/searchService';
 import { blockOrUnblockUser } from '@/utils/userService';
-import type { UserInfo, FriendRequest, Conversation } from '@/types/chat';
+import type { UserInfo, Conversation } from '@/types/chat';
+import type { FriendRequest } from '@/types/friend';
 import CreateGroupModal from '@/components/contacts/CreateGroupModal';
 import FriendRequestsModal from '@/components/contacts/FriendRequestsModal';
 import GroupManageModal from '@/components/contacts/GroupManageModal';

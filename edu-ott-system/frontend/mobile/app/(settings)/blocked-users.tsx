@@ -11,9 +11,8 @@ import {
     Alert,
     RefreshControl,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
 import { getBlockedUsers, blockOrUnblockUser } from '@/utils/userService';
@@ -23,7 +22,6 @@ export default function BlockedUsersScreen() {
     const colorScheme = useColorScheme() ?? 'light';
     const colors = Colors[colorScheme];
     const router = useRouter();
-    const insets = useSafeAreaInsets();
 
     const [blockedUsers, setBlockedUsers] = useState<User[]>([]);
     const [loading, setLoading] = useState(true);
@@ -136,22 +134,20 @@ export default function BlockedUsersScreen() {
 
     return (
         <View style={[styles.container, { backgroundColor: colors.background }]}>
-            {/* Header */}
-            <View
-                style={[
-                    styles.header,
-                    {
+            <Stack.Screen
+                options={{
+                    title: 'Danh sách chặn',
+                    headerStyle: {
                         backgroundColor: colorScheme === 'dark' ? colors.surface : colors.tint,
-                        paddingTop: insets.top + 8,
                     },
-                ]}
-            >
-                <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-                    <Ionicons name="arrow-back" size={24} color={colorScheme === 'dark' ? colors.text : "#fff"} />
-                </TouchableOpacity>
-                <Text style={[styles.headerTitle, { color: colorScheme === 'dark' ? colors.text : "#fff" }]}>Danh sách chặn</Text>
-                <View style={{ width: 40 }} />
-            </View>
+                    headerTintColor: colorScheme === 'dark' ? colors.text : '#fff',
+                    headerTitleStyle: {
+                        fontSize: 18,
+                        fontWeight: '700',
+                        color: colorScheme === 'dark' ? colors.text : '#fff',
+                    },
+                }}
+            />
 
             {/* Count badge */}
             {!loading && blockedUsers.length > 0 && (
@@ -191,20 +187,6 @@ export default function BlockedUsersScreen() {
 
 const styles = StyleSheet.create({
     container: { flex: 1 },
-
-    header: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        paddingHorizontal: 16,
-        paddingBottom: 14,
-    },
-    backBtn: { width: 40 },
-    headerTitle: {
-        fontSize: 18,
-        fontWeight: '700',
-        color: '#fff',
-    },
 
     countBadge: {
         flexDirection: 'row',
