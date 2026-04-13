@@ -7,6 +7,7 @@ const ApiError = require('../utils/apiError');
 const { successResponse } = require('../utils/apiResponse');
 const { issueTokenPair, rotateRefreshToken, revokeAllSessions, revokeRefreshToken } = require('../services/authService');
 const { sendEmail } = require('../utils/email');
+const { getRedis, isRedisAvailable, keyWithPrefix } = require('../services/redisClient');
 
 const OTP_COOLDOWN_SECONDS = 60; // 1 minute between OTP sends
 const OTP_EXPIRE_MINUTES = 10;
@@ -229,14 +230,53 @@ const login = asyncHandler(async (req, res) => {
     throw new ApiError(401, 'INVALID_CREDENTIALS', 'Email/SĐT hoặc mật khẩu không đúng');
   }
 
+  // 1. Kiểm tra tài khoản có bị khóa không
+  if (user.isActive === false) {
+    throw new ApiError(403, 'ACCOUNT_LOCKED', user.banReason || 'Tài khoản của bạn đã bị khóa.');
+  }
+
   const passwordToCompare = user.passwordHash || user.password;
   if (!passwordToCompare) {
     throw new ApiError(401, 'INVALID_CREDENTIALS', 'Tài khoản không hợp lệ');
   }
 
   const validPassword = await bcrypt.compare(password, passwordToCompare);
+
+  // 2. Xử lý khóa tự động nếu sai mật khẩu (Dùng Redis của bạn)
   if (!validPassword) {
+    if (isRedisAvailable()) {
+      const redis = getRedis();
+      const failKey = keyWithPrefix(`login_fails:${user._id.toString()}`);
+      
+      const failCount = await redis.incr(failKey);
+ 
+      if (failCount === 3) {
+        await redis.expire(failKey, 360);
+      }
+
+      // Khóa tự động nếu sai 5 lần
+      if (failCount >= 5) {
+        user.isActive = false;
+        user.banReason = 'Hệ thống tự động khóa bảo vệ do nhập sai mật khẩu quá 5 lần.';
+        user.tokenVersion += 1;
+        user.webTokenVersion += 1;
+        user.mobileTokenVersion += 1;
+        await user.save();
+        throw new ApiError(403, 'ACCOUNT_LOCKED', 'Tài khoản đã bị khóa bảo vệ do nhập sai mật khẩu quá 5 lần!');
+      }
+
+      throw new ApiError(401, 'INVALID_CREDENTIALS', `Mật khẩu không đúng. Bạn còn ${5 - failCount} lần thử trước khi bị khóa.`);
+    }
+    
+    // Fallback nếu Redis sập
     throw new ApiError(401, 'INVALID_CREDENTIALS', 'Email/SĐT hoặc mật khẩu không đúng');
+  }
+
+  // 3. Đăng nhập thành công -> Xóa cờ lỗi trong Redis
+  if (isRedisAvailable()) {
+    const redis = getRedis();
+    const failKey = keyWithPrefix(`login_fails:${user._id.toString()}`);
+    await redis.del(failKey);
   }
 
   // issueTokenPair bumps the device version → force-logout previous session on same device
@@ -246,7 +286,6 @@ const login = asyncHandler(async (req, res) => {
   const freshUser = await User.findById(user._id);
   return successResponse(res, { ...toAuthPayload(freshUser, tokens), device }, 'Đăng nhập thành công');
 });
-
 // ════════════════════════════════════════════════════════════════
 //  FORGOT PASSWORD (3-step flow: send OTP → verify OTP → reset)
 // ════════════════════════════════════════════════════════════════

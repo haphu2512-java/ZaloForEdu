@@ -28,6 +28,9 @@ export const useAuthStore = create((set, get) => ({
     try {
       const res = await authService.login({ email, phone, password, device });
       const { user, accessToken, refreshToken } = res.data.data;
+
+      // //them tạm để test admin
+      // user.role = "admin";
       localStorage.setItem("token", accessToken);
       localStorage.setItem("user", JSON.stringify(user));
       if (refreshToken) localStorage.setItem("refreshToken", refreshToken);

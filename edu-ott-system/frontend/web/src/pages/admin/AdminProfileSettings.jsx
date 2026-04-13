@@ -5,15 +5,17 @@ import { authService } from "../../services/authService";
 
 export default function AdminProfileSettings() {
   const [adminProfile, setAdminProfile] = useState({ 
+    id: "",
     fullName: "", 
     email: "",
+    phone: "",
     avatarUrl: "",
     role: "admin"
   });
   
-  // State quản lý chế độ Xem/Sửa
   const [isEditing, setIsEditing] = useState(false);
   const [isFetching, setIsFetching] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const fileInputRef = useRef(null);
   const [avatarFile, setAvatarFile] = useState(null);
 
@@ -28,10 +30,12 @@ export default function AdminProfileSettings() {
         const userData = res.data?.data?.user || res.data?.user || res.data;
         if (userData) {
           setAdminProfile({ 
-            fullName: userData.fullName || "", 
+            id: userData._id || userData.id || "",
+            fullName: userData.fullName || userData.username || "", 
             email: userData.email || "",
-            avatarUrl: userData.avatar || userData.avatarUrl || "https://i.pravatar.cc/150?img=11",
-            role: userData.role || "Quản trị viên"
+            phone: userData.phone || userData.phoneNumber || "",
+            avatarUrl: userData.avatarUrl || userData.avatar || "https://i.pravatar.cc/150?img=11",
+            role: userData.role || "admin"
           });
         }
       } catch (error) {
@@ -58,24 +62,67 @@ export default function AdminProfileSettings() {
 
   const handleUpdateProfile = async () => {
     try {
-      const updateData = {
-        fullName: adminProfile.fullName,
-      };
+      setIsSaving(true);
+      
+      if (!adminProfile.id) {
+        alert("Lỗi: Không tìm thấy ID User. Vui lòng F5 lại trang!");
+        setIsSaving(false); return;
+      }
+
+      let finalAvatarUrl = adminProfile.avatarUrl;
+
+      // 1. Upload ảnh qua Cloudinary
       if (avatarFile) {
-        updateData.avatarFile = avatarFile;
-      } else if (adminProfile.avatarUrl?.startsWith('http')) {
-        updateData.avatar = adminProfile.avatarUrl;
+        try {
+          const uploadRes = await userService.uploadAvatar(avatarFile);
+          finalAvatarUrl = uploadRes.url || adminProfile.avatarUrl;
+        } catch (err) {
+          console.error("Lỗi upload ảnh:", err);
+          alert("Tải ảnh lên thất bại. Hệ thống hủy cập nhật để bảo toàn dữ liệu.");
+          setIsSaving(false); return;
+        }
       }
-      const response = await userService.updateProfile(updateData);
+
+      // 2. Bọc data lách luật Zod
+      const updateData = {};
+      if (adminProfile.fullName) {
+        updateData.fullName = adminProfile.fullName.trim();
+        updateData.username = adminProfile.fullName.trim();
+      }
+
+      if (adminProfile.phone && adminProfile.phone.trim().length >= 8) {
+        updateData.phone = adminProfile.phone.trim();
+      } else {
+        updateData.phone = null;
+      }
+
+      if (finalAvatarUrl && finalAvatarUrl.startsWith('http')) {
+        updateData.avatarUrl = finalAvatarUrl;
+      } else {
+        updateData.avatarUrl = null;
+      }
+
+      // 3. Gọi API Update
+      const response = await userService.updateProfile(adminProfile.id, updateData);
       const updatedUser = response?.data?.user || response?.user || response?.data?.data?.user;
-      if (updatedUser?.avatar) {
-        setAdminProfile((prev) => ({ ...prev, avatarUrl: updatedUser.avatar }));
+      
+      if (updatedUser) {
+        setAdminProfile((prev) => ({ 
+          ...prev, 
+          avatarUrl: updatedUser.avatarUrl || updatedUser.avatar || prev.avatarUrl,
+          fullName: updatedUser.fullName || updatedUser.username || prev.fullName,
+          phone: updatedUser.phone || updatedUser.phoneNumber || prev.phone
+        }));
       }
+      
       setAvatarFile(null);
       alert("Cập nhật hồ sơ thành công!");
-      setIsEditing(false); // Lưu xong tự động quay về chế độ Xem
+      setIsEditing(false); 
     } catch (error) { 
-      alert("Cập nhật thất bại!"); 
+      console.error(error);
+      alert("Cập nhật thất bại. Vui lòng kiểm tra lại thông tin!"); 
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -87,10 +134,7 @@ export default function AdminProfileSettings() {
       return alert("Mật khẩu xác nhận không khớp!");
     }
     try {
-      await authService.changePassword({ 
-        currentPassword: passForm.currentPassword, 
-        newPassword: passForm.newPassword 
-      });
+      await authService.changePassword({ currentPassword: passForm.currentPassword, newPassword: passForm.newPassword });
       alert("Đổi mật khẩu thành công!");
       setPassForm({ currentPassword: "", newPassword: "", confirmPassword: "" });
     } catch (error) {
@@ -101,26 +145,20 @@ export default function AdminProfileSettings() {
 
   const toggleEye = (field) => setShowPass({ ...showPass, [field]: !showPass[field] });
 
-  // CSS dùng chung
   const inputStyle = { width: "100%", padding: "14px 45px 14px 16px", borderRadius: "10px", border: "1px solid #cbd5e1", fontSize: "15px", color: "#1e293b", outline: "none", boxSizing: "border-box", transition: "border 0.2s" };
   const labelStyle = { display: "block", fontSize: "14px", fontWeight: 600, color: "#475569", marginBottom: "8px" };
   const cardStyle = { backgroundColor: "white", padding: "32px", borderRadius: "20px", marginBottom: "32px", boxShadow: "0 4px 20px -2px rgba(0,0,0,0.03)", border: "1px solid #f1f5f9" };
   const eyeIconStyle = { position: "absolute", right: "16px", top: "50%", transform: "translateY(-50%)", cursor: "pointer", color: "#94a3b8" };
 
-  if (isFetching) {
-    return <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: "400px", color: "#3b82f6" }}><FaSpinner className="spin" size={28} /></div>;
-  }
+  if (isFetching) return <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: "400px", color: "#3b82f6" }}><FaSpinner className="spin" size={28} /></div>;
 
   return (
     <div style={{ maxWidth: "800px", margin: "0 auto", animation: "fadeIn 0.3s ease-out" }}>
-      
-      {/* Header Trang */}
       <div style={{ marginBottom: "32px" }}>
         <h1 style={{ margin: "0 0 8px 0", color: "#0f172a", fontSize: "28px", fontWeight: 800 }}>Thiết lập Tài khoản</h1>
-        <p style={{ margin: 0, color: "#64748b", fontSize: "15px" }}>Quản lý thông tin định danh và bảo mật của Quản trị viên.</p>
+        <p style={{ margin: 0, color: "#64748b", fontSize: "15px" }}>Quản lý thông định danh và bảo mật của Quản trị viên.</p>
       </div>
       
-      {/* ================= KHỐI 1: THÔNG TIN CÁ NHÂN ================= */}
       <div style={cardStyle}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "24px", borderBottom: "1px solid #f1f5f9", paddingBottom: "16px" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
@@ -130,18 +168,13 @@ export default function AdminProfileSettings() {
             <h3 style={{ margin: 0, fontSize: "18px", color: "#0f172a", fontWeight: 700 }}>Thông tin cá nhân</h3>
           </div>
           
-          {/* Nút Toggle Edit/View */}
           {!isEditing && (
-            <button 
-              onClick={() => setIsEditing(true)} 
-              style={{ background: "#f8fafc", color: "#3b82f6", border: "none", padding: "8px 16px", borderRadius: "8px", fontWeight: 600, cursor: "pointer", display: "flex", gap: "8px", alignItems: "center" }}
-            >
+            <button onClick={() => setIsEditing(true)} style={{ background: "#f8fafc", color: "#3b82f6", border: "none", padding: "8px 16px", borderRadius: "8px", fontWeight: 600, cursor: "pointer", display: "flex", gap: "8px", alignItems: "center" }}>
               <FaEdit /> Chỉnh sửa
             </button>
           )}
         </div>
 
-        {/* --- DẠNG XEM (READ-ONLY) --- */}
         {!isEditing ? (
           <div style={{ display: "flex", alignItems: "center", gap: "30px" }}>
             <div style={{ width: "100px", height: "100px", borderRadius: "20px", overflow: "hidden", border: "4px solid #f1f5f9", flexShrink: 0 }}>
@@ -155,56 +188,51 @@ export default function AdminProfileSettings() {
               <div>
                 <p style={{ margin: "0 0 4px 0", fontSize: "13px", color: "#94a3b8", fontWeight: 600, textTransform: "uppercase" }}>Vai trò</p>
                 <p style={{ margin: 0, fontSize: "14px", color: "#2563eb", fontWeight: 700, backgroundColor: "#eff6ff", display: "inline-block", padding: "4px 10px", borderRadius: "6px" }}>
-                  <FaUserShield style={{ marginRight: "4px" }}/> Quản trị viên hệ thống
+                  <FaUserShield style={{ marginRight: "4px" }}/> Admin
                 </p>
               </div>
-              <div style={{ gridColumn: "1 / -1" }}>
-                <p style={{ margin: "0 0 4px 0", fontSize: "13px", color: "#94a3b8", fontWeight: 600, textTransform: "uppercase" }}>Địa chỉ Email</p>
-                <p style={{ margin: 0, fontSize: "16px", color: "#475569", fontWeight: 500, display: "flex", alignItems: "center", gap: "8px" }}>
-                  <FaEnvelope color="#cbd5e1"/> {adminProfile.email}
-                </p>
+              <div style={{ gridColumn: "1 / -1", display: "flex", gap: "30px" }}>
+                <div>
+                  <p style={{ margin: "0 0 4px 0", fontSize: "13px", color: "#94a3b8", fontWeight: 600, textTransform: "uppercase" }}>Email</p>
+                  <p style={{ margin: 0, fontSize: "16px", color: "#475569", fontWeight: 500, display: "flex", alignItems: "center", gap: "8px" }}><FaEnvelope color="#cbd5e1"/> {adminProfile.email}</p>
+                </div>
+                <div>
+                  <p style={{ margin: "0 0 4px 0", fontSize: "13px", color: "#94a3b8", fontWeight: 600, textTransform: "uppercase" }}>Điện thoại</p>
+                  <p style={{ margin: 0, fontSize: "16px", color: "#475569", fontWeight: 500 }}>{adminProfile.phone || "Chưa cập nhật"}</p>
+                </div>
               </div>
             </div>
           </div>
         ) : (
-          /* --- DẠNG SỬA (FORM) --- */
           <div style={{ display: "flex", gap: "30px", alignItems: "flex-start" }}>
-            
-            {/* Sửa Avatar */}
-            <div 
-              onClick={() => fileInputRef.current?.click()}
-              style={{ width: "100px", height: "100px", borderRadius: "20px", overflow: "hidden", border: "4px solid #eff6ff", flexShrink: 0, position: "relative", cursor: "pointer" }}
-            >
+            <div onClick={() => fileInputRef.current?.click()} style={{ width: "100px", height: "100px", borderRadius: "20px", overflow: "hidden", border: "4px solid #eff6ff", flexShrink: 0, position: "relative", cursor: "pointer" }}>
               <img src={adminProfile.avatarUrl} alt="Avatar" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-              <div style={{ position: "absolute", inset: 0, backgroundColor: "rgba(0,0,0,0.5)", display: "flex", justifyContent: "center", alignItems: "center", color: "white" }}>
-                <FaCamera size={24} />
-              </div>
+              <div style={{ position: "absolute", inset: 0, backgroundColor: "rgba(0,0,0,0.5)", display: "flex", justifyContent: "center", alignItems: "center", color: "white" }}><FaCamera size={24} /></div>
               <input type="file" ref={fileInputRef} style={{ display: "none" }} accept="image/*" onChange={handleAvatarChange} />
             </div>
 
-            {/* Sửa Tên */}
             <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "20px" }}>
               <div>
                 <label style={labelStyle}>Họ và Tên hiển thị</label>
-                <input 
-                  type="text" name="fullName" value={adminProfile.fullName} 
-                  onChange={handleAdminChange} style={{...inputStyle, paddingRight: "16px"}} 
-                />
+                <input type="text" name="fullName" value={adminProfile.fullName} onChange={handleAdminChange} style={{...inputStyle, paddingRight: "16px"}} />
               </div>
-              <div>
-                <label style={labelStyle}>Địa chỉ Email <span style={{color: "#94a3b8", fontWeight: "normal"}}>(Cố định)</span></label>
-                <input 
-                  type="email" value={adminProfile.email} disabled 
-                  style={{...inputStyle, paddingRight: "16px", backgroundColor: "#f8fafc", color: "#94a3b8", cursor: "not-allowed"}} 
-                />
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
+                <div>
+                  <label style={labelStyle}>Số điện thoại</label>
+                  <input type="text" name="phone" value={adminProfile.phone} onChange={handleAdminChange} style={{...inputStyle, paddingRight: "16px"}} />
+                </div>
+                <div>
+                  <label style={labelStyle}>Email (Cố định)</label>
+                  <input type="email" value={adminProfile.email} disabled style={{...inputStyle, paddingRight: "16px", backgroundColor: "#f8fafc", color: "#94a3b8", cursor: "not-allowed"}} />
+                </div>
               </div>
               
               <div style={{ display: "flex", gap: "12px", marginTop: "10px" }}>
                 <button onClick={() => { setAvatarFile(null); setIsEditing(false); }} style={{ padding: "12px 20px", background: "#f1f5f9", color: "#475569", borderRadius: "10px", border: "none", cursor: "pointer", fontWeight: 600, display: "flex", gap: "8px", alignItems: "center" }}>
                   <FaTimes /> Hủy bỏ
                 </button>
-                <button onClick={handleUpdateProfile} style={{ padding: "12px 24px", background: "#2563eb", color: "#fff", borderRadius: "10px", border: "none", cursor: "pointer", fontWeight: 600, display: "flex", alignItems: "center", gap: "8px", boxShadow: "0 4px 12px rgba(37, 99, 235, 0.2)" }}>
-                  <FaSave /> Lưu thay đổi
+                <button onClick={handleUpdateProfile} disabled={isSaving} style={{ padding: "12px 24px", background: "#2563eb", color: "#fff", borderRadius: "10px", border: "none", cursor: isSaving ? "not-allowed" : "pointer", fontWeight: 600, display: "flex", alignItems: "center", gap: "8px", boxShadow: "0 4px 12px rgba(37, 99, 235, 0.2)", opacity: isSaving ? 0.7 : 1 }}>
+                  {isSaving ? <FaSpinner className="spin"/> : <FaSave />} {isSaving ? "Đang lưu..." : "Lưu thay đổi"}
                 </button>
               </div>
             </div>
@@ -222,61 +250,35 @@ export default function AdminProfileSettings() {
         </div>
 
         <div style={{ display: "flex", flexDirection: "column", gap: "20px", maxWidth: "500px" }}>
-          
           <div>
             <label style={labelStyle}>Mật khẩu hiện tại</label>
             <div style={{ position: "relative" }}>
-              <input 
-                type={showPass.current ? "text" : "password"} 
-                name="currentPassword" value={passForm.currentPassword} 
-                onChange={e => setPassForm({...passForm, currentPassword: e.target.value})} 
-                placeholder="Nhập mật khẩu hiện tại" style={inputStyle} 
-              />
-              <div style={eyeIconStyle} onClick={() => toggleEye('current')}>
-                {showPass.current ? <FaEyeSlash size={18} /> : <FaEye size={18} />}
-              </div>
+              <input type={showPass.current ? "text" : "password"} name="currentPassword" value={passForm.currentPassword} onChange={e => setPassForm({...passForm, currentPassword: e.target.value})} placeholder="Nhập mật khẩu hiện tại" style={inputStyle} />
+              <div style={eyeIconStyle} onClick={() => toggleEye('current')}>{showPass.current ? <FaEyeSlash size={18} /> : <FaEye size={18} />}</div>
             </div>
           </div>
 
           <div>
             <label style={labelStyle}>Mật khẩu mới</label>
             <div style={{ position: "relative" }}>
-              <input 
-                type={showPass.new ? "text" : "password"} 
-                name="newPassword" value={passForm.newPassword} 
-                onChange={e => setPassForm({...passForm, newPassword: e.target.value})} 
-                placeholder="Nhập mật khẩu mới" style={inputStyle} 
-              />
-              <div style={eyeIconStyle} onClick={() => toggleEye('new')}>
-                {showPass.new ? <FaEyeSlash size={18} /> : <FaEye size={18} />}
-              </div>
+              <input type={showPass.new ? "text" : "password"} name="newPassword" value={passForm.newPassword} onChange={e => setPassForm({...passForm, newPassword: e.target.value})} placeholder="Nhập mật khẩu mới" style={inputStyle} />
+              <div style={eyeIconStyle} onClick={() => toggleEye('new')}>{showPass.new ? <FaEyeSlash size={18} /> : <FaEye size={18} />}</div>
             </div>
           </div>
 
           <div>
             <label style={labelStyle}>Xác nhận mật khẩu mới</label>
             <div style={{ position: "relative" }}>
-              <input 
-                type={showPass.confirm ? "text" : "password"} 
-                name="confirmPassword" value={passForm.confirmPassword} 
-                onChange={e => setPassForm({...passForm, confirmPassword: e.target.value})} 
-                placeholder="Nhập lại mật khẩu mới" style={inputStyle} 
-              />
-              <div style={eyeIconStyle} onClick={() => toggleEye('confirm')}>
-                {showPass.confirm ? <FaEyeSlash size={18} /> : <FaEye size={18} />}
-              </div>
+              <input type={showPass.confirm ? "text" : "password"} name="confirmPassword" value={passForm.confirmPassword} onChange={e => setPassForm({...passForm, confirmPassword: e.target.value})} placeholder="Nhập lại mật khẩu mới" style={inputStyle} />
+              <div style={eyeIconStyle} onClick={() => toggleEye('confirm')}>{showPass.confirm ? <FaEyeSlash size={18} /> : <FaEye size={18} />}</div>
             </div>
           </div>
 
-          <button 
-            onClick={handleUpdatePassword} 
-            style={{ padding: "12px 24px", background: "#0f172a", color: "#fff", borderRadius: "10px", border: "none", cursor: "pointer", fontWeight: 600, display: "inline-flex", alignItems: "center", gap: "8px", alignSelf: "flex-start", marginTop: "10px", boxShadow: "0 4px 12px rgba(15, 23, 42, 0.2)", transition: "0.2s" }}
-          >
+          <button onClick={handleUpdatePassword} style={{ padding: "12px 24px", background: "#0f172a", color: "#fff", borderRadius: "10px", border: "none", cursor: "pointer", fontWeight: 600, display: "inline-flex", alignItems: "center", gap: "8px", alignSelf: "flex-start", marginTop: "10px", boxShadow: "0 4px 12px rgba(15, 23, 42, 0.2)" }}>
             <FaLock /> Đổi Mật Khẩu
           </button>
         </div>
       </div>
-      
     </div>
   );
 }

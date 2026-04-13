@@ -10,12 +10,15 @@ const userSchema = new mongoose.Schema(
       unique: true,
       sparse: true,
     },
+    role: {
+      type: String,
+      enum: ['user', 'admin'],
+      default: 'user',
+    },
     email: {
       type: String,
       trim: true,
       lowercase: true,
-      unique: true,
-      sparse: true,
     },
     passwordHash: {
       type: String,
@@ -23,8 +26,6 @@ const userSchema = new mongoose.Schema(
     },
     phone: {
       type: String,
-      unique: true,
-      sparse: true,
     },
     avatarUrl: {
       type: String,
@@ -42,17 +43,7 @@ const userSchema = new mongoose.Schema(
         ref: 'User',
       },
     ],
-    // Global token version (legacy / fallback)
     tokenVersion: {
-      type: Number,
-      default: 0,
-    },
-    // Per-device token versions (Zalo-style single-device-per-type login)
-    webTokenVersion: {
-      type: Number,
-      default: 0,
-    },
-    mobileTokenVersion: {
       type: Number,
       default: 0,
     },
@@ -68,34 +59,11 @@ const userSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
-    isPhoneVerified: {
-      type: Boolean,
-      default: false,
-    },
     emailVerificationToken: {
       type: String,
       default: null,
     },
     emailVerificationExpires: {
-      type: Date,
-      default: null,
-    },
-    // Generic OTP for phone verification, forgot-password via phone
-    otpCode: {
-      type: String,
-      default: null,
-    },
-    otpExpires: {
-      type: Date,
-      default: null,
-    },
-    otpType: {
-      type: String,
-      enum: ['phone_verify', 'forgot_password', null],
-      default: null,
-    },
-    // Anti-spam: track when last OTP was sent
-    lastOtpSentAt: {
       type: Date,
       default: null,
     },
@@ -111,6 +79,14 @@ const userSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+    isActive: {
+      type: Boolean,
+      default: true,
+    },
+    banReason: {
+      type: String,
+      default: null,
+    },
   },
   {
     timestamps: {
@@ -124,15 +100,26 @@ const userSchema = new mongoose.Schema(
         delete ret.__v;
         delete ret.passwordHash;
         delete ret.tokenVersion;
-        delete ret.webTokenVersion;
-        delete ret.mobileTokenVersion;
-        delete ret.otpCode;
-        delete ret.otpExpires;
-        delete ret.otpType;
-        delete ret.lastOtpSentAt;
         return ret;
       },
     },
+  },
+);
+
+// Allow many users without email/phone (or with null), but keep uniqueness when value is a string.
+userSchema.index(
+  { email: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { email: { $type: 'string' } },
+  },
+);
+
+userSchema.index(
+  { phone: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { phone: { $type: 'string' } },
   },
 );
 
