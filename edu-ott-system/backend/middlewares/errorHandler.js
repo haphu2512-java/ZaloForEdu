@@ -14,7 +14,14 @@ const errorHandler = (err, _req, res, _next) => {
   }
 
   if (err.name === 'MongoServerError' && err.code === 11000) {
-    message = 'Duplicated value';
+    const field = Object.keys(err.keyValue)[0];
+    const fieldMapping = {
+      email: 'Email',
+      phone: 'Số điện thoại',
+      username: 'Tên người dùng',
+    };
+    const friendlyField = fieldMapping[field] || field;
+    message = `${friendlyField} đã tồn tại trong hệ thống`;
     details = err.keyValue;
   }
 

@@ -1,6 +1,5 @@
 import { io } from "socket.io-client";
 
-// Get base URL by stripping /api/v1 from API_URL, or use default backend URL
 const getSocketUrl = () => {
   const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:5000/api/v1";
   return apiUrl.replace(/\/api\/v1\/?$/, "");
@@ -9,11 +8,11 @@ const getSocketUrl = () => {
 class SocketService {
   constructor() {
     this.socket = null;
+    this._notifCallback = null;
   }
 
   connect() {
     if (this.socket?.connected) return;
-
     const token = localStorage.getItem("token");
     if (!token) return;
 
@@ -36,6 +35,14 @@ class SocketService {
     this.socket.on("disconnect", (reason) => {
       console.log("Socket disconnected:", reason);
     });
+
+    // Lắng nghe notification realtime từ backend
+    this.socket.on("new_notification", (notification) => {
+      // Import động để tránh circular dependency
+      import("../store/notificationStore").then(({ useNotificationStore }) => {
+        useNotificationStore.getState().addSocketNotification(notification);
+      });
+    });
   }
 
   disconnect() {
@@ -45,17 +52,14 @@ class SocketService {
     }
   }
 
-  // Common emitters for user-driven actions
   emitTyping(conversationId) {
     if (this.socket?.connected) {
       this.socket.emit("typing", { conversationId });
     }
   }
 
-  // Handlers binding mechanism
   on(event, callback) {
     if (this.socket) {
-      // Remove any existing listeners of the same event by returning a cleanup func if needed
       this.socket.on(event, callback);
     }
   }

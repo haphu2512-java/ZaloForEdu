@@ -1,6 +1,7 @@
 const express = require('express');
 
 const conversationController = require('../controllers/conversationController');
+const groupFeatureController = require('../controllers/groupFeatureController');
 const auth = require('../middlewares/auth');
 const validate = require('../middlewares/validate');
 const {
@@ -16,6 +17,7 @@ const {
   pinMessageSchema,
   updateConversationPreferenceSchema,
 } = require('../validators/conversationSchemas');
+const { z } = require('zod');
 
 const router = express.Router();
 
@@ -43,6 +45,21 @@ const router = express.Router();
  *         description: Conversations fetched
  */
 router.get('/', auth, validate({ query: conversationPaginationQuerySchema }), conversationController.listConversations);
+
+/**
+ * @openapi
+ * /conversations/archived:
+ *   get:
+ *     tags: [Conversations]
+ *     summary: List archived (hidden) conversations
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Archived conversations fetched
+ */
+router.get('/archived', auth, conversationController.listArchivedConversations);
+
 /**
  * @openapi
  * /conversations:
@@ -306,6 +323,105 @@ router.put(
   auth,
   validate({ params: conversationIdParamSchema, body: updateConversationPreferenceSchema }),
   conversationController.updateConversationPreference,
+);
+
+// ==================== FEATURE 2: PINNED MESSAGES (Bảng tin) ====================
+const pinBodySchema = z.object({ messageId: z.string().min(1) });
+const pinParamSchema = z.object({ id: z.string().min(1), messageId: z.string().min(1) });
+
+// POST /:id/pins - Ghím tin nhắn
+router.post(
+  '/:id/pins',
+  auth,
+  validate({ params: conversationIdParamSchema, body: pinBodySchema }),
+  groupFeatureController.pinMessage,
+);
+// DELETE /:id/pins/:messageId - Bỏ ghím
+router.delete(
+  '/:id/pins/:messageId',
+  auth,
+  validate({ params: pinParamSchema }),
+  groupFeatureController.unpinMessage,
+);
+// GET /:id/pins - Lấy danh sách ghím (Bảng tin)
+router.get(
+  '/:id/pins',
+  auth,
+  validate({ params: conversationIdParamSchema }),
+  groupFeatureController.getPinnedMessages,
+);
+
+// ==================== FEATURE 4: JOIN APPROVAL ====================
+const groupSettingsSchema = z.object({
+  isApprovalRequired: z.boolean().optional(),
+});
+const joinRequestBodySchema = z.object({
+  reason: z.string().max(300).optional(),
+});
+const processRequestBodySchema = z.object({
+  action: z.enum(['approve', 'reject']),
+});
+const joinRequestParamSchema = z.object({ id: z.string().min(1), requestId: z.string().min(1) });
+
+// PUT /:id/settings - Cập nhật cài đặt nhóm
+router.put(
+  '/:id/settings',
+  auth,
+  validate({ params: conversationIdParamSchema, body: groupSettingsSchema }),
+  groupFeatureController.updateGroupSettings,
+);
+// POST /:id/join-requests - Gửi yêu cầu tham gia nhóm
+router.post(
+  '/:id/join-requests',
+  auth,
+  validate({ params: conversationIdParamSchema, body: joinRequestBodySchema }),
+  groupFeatureController.requestToJoin,
+);
+// GET /:id/join-requests - Admin lấy danh sách chờ duyệt
+router.get(
+  '/:id/join-requests',
+  auth,
+  validate({ params: conversationIdParamSchema }),
+  groupFeatureController.listJoinRequests,
+);
+// PUT /:id/join-requests/:requestId - Duyệt / Từ chối
+router.put(
+  '/:id/join-requests/:requestId',
+  auth,
+  validate({ params: joinRequestParamSchema, body: processRequestBodySchema }),
+  groupFeatureController.processJoinRequest,
+);
+
+// ==================== FEATURE 5: INVITE LINKS ====================
+const inviteCodeParamSchema = z.object({ code: z.string().min(1) });
+
+// GET /:id/invite-link - Lấy/tạo invite link
+router.get(
+  '/:id/invite-link',
+  auth,
+  validate({ params: conversationIdParamSchema }),
+  groupFeatureController.getInviteLink,
+);
+// POST /preview/:code - Xem preview nhóm (public, không cần auth)
+router.get(
+  '/preview/:code',
+  auth,
+  validate({ params: inviteCodeParamSchema }),
+  groupFeatureController.previewGroupByInviteCode,
+);
+// POST /join/:code - Tham gia nhóm qua invite link
+router.post(
+  '/join/:code',
+  auth,
+  validate({ params: inviteCodeParamSchema }),
+  groupFeatureController.joinByInviteLink,
+);
+// POST /invite/:code/reset - Reset invite link
+router.post(
+  '/invite/:code/reset',
+  auth,
+  validate({ params: inviteCodeParamSchema }),
+  groupFeatureController.resetInviteLink,
 );
 
 module.exports = router;

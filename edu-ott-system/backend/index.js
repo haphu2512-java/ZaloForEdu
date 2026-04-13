@@ -87,7 +87,8 @@ const startServer = async () => {
   await connectDB();
   await initRedis();
   if (!socketInitialized) {
-    initSocket(server);
+    const ioInstance = initSocket(server);
+    app.set('io', ioInstance);
     socketInitialized = true;
   }
 

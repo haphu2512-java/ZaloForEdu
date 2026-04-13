@@ -1,63 +1,148 @@
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { format } from "date-fns";
 import {
-  FaSearch,
-  FaPlus,
-  FaEllipsisV,
-  FaPaperPlane,
-  FaPaperclip,
-  FaSmile,
-  FaImage,
-  FaFile,
-  FaVideo,
-  FaBook,
-  FaUsers,
-  FaUser,
-  FaChevronDown,
-  FaPhone,
-  FaSpinner,
-  FaVideo as FaVideoCall,
-  FaThumbtack,
-  FaCloud,
-  FaCloudDownloadAlt,
-  FaDownload,
-  FaEllipsisH
+  FaSearch, FaPlus, FaEllipsisV, FaPaperPlane, FaPaperclip,
+  FaSmile, FaImage, FaVideo, FaUsers, FaUser, FaPhone,
+  FaSpinner, FaVideo as FaVideoCall, FaThumbtack, FaCloud,
+  FaDownload, FaEllipsisH, FaUserPlus, FaRegSmile,
+  FaRegImage, FaFolder, FaFilm, FaRegFileAlt, FaThumbsUp,
+  FaTimes, FaChevronRight, FaChevronLeft,
 } from "react-icons/fa";
+import EmojiPicker from "emoji-picker-react";
 import { useAuthStore } from "../../store/authStore";
 import { useChatStore } from "../../store/chatStore";
 import { socketService } from "../../services/socketService";
+import { uploadFile } from "../../services/mediaService";
+import AddFriendModal from "../../components/Modals/AddFriendModal";
 import "./ChatPage.css";
 
 const TYPE_BADGE = {
   group: { label: "Nhóm", bg: "#F0FDF4", color: "#16A34A" },
-  dm: { label: "1-1", bg: "#FDF4FF", color: "#9333EA" },
+  dm:    { label: "1-1",  bg: "#FDF4FF", color: "#9333EA" },
 };
-
 const TABS = ["Tất cả", "Nhóm", "1-1"];
 
+// ── Sticker data (Zalo-style) ────────────────────────────────
+const STICKER_PACKS = [
+  {
+    id: "bear", name: "Gấu dễ thương",
+    stickers: [
+      "https://stickershop.line-scdn.net/stickershop/v1/sticker/52002734/iPhone/sticker@2x.png",
+      "https://stickershop.line-scdn.net/stickershop/v1/sticker/52002735/iPhone/sticker@2x.png",
+      "https://stickershop.line-scdn.net/stickershop/v1/sticker/52002736/iPhone/sticker@2x.png",
+      "https://stickershop.line-scdn.net/stickershop/v1/sticker/52002737/iPhone/sticker@2x.png",
+      "https://stickershop.line-scdn.net/stickershop/v1/sticker/52002738/iPhone/sticker@2x.png",
+      "https://stickershop.line-scdn.net/stickershop/v1/sticker/52002739/iPhone/sticker@2x.png",
+      "https://stickershop.line-scdn.net/stickershop/v1/sticker/52002740/iPhone/sticker@2x.png",
+      "https://stickershop.line-scdn.net/stickershop/v1/sticker/52002741/iPhone/sticker@2x.png",
+    ]
+  },
+  {
+    id: "cat", name: "Mèo vui vẻ",
+    stickers: [
+      "https://stickershop.line-scdn.net/stickershop/v1/sticker/51626494/iPhone/sticker@2x.png",
+      "https://stickershop.line-scdn.net/stickershop/v1/sticker/51626495/iPhone/sticker@2x.png",
+      "https://stickershop.line-scdn.net/stickershop/v1/sticker/51626496/iPhone/sticker@2x.png",
+      "https://stickershop.line-scdn.net/stickershop/v1/sticker/51626497/iPhone/sticker@2x.png",
+      "https://stickershop.line-scdn.net/stickershop/v1/sticker/51626498/iPhone/sticker@2x.png",
+      "https://stickershop.line-scdn.net/stickershop/v1/sticker/51626499/iPhone/sticker@2x.png",
+      "https://stickershop.line-scdn.net/stickershop/v1/sticker/51626500/iPhone/sticker@2x.png",
+      "https://stickershop.line-scdn.net/stickershop/v1/sticker/51626501/iPhone/sticker@2x.png",
+    ]
+  },
+];
+
+// ── Sticker/Emoji Picker ─────────────────────────────────────
+function StickerEmojiPicker({ onSelectEmoji, onSelectSticker, onClose }) {
+  const [tab, setTab] = useState("sticker"); // sticker | emoji | gif
+  const [packIdx, setPackIdx] = useState(0);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) onClose(); };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [onClose]);
+
+  const pack = STICKER_PACKS[packIdx];
+
+  return (
+    <div className="sep-panel" ref={ref}>
+      {/* Tabs */}
+      <div className="sep-tabs">
+        <button className={`sep-tab ${tab === "sticker" ? "active" : ""}`} onClick={() => setTab("sticker")}>STICKER</button>
+        <button className={`sep-tab ${tab === "emoji" ? "active" : ""}`} onClick={() => setTab("emoji")}>EMOJI</button>
+        <button className={`sep-tab ${tab === "gif" ? "active" : ""}`} onClick={() => setTab("gif")}>GIF</button>
+      </div>
+
+      {tab === "sticker" && (
+        <div className="sep-sticker-body">
+          <div className="sep-sticker-search">
+            <FaSearch size={12} color="var(--text-tertiary)" />
+            <input placeholder="Tìm kiếm sticker..." />
+          </div>
+          <div className="sep-sticker-label">Gần đây</div>
+          <div className="sep-sticker-grid">
+            {pack.stickers.map((url, i) => (
+              <button key={i} className="sep-sticker-item" onClick={() => { onSelectSticker(url); onClose(); }}>
+                <img src={url} alt="" loading="lazy" />
+              </button>
+            ))}
+          </div>
+          {/* Pack selector */}
+          <div className="sep-pack-bar">
+            <button className="sep-pack-nav" onClick={() => setPackIdx(Math.max(0, packIdx - 1))}><FaChevronLeft size={10} /></button>
+            {STICKER_PACKS.map((p, i) => (
+              <button key={p.id} className={`sep-pack-btn ${packIdx === i ? "active" : ""}`} onClick={() => setPackIdx(i)}>
+                <img src={p.stickers[0]} alt={p.name} />
+              </button>
+            ))}
+            <button className="sep-pack-nav" onClick={() => setPackIdx(Math.min(STICKER_PACKS.length - 1, packIdx + 1))}><FaChevronRight size={10} /></button>
+            <button className="sep-pack-nav" title="Thêm sticker"><FaPlus size={10} /></button>
+          </div>
+        </div>
+      )}
+
+      {tab === "emoji" && (
+        <div className="sep-emoji-body">
+          <EmojiPicker
+            onEmojiClick={(e) => { onSelectEmoji(e.emoji); onClose(); }}
+            width="100%"
+            height={360}
+            searchPlaceholder="Tìm emoji..."
+            previewConfig={{ showPreview: false }}
+          />
+        </div>
+      )}
+
+      {tab === "gif" && (
+        <div className="sep-gif-body">
+          <div className="sep-gif-placeholder">
+            <FaRegSmile size={32} />
+            <p>GIF đang được phát triển</p>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 function RoomItem({ room, active, onClick, isPinned, onTogglePin }) {
   const badge = TYPE_BADGE[room.type] || TYPE_BADGE["group"];
-  const isCloud = room.type === 'cloud';
   const [showMenu, setShowMenu] = useState(false);
 
   return (
-    <div 
-      className={`room-item ${active ? "active" : ""} ${isPinned ? "pinned" : ""}`} 
+    <div
+      className={`room-item ${active ? "active" : ""} ${isPinned ? "pinned" : ""}`}
       onClick={onClick}
       onMouseLeave={() => setShowMenu(false)}
     >
-      <div className="room-avatar" style={{ background: isCloud ? '#0068FF' : room.color }}>
-        {isCloud ? <FaCloud size={16} color="white" /> : room.initials}
+      <div className="room-avatar" style={{ background: room.color }}>
+        {room.initials}
       </div>
       <div className="room-info">
         <div className="room-name">{room.name}</div>
-        <div
-          className="room-badge"
-          style={{ background: badge.bg, color: badge.color }}
-        >
-          {room.type === "group" && <FaUsers size={8} />}
-          {room.type === "dm" && <FaUser size={8} />}
-          {room.type === "cloud" && <FaCloud size={8} />}
+        <div className="room-badge" style={{ background: badge.bg, color: badge.color }}>
+          {room.type === "group" ? <FaUsers size={8} /> : <FaUser size={8} />}
           {badge.label}
         </div>
         <div className="room-last">{room.lastMsg}</div>
@@ -88,74 +173,76 @@ function RoomItem({ room, active, onClick, isPinned, onTogglePin }) {
   );
 }
 
+// ── Message bubble ───────────────────────────────────────────
 function Message({ msg, isMe }) {
   const isFile = msg.type === "file";
-  const isDoc = isFile && msg.content?.toLowerCase().includes('.doc');
-  const isPdf = isFile && msg.content?.toLowerCase().includes('.pdf');
-  const fileColor = isPdf ? '#EF4444' : isDoc ? '#3B82F6' : '#10B981';
+  const ext = (msg.fileName || "").split(".").pop().toLowerCase();
+  const isPdf = ext === "pdf";
+  const isDoc = ["doc","docx"].includes(ext);
+  const isImg = ["jpg","jpeg","png","gif","webp"].includes(ext);
+  const isSticker = msg.type === "text" && (msg.content?.startsWith("https://stickershop.line-scdn.net") || msg.content?.startsWith("https://sticker"));
+  const fileColor = isPdf ? "#EF4444" : isDoc ? "#3B82F6" : "#10B981";
 
   return (
     <div className={`msg-wrap ${isMe ? "me" : ""}`}>
       {!isMe && (
-        <div className="msg-avatar" style={{ background: msg.color }}>
-          {msg.avatar}
-        </div>
+        <div className="msg-avatar" style={{ background: msg.color }}>{msg.avatar}</div>
       )}
       <div className="msg-body">
         {!isMe && <div className="msg-sender">{msg.sender}</div>}
-        
-        {msg.type === "text" && (
+
+        {isSticker && (
+          <img src={msg.content} alt="sticker" className="msg-sticker" />
+        )}
+
+        {!isSticker && msg.type === "text" && (
           <div className={`msg-bubble ${isMe ? "me" : ""}`}>{msg.content}</div>
         )}
-        
-        {isFile && (
-          <div className="msg-file-card">
-            <div className="mfc-icon" style={{ background: fileColor }}>
-              {isPdf ? "PDF" : isDoc ? "DOC" : "FILE"}
-            </div>
-            <div className="mfc-info">
-              <div className="mfc-name">{msg.content}</div>
-              <div className="mfc-meta">
-                <span>{msg.fileSize || "1.2 MB"}</span>
-                <span className="mfc-cloud-tag"><FaCloud size={9} /> Đã có trên Cloud</span>
-              </div>
-            </div>
-            <button className="mfc-download">
-              <FaDownload size={14} />
-            </button>
+
+        {isFile && isImg && msg.fileUrl && (
+          <div className="msg-img-wrap">
+            <img src={msg.fileUrl} alt={msg.fileName} className="msg-img" />
           </div>
         )}
-        
-        <div className="msg-time">{msg.time}</div>
+
+        {isFile && !isImg && (
+          <div className="msg-file-card">
+            <div className="mfc-icon" style={{ background: fileColor }}>
+              {isPdf ? "PDF" : isDoc ? "DOC" : ext.toUpperCase().slice(0,4)}
+            </div>
+            <div className="mfc-info">
+              <div className="mfc-name">{msg.fileName || msg.content}</div>
+              <div className="mfc-meta">
+                <span>{msg.fileSize || ""}</span>
+                <span className="mfc-cloud-tag"><FaCloud size={9} /> Cloud</span>
+              </div>
+            </div>
+            {msg.fileUrl && (
+              <a className="mfc-download" href={msg.fileUrl} target="_blank" rel="noreferrer">
+                <FaDownload size={14} />
+              </a>
+            )}
+          </div>
+        )}
+
+        {!isSticker && <div className="msg-time">{msg.time}</div>}
       </div>
     </div>
   );
 }
 
-// ---------------- ADAPTERS ----------------
+// ── Adapters ─────────────────────────────────────────────────
 const adaptConversation = (c, myUserId) => {
   if (!c) return null;
-  let name = "";
-  let initials = "";
-  let subtitle = "";
-  let color = "#1B6EF3";
-  let type = c.type === "direct" ? "dm" : "group"; // temporarily no class separation
+  let name, initials, subtitle, color;
+  const type = c.type === "direct" ? "dm" : "group";
 
-  // Nhận diện My Cloud
-  const isCloud = c.type === "cloud" || (c.type === "direct" && c.participants?.length === 1 && c.participants[0]._id === myUserId) || (c.participants?.length === 2 && c.participants[0]._id === c.participants[1]._id);
-  
-  if (isCloud) {
-    type = "cloud";
-    name = "My Documents";
-    initials = "☁️";
-    color = "#0068FF";
-    subtitle = "Lưu và đồng bộ dữ liệu giữa các thiết bị";
-  } else if (c.type === "direct") {
+  if (c.type === "direct") {
     const other = c.participants?.find((p) => p._id !== myUserId);
-    name = other ? other.username : "Unknown User";
+    name = other?.username || "Người dùng";
     initials = name.substring(0, 2).toUpperCase();
     color = "#9333EA";
-    subtitle = "Bạn bè";
+    subtitle = other?.isOnline ? "🟢 Đang hoạt động" : "Ngoại tuyến";
   } else {
     name = c.name || "Nhóm";
     initials = name.substring(0, 2).toUpperCase();
@@ -165,185 +252,105 @@ const adaptConversation = (c, myUserId) => {
 
   let lastMsg = "Chưa có tin nhắn";
   if (c.latestMessage) {
-    if (c.latestMessage.type === "text") lastMsg = c.latestMessage.content;
-    else lastMsg = "Đã gửi file đính kèm";
+    lastMsg = c.latestMessage.type === "text"
+      ? c.latestMessage.content
+      : "📎 Đã gửi file";
   }
 
   let time = "";
-  if (c.lastMessageAt) {
-    try {
-      time = format(new Date(c.lastMessageAt), "HH:mm");
-    } catch (e) {}
-  }
+  try { if (c.lastMessageAt) time = format(new Date(c.lastMessageAt), "HH:mm"); } catch {}
 
-  return {
-    id: c._id,
-    type,
-    name,
-    lastMsg,
-    time,
-    unread: c.preference?.unreadCount || 0,
-    color,
-    initials,
-    subtitle,
-    isCloud,
-    raw: c,
-  };
+  return { id: c._id, type, name, lastMsg, time, unread: c.preference?.unreadCount || 0, color, initials, subtitle, raw: c };
 };
 
 const adaptMessage = (m, myUserId) => {
   const isMe = m.senderId?._id === myUserId;
   let timeStr = "";
-  try {
-    timeStr = format(new Date(m.createdAt), "HH:mm");
-  } catch (e) {}
+  try { timeStr = format(new Date(m.createdAt), "HH:mm"); } catch {}
+
+  // Xác định loại message
+  const hasMedia = m.mediaIds?.length > 0 || m.media?.length > 0;
+  const mediaItem = m.media?.[0] || null;
+  const isFile = hasMedia || m.type === "file";
 
   return {
     id: m._id,
     senderId: m.senderId?._id,
     sender: m.senderId?.username || "Unknown",
-    content: m.content,
+    content: m.content || "",
     time: timeStr,
-    type: m.type === "text" || !m.type ? "text" : "file",
+    type: isFile ? "file" : "text",
+    fileName: mediaItem?.fileName || m.content,
+    fileUrl: mediaItem?.url || null,
+    fileSize: mediaItem?.size ? `${(mediaItem.size / 1024).toFixed(0)} KB` : null,
     color: isMe ? "#E91E63" : "#4CAF50",
     avatar: m.senderId?.username?.substring(0, 1).toUpperCase() || "U",
     isMe,
     raw: m,
   };
 };
-// ------------------------------------------
 
-export default function ChatPage({ defaultCloud = false }) {
+// ── Main Component ────────────────────────────────────────────
+export default function ChatPage() {
   const { user } = useAuthStore();
   const {
-    conversations,
-    fetchConversations,
-    isFetchingConversations,
-    hasMoreConversations,
-    activeRoom,
-    setActiveRoom,
-    fetchMessages,
-    messages,
-    isFetchingMessages,
-    hasMoreMessages,
-    sendMessage,
-    handleSocketNewMessage,
+    conversations, fetchConversations, isFetchingConversations, hasMoreConversations,
+    activeRoom, setActiveRoom, fetchMessages, messages, isFetchingMessages,
+    hasMoreMessages, sendMessage, handleSocketNewMessage,
   } = useChatStore();
 
   const [activeTab, setActiveTab] = useState(0);
   const [input, setInput] = useState("");
-  const messagesEndRef = useRef(null);
+  const [showAddFriend, setShowAddFriend] = useState(false);
+  const [isUploadingMedia, setIsUploadingMedia] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [showStickerPicker, setShowStickerPicker] = useState(false);
   const [pinnedIds, setPinnedIds] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('pinned-rooms')) || []; } catch(e) { return []; }
+    try { return JSON.parse(localStorage.getItem("pinned-rooms")) || []; } catch { return []; }
   });
+  const messagesEndRef = useRef(null);
+  const imageInputRef = useRef(null);
+  const fileInputRef = useRef(null);
+  const videoInputRef = useRef(null);
 
   const togglePin = (roomId) => {
-    setPinnedIds(prev => {
-      const newIds = prev.includes(roomId) ? prev.filter(id => id !== roomId) : [...prev, roomId];
-      localStorage.setItem('pinned-rooms', JSON.stringify(newIds));
-      return newIds;
+    setPinnedIds((prev) => {
+      const next = prev.includes(roomId) ? prev.filter((id) => id !== roomId) : [...prev, roomId];
+      localStorage.setItem("pinned-rooms", JSON.stringify(next));
+      return next;
     });
   };
 
-  // Scroll to bottom when new messages come
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, activeRoom]);
 
-  // Initial fetch and Socket connection
   useEffect(() => {
     fetchConversations(true);
-
     socketService.connect();
-    socketService.on("new_message", (msg) => {
-      handleSocketNewMessage(msg);
-    });
-
-    return () => {
-      socketService.disconnect();
-    };
+    socketService.on("new_message", handleSocketNewMessage);
+    return () => socketService.disconnect();
   }, []);
 
-  // Handle auto-select for defaultCloud
-  useEffect(() => {
-    if (defaultCloud) {
-      const cloudRoom = roomList.find((r) => r.isCloud);
-      if (cloudRoom && (!activeRoom || activeRoom._id !== cloudRoom.raw._id)) {
-        setActiveRoom(cloudRoom.raw);
-      }
-    } else {
-      if (activeRoom && activeRoom._id === 'mock-cloud-id') {
-        setActiveRoom(null);
-      }
+  // Send file in chat
+  const handleUpload = useCallback(async (file) => {
+    if (!file || !activeRoom) return;
+    try {
+      setIsUploadingMedia(true);
+      const media = await uploadFile(file, { folder: `zaloapp/chats/${activeRoom._id}` });
+      await sendMessage(activeRoom._id, file.name, [media._id || media.id]);
+    } catch (err) {
+      alert("Gửi file thất bại: " + (err.message || "Lỗi không xác định"));
+    } finally {
+      setIsUploadingMedia(false);
     }
-  }, [defaultCloud, conversations, activeRoom]);
+  }, [activeRoom, sendMessage]);
 
-  // UI mapping
-  let roomList = conversations.map((c) => adaptConversation(c, user?.id)).filter(Boolean);
-  
-  // Tự động ghim hoặc thêm My Cloud nếu chưa có (Mocking purpose)
-  const hasCloud = roomList.some(r => r.isCloud);
-  if (!hasCloud && user) {
-    const fakeCloud = {
-      id: 'mock-cloud-id',
-      type: 'cloud',
-      name: 'My Documents',
-      lastMsg: "Lưu và đồng bộ dữ liệu...",
-      time: "",
-      unread: 0,
-      color: "#0068FF",
-      initials: "☁️",
-      subtitle: "Lưu trữ và đồng bộ dữ liệu giữa các thiết bị",
-      isCloud: true,
-      raw: { _id: 'mock-cloud-id', type: 'cloud', participants: [{ _id: user.id }] }
-    };
-    roomList.unshift(fakeCloud);
-  }
-
-  let filtered = roomList.filter((r) => {
-    if (defaultCloud) return r.isCloud;
-    if (activeTab === 0) return true;
-    if (activeTab === 1) return r.type === "group";
-    if (activeTab === 2) return r.type === "dm";
-    return true;
-  });
-
-  // Sort: Pinned first
-  filtered.sort((a, b) => {
-    const aPin = pinnedIds.includes(a.id) || a.isCloud; // Ưu tiên mây
-    const bPin = pinnedIds.includes(b.id) || b.isCloud;
-    if (aPin === bPin) return 0;
-    return aPin ? -1 : 1;
-  });
-
-  let activeUiRoom = null;
-  if (activeRoom) {
-    if (activeRoom._id === 'mock-cloud-id') {
-      activeUiRoom = roomList.find(r => r.id === 'mock-cloud-id') || null;
-    } else {
-      activeUiRoom = adaptConversation(activeRoom, user?.id);
-    }
-  }
-  const activeIsCloud = activeUiRoom?.isCloud;
-  
-  // Notice: The backend returns latest messages FIRST. 
-  // We need to reverse them before displaying so newest are at the bottom.
-  const activeMessagesRaw = activeRoom && messages[activeRoom._id] ? messages[activeRoom._id] : [];
-  const activeMessages = [...activeMessagesRaw].reverse().map((m) => adaptMessage(m, user?.id));
-
-  // Tính dung lượng ảo (Storage Calculation Mock)
-  const storageData = useMemo(() => {
-    if (!activeIsCloud) return { used: 0, total: 1024, files: 0, images: 0 };
-    const filesSize = activeMessages.filter(m => m.type === 'file').length * 2.1;
-    const imagesSize = activeMessages.filter(m => m.type === 'image').length * 3.5;
-    const others = 500; // Base system files mock
-    return {
-      used: parseFloat((filesSize + imagesSize + others).toFixed(1)),
-      total: 1024,
-      files: filesSize,
-      images: imagesSize
-    };
-  }, [activeMessages, activeIsCloud]);
+  const handleFileInput = useCallback((e) => {
+    const file = e.target.files?.[0];
+    if (file) handleUpload(file);
+    e.target.value = "";
+  }, [handleUpload]);
 
   const handleSend = async () => {
     if (!input.trim() || !activeRoom) return;
@@ -351,46 +358,76 @@ export default function ChatPage({ defaultCloud = false }) {
     if (ok) setInput("");
   };
 
+  const handleStickerSend = async (url) => {
+    if (!activeRoom) return;
+    await sendMessage(activeRoom._id, url);
+  };
+
+  const handleEmojiSelect = (emoji) => {
+    setInput((prev) => prev + emoji);
+  };
+
+  // Build room list
+  let roomList = conversations.map((c) => adaptConversation(c, user?.id)).filter(Boolean);
+
+  // Filter by tab + search
+  let filtered = roomList.filter((r) => {
+    if (activeTab === 1 && r.type !== "group") return false;
+    if (activeTab === 2 && r.type !== "dm") return false;
+    if (searchQuery && !r.name.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+    return true;
+  });
+
+  // Sort: pinned first
+  filtered.sort((a, b) => {
+    const aPin = pinnedIds.includes(a.id);
+    const bPin = pinnedIds.includes(b.id);
+    if (aPin === bPin) return 0;
+    return aPin ? -1 : 1;
+  });
+
+  const activeUiRoom = activeRoom ? adaptConversation(activeRoom, user?.id) : null;
+  const activeMessagesRaw = activeRoom && messages[activeRoom._id] ? messages[activeRoom._id] : [];
+  const activeMessages = [...activeMessagesRaw].reverse().map((m) => adaptMessage(m, user?.id));
+
   return (
     <div className="chat-page">
-      {/* ── DANH SÁCH ROOM ── */}
+      {/* ── ROOM SIDEBAR ── */}
       <div className="room-sidebar">
         <div className="rs-header">
           <span className="rs-title">Tin nhắn</span>
-          {!defaultCloud && (
-            <button className="rs-add-btn">
+          <div className="rs-header-actions">
+            <button className="rs-add-btn" onClick={() => setShowAddFriend(true)} title="Thêm bạn">
+              <FaUserPlus size={16} />
+            </button>
+            <button className="rs-add-btn" title="Tạo nhóm">
               <FaPlus size={12} />
             </button>
-          )}
+          </div>
         </div>
-        {!defaultCloud && (
-          <>
-            <div className="rs-search">
-              <FaSearch size={12} color="#9CA3AF" />
-              <input placeholder="Tìm kiếm..." />
-            </div>
-            <div className="rs-tabs">
-              {TABS.map((t, i) => (
-                <button
-                  key={t}
-                  className={`rs-tab ${activeTab === i ? "active" : ""}`}
-                  onClick={() => setActiveTab(i)}
-                >
-                  {t}
-                </button>
-              ))}
-            </div>
-          </>
-        )}
+
+        <div className="rs-search">
+          <FaSearch size={12} color="#9CA3AF" />
+          <input
+            placeholder="Tìm kiếm..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
+        </div>
+
+        <div className="rs-tabs">
+          {TABS.map((t, i) => (
+            <button key={t} className={`rs-tab ${activeTab === i ? "active" : ""}`} onClick={() => setActiveTab(i)}>
+              {t}
+            </button>
+          ))}
+        </div>
+
         <div className="rs-list">
           {isFetchingConversations && conversations.length === 0 ? (
-            <div style={{ textAlign: "center", padding: "20px", color: "#6b7280" }}>
-              <FaSpinner className="spin" /> Đang tải...
-            </div>
+            <div className="rs-loading"><FaSpinner className="spin" /> Đang tải...</div>
           ) : filtered.length === 0 ? (
-            <div style={{ textAlign: "center", padding: "20px", color: "#6b7280", fontSize: 13 }}>
-              Không có hội thoại nào
-            </div>
+            <div className="rs-empty">Không có hội thoại nào</div>
           ) : (
             filtered.map((r) => (
               <RoomItem
@@ -404,22 +441,20 @@ export default function ChatPage({ defaultCloud = false }) {
             ))
           )}
           {hasMoreConversations && (
-            <button 
-              className="load-more-btn"
-              onClick={() => fetchConversations()}
-              disabled={isFetchingConversations}
-            >
+            <button className="load-more-btn" onClick={() => fetchConversations()} disabled={isFetchingConversations}>
               Tải thêm
             </button>
           )}
         </div>
       </div>
 
-      {/* ── VÙNG CHAT ── */}
+      {/* ── CHAT MAIN ── */}
       <div className="chat-main">
         {!activeUiRoom ? (
           <div className="chat-empty-state">
-            Vui lòng chọn một cuộc trò chuyện để bắt đầu
+            <FaCommentDots size={48} />
+            <h3>Chọn một cuộc trò chuyện</h3>
+            <p>Chọn từ danh sách bên trái để bắt đầu nhắn tin</p>
           </div>
         ) : (
           <>
@@ -435,29 +470,9 @@ export default function ChatPage({ defaultCloud = false }) {
                 </div>
               </div>
               <div className="ch-actions">
-                {activeUiRoom.type === "class" && (
-                  <>
-                    <button className="ch-btn">
-                      <FaFile size={13} /> Tài liệu
-                    </button>
-                    <button className="ch-btn">
-                      <FaUsers size={13} /> Thành viên
-                    </button>
-                  </>
-                )}
-                {!activeIsCloud && (
-                  <>
-                    <button className="ch-btn-icon">
-                      <FaPhone size={14} />
-                    </button>
-                    <button className="ch-btn-icon">
-                      <FaVideoCall size={14} />
-                    </button>
-                  </>
-                )}
-                <button className="ch-btn-icon" onClick={() => document.querySelector('.chat-page').classList.toggle('panel-hidden')}>
-                  <FaEllipsisV size={14} />
-                </button>
+                <button className="ch-btn-icon" title="Gọi thoại"><FaPhone size={14} /></button>
+                <button className="ch-btn-icon" title="Video call"><FaVideoCall size={14} /></button>
+                <button className="ch-btn-icon" title="Tùy chọn"><FaEllipsisV size={14} /></button>
               </div>
             </div>
 
@@ -465,46 +480,93 @@ export default function ChatPage({ defaultCloud = false }) {
             <div className="chat-messages">
               {hasMoreMessages[activeRoom._id] && (
                 <div style={{ textAlign: "center", padding: 10 }}>
-                   <button 
-                     onClick={() => fetchMessages(activeRoom._id)} 
-                     className="load-more-btn"
-                   >
-                     {isFetchingMessages ? "Đang tải..." : "Tải thêm tin nhắn cũ"}
-                   </button>
+                  <button className="load-more-btn" onClick={() => fetchMessages(activeRoom._id)} disabled={isFetchingMessages}>
+                    {isFetchingMessages ? "Đang tải..." : "Tải thêm tin nhắn cũ"}
+                  </button>
                 </div>
               )}
-
               {activeMessages.map((msg) => (
                 <Message key={msg.id} msg={msg} isMe={msg.isMe} />
               ))}
               <div ref={messagesEndRef} />
             </div>
 
-            {/* Input */}
-            <div className="chat-input-bar">
-              <button className="cib-btn">
-                <FaPaperclip size={15} />
-              </button>
-              <button className="cib-btn">
-                <FaImage size={15} />
-              </button>
-              <button className="cib-btn">
-                <FaVideo size={15} />
-              </button>
-              <div className="cib-input">
-                <input
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  placeholder="Nhập tin nhắn..."
-                  onKeyDown={(e) => e.key === "Enter" && handleSend()}
-                />
+            {/* Input bar - Zalo style */}
+            <div className="chat-input-area">
+              {/* Toolbar top */}
+              <div className="cia-toolbar">
+                {/* Hidden file inputs */}
+                <input ref={imageInputRef} type="file" accept="image/*" style={{ display:"none" }} onChange={handleFileInput} />
+                <input ref={videoInputRef} type="file" accept="video/*" style={{ display:"none" }} onChange={handleFileInput} />
+                <input ref={fileInputRef} type="file" accept="*/*" style={{ display:"none" }} onChange={handleFileInput} />
+
+                <button className="cia-tool-btn" title="Sticker / Emoji" onClick={() => setShowStickerPicker(!showStickerPicker)}>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><path d="M8 13s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>
+                </button>
+                <button className="cia-tool-btn" title="Gửi ảnh" onClick={() => imageInputRef.current?.click()}>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                </button>
+                <button className="cia-tool-btn" title="Đính kèm file" onClick={() => fileInputRef.current?.click()}>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+                </button>
+                <button className="cia-tool-btn" title="Gửi video" onClick={() => videoInputRef.current?.click()}>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>
+                </button>
+                <button className="cia-tool-btn" title="Gửi thư mục" onClick={() => { if(fileInputRef.current){ fileInputRef.current.setAttribute("webkitdirectory",""); fileInputRef.current.click(); } }}>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+                </button>
+                <div className="cia-tool-divider" />
+                <button className="cia-tool-btn" title="Tạo bình chọn">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+                </button>
+                <button className="cia-tool-btn" title="Nhắc hẹn">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                </button>
+                <button className="cia-tool-btn" title="Thêm">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>
+                </button>
               </div>
-              <button className="cib-btn">
-                <FaSmile size={15} />
-              </button>
-              <button className="cib-send" onClick={handleSend}>
-                <FaPaperPlane size={14} />
-              </button>
+
+              {/* Text input row */}
+              <div className="cia-input-row">
+                <div className="cia-input-wrap">
+                  <input
+                    className="cia-input"
+                    value={input}
+                    onChange={(e) => setInput(e.target.value)}
+                    placeholder="Nhập @, tin nhắn tới đây"
+                    onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSend()}
+                  />
+                  <button className="cia-emoji-inline" onClick={() => setShowStickerPicker(!showStickerPicker)}>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><path d="M8 13s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>
+                  </button>
+                </div>
+                {input.trim() ? (
+                  <button className="cia-send-btn" onClick={handleSend}>
+                    <FaPaperPlane size={16} />
+                  </button>
+                ) : (
+                  <button className="cia-like-btn" onClick={() => activeRoom && sendMessage(activeRoom._id, "👍")}>
+                    <FaThumbsUp size={18} />
+                  </button>
+                )}
+              </div>
+
+              {/* Sticker/Emoji picker */}
+              {showStickerPicker && (
+                <StickerEmojiPicker
+                  onSelectEmoji={handleEmojiSelect}
+                  onSelectSticker={handleStickerSend}
+                  onClose={() => setShowStickerPicker(false)}
+                />
+              )}
+
+              {/* Upload indicator */}
+              {isUploadingMedia && (
+                <div className="cia-uploading">
+                  <FaSpinner className="spin" size={12} /> Đang gửi file...
+                </div>
+              )}
             </div>
           </>
         )}
@@ -513,68 +575,33 @@ export default function ChatPage({ defaultCloud = false }) {
       {/* ── RIGHT PANEL ── */}
       {activeUiRoom && (
         <div className="chat-right-panel">
-          {activeIsCloud ? (
-            <div className="cloud-panel">
-              <div className="cloud-panel-header">
-                <div className="cp-icon"><FaCloud size={24} /></div>
-                <h3>My Documents</h3>
-                <p>Lưu trữ và truy cập nhanh những nội dung quan trọng của bạn ngay trên Zalo</p>
-              </div>
-              
-              <div className="cp-storage">
-                <div className="cp-storage-top">
-                  <span>Dung lượng</span>
-                  <span className="cp-storage-value">{storageData.used} MB / 1 GB</span>
-                </div>
-                <div className="cp-progress">
-                  <div className="cp-pg-bar image" style={{ width: `${(storageData.images / storageData.total) * 100}%` }}></div>
-                  <div className="cp-pg-bar video" style={{ width: `0%` }}></div>
-                  <div className="cp-pg-bar file" style={{ width: `${(storageData.files / storageData.total) * 100}%` }}></div>
-                  <div className="cp-pg-bar other" style={{ width: `${((storageData.used - storageData.images - storageData.files) / storageData.total) * 100}%` }}></div>
-                </div>
-                <div className="cp-legend">
-                  <span><div className="lg-dot image"></div>Ảnh</span>
-                  <span><div className="lg-dot video"></div>Video</span>
-                  <span><div className="lg-dot file"></div>File</span>
-                  <span><div className="lg-dot other"></div>Khác</span>
-                </div>
-                
-                <button className="cp-clean-btn">Xem và dọn dẹp My Documents</button>
-              </div>
-
-              <div className="cp-upgrade-card">
-                <div className="cp-upgrade-icon">🚀</div>
-                <div className="cp-upgrade-info">
-                  <h4>Nâng cấp dung lượng My Documents</h4>
-                  <p>Mở rộng lên đến 100GB. Đồng bộ dữ liệu vĩnh viễn với zCloud.</p>
-                </div>
-                <button className="cp-upgrade-btn">Thêm dung lượng</button>
-              </div>
+          <div className="crp-header">
+            <div className="crp-avatar" style={{ background: activeUiRoom.color }}>
+              {activeUiRoom.initials}
             </div>
-          ) : (
-            <>
-              <div className="crp-header">
-                <div className="crp-avatar" style={{ background: activeUiRoom.color }}>
-                  {activeUiRoom.initials}
+            <div className="crp-name">{activeUiRoom.name}</div>
+            <div className="crp-sub">{activeUiRoom.subtitle}</div>
+          </div>
+          <div className="crp-section">
+            <div className="crp-section-title">Thành viên</div>
+            {activeUiRoom.raw.participants?.map((m) => (
+              <div key={m._id} className="crp-member">
+                <div className="crp-m-av" style={{ background: "#f3f4f6", color: "#1f2937" }}>
+                  {m.username?.substring(0, 1).toUpperCase() || "U"}
                 </div>
-                <div className="crp-name">{activeUiRoom.name}</div>
+                <span className="crp-m-name">{m.username}</span>
               </div>
-
-              <div className="crp-section">
-                <div className="crp-section-title">Thành viên</div>
-                {activeUiRoom.raw.participants?.map((m) => (
-                  <div key={m._id} className="crp-member">
-                    <div className="crp-m-av" style={{ background: "#f3f4f6", color: "#1f2937" }}>
-                      {m.username?.substring(0, 1).toUpperCase() || "U"}
-                    </div>
-                    <span className="crp-m-name">{m.username}</span>
-                  </div>
-                ))}
-              </div>
-            </>
-          )}
+            ))}
+          </div>
         </div>
       )}
+
+      <AddFriendModal isOpen={showAddFriend} onClose={() => setShowAddFriend(false)} />
     </div>
   );
+}
+
+// Missing import fix
+function FaCommentDots(props) {
+  return <svg viewBox="0 0 512 512" width={props.size || 16} height={props.size || 16} fill="currentColor" {...props}><path d="M256 32C114.6 32 0 125.1 0 240c0 49.6 21.4 95 57 130.7C44.5 421.1 2.7 466 2.2 466.5c-2.2 2.3-2.8 5.7-1.5 8.7S4.8 480 8 480c66.3 0 116-31.8 140.6-51.4C169.1 433.1 212.1 448 256 448c141.4 0 256-93.1 256-208S397.4 32 256 32z"/></svg>;
 }

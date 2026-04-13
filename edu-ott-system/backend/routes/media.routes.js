@@ -97,6 +97,26 @@ router.post(
  *       200:
  *         description: Media fetched
  */
+/**
+ * @openapi
+ * /media/my:
+ *   get:
+ *     tags: [Media]
+ *     summary: Get authenticated user's uploaded media list
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema: { type: integer }
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer }
+ *     responses:
+ *       200:
+ *         description: My media list fetched
+ */
+router.get('/my', auth, mediaController.getMyMedia);
 router.get('/:id', auth, validate({ params: mediaIdParamSchema }), mediaController.getMediaById);
 /**
  * @openapi

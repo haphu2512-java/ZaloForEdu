@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
+import { useFocusEffect } from 'expo-router';
 import {
   ActivityIndicator,
   FlatList,
@@ -37,17 +38,23 @@ export default function NotificationsScreen() {
     setItems(res.items || []);
   }, []);
 
-  useEffect(() => {
-    const run = async () => {
-      try {
-        setLoading(true);
-        await loadData();
-      } finally {
-        setLoading(false);
-      }
-    };
-    run();
-  }, [loadData]);
+  useFocusEffect(
+    useCallback(() => {
+      let isActive = true;
+      const run = async () => {
+        try {
+          if (items.length === 0) setLoading(true);
+          await loadData();
+        } finally {
+          if (isActive) setLoading(false);
+        }
+      };
+      run();
+      return () => {
+        isActive = false;
+      };
+    }, [loadData])
+  );
 
   const onRefresh = useCallback(async () => {
     try {

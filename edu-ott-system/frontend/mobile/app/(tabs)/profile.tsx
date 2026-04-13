@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useFocusEffect } from 'expo-router';
 import {
   StyleSheet,
   Image,
@@ -12,21 +13,13 @@ import {
   Modal,
   KeyboardAvoidingView,
   Dimensions,
-<<<<<<< HEAD:edu-ott-system/frontend/mobile-app/app/(tabs)/profile.tsx
-=======
   Switch,
->>>>>>> Refactor_Project:edu-ott-system/frontend/mobile/app/(tabs)/profile.tsx
 } from 'react-native';
 import { Text, View } from '@/components/Themed';
 import Colors from '@/constants/Colors';
 import { useColorScheme } from '@/components/useColorScheme';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { Ionicons } from '@expo/vector-icons';
-<<<<<<< HEAD:edu-ott-system/frontend/mobile-app/app/(tabs)/profile.tsx
-import { useAuth } from '@/context/auth';
-import * as authService from '@/utils/authService';
-import * as ImagePicker from 'expo-image-picker';
-=======
 import * as ImagePicker from 'expo-image-picker';
 import { useAuth } from '@/context/auth';
 import { changePassword, logoutAll, resendVerificationEmail } from '@/utils/authService';
@@ -34,58 +27,22 @@ import { uploadImageToCloudinary } from '@/utils/mediaService';
 import { deleteMyAccount } from '@/utils/userService';
 import { getMySettings, updateMySettings, type UserSettings, type ThemeMode } from '@/utils/settingsService';
 import { useRouter } from 'expo-router';
->>>>>>> Refactor_Project:edu-ott-system/frontend/mobile/app/(tabs)/profile.tsx
+import EditProfileModal from '@/components/profile/EditProfileModal';
+import ChangeAvatarModal from '@/components/profile/ChangeAvatarModal';
+import ChangePasswordModal from '@/components/profile/ChangePasswordModal';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 type EditableFields = {
-<<<<<<< HEAD:edu-ott-system/frontend/mobile-app/app/(tabs)/profile.tsx
-  fullName: string;
-  phoneNumber: string;
-  bio: string;
-  department: string;
-  dateOfBirth: string;
-=======
   username: string;
   phone: string;
   email: string;
   avatarUrl: string;
->>>>>>> Refactor_Project:edu-ott-system/frontend/mobile/app/(tabs)/profile.tsx
 };
 
 export default function ProfileScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const colors = Colors[colorScheme];
-<<<<<<< HEAD:edu-ott-system/frontend/mobile-app/app/(tabs)/profile.tsx
-  const { user, logout, updateUser, refreshUser, setUser } = useAuth();
-
-  const [refreshing, setRefreshing] = useState(false);
-  const [editModalVisible, setEditModalVisible] = useState(false);
-  const [passwordModalVisible, setPasswordModalVisible] = useState(false);
-  const [avatarModalVisible, setAvatarModalVisible] = useState(false);
-
-  // Edit Profile fields
-  const [editFields, setEditFields] = useState<EditableFields>({
-    fullName: '',
-    phoneNumber: '',
-    bio: '',
-    department: '',
-    dateOfBirth: '',
-  });
-  const [isUpdating, setIsUpdating] = useState(false);
-
-  // Change Password fields
-  const [currentPassword, setCurrentPassword] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [confirmNewPassword, setConfirmNewPassword] = useState('');
-  const [isChangingPassword, setIsChangingPassword] = useState(false);
-  const [showCurrentPw, setShowCurrentPw] = useState(false);
-  const [showNewPw, setShowNewPw] = useState(false);
-
-  // Avatar URL input
-  const [avatarUrl, setAvatarUrl] = useState('');
-  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
-=======
   const { user, logout, updateUser, refreshUser } = useAuth();
   const router = useRouter();
 
@@ -100,14 +57,8 @@ export default function ProfileScreen() {
   const [isChangingPassword, setIsChangingPassword] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
-  // Edit Profile fields
-  const [editFields, setEditFields] = useState<EditableFields>({
-    username: '',
-    phone: '',
-    email: '',
-    avatarUrl: '',
-  });
-  const [isUpdating, setIsUpdating] = useState(false);
+  // Edit Profile fields (moved to EditProfileModal)
+
 
   // Avatar URL input
   const [avatarUrl, setAvatarUrl] = useState('');
@@ -117,87 +68,59 @@ export default function ProfileScreen() {
   const [settings, setSettings] = useState<UserSettings | null>(null);
   const [isLoadingSettings, setIsLoadingSettings] = useState(false);
   const [isSavingSettings, setIsSavingSettings] = useState(false);
->>>>>>> Refactor_Project:edu-ott-system/frontend/mobile/app/(tabs)/profile.tsx
 
   useEffect(() => {
-    if (user) {
-      setEditFields({
-<<<<<<< HEAD:edu-ott-system/frontend/mobile-app/app/(tabs)/profile.tsx
-        fullName: user.fullName || '',
-        phoneNumber: user.phoneNumber || '',
-        bio: user.bio || '',
-        department: user.department || '',
-        dateOfBirth: user.dateOfBirth ? user.dateOfBirth.split('T')[0] : '',
-=======
-        username: user.username || '',
-        phone: user.phone || '',
-        email: user.email || '',
-        avatarUrl: user.avatarUrl || '',
->>>>>>> Refactor_Project:edu-ott-system/frontend/mobile/app/(tabs)/profile.tsx
-      });
-    }
+    // Other simple syncing logic if needed
   }, [user]);
 
-<<<<<<< HEAD:edu-ott-system/frontend/mobile-app/app/(tabs)/profile.tsx
-  const onRefresh = useCallback(async () => {
-    setRefreshing(true);
-    await refreshUser();
-    setRefreshing(false);
-  }, []);
-
-  // ==================== EDIT PROFILE ====================
-  const handleSaveProfile = async () => {
-    if (!editFields.fullName.trim()) {
-      Alert.alert('Lỗi', 'Họ tên không được để trống');
-      return;
-    }
-    setIsUpdating(true);
-    try {
-      await updateUser({
-        fullName: editFields.fullName.trim(),
-        phoneNumber: editFields.phoneNumber.trim() || undefined,
-        bio: editFields.bio.trim(),
-        department: editFields.department.trim() || undefined,
-        dateOfBirth: editFields.dateOfBirth || undefined,
-      });
-=======
-  useEffect(() => {
-    const loadSettings = async () => {
-      setIsLoadingSettings(true);
-      try {
-        const data = await getMySettings();
-        setSettings(data);
-      } catch (error: any) {
-        console.log('Failed to load settings:', error.message);
-      } finally {
-        setIsLoadingSettings(false);
-      }
-    };
-    void loadSettings();
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      let isActive = true;
+      const load = async () => {
+        if (!user?.id) return; // Prevent fetching if logged out
+        try {
+          if (!settings) setIsLoadingSettings(true);
+          await Promise.all([
+            refreshUser(),
+            getMySettings().then((s) => {
+              if (isActive) setSettings(s);
+            }),
+          ]);
+        } catch (e: any) {
+          console.log('Failed to load profile settings:', e.message);
+        } finally {
+          if (isActive) setIsLoadingSettings(false);
+        }
+      };
+      load();
+      return () => {
+        isActive = false;
+      };
+    }, [refreshUser, user?.id])
+  );
 
   const onRefresh = useCallback(async () => {
+    if (!user?.id) return; // Prevent fetching if logged out
     setRefreshing(true);
     await Promise.all([
       refreshUser(),
-      getMySettings()
-        .then(setSettings)
-        .catch((error: any) => console.log('Failed to refresh settings:', error.message)),
+      getMySettings().then(setSettings).catch((error: any) => console.log('Failed to refresh settings:', error.message)),
     ]);
     setRefreshing(false);
-  }, [refreshUser]);
+  }, [refreshUser, user?.id]);
 
   const handleUpdateTheme = async (theme: ThemeMode) => {
     if (!settings || isSavingSettings) return;
+    if (settings.theme === theme) return; // no change
     const previous = settings;
     const next = { ...settings, theme };
-    setSettings(next);
+    setSettings(next); // optimistic update
     setIsSavingSettings(true);
     try {
       await updateMySettings({ theme });
-      Alert.alert('Thành công', 'Đã lưu cài đặt giao diện');
+      // Theme changes silently - the color scheme hook reacts immediately
     } catch (error: any) {
-      setSettings(previous);
+      setSettings(previous); // rollback on error
       Alert.alert('Lỗi', error.message || 'Không thể lưu cài đặt giao diện');
     } finally {
       setIsSavingSettings(false);
@@ -238,67 +161,6 @@ export default function ProfileScreen() {
     return false;
   }, [user?.email, user?.isEmailVerified, router]);
 
-  // ==================== EDIT PROFILE ====================
-  const handleSaveProfile = async () => {
-    const nextUsername = editFields.username.trim();
-    const nextPhone = editFields.phone.trim();
-    const nextEmail = editFields.email.trim().toLowerCase();
-
-    if (!nextUsername || nextUsername.length < 3) {
-      Alert.alert('Lỗi', 'Username phải có ít nhất 3 ký tự');
-      return;
-    }
-
-    if (nextEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(nextEmail)) {
-      Alert.alert('Lỗi', 'Email không đúng định dạng');
-      return;
-    }
-
-    if (nextPhone && !/^\d{8,20}$/.test(nextPhone)) {
-      Alert.alert('Lỗi', 'Số điện thoại phải từ 8-20 chữ số');
-      return;
-    }
-
-    const currentUsername = (user?.username || '').trim();
-    const currentPhone = (user?.phone || '').trim();
-    const currentEmail = (user?.email || '').trim().toLowerCase();
-
-    if (
-      nextUsername === currentUsername &&
-      nextPhone === currentPhone &&
-      nextEmail === currentEmail
-    ) {
-      Alert.alert('Thông báo', 'Không có thay đổi để cập nhật');
-      return;
-    }
-
-    const payload: any = {};
-    if (nextUsername !== currentUsername) payload.username = nextUsername;
-    if (nextPhone !== currentPhone) payload.phone = nextPhone || null;
-    if (nextEmail !== currentEmail) payload.email = nextEmail || null;
-
-    if (payload.email) {
-      Alert.alert(
-        'Lưu ý',
-        'Bạn đang thay đổi email. Sau khi cập nhật, hãy xác thực email mới để đảm bảo bảo mật.',
-      );
-    }
-
-    setIsUpdating(true);
-    try {
-      await updateUser(payload);
->>>>>>> Refactor_Project:edu-ott-system/frontend/mobile/app/(tabs)/profile.tsx
-      setEditModalVisible(false);
-      Alert.alert('Thành công ✅', 'Hồ sơ đã được cập nhật!');
-    } catch (error: any) {
-      Alert.alert('Lỗi', error.message || 'Cập nhật thất bại');
-    } finally {
-      setIsUpdating(false);
-    }
-  };
-
-<<<<<<< HEAD:edu-ott-system/frontend/mobile-app/app/(tabs)/profile.tsx
-=======
   // ==================== CHANGE AVATAR ====================
   const handleChangeAvatar = async () => {
     const nextAvatar = avatarUrl.trim();
@@ -368,7 +230,6 @@ export default function ProfileScreen() {
     }
   };
 
->>>>>>> Refactor_Project:edu-ott-system/frontend/mobile/app/(tabs)/profile.tsx
   // ==================== CHANGE PASSWORD ====================
   const handleChangePassword = async () => {
     if (!currentPassword || !newPassword) {
@@ -379,20 +240,6 @@ export default function ProfileScreen() {
       Alert.alert('Lỗi', 'Mật khẩu mới phải có ít nhất 6 ký tự');
       return;
     }
-<<<<<<< HEAD:edu-ott-system/frontend/mobile-app/app/(tabs)/profile.tsx
-    if (newPassword !== confirmNewPassword) {
-      Alert.alert('Lỗi', 'Mật khẩu mới nhập lại không khớp');
-      return;
-    }
-    setIsChangingPassword(true);
-    try {
-      await authService.changePassword({ currentPassword, newPassword });
-      setPasswordModalVisible(false);
-      setCurrentPassword('');
-      setNewPassword('');
-      setConfirmNewPassword('');
-      Alert.alert('Thành công ✅', 'Mật khẩu đã được thay đổi!');
-=======
     setIsChangingPassword(true);
     try {
       await changePassword({ currentPassword, newPassword });
@@ -400,7 +247,6 @@ export default function ProfileScreen() {
       setCurrentPassword('');
       setNewPassword('');
       Alert.alert('Thành công ✅', 'Mật khẩu đã được đổi!');
->>>>>>> Refactor_Project:edu-ott-system/frontend/mobile/app/(tabs)/profile.tsx
     } catch (error: any) {
       Alert.alert('Lỗi', error.message || 'Đổi mật khẩu thất bại');
     } finally {
@@ -408,62 +254,6 @@ export default function ProfileScreen() {
     }
   };
 
-<<<<<<< HEAD:edu-ott-system/frontend/mobile-app/app/(tabs)/profile.tsx
-  // ==================== CHANGE AVATAR ====================
-  const handlePickAvatarFromLibrary = async () => {
-    try {
-      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (!permission.granted) {
-        Alert.alert('Thiếu quyền', 'Vui lòng cấp quyền truy cập thư viện ảnh để chọn ảnh đại diện.');
-        return;
-      }
-
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
-        aspect: [1, 1],
-        quality: 0.8,
-      });
-
-      if (!result.canceled && result.assets?.length > 0) {
-        setAvatarUrl(result.assets[0].uri);
-      }
-    } catch (error: any) {
-      Alert.alert('Lỗi', error?.message || 'Không thể mở thư viện ảnh');
-    }
-  };
-
-  const handleChangeAvatar = async () => {
-    const nextAvatar = avatarUrl.trim();
-    if (!nextAvatar) {
-      Alert.alert('Lỗi', 'Vui lòng nhập URL ảnh');
-      return;
-    }
-    setIsUploadingAvatar(true);
-    try {
-      const isHttpUrl = /^https?:\/\//i.test(nextAvatar);
-      const isLocalFileUri = /^(file|content):\/\//i.test(nextAvatar);
-
-      if (isLocalFileUri) {
-        await updateUser({ avatarFile: { uri: nextAvatar } });
-      } else if (isHttpUrl) {
-        await updateUser({ avatar: nextAvatar });
-      } else {
-        Alert.alert('Lỗi', 'URL ảnh không hợp lệ');
-        return;
-      }
-      setAvatarModalVisible(false);
-      setAvatarUrl('');
-      Alert.alert('Thành công ✅', 'Ảnh đại diện đã được cập nhật!');
-    } catch (error: any) {
-      Alert.alert('Lỗi', error.message || 'Cập nhật ảnh thất bại');
-    } finally {
-      setIsUploadingAvatar(false);
-    }
-  };
-
-=======
->>>>>>> Refactor_Project:edu-ott-system/frontend/mobile/app/(tabs)/profile.tsx
   // ==================== LOGOUT ====================
   const handleLogout = () => {
     Alert.alert(
@@ -474,28 +264,14 @@ export default function ProfileScreen() {
         {
           text: 'Đăng xuất',
           style: 'destructive',
-          onPress: async () => { await logout(); },
+          onPress: async () => {
+            await logout();
+          },
         },
       ]
     );
   };
 
-<<<<<<< HEAD:edu-ott-system/frontend/mobile-app/app/(tabs)/profile.tsx
-  const getRoleLabel = (role?: string) => {
-    switch (role) {
-      case 'teacher': return 'Giảng viên';
-      case 'admin': return 'Quản trị viên';
-      default: return 'Sinh viên';
-    }
-  };
-
-  const getRoleColor = (role?: string) => {
-    switch (role) {
-      case 'teacher': return '#F59E0B';
-      case 'admin': return '#EF4444';
-      default: return colors.tint;
-    }
-=======
   const handleLogoutAll = () => {
     Alert.alert(
       'Đăng xuất mọi thiết bị',
@@ -539,7 +315,6 @@ export default function ProfileScreen() {
         },
       ],
     );
->>>>>>> Refactor_Project:edu-ott-system/frontend/mobile/app/(tabs)/profile.tsx
   };
 
   if (!user) {
@@ -551,57 +326,6 @@ export default function ProfileScreen() {
     );
   }
 
-<<<<<<< HEAD:edu-ott-system/frontend/mobile-app/app/(tabs)/profile.tsx
-  const roleColor = getRoleColor(user.role);
-
-  // ==================== MENU ITEM COMPONENT ====================
-  const MenuItem = ({
-    icon,
-=======
-  // ==================== MENU ITEM COMPONENT ====================
-  const MenuItem = ({
->>>>>>> Refactor_Project:edu-ott-system/frontend/mobile/app/(tabs)/profile.tsx
-    ionIcon,
-    title,
-    subtitle,
-    onPress,
-    color = colors.text,
-    showChevron = true,
-  }: {
-<<<<<<< HEAD:edu-ott-system/frontend/mobile-app/app/(tabs)/profile.tsx
-    icon?: string;
-=======
->>>>>>> Refactor_Project:edu-ott-system/frontend/mobile/app/(tabs)/profile.tsx
-    ionIcon?: keyof typeof Ionicons.glyphMap;
-    title: string;
-    subtitle?: string;
-    onPress?: () => void;
-    color?: string;
-    showChevron?: boolean;
-  }) => (
-    <TouchableOpacity
-      style={[styles.menuItem, { borderBottomColor: colors.border }]}
-      onPress={onPress}
-      activeOpacity={0.6}
-    >
-      <View style={[styles.menuIcon, { backgroundColor: color + '15' }]}>
-<<<<<<< HEAD:edu-ott-system/frontend/mobile-app/app/(tabs)/profile.tsx
-        {ionIcon ? (
-          <Ionicons name={ionIcon} size={20} color={color} />
-        ) : (
-          <FontAwesome name={icon as any} size={18} color={color} />
-        )}
-=======
-        {ionIcon && <Ionicons name={ionIcon} size={20} color={color} />}
->>>>>>> Refactor_Project:edu-ott-system/frontend/mobile/app/(tabs)/profile.tsx
-      </View>
-      <View style={{ flex: 1, backgroundColor: 'transparent' }}>
-        <Text style={[styles.menuText, { color }]}>{title}</Text>
-        {subtitle ? <Text style={{ fontSize: 12, color: colors.muted, marginTop: 2 }}>{subtitle}</Text> : null}
-      </View>
-      {showChevron && <FontAwesome name="chevron-right" size={14} color={colors.muted} />}
-    </TouchableOpacity>
-  );
 
   return (
     <ScrollView
@@ -610,13 +334,8 @@ export default function ProfileScreen() {
     >
       {/* ==================== PROFILE HEADER ==================== */}
       <View style={[styles.profileHeader, { backgroundColor: colors.surface }]}>
-<<<<<<< HEAD:edu-ott-system/frontend/mobile-app/app/(tabs)/profile.tsx
-        {/* Gradient-like decorative bar */}
-        <View style={{ height: 100, backgroundColor: roleColor, opacity: 0.1, position: 'absolute', top: 0, left: 0, right: 0, borderTopLeftRadius: 0, borderTopRightRadius: 0 }} />
-=======
         {/* Decorative bar */}
         <View style={{ height: 100, backgroundColor: colors.tint, opacity: 0.1, position: 'absolute', top: 0, left: 0, right: 0 }} />
->>>>>>> Refactor_Project:edu-ott-system/frontend/mobile/app/(tabs)/profile.tsx
 
         {/* Avatar */}
         <TouchableOpacity
@@ -626,11 +345,7 @@ export default function ProfileScreen() {
         >
           <Image
             style={styles.avatar}
-<<<<<<< HEAD:edu-ott-system/frontend/mobile-app/app/(tabs)/profile.tsx
-            source={{ uri: user.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.fullName)}&background=6366F1&color=fff&size=200&bold=true` }}
-=======
             source={{ uri: user.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.username)}&background=6366F1&color=fff&size=200&bold=true` }}
->>>>>>> Refactor_Project:edu-ott-system/frontend/mobile/app/(tabs)/profile.tsx
           />
           <View style={[styles.avatarBadge, { backgroundColor: colors.tint }]}>
             <Ionicons name="camera" size={14} color="#fff" />
@@ -638,24 +353,6 @@ export default function ProfileScreen() {
         </TouchableOpacity>
 
         {/* Name & Info */}
-<<<<<<< HEAD:edu-ott-system/frontend/mobile-app/app/(tabs)/profile.tsx
-        <Text style={[styles.profileName, { color: colors.text }]}>{user.fullName}</Text>
-        <Text style={[styles.profileEmail, { color: colors.muted }]}>{user.email}</Text>
-
-        {/* Role Badge */}
-        <View style={[styles.roleBadge, { backgroundColor: roleColor + '15', borderColor: roleColor + '30' }]}>
-          <View style={[styles.roleDot, { backgroundColor: roleColor }]} />
-          <Text style={[styles.roleText, { color: roleColor }]}>{getRoleLabel(user.role)}</Text>
-        </View>
-
-        {/* Verified Badge */}
-        {user.isEmailVerified && (
-          <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 8, backgroundColor: 'transparent' }}>
-            <Ionicons name="checkmark-circle" size={16} color="#10B981" />
-            <Text style={{ fontSize: 12, color: '#10B981', fontWeight: '600', marginLeft: 4 }}>Email đã xác thực</Text>
-          </View>
-        )}
-=======
         <Text style={[styles.profileName, { color: colors.text }]}>{user.username}</Text>
         <Text style={[styles.profileEmail, { color: colors.muted }]}>{user.email}</Text>
 
@@ -666,65 +363,12 @@ export default function ProfileScreen() {
             {user.isOnline ? 'Đang hoạt động' : 'Ngoại tuyến'}
           </Text>
         </View>
->>>>>>> Refactor_Project:edu-ott-system/frontend/mobile/app/(tabs)/profile.tsx
       </View>
 
       {/* ==================== PROFILE DETAILS ==================== */}
       <View style={[styles.sectionContainer, { backgroundColor: colors.surface }]}>
         <Text style={[styles.sectionTitle, { color: colors.text }]}>Thông tin cá nhân</Text>
 
-<<<<<<< HEAD:edu-ott-system/frontend/mobile-app/app/(tabs)/profile.tsx
-        <ProfileRow
-          icon="person-outline"
-          label="Họ tên"
-          value={user.fullName}
-          colors={colors}
-        />
-        <ProfileRow
-          icon="mail-outline"
-          label="Email"
-          value={user.email}
-          colors={colors}
-        />
-        <ProfileRow
-          icon="call-outline"
-          label="Số điện thoại"
-          value={user.phoneNumber || 'Chưa cập nhật'}
-          colors={colors}
-          muted={!user.phoneNumber}
-        />
-        <ProfileRow
-          icon="calendar-outline"
-          label="Ngày sinh"
-          value={user.dateOfBirth ? new Date(user.dateOfBirth).toLocaleDateString('vi-VN') : 'Chưa cập nhật'}
-          colors={colors}
-          muted={!user.dateOfBirth}
-        />
-        <ProfileRow
-          icon="business-outline"
-          label="Khoa/Bộ môn"
-          value={user.department || 'Chưa cập nhật'}
-          colors={colors}
-          muted={!user.department}
-        />
-        {user.studentId && (
-          <ProfileRow
-            icon="id-card-outline"
-            label="Mã sinh viên"
-            value={user.studentId}
-            colors={colors}
-          />
-        )}
-        <ProfileRow
-          icon="document-text-outline"
-          label="Giới thiệu"
-          value={user.bio || 'Chưa có giới thiệu'}
-          colors={colors}
-          muted={!user.bio}
-        />
-      </View>
-
-=======
         <ProfileRow icon="person-outline" label="Username" value={user.username} colors={colors} />
         <TouchableOpacity
           onPress={() => {
@@ -806,7 +450,6 @@ export default function ProfileScreen() {
         </View>
       )}
 
->>>>>>> Refactor_Project:edu-ott-system/frontend/mobile/app/(tabs)/profile.tsx
       {/* ==================== ACCOUNT SETTINGS ==================== */}
       <View style={[styles.sectionContainer, { backgroundColor: colors.surface }]}>
         <Text style={[styles.sectionTitle, { color: colors.text }]}>Tài khoản</Text>
@@ -814,10 +457,18 @@ export default function ProfileScreen() {
         <MenuItem
           ionIcon="create-outline"
           title="Chỉnh sửa hồ sơ"
-<<<<<<< HEAD:edu-ott-system/frontend/mobile-app/app/(tabs)/profile.tsx
-          subtitle="Cập nhật thông tin cá nhân"
+          subtitle="Cập nhật username và số điện thoại"
           onPress={() => setEditModalVisible(true)}
           color="#6366F1"
+          colors={colors}
+        />
+        <MenuItem
+          ionIcon="lock-closed-outline"
+          title="Đổi mật khẩu"
+          subtitle="Cập nhật mật khẩu an toàn"
+          onPress={() => setPasswordModalVisible(true)}
+          color="#10B981"
+          colors={colors}
         />
         <MenuItem
           ionIcon="image-outline"
@@ -825,40 +476,7 @@ export default function ProfileScreen() {
           subtitle="Thay đổi hình ảnh tài khoản"
           onPress={() => setAvatarModalVisible(true)}
           color="#F59E0B"
-        />
-        <MenuItem
-          ionIcon="lock-closed-outline"
-          title="Đổi mật khẩu"
-          subtitle="Cập nhật mật khẩu tài khoản"
-          onPress={() => setPasswordModalVisible(true)}
-          color="#10B981"
-=======
-          subtitle="Cập nhật username và số điện thoại"
-          onPress={() => {
-            if (requireEmailVerification()) return;
-            setEditModalVisible(true);
-          }}
-          color="#6366F1"
-        />
-        <MenuItem
-          ionIcon="lock-closed-outline"
-          title="Đổi mật khẩu"
-          subtitle="Cập nhật mật khẩu an toàn"
-          onPress={() => {
-            if (requireEmailVerification()) return;
-            setPasswordModalVisible(true);
-          }}
-          color="#10B981"
-        />
-        <MenuItem
-          ionIcon="image-outline"
-          title="Đổi ảnh đại diện"
-          subtitle="Thay đổi hình ảnh tài khoản"
-          onPress={() => {
-            if (requireEmailVerification()) return;
-            setAvatarModalVisible(true);
-          }}
-          color="#F59E0B"
+          colors={colors}
         />
         <MenuItem
           ionIcon="folder-open-outline"
@@ -866,7 +484,23 @@ export default function ProfileScreen() {
           subtitle="Tra cứu và xóa media theo ID"
           onPress={() => router.push('/media-manager' as any)}
           color="#0EA5E9"
->>>>>>> Refactor_Project:edu-ott-system/frontend/mobile/app/(tabs)/profile.tsx
+          colors={colors}
+        />
+        <MenuItem
+          ionIcon="archive-outline"
+          title="Tin nhắn lưu trữ"
+          subtitle="Xem các cuộc trò chuyện đã ẩn"
+          onPress={() => router.push('/archived-conversations' as any)}
+          color="#8B5CF6"
+          colors={colors}
+        />
+        <MenuItem
+          ionIcon="ban-outline"
+          title="Danh sách chặn"
+          subtitle="Quản lý người dùng đã chặn"
+          onPress={() => router.push('/blocked-users' as any)}
+          color="#EF4444"
+          colors={colors}
         />
       </View>
 
@@ -874,25 +508,19 @@ export default function ProfileScreen() {
       <View style={[styles.sectionContainer, { backgroundColor: colors.surface }]}>
         <Text style={[styles.sectionTitle, { color: colors.text }]}>Khác</Text>
 
-<<<<<<< HEAD:edu-ott-system/frontend/mobile-app/app/(tabs)/profile.tsx
-        <MenuItem
-          ionIcon="notifications-outline"
-          title="Thông báo"
-          color={colors.text}
-        />
-        <MenuItem
-          ionIcon="shield-outline"
-          title="Quyền riêng tư"
-=======
         <View style={[styles.preferenceWrap, { borderBottomColor: colors.border }]}>
           <View style={{ flex: 1, backgroundColor: 'transparent' }}>
-            <Text style={[styles.menuText, { color: colors.text }]}>Theme</Text>
+            <Text style={[styles.menuText, { color: colors.text }]}>Giao diện (Theme)</Text>
             <Text style={{ fontSize: 12, color: colors.muted, marginTop: 2 }}>
-              Chọn giao diện ứng dụng
+              Hiện tại: {settings?.theme === 'light' ? '☀️ Sáng' : settings?.theme === 'dark' ? '🌙 Tối' : '📱 Hệ thống'}
             </Text>
           </View>
-          <View style={{ flexDirection: 'row', gap: 8, backgroundColor: 'transparent' }}>
-            {(['light', 'dark', 'system'] as ThemeMode[]).map((mode) => {
+          <View style={{ flexDirection: 'row', gap: 6, backgroundColor: 'transparent' }}>
+            {([
+              { mode: 'light', label: 'Sáng', icon: 'sunny' },
+              { mode: 'dark', label: 'Tối', icon: 'moon' },
+              { mode: 'system', label: 'Auto', icon: 'phone-portrait' },
+            ] as { mode: ThemeMode; label: string; icon: any }[]).map(({ mode, label, icon }) => {
               const active = settings?.theme === mode;
               return (
                 <TouchableOpacity
@@ -903,12 +531,13 @@ export default function ProfileScreen() {
                     styles.themeChip,
                     {
                       borderColor: active ? colors.tint : colors.border,
-                      backgroundColor: active ? colors.tint + '20' : 'transparent',
+                      backgroundColor: active ? colors.tint : 'transparent',
                     },
                   ]}
                 >
-                  <Text style={{ color: active ? colors.tint : colors.muted, fontWeight: '700', fontSize: 12 }}>
-                    {mode === 'light' ? 'Sáng' : mode === 'dark' ? 'Tối' : 'System'}
+                  <Ionicons name={icon} size={13} color={active ? '#fff' : colors.muted} />
+                  <Text style={{ color: active ? '#fff' : colors.muted, fontWeight: '700', fontSize: 11, marginTop: 2 }}>
+                    {label}
                   </Text>
                 </TouchableOpacity>
               );
@@ -954,23 +583,21 @@ export default function ProfileScreen() {
           title="Thông báo"
           subtitle="Xem và đánh dấu đã đọc"
           onPress={() => router.push('/notifications' as any)}
->>>>>>> Refactor_Project:edu-ott-system/frontend/mobile/app/(tabs)/profile.tsx
           color={colors.text}
+          colors={colors}
         />
         <MenuItem
           ionIcon="information-circle-outline"
           title="Về ứng dụng"
           subtitle="Phiên bản 1.0.0"
-<<<<<<< HEAD:edu-ott-system/frontend/mobile-app/app/(tabs)/profile.tsx
-=======
           onPress={() =>
             Alert.alert(
               'Về ứng dụng',
               'Zalo Edu Mobile\nPhiên bản 1.0.0',
             )
           }
->>>>>>> Refactor_Project:edu-ott-system/frontend/mobile/app/(tabs)/profile.tsx
           color={colors.text}
+          colors={colors}
         />
       </View>
 
@@ -982,15 +609,15 @@ export default function ProfileScreen() {
           onPress={handleLogout}
           color={colors.error}
           showChevron={false}
+          colors={colors}
         />
-<<<<<<< HEAD:edu-ott-system/frontend/mobile-app/app/(tabs)/profile.tsx
-=======
         <MenuItem
           ionIcon="log-out"
           title="Đăng xuất tất cả thiết bị"
           onPress={handleLogoutAll}
           color="#B91C1C"
           showChevron={false}
+          colors={colors}
         />
         <MenuItem
           ionIcon="trash-outline"
@@ -999,460 +626,91 @@ export default function ProfileScreen() {
           onPress={isDeletingAccount ? undefined : handleDeleteAccount}
           color="#DC2626"
           showChevron={false}
+          colors={colors}
         />
->>>>>>> Refactor_Project:edu-ott-system/frontend/mobile/app/(tabs)/profile.tsx
       </View>
 
       {/* ==================== EDIT PROFILE MODAL ==================== */}
-      <Modal
+      <EditProfileModal
         visible={editModalVisible}
-        animationType="slide"
-        presentationStyle="formSheet"
-        onRequestClose={() => setEditModalVisible(false)}
-      >
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          style={{ flex: 1, backgroundColor: colors.background }}
-        >
-          {/* Modal Header */}
-          <View style={[styles.modalHeader, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
-            <TouchableOpacity onPress={() => setEditModalVisible(false)}>
-              <Text style={{ color: colors.error, fontSize: 16, fontWeight: '600' }}>Hủy</Text>
-            </TouchableOpacity>
-            <Text style={[styles.modalTitle, { color: colors.text }]}>Chỉnh sửa hồ sơ</Text>
-            <TouchableOpacity onPress={handleSaveProfile} disabled={isUpdating}>
-              {isUpdating ? (
-                <ActivityIndicator size="small" color={colors.tint} />
-              ) : (
-                <Text style={{ color: colors.tint, fontSize: 16, fontWeight: '700' }}>Lưu</Text>
-              )}
-            </TouchableOpacity>
-          </View>
+        onClose={() => setEditModalVisible(false)}
+        user={user}
+        updateUser={updateUser}
+        colors={colors}
+      />
 
-          <ScrollView style={{ padding: 20 }}>
-            <ModalInput
-<<<<<<< HEAD:edu-ott-system/frontend/mobile-app/app/(tabs)/profile.tsx
-              label="Họ và tên *"
-              value={editFields.fullName}
-              onChangeText={(v: string) => setEditFields({ ...editFields, fullName: v })}
-              placeholder="Nhập họ và tên"
-=======
-              label="Username *"
-              value={editFields.username}
-              onChangeText={(v: string) => setEditFields({ ...editFields, username: v })}
-              placeholder="Nhập username (ít nhất 3 ký tự)"
-              autoCapitalize="none"
-              colors={colors}
-            />
-            <ModalInput
-              label="Email"
-              value={editFields.email}
-              onChangeText={(v: string) => setEditFields({ ...editFields, email: v })}
-              placeholder="Nhập email"
-              keyboardType="email-address"
-              autoCapitalize="none"
->>>>>>> Refactor_Project:edu-ott-system/frontend/mobile/app/(tabs)/profile.tsx
-              colors={colors}
-            />
-            <ModalInput
-              label="Số điện thoại"
-<<<<<<< HEAD:edu-ott-system/frontend/mobile-app/app/(tabs)/profile.tsx
-              value={editFields.phoneNumber}
-              onChangeText={(v: string) => setEditFields({ ...editFields, phoneNumber: v })}
-=======
-              value={editFields.phone}
-              onChangeText={(v: string) => setEditFields({ ...editFields, phone: v })}
->>>>>>> Refactor_Project:edu-ott-system/frontend/mobile/app/(tabs)/profile.tsx
-              placeholder="0901234567"
-              keyboardType="phone-pad"
-              colors={colors}
-            />
-<<<<<<< HEAD:edu-ott-system/frontend/mobile-app/app/(tabs)/profile.tsx
-            <ModalInput
-              label="Ngày sinh (YYYY-MM-DD)"
-              value={editFields.dateOfBirth}
-              onChangeText={(v: string) => setEditFields({ ...editFields, dateOfBirth: v })}
-              placeholder="2000-01-15"
-              colors={colors}
-            />
-            <ModalInput
-              label="Khoa / Bộ môn"
-              value={editFields.department}
-              onChangeText={(v: string) => setEditFields({ ...editFields, department: v })}
-              placeholder="Khoa Công nghệ Thông tin"
-              colors={colors}
-            />
-            <ModalInput
-              label="Giới thiệu bản thân"
-              value={editFields.bio}
-              onChangeText={(v: string) => setEditFields({ ...editFields, bio: v })}
-              placeholder="Viết vài dòng về bạn..."
-              multiline
-              colors={colors}
-            />
-          </ScrollView>
-        </KeyboardAvoidingView>
-      </Modal>
-
-      {/* ==================== CHANGE PASSWORD MODAL ==================== */}
-      <Modal
-        visible={passwordModalVisible}
-        animationType="slide"
-        presentationStyle="formSheet"
-        onRequestClose={() => setPasswordModalVisible(false)}
-      >
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          style={{ flex: 1, backgroundColor: colors.background }}
-        >
-          {/* Modal Header */}
-          <View style={[styles.modalHeader, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
-            <TouchableOpacity onPress={() => { setPasswordModalVisible(false); setCurrentPassword(''); setNewPassword(''); setConfirmNewPassword(''); }}>
-              <Text style={{ color: colors.error, fontSize: 16, fontWeight: '600' }}>Hủy</Text>
-            </TouchableOpacity>
-            <Text style={[styles.modalTitle, { color: colors.text }]}>Đổi mật khẩu</Text>
-            <View style={{ width: 40 }} />
-          </View>
-
-          <ScrollView style={{ padding: 20 }}>
-            {/* Lock icon */}
-            <View style={{ alignItems: 'center', marginBottom: 28 }}>
-              <View style={{ width: 72, height: 72, borderRadius: 36, backgroundColor: '#10B98120', alignItems: 'center', justifyContent: 'center' }}>
-                <Ionicons name="key" size={32} color="#10B981" />
-              </View>
-            </View>
-
-            {/* Current Password */}
-            <Text style={[styles.inputLabel, { color: colors.text }]}>Mật khẩu hiện tại</Text>
-            <View style={[styles.passwordInput, { borderColor: colors.border, backgroundColor: colorScheme === 'dark' ? '#374151' : '#F8FAFC' }]}>
-              <Ionicons name="lock-closed-outline" size={20} color={colors.muted} />
-              <TextInput
-                placeholder="Nhập mật khẩu hiện tại"
-                placeholderTextColor={colors.muted}
-                secureTextEntry={!showCurrentPw}
-                value={currentPassword}
-                onChangeText={setCurrentPassword}
-                style={[styles.passwordTextInput, { color: colors.text }]}
-              />
-              <TouchableOpacity onPress={() => setShowCurrentPw(!showCurrentPw)}>
-                <Ionicons name={showCurrentPw ? 'eye-off-outline' : 'eye-outline'} size={20} color={colors.muted} />
-              </TouchableOpacity>
-            </View>
-
-            {/* New Password */}
-            <Text style={[styles.inputLabel, { color: colors.text }]}>Mật khẩu mới</Text>
-            <View style={[styles.passwordInput, { borderColor: colors.border, backgroundColor: colorScheme === 'dark' ? '#374151' : '#F8FAFC' }]}>
-              <Ionicons name="lock-open-outline" size={20} color={colors.muted} />
-              <TextInput
-                placeholder="Ít nhất 6 ký tự"
-                placeholderTextColor={colors.muted}
-                secureTextEntry={!showNewPw}
-                value={newPassword}
-                onChangeText={setNewPassword}
-                style={[styles.passwordTextInput, { color: colors.text }]}
-              />
-              <TouchableOpacity onPress={() => setShowNewPw(!showNewPw)}>
-                <Ionicons name={showNewPw ? 'eye-off-outline' : 'eye-outline'} size={20} color={colors.muted} />
-              </TouchableOpacity>
-            </View>
-
-            {/* Password Strength */}
-            {newPassword.length > 0 && (
-              <View style={{ marginBottom: 16 }}>
-                <View style={{ flexDirection: 'row', gap: 4, marginBottom: 4 }}>
-                  {[1, 2, 3, 4].map((level) => (
-                    <View
-                      key={level}
-                      style={{
-                        flex: 1, height: 3, borderRadius: 2,
-                        backgroundColor: newPassword.length >= level * 3
-                          ? level <= 1 ? '#EF4444' : level <= 2 ? '#F59E0B' : level <= 3 ? '#3B82F6' : '#10B981'
-                          : '#E2E8F0',
-                      }}
-                    />
-                  ))}
-                </View>
-              </View>
-            )}
-
-            {/* Confirm New Password */}
-            <Text style={[styles.inputLabel, { color: colors.text }]}>Xác nhận mật khẩu mới</Text>
-            <View style={[styles.passwordInput, { borderColor: colors.border, backgroundColor: colorScheme === 'dark' ? '#374151' : '#F8FAFC' }]}>
-              <Ionicons name="shield-checkmark-outline" size={20} color={colors.muted} />
-              <TextInput
-                placeholder="Nhập lại mật khẩu mới"
-                placeholderTextColor={colors.muted}
-                secureTextEntry={!showNewPw}
-                value={confirmNewPassword}
-                onChangeText={setConfirmNewPassword}
-                style={[styles.passwordTextInput, { color: colors.text }]}
-              />
-            </View>
-
-            {/* Mismatch warning */}
-            {confirmNewPassword.length > 0 && newPassword !== confirmNewPassword && (
-              <Text style={{ color: '#EF4444', fontSize: 13, marginTop: -8, marginBottom: 16 }}>
-                ⚠️ Mật khẩu không khớp
-              </Text>
-            )}
-
-            {/* Submit Button */}
-            <TouchableOpacity
-              onPress={handleChangePassword}
-              disabled={isChangingPassword}
-              activeOpacity={0.8}
-              style={{
-                backgroundColor: isChangingPassword ? '#6EE7B7' : '#10B981',
-                borderRadius: 16, paddingVertical: 16, alignItems: 'center',
-                flexDirection: 'row', justifyContent: 'center', marginTop: 12,
-                shadowColor: '#10B981', shadowOffset: { width: 0, height: 8 },
-                shadowOpacity: 0.3, shadowRadius: 12, elevation: 8,
-              }}
-            >
-              {isChangingPassword ? <ActivityIndicator color="white" style={{ marginRight: 8 }} /> : null}
-              <Text style={{ color: '#fff', fontWeight: '700', fontSize: 16 }}>Cập nhật mật khẩu</Text>
-            </TouchableOpacity>
-=======
->>>>>>> Refactor_Project:edu-ott-system/frontend/mobile/app/(tabs)/profile.tsx
-          </ScrollView>
-        </KeyboardAvoidingView>
-      </Modal>
 
       {/* ==================== CHANGE AVATAR MODAL ==================== */}
-      <Modal
+      <ChangeAvatarModal
         visible={avatarModalVisible}
-        animationType="slide"
-        presentationStyle="formSheet"
-        onRequestClose={() => setAvatarModalVisible(false)}
-      >
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          style={{ flex: 1, backgroundColor: colors.background }}
-        >
-          {/* Modal Header */}
-          <View style={[styles.modalHeader, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
-            <TouchableOpacity onPress={() => { setAvatarModalVisible(false); setAvatarUrl(''); }}>
-              <Text style={{ color: colors.error, fontSize: 16, fontWeight: '600' }}>Hủy</Text>
-            </TouchableOpacity>
-            <Text style={[styles.modalTitle, { color: colors.text }]}>Đổi ảnh đại diện</Text>
-            <View style={{ width: 40 }} />
-          </View>
-
-          <ScrollView style={{ padding: 20 }} contentContainerStyle={{ alignItems: 'center' }}>
-            {/* Current Avatar Preview */}
-            <View style={{ marginBottom: 28, alignItems: 'center' }}>
-              <Image
-                style={{ width: 140, height: 140, borderRadius: 70, borderWidth: 4, borderColor: colors.tint + '30' }}
-<<<<<<< HEAD:edu-ott-system/frontend/mobile-app/app/(tabs)/profile.tsx
-                source={{ uri: avatarUrl || user.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.fullName)}&background=6366F1&color=fff&size=200&bold=true` }}
-=======
-                source={{ uri: avatarUrl || user.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.username)}&background=6366F1&color=fff&size=200&bold=true` }}
->>>>>>> Refactor_Project:edu-ott-system/frontend/mobile/app/(tabs)/profile.tsx
-              />
-              <Text style={{ color: colors.muted, marginTop: 12, fontSize: 14 }}>Xem trước ảnh đại diện</Text>
-            </View>
-
-            {/* URL Input */}
-            <View style={{ width: '100%' }}>
-<<<<<<< HEAD:edu-ott-system/frontend/mobile-app/app/(tabs)/profile.tsx
-              <TouchableOpacity
-                onPress={handlePickAvatarFromLibrary}
-                activeOpacity={0.8}
-                style={{
-                  borderRadius: 14,
-                  borderWidth: 1,
-                  borderColor: colors.border,
-                  backgroundColor: colorScheme === 'dark' ? '#374151' : '#F8FAFC',
-                  paddingVertical: 14,
-                  paddingHorizontal: 14,
-                  marginBottom: 12,
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: 8,
-                }}
-              >
-                <Ionicons name="images-outline" size={20} color={colors.tint} />
-                <Text style={{ color: colors.text, fontWeight: '600' }}>Chọn ảnh từ thư viện</Text>
-              </TouchableOpacity>
-
-              <Text style={{ color: colors.muted, fontSize: 12, marginBottom: 10 }}>
-                Hoặc dán URL ảnh bên dưới:
-              </Text>
-=======
->>>>>>> Refactor_Project:edu-ott-system/frontend/mobile/app/(tabs)/profile.tsx
-              <Text style={[styles.inputLabel, { color: colors.text }]}>URL hình ảnh</Text>
-              <View style={[styles.passwordInput, { borderColor: colors.border, backgroundColor: colorScheme === 'dark' ? '#374151' : '#F8FAFC' }]}>
-                <Ionicons name="link-outline" size={20} color={colors.muted} />
-                <TextInput
-                  placeholder="https://example.com/avatar.jpg"
-                  placeholderTextColor={colors.muted}
-                  value={avatarUrl}
-                  onChangeText={setAvatarUrl}
-                  autoCapitalize="none"
-                  keyboardType="url"
-                  style={[styles.passwordTextInput, { color: colors.text }]}
-                />
-              </View>
-
-<<<<<<< HEAD:edu-ott-system/frontend/mobile-app/app/(tabs)/profile.tsx
-              {/* Quick Avatars */}
-              <Text style={[styles.inputLabel, { color: colors.text, marginTop: 8 }]}>Hoặc chọn avatar mẫu:</Text>
-              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginTop: 8, justifyContent: 'center' }}>
-                {[
-                  `https://ui-avatars.com/api/?name=${encodeURIComponent(user.fullName)}&background=6366F1&color=fff&size=200&bold=true`,
-                  `https://ui-avatars.com/api/?name=${encodeURIComponent(user.fullName)}&background=EF4444&color=fff&size=200&bold=true`,
-                  `https://ui-avatars.com/api/?name=${encodeURIComponent(user.fullName)}&background=10B981&color=fff&size=200&bold=true`,
-                  `https://ui-avatars.com/api/?name=${encodeURIComponent(user.fullName)}&background=F59E0B&color=fff&size=200&bold=true`,
-                  `https://ui-avatars.com/api/?name=${encodeURIComponent(user.fullName)}&background=EC4899&color=fff&size=200&bold=true`,
-                  `https://ui-avatars.com/api/?name=${encodeURIComponent(user.fullName)}&background=8B5CF6&color=fff&size=200&bold=true`,
-                ].map((url, idx) => (
-                  <TouchableOpacity
-                    key={idx}
-                    onPress={() => setAvatarUrl(url)}
-                    style={{
-                      borderWidth: 3,
-                      borderColor: avatarUrl === url ? colors.tint : 'transparent',
-                      borderRadius: 32,
-                      padding: 2,
-                    }}
-                  >
-                    <Image source={{ uri: url }} style={{ width: 56, height: 56, borderRadius: 28 }} />
-                  </TouchableOpacity>
-                ))}
-=======
-              <TouchableOpacity
-                onPress={handlePickAvatarFromLibrary}
-                disabled={isUploadingAvatar}
-                style={{
-                  backgroundColor: '#0EA5E9',
-                  borderRadius: 12,
-                  paddingVertical: 12,
-                  alignItems: 'center',
-                  marginBottom: 12,
-                }}
-              >
-                {isUploadingAvatar ? (
-                  <ActivityIndicator size="small" color="#fff" />
-                ) : (
-                  <Text style={{ color: '#fff', fontWeight: '700' }}>Chọn ảnh từ thư viện (Cloudinary)</Text>
-                )}
-              </TouchableOpacity>
-
-              {/* Quick Avatars */}
-              <Text style={[styles.inputLabel, { color: colors.text, marginTop: 8 }]}>Hoặc chọn avatar mẫu:</Text>
-              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginTop: 8, justifyContent: 'center' }}>
-                {['6366F1', 'EF4444', '10B981', 'F59E0B', 'EC4899', '8B5CF6'].map((bg, idx) => {
-                  const url = `https://ui-avatars.com/api/?name=${encodeURIComponent(user.username)}&background=${bg}&color=fff&size=200&bold=true`;
-                  return (
-                    <TouchableOpacity
-                      key={idx}
-                      onPress={() => setAvatarUrl(url)}
-                      style={{
-                        borderWidth: 3,
-                        borderColor: avatarUrl === url ? colors.tint : 'transparent',
-                        borderRadius: 32,
-                        padding: 2,
-                      }}
-                    >
-                      <Image source={{ uri: url }} style={{ width: 56, height: 56, borderRadius: 28 }} />
-                    </TouchableOpacity>
-                  );
-                })}
->>>>>>> Refactor_Project:edu-ott-system/frontend/mobile/app/(tabs)/profile.tsx
-              </View>
-
-              {/* Submit Button */}
-              <TouchableOpacity
-                onPress={handleChangeAvatar}
-                disabled={isUploadingAvatar}
-                activeOpacity={0.8}
-                style={{
-                  backgroundColor: isUploadingAvatar ? '#FCD34D' : '#F59E0B',
-                  borderRadius: 16, paddingVertical: 16, alignItems: 'center',
-                  flexDirection: 'row', justifyContent: 'center', marginTop: 28,
-                  shadowColor: '#F59E0B', shadowOffset: { width: 0, height: 8 },
-                  shadowOpacity: 0.3, shadowRadius: 12, elevation: 8,
-                }}
-              >
-                {isUploadingAvatar ? <ActivityIndicator color="white" style={{ marginRight: 8 }} /> : null}
-                <Text style={{ color: '#fff', fontWeight: '700', fontSize: 16 }}>Cập nhật ảnh đại diện</Text>
-              </TouchableOpacity>
-            </View>
-          </ScrollView>
-        </KeyboardAvoidingView>
-      </Modal>
-<<<<<<< HEAD:edu-ott-system/frontend/mobile-app/app/(tabs)/profile.tsx
-=======
+        onClose={() => setAvatarModalVisible(false)}
+        colors={colors}
+        colorScheme={colorScheme as 'light' | 'dark'}
+        user={user}
+        avatarUrl={avatarUrl}
+        setAvatarUrl={setAvatarUrl}
+        handlePickAvatarFromLibrary={handlePickAvatarFromLibrary}
+        handleChangeAvatar={handleChangeAvatar}
+        isUploadingAvatar={isUploadingAvatar}
+      />
 
       {/* ==================== CHANGE PASSWORD MODAL ==================== */}
-      <Modal
+      <ChangePasswordModal
         visible={passwordModalVisible}
-        animationType="slide"
-        presentationStyle="formSheet"
-        onRequestClose={() => setPasswordModalVisible(false)}
-      >
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          style={{ flex: 1, backgroundColor: colors.background }}
-        >
-          {/* Modal Header */}
-          <View style={[styles.modalHeader, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
-            <TouchableOpacity onPress={() => { setPasswordModalVisible(false); setCurrentPassword(''); setNewPassword(''); }}>
-              <Text style={{ color: colors.error, fontSize: 16, fontWeight: '600' }}>Hủy</Text>
-            </TouchableOpacity>
-            <Text style={[styles.modalTitle, { color: colors.text }]}>Đổi mật khẩu</Text>
-            <TouchableOpacity onPress={handleChangePassword} disabled={isChangingPassword}>
-              {isChangingPassword ? (
-                <ActivityIndicator size="small" color={colors.tint} />
-              ) : (
-                <Text style={{ color: colors.tint, fontSize: 16, fontWeight: '700' }}>Lưu</Text>
-              )}
-            </TouchableOpacity>
-          </View>
-
-          <ScrollView style={{ padding: 20 }}>
-            <View style={{ marginBottom: 20 }}>
-              <Text style={[styles.inputLabel, { color: colors.text }]}>Mật khẩu hiện tại</Text>
-              <View style={[styles.passwordInput, { borderColor: colors.border, backgroundColor: colors.background }]}>
-                <Ionicons name="lock-closed-outline" size={20} color={colors.muted} />
-                <TextInput
-                  placeholder="Nhập mật khẩu cũ"
-                  placeholderTextColor={colors.muted}
-                  secureTextEntry={!showPassword}
-                  value={currentPassword}
-                  onChangeText={setCurrentPassword}
-                  style={[styles.passwordTextInput, { color: colors.text }]}
-                />
-                <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
-                  <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={20} color={colors.muted} />
-                </TouchableOpacity>
-              </View>
-            </View>
-
-            <View style={{ marginBottom: 20 }}>
-              <Text style={[styles.inputLabel, { color: colors.text }]}>Mật khẩu mới</Text>
-              <View style={[styles.passwordInput, { borderColor: colors.border, backgroundColor: colors.background }]}>
-                <Ionicons name="key-outline" size={20} color={colors.muted} />
-                <TextInput
-                  placeholder="Ít nhất 6 ký tự"
-                  placeholderTextColor={colors.muted}
-                  secureTextEntry={!showPassword}
-                  value={newPassword}
-                  onChangeText={setNewPassword}
-                  style={[styles.passwordTextInput, { color: colors.text }]}
-                />
-              </View>
-            </View>
-          </ScrollView>
+        onClose={() => setPasswordModalVisible(false)}
+        colors={colors}
+        currentPassword={currentPassword}
+        setCurrentPassword={setCurrentPassword}
+        newPassword={newPassword}
+        setNewPassword={setNewPassword}
+        showPassword={showPassword}
+        setShowPassword={setShowPassword}
+        isChangingPassword={isChangingPassword}
+        handleChangePassword={handleChangePassword}
+      />
+    </ScrollView>
         </KeyboardAvoidingView>
       </Modal>
->>>>>>> Refactor_Project:edu-ott-system/frontend/mobile/app/(tabs)/profile.tsx
     </ScrollView>
   );
 }
 
 // ==================== SUB COMPONENTS ====================
+
+function MenuItem({
+  ionIcon,
+  title,
+  subtitle,
+  onPress,
+  color,
+  showChevron = true,
+  colors,
+}: {
+  ionIcon?: keyof typeof Ionicons.glyphMap;
+  title: string;
+  subtitle?: string;
+  onPress?: () => void;
+  color?: string;
+  showChevron?: boolean;
+  colors: any;
+}) {
+  return (
+    <TouchableOpacity
+      style={[styles.menuItem, { borderBottomColor: colors.border }]}
+      onPress={onPress}
+      activeOpacity={0.6}
+    >
+      <View style={[styles.menuIcon, { backgroundColor: (color || colors.text) + '15' }]}>
+        {ionIcon && <Ionicons name={ionIcon} size={20} color={color || colors.text} />}
+      </View>
+      <View style={{ flex: 1, backgroundColor: 'transparent' }}>
+        <Text style={[styles.menuText, { color: color || colors.text }]}>{title}</Text>
+        {subtitle ? <Text style={{ fontSize: 12, color: colors.muted, marginTop: 2 }}>{subtitle}</Text> : null}
+      </View>
+      {showChevron && <FontAwesome name="chevron-right" size={14} color={colors.muted} />}
+    </TouchableOpacity>
+  );
+}
 
 function ProfileRow({
   icon,
@@ -1482,67 +740,6 @@ function ProfileRow({
   );
 }
 
-function ModalInput({
-  label,
-  value,
-  onChangeText,
-  placeholder,
-  keyboardType,
-<<<<<<< HEAD:edu-ott-system/frontend/mobile-app/app/(tabs)/profile.tsx
-  multiline,
-=======
-  autoCapitalize,
->>>>>>> Refactor_Project:edu-ott-system/frontend/mobile/app/(tabs)/profile.tsx
-  colors,
-}: {
-  label: string;
-  value: string;
-  onChangeText: (v: string) => void;
-  placeholder: string;
-  keyboardType?: 'default' | 'phone-pad' | 'email-address' | 'url';
-<<<<<<< HEAD:edu-ott-system/frontend/mobile-app/app/(tabs)/profile.tsx
-  multiline?: boolean;
-=======
-  autoCapitalize?: 'none' | 'sentences';
->>>>>>> Refactor_Project:edu-ott-system/frontend/mobile/app/(tabs)/profile.tsx
-  colors: any;
-}) {
-  return (
-    <View style={{ marginBottom: 20 }}>
-      <Text style={[styles.inputLabel, { color: colors.text }]}>{label}</Text>
-      <TextInput
-        value={value}
-        onChangeText={onChangeText}
-        placeholder={placeholder}
-        placeholderTextColor={colors.muted}
-        keyboardType={keyboardType}
-<<<<<<< HEAD:edu-ott-system/frontend/mobile-app/app/(tabs)/profile.tsx
-        multiline={multiline}
-        numberOfLines={multiline ? 4 : 1}
-        textAlignVertical={multiline ? 'top' : 'center'}
-=======
-        autoCapitalize={autoCapitalize}
->>>>>>> Refactor_Project:edu-ott-system/frontend/mobile/app/(tabs)/profile.tsx
-        style={[
-          styles.modalTextInput,
-          {
-            color: colors.text,
-            borderColor: colors.border,
-            backgroundColor: colors.background,
-<<<<<<< HEAD:edu-ott-system/frontend/mobile-app/app/(tabs)/profile.tsx
-            minHeight: multiline ? 100 : 48,
-=======
->>>>>>> Refactor_Project:edu-ott-system/frontend/mobile/app/(tabs)/profile.tsx
-          },
-        ]}
-      />
-    </View>
-  );
-}
-
-<<<<<<< HEAD:edu-ott-system/frontend/mobile-app/app/(tabs)/profile.tsx
-// ==================== STYLES ====================
-=======
 function PreferenceSwitchRow({
   label,
   subtitle,
@@ -1574,68 +771,25 @@ function PreferenceSwitchRow({
     </View>
   );
 }
->>>>>>> Refactor_Project:edu-ott-system/frontend/mobile/app/(tabs)/profile.tsx
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
 
-<<<<<<< HEAD:edu-ott-system/frontend/mobile-app/app/(tabs)/profile.tsx
-  // Profile Header
-  profileHeader: {
-    alignItems: 'center',
-    paddingTop: 32,
-=======
   profileHeader: {
     alignItems: 'center',
     paddingTop: 48,
->>>>>>> Refactor_Project:edu-ott-system/frontend/mobile/app/(tabs)/profile.tsx
     paddingBottom: 24,
     paddingHorizontal: 20,
     overflow: 'hidden',
   },
-<<<<<<< HEAD:edu-ott-system/frontend/mobile-app/app/(tabs)/profile.tsx
-  avatarContainer: { position: 'relative', marginBottom: 16 },
-  avatar: {
-    width: 100, height: 100, borderRadius: 50,
-    borderWidth: 4, borderColor: '#fff',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15, shadowRadius: 8,
-  },
-  avatarBadge: {
-    position: 'absolute', bottom: 2, right: 2,
-=======
   avatarContainer: { position: 'relative', marginTop: 20 },
   avatar: { width: 110, height: 110, borderRadius: 55, borderWidth: 4, borderColor: '#fff' },
   avatarBadge: {
     position: 'absolute', bottom: 4, right: 4,
->>>>>>> Refactor_Project:edu-ott-system/frontend/mobile/app/(tabs)/profile.tsx
     width: 32, height: 32, borderRadius: 16,
     alignItems: 'center', justifyContent: 'center',
     borderWidth: 3, borderColor: '#fff',
   },
-<<<<<<< HEAD:edu-ott-system/frontend/mobile-app/app/(tabs)/profile.tsx
-  profileName: { fontSize: 24, fontWeight: '800', marginBottom: 4 },
-  profileEmail: { fontSize: 14, marginBottom: 12 },
-  roleBadge: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 14, paddingVertical: 6,
-    borderRadius: 20, borderWidth: 1,
-  },
-  roleDot: { width: 8, height: 8, borderRadius: 4, marginRight: 8 },
-  roleText: { fontSize: 13, fontWeight: '700' },
-
-  // Sections
-  sectionContainer: { marginTop: 12, paddingHorizontal: 20, paddingVertical: 16 },
-  sectionTitle: { fontSize: 17, fontWeight: '700', marginBottom: 12 },
-
-  // Profile Row
-  profileRow: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingVertical: 14, borderBottomWidth: StyleSheet.hairlineWidth,
-    backgroundColor: 'transparent',
-  },
-  profileRowIcon: {
-=======
   profileName: { fontSize: 26, fontWeight: '800', marginTop: 16 },
   profileEmail: { fontSize: 14, marginTop: 4 },
 
@@ -1660,60 +814,10 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   menuIcon: {
->>>>>>> Refactor_Project:edu-ott-system/frontend/mobile/app/(tabs)/profile.tsx
     width: 36, height: 36, borderRadius: 10,
     alignItems: 'center', justifyContent: 'center',
     marginRight: 14,
   },
-<<<<<<< HEAD:edu-ott-system/frontend/mobile-app/app/(tabs)/profile.tsx
-
-  // Menu Item
-  menuItem: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingVertical: 16, borderBottomWidth: StyleSheet.hairlineWidth,
-    backgroundColor: 'transparent',
-  },
-  menuIcon: {
-    width: 40, height: 40, borderRadius: 12,
-    alignItems: 'center', justifyContent: 'center',
-    marginRight: 14,
-  },
-  menuText: { fontSize: 16, fontWeight: '600' },
-
-  // Modal
-  modalHeader: {
-    flexDirection: 'row', alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20, paddingVertical: 16,
-    borderBottomWidth: 1,
-  },
-  modalTitle: { fontSize: 17, fontWeight: '700' },
-  modalTextInput: {
-    borderWidth: 1, borderRadius: 14,
-    paddingHorizontal: 16, paddingVertical: 14,
-    fontSize: 15,
-  },
-
-  // Input Label
-  inputLabel: {
-    fontSize: 14, fontWeight: '600',
-    marginBottom: 8, marginLeft: 2,
-  },
-
-  // Password Input
-  passwordInput: {
-    flexDirection: 'row', alignItems: 'center',
-    borderWidth: 1, borderRadius: 14,
-    paddingHorizontal: 14, paddingVertical: 14,
-    marginBottom: 20, backgroundColor: 'transparent',
-  },
-  passwordTextInput: {
-    flex: 1, marginLeft: 10, fontSize: 15,
-  },
-});
-
-
-=======
   menuText: { fontSize: 15, fontWeight: '600' },
   preferenceWrap: {
     flexDirection: 'row',
@@ -1724,10 +828,12 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   themeChip: {
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderRadius: 10,
-    paddingHorizontal: 10,
+    paddingHorizontal: 8,
     paddingVertical: 6,
+    alignItems: 'center',
+    minWidth: 48,
   },
 
   profileRow: {
@@ -1774,4 +880,3 @@ const styles = StyleSheet.create({
   },
   passwordTextInput: { flex: 1, fontSize: 15 },
 });
->>>>>>> Refactor_Project:edu-ott-system/frontend/mobile/app/(tabs)/profile.tsx

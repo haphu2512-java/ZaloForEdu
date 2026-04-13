@@ -22,6 +22,8 @@ import {
 import { useAuthStore } from "../../store/authStore";
 import { useTheme } from "../../contexts/ThemeContext";
 import { useLanguage } from "../../contexts/LanguageContext";
+import { useNotificationStore } from "../../store/notificationStore";
+import NotificationsPanel from "../../pages/notifications/NotificationsPanel";
 import "./MainLayout.css";
 
 function getInitials(name = "") {
@@ -46,7 +48,7 @@ function getAvatarColor(name = "") {
 
 // ── SETTINGS MODAL ──────────────────────────────────────────────────────────
 function SettingsModal({ onClose }) {
-  const { theme, setTheme } = useTheme();
+  const { themeMode, setThemeMode } = useTheme();
   const { language, changeLanguage, t } = useLanguage();
   const [activeTab, setActiveTab] = useState("general");
   const [notifications, setNotifications] = useState(true);
@@ -94,22 +96,35 @@ function SettingsModal({ onClose }) {
                   <h3>{t("appearance")}</h3>
                   <div className="theme-picker">
                     <button
-                      className={`theme-opt ${theme === "light" ? "active" : ""}`}
-                      onClick={() => setTheme("light")}
+                      className={`theme-opt ${themeMode === "light" ? "active" : ""}`}
+                      onClick={() => setThemeMode("light")}
                     >
                       <FaSun size={20} />
                       <span>{t("themeLight")}</span>
-                      {theme === "light" && <FaCheck className="theme-check" size={12} />}
+                      {themeMode === "light" && <FaCheck className="theme-check" size={12} />}
                     </button>
                     <button
-                      className={`theme-opt ${theme === "dark" ? "active" : ""}`}
-                      onClick={() => setTheme("dark")}
+                      className={`theme-opt ${themeMode === "dark" ? "active" : ""}`}
+                      onClick={() => setThemeMode("dark")}
                     >
                       <FaMoon size={20} />
                       <span>{t("themeDark")}</span>
-                      {theme === "dark" && <FaCheck className="theme-check" size={12} />}
+                      {themeMode === "dark" && <FaCheck className="theme-check" size={12} />}
+                    </button>
+                    <button
+                      className={`theme-opt ${themeMode === "system" ? "active" : ""}`}
+                      onClick={() => setThemeMode("system")}
+                    >
+                      <FaCog size={20} />
+                      <span>{t("themeSystem")}</span>
+                      {themeMode === "system" && <FaCheck className="theme-check" size={12} />}
                     </button>
                   </div>
+                  {themeMode === "system" && (
+                    <p style={{ fontSize: "11px", color: "var(--text-secondary)", marginTop: "8px" }}>
+                      * Tự động chuyển sang Tối sau 18:00 và Sáng sau 06:00.
+                    </p>
+                  )}
                 </div>
 
                 {/* Notifications */}
@@ -151,7 +166,18 @@ function SettingsModal({ onClose }) {
                 <div className="sm-section">
                   <h3>{t("securityTitle")}</h3>
                   <p className="sm-desc">{t("securityDesc")}</p>
-                  <button className="sm-action-btn">{t("changePassword")}</button>
+                  <button className="sm-action-btn" onClick={() => { onClose(); window.location.href = "/profile"; }}>{t("changePassword")}</button>
+                </div>
+                <div className="sm-section">
+                  <h3>Quyền riêng tư</h3>
+                  <div className="sm-row">
+                    <span>Danh sách chặn</span>
+                    <button className="sm-action-btn" onClick={() => { onClose(); window.location.href = "/blocked"; }}>Xem danh sách</button>
+                  </div>
+                  <div className="sm-row">
+                    <span>Hội thoại đã lưu trữ</span>
+                    <button className="sm-action-btn" onClick={() => { onClose(); window.location.href = "/archived"; }}>Xem lưu trữ</button>
+                  </div>
                 </div>
               </div>
             )}
@@ -231,7 +257,15 @@ export default function MainLayout() {
   const navigate = useNavigate();
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showNotifications, setShowNotifications] = useState(false);
   const menuRef = useRef(null);
+  const { unreadCount, fetchUnreadCount } = useNotificationStore();
+
+  useEffect(() => {
+    fetchUnreadCount();
+    const interval = setInterval(fetchUnreadCount, 30000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Nav items dùng t() để đa ngôn ngữ
   const NAV_ITEMS = [
@@ -299,9 +333,21 @@ export default function MainLayout() {
         {/* Bottom */}
         <div className="sidebar-bottom">
           {/* Notification bell */}
-          <button className="sidebar-icon-btn" title={t("notifications")}>
-            <FaBell size={17} />
-          </button>
+          <div className="sidebar-notif-wrap">
+            <button
+              className={`sidebar-icon-btn ${showNotifications ? "active" : ""}`}
+              title={t("notifications")}
+              onClick={() => setShowNotifications(!showNotifications)}
+            >
+              <FaBell size={17} />
+              {unreadCount > 0 && (
+                <span className="sidebar-notif-badge">{unreadCount > 99 ? "99+" : unreadCount}</span>
+              )}
+            </button>
+            {showNotifications && (
+              <NotificationsPanel onClose={() => setShowNotifications(false)} />
+            )}
+          </div>
 
           {/* Avatar + user menu */}
           <div className="sidebar-avatar-wrap" ref={menuRef}>

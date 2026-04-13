@@ -85,9 +85,15 @@ const searchUsers = asyncHandler(async (req, res) => {
   const { cursor } = req.query;
   const queryRegex = new RegExp(escapeRegex(q), 'i');
 
+  const isPhoneSearch = /^\d{10,11}$/.test(q);
+  
   const filter = {
     deletedAt: null,
-    $or: [{ username: queryRegex }, { email: queryRegex }, { phone: queryRegex }],
+    $or: [
+      { username: queryRegex }, 
+      { email: queryRegex }, 
+      { phone: isPhoneSearch ? q : queryRegex }
+    ],
   };
 
   // Apply cursor filter

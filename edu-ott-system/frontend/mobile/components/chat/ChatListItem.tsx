@@ -1,9 +1,5 @@
 import React from 'react';
 import { View, Text, Image, TouchableOpacity, StyleSheet } from 'react-native';
-<<<<<<< HEAD:edu-ott-system/frontend/mobile-app/components/chat/ChatListItem.tsx
-import { useRouter } from 'expo-router';
-=======
->>>>>>> Refactor_Project:edu-ott-system/frontend/mobile/components/chat/ChatListItem.tsx
 import { Ionicons } from '@expo/vector-icons';
 
 interface ChatListItemProps {
@@ -14,9 +10,8 @@ interface ChatListItemProps {
   time: string;
   unreadCount?: number;
   roomModel?: 'Conversation' | 'Class' | 'Group';
-<<<<<<< HEAD:edu-ott-system/frontend/mobile-app/components/chat/ChatListItem.tsx
-=======
   isOnline?: boolean;
+  isActive?: boolean;
   onPress?: () => void;
   onLongPress?: () => void;
   colors?: {
@@ -27,7 +22,6 @@ interface ChatListItemProps {
     surface: string;
     secondaryBackground: string;
   };
->>>>>>> Refactor_Project:edu-ott-system/frontend/mobile/components/chat/ChatListItem.tsx
 }
 
 function getRoomBadge(roomModel?: string): { icon: keyof typeof Ionicons.glyphMap; color: string } | null {
@@ -42,35 +36,14 @@ function getRoomBadge(roomModel?: string): { icon: keyof typeof Ionicons.glyphMa
 }
 
 export const ChatListItem: React.FC<ChatListItemProps> = ({
-<<<<<<< HEAD:edu-ott-system/frontend/mobile-app/components/chat/ChatListItem.tsx
-  id,
-=======
->>>>>>> Refactor_Project:edu-ott-system/frontend/mobile/components/chat/ChatListItem.tsx
   name,
   lastMessage,
   avatar,
   time,
   unreadCount,
   roomModel,
-<<<<<<< HEAD:edu-ott-system/frontend/mobile-app/components/chat/ChatListItem.tsx
-}) => {
-  const router = useRouter();
-  const badge = getRoomBadge(roomModel);
-  const hasUnread = (unreadCount || 0) > 0;
-
-  const handlePress = () => {
-    router.push({
-      pathname: '/chat/[id]' as any,
-      params: { id, name, avatar: avatar || '', roomModel: roomModel || 'Conversation' },
-    });
-  };
-
-  return (
-    <TouchableOpacity
-      style={[styles.container, hasUnread && styles.unreadBg]}
-      onPress={handlePress}
-=======
   isOnline,
+  isActive = true,
   onPress,
   onLongPress,
   colors,
@@ -86,68 +59,53 @@ export const ChatListItem: React.FC<ChatListItemProps> = ({
       ]}
       onPress={onPress}
       onLongPress={onLongPress}
->>>>>>> Refactor_Project:edu-ott-system/frontend/mobile/components/chat/ChatListItem.tsx
       activeOpacity={0.7}
     >
       {/* Avatar */}
       <View style={styles.avatarWrapper}>
         <Image
           source={{
-<<<<<<< HEAD:edu-ott-system/frontend/mobile-app/components/chat/ChatListItem.tsx
-            uri: avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=6366F1&color=fff&size=100&bold=true`,
-=======
             uri: avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=0068FF&color=fff&size=100&bold=true`,
->>>>>>> Refactor_Project:edu-ott-system/frontend/mobile/components/chat/ChatListItem.tsx
           }}
-          style={styles.avatar}
+          style={[styles.avatar, !isActive && { opacity: 0.4, tintColor: 'gray' as any }]}
         />
         {badge && (
           <View style={[styles.badgeIcon, { backgroundColor: badge.color }]}>
             <Ionicons name={badge.icon} size={10} color="#fff" />
           </View>
         )}
-<<<<<<< HEAD:edu-ott-system/frontend/mobile-app/components/chat/ChatListItem.tsx
-=======
-        {isOnline && <View style={[styles.onlineDot, { borderColor: colors?.surface || '#fff' }]} />}
->>>>>>> Refactor_Project:edu-ott-system/frontend/mobile/components/chat/ChatListItem.tsx
+        {isOnline && <View style={[styles.onlineDot, { borderColor: colors?.surface || colors?.background || '#fff' }]} />}
       </View>
 
       {/* Content */}
       <View style={styles.content}>
         <View style={styles.topRow}>
           <Text
-<<<<<<< HEAD:edu-ott-system/frontend/mobile-app/components/chat/ChatListItem.tsx
-            style={[styles.name, hasUnread && styles.nameUnread]}
-=======
             style={[
               styles.name,
               { color: colors?.text || '#111827' },
               hasUnread && styles.nameUnread,
             ]}
->>>>>>> Refactor_Project:edu-ott-system/frontend/mobile/components/chat/ChatListItem.tsx
             numberOfLines={1}
           >
             {name}
           </Text>
-<<<<<<< HEAD:edu-ott-system/frontend/mobile-app/components/chat/ChatListItem.tsx
-          <Text style={[styles.time, hasUnread && styles.timeUnread]}>
-=======
+          {!isActive && (
+            <Text style={{ fontSize: 10, color: '#EF4444', fontWeight: 'bold', marginLeft: 6 }}>
+              VÔ HIỆU HÓA
+            </Text>
+          )}
           <Text style={[styles.time, { color: colors?.muted || '#8A8A8A' }, hasUnread && styles.timeUnread]}>
->>>>>>> Refactor_Project:edu-ott-system/frontend/mobile/components/chat/ChatListItem.tsx
             {time}
           </Text>
         </View>
         <View style={styles.bottomRow}>
           <Text
-<<<<<<< HEAD:edu-ott-system/frontend/mobile-app/components/chat/ChatListItem.tsx
-            style={[styles.message, hasUnread && styles.messageUnread]}
-=======
             style={[
               styles.message,
               { color: colors?.muted || '#6B7280' },
               hasUnread && { color: colors?.text || '#111827', fontWeight: '500' },
             ]}
->>>>>>> Refactor_Project:edu-ott-system/frontend/mobile/components/chat/ChatListItem.tsx
             numberOfLines={1}
           >
             {lastMessage || 'Chưa có tin nhắn'}
@@ -171,14 +129,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 14,
-<<<<<<< HEAD:edu-ott-system/frontend/mobile-app/components/chat/ChatListItem.tsx
-    backgroundColor: '#fff',
-  },
-  unreadBg: { backgroundColor: '#E0F2FE' },
-
-  avatarWrapper: { position: 'relative', marginRight: 14 },
-  avatar: { width: 54, height: 54, borderRadius: 27 },
-=======
   },
   avatarWrapper: { position: 'relative', marginRight: 14 },
   avatar: { width: 48, height: 48, borderRadius: 24 },
@@ -193,7 +143,6 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: '#fff',
   },
->>>>>>> Refactor_Project:edu-ott-system/frontend/mobile/components/chat/ChatListItem.tsx
   badgeIcon: {
     position: 'absolute',
     bottom: -1,
@@ -204,21 +153,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
-    borderColor: '#fff',
+    borderColor: '#fff', // This fallback is okay but better use a passed prop if needed
   },
 
   content: { flex: 1 },
   topRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
-<<<<<<< HEAD:edu-ott-system/frontend/mobile-app/components/chat/ChatListItem.tsx
-  name: { fontSize: 16, fontWeight: '500', color: '#111827', flex: 1, marginRight: 8 },
-  nameUnread: { fontWeight: '700' },
-  time: { fontSize: 12, color: '#9CA3AF' },
-  timeUnread: { color: '#007AFF' },
-
-  bottomRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  message: { fontSize: 14, color: '#6B7280', flex: 1, marginRight: 8 },
-  messageUnread: { color: '#111827', fontWeight: '500' },
-=======
   name: { fontSize: 16, fontWeight: '500', flex: 1, marginRight: 8 },
   nameUnread: { fontWeight: '700' },
   time: { fontSize: 12, color: '#8A8A8A' },
@@ -226,17 +165,12 @@ const styles = StyleSheet.create({
 
   bottomRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   message: { fontSize: 14, flex: 1, marginRight: 8 },
->>>>>>> Refactor_Project:edu-ott-system/frontend/mobile/components/chat/ChatListItem.tsx
 
   unreadBadge: {
     minWidth: 20,
     height: 20,
     borderRadius: 10,
-<<<<<<< HEAD:edu-ott-system/frontend/mobile-app/components/chat/ChatListItem.tsx
-    backgroundColor: '#007AFF',
-=======
     backgroundColor: '#FF3B30',
->>>>>>> Refactor_Project:edu-ott-system/frontend/mobile/components/chat/ChatListItem.tsx
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 6,

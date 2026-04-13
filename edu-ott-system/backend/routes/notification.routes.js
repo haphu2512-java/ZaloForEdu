@@ -7,48 +7,10 @@ const { notificationIdParamSchema, notificationPaginationQuerySchema } = require
 
 const router = express.Router();
 
-/**
- * @openapi
- * /notifications:
- *   get:
- *     tags: [Notifications]
- *     summary: List notifications of current user
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: query
- *         name: page
- *         required: false
- *         schema:
- *           type: integer
- *       - in: query
- *         name: limit
- *         required: false
- *         schema:
- *           type: integer
- *     responses:
- *       200:
- *         description: Notifications fetched
- */
 router.get('/', auth, validate({ query: notificationPaginationQuerySchema }), notificationController.listNotifications);
-/**
- * @openapi
- * /notifications/{id}/read:
- *   put:
- *     tags: [Notifications]
- *     summary: Mark notification as read
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: string
- *     responses:
- *       200:
- *         description: Notification marked as read
- */
+router.get('/unread-count', auth, notificationController.getUnreadCount);
+router.put('/read-all', auth, notificationController.markAllRead);
 router.put('/:id/read', auth, validate({ params: notificationIdParamSchema }), notificationController.markNotificationRead);
+router.delete('/:id', auth, validate({ params: notificationIdParamSchema }), notificationController.deleteNotification);
 
 module.exports = router;

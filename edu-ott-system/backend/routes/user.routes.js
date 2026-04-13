@@ -6,6 +6,21 @@ const validate = require('../middlewares/validate');
 const { blockUserBodySchema, updateUserSchema, userIdParamSchema } = require('../validators/userSchemas');
 
 const router = express.Router();
+
+/**
+ * @openapi
+ * /users/me/blocked:
+ *   get:
+ *     tags: [Users]
+ *     summary: Get current user's blocked users list
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Blocked users fetched
+ */
+router.get('/me/blocked', auth, userController.getBlockedUsers);
+
 router.get('/', userController.getAllUsers);
 /**
  * @openapi
@@ -100,6 +115,29 @@ router.post(
   validate({ params: userIdParamSchema, body: blockUserBodySchema }),
   userController.blockOrUnblockUser,
 );
+
+/**
+ * @openapi
+ * /users/admin/status:
+ *   post:
+ *     tags: [Users]
+ *     summary: [ADMIN] Force disable/enable account
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [targetUserId, isActive]
+ *             properties:
+ *               targetUserId: { type: string }
+ *               isActive: { type: boolean }
+ *               banReason: { type: string }
+ */
+router.post('/admin/status', auth, userController.updateUserStatus);
+
 router.post('/admin/status', auth, userController.updateUserStatus);
 // Cho phép người dùng report tài khoản khác
 router.post('/report/:id', auth, userController.reportUser);

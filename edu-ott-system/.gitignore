@@ -56,3 +56,5 @@ backend/scripts/seedAdmin.js
 =======
 backend_review_and_mobile_plan.md
 >>>>>>> Refactor_Project
+
+package-lock.json
