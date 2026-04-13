@@ -191,6 +191,59 @@ const getIncomingFriendRequests = asyncHandler(async (req, res) => {
   );
 });
 
+const getOutgoingFriendRequests = asyncHandler(async (req, res) => {
+  const limit = Math.min(Number(req.query.limit) || 20, 100);
+  const { cursor } = req.query;
+
+  const filter = {
+    fromUserId: req.user._id,
+    status: 'pending',
+  };
+
+  // Apply cursor filter
+  const query = { ...filter };
+  if (cursor) {
+    const parsed = decodeCursor(cursor);
+    if (!parsed) {
+      throw new ApiError(400, 'INVALID_CURSOR', 'Cursor is invalid');
+    }
+    query.$or = [
+      { createdAt: { $lt: parsed.createdAt } },
+      {
+        createdAt: parsed.createdAt,
+        _id: { $lt: parsed.id },
+      },
+    ];
+  }
+
+  const items = await FriendRequest.find(query)
+    .sort({ createdAt: -1, _id: -1 })
+    .limit(limit + 1)
+    .populate('toUserId', 'username email phone avatarUrl isOnline lastSeen');
+
+  let nextCursor = null;
+  let finalItems = items;
+
+  if (items.length > limit) {
+    const nextItem = items[limit - 1];
+    nextCursor = encodeCursor({
+      createdAt: nextItem.createdAt,
+      id: nextItem._id.toString(),
+    });
+    finalItems = items.slice(0, limit);
+  }
+
+  return successResponse(
+    res,
+    {
+      items: finalItems,
+      nextCursor,
+      limit,
+    },
+    'Outgoing friend requests fetched',
+  );
+});
+
 module.exports = {
   sendFriendRequest,
   acceptFriendRequest,
@@ -198,4 +251,5 @@ module.exports = {
   removeFriend,
   getFriendList,
   getIncomingFriendRequests,
+  getOutgoingFriendRequests,
 };

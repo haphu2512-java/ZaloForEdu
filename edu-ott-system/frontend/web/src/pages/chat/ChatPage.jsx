@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { format } from "date-fns";
 import {
   FaSearch,
@@ -21,11 +21,20 @@ import {
   FaCloud,
   FaCloudDownloadAlt,
   FaDownload,
-  FaEllipsisH
+  FaEllipsisH,
+  FaTrash,
+  FaFilePdf,
+  FaFileAlt,
+  FaFileArchive,
+  FaFileVideo,
+  FaCheckCircle,
+  FaUserPlus
 } from "react-icons/fa";
 import { useAuthStore } from "../../store/authStore";
 import { useChatStore } from "../../store/chatStore";
 import { socketService } from "../../services/socketService";
+import { uploadFile, deleteMedia, getFileCategory, ALL_ALLOWED_EXTENSIONS } from "../../services/mediaService";
+import AddFriendModal from "../../components/Modals/AddFriendModal";
 import "./ChatPage.css";
 
 const TYPE_BADGE = {
@@ -86,6 +95,23 @@ function RoomItem({ room, active, onClick, isPinned, onTogglePin }) {
       </div>
     </div>
   );
+}
+
+// ── File Icon helper ──────────────────────────────────
+function FileIcon({ category, ext }) {
+  const style = { fontSize: 22 };
+  if (category === "image") return <FaImage style={style} color="#10B981" />;
+  if (category === "video") return <FaFileVideo style={style} color="#8B5CF6" />;
+  if (ext?.toLowerCase() === "pdf") return <FaFilePdf style={style} color="#EF4444" />;
+  if (category === "archive") return <FaFileArchive style={style} color="#F59E0B" />;
+  return <FaFileAlt style={style} color="#3B82F6" />;
+}
+
+function formatBytes(bytes) {
+  if (!bytes) return "–";
+  if (bytes < 1024) return bytes + " B";
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
+  return (bytes / (1024 * 1024)).toFixed(2) + " MB";
 }
 
 function Message({ msg, isMe }) {
@@ -233,6 +259,15 @@ export default function ChatPage({ defaultCloud = false }) {
   const [activeTab, setActiveTab] = useState(0);
   const [input, setInput] = useState("");
   const messagesEndRef = useRef(null);
+  const fileInputRef = useRef(null);
+
+  // Cloud files state
+  const [cloudFiles, setCloudFiles] = useState([]);
+  const [uploadProgress, setUploadProgress] = useState(null); // null | { name, percent }
+  const [uploadError, setUploadError] = useState("");
+  const [cloudTab, setCloudTab] = useState("all"); // "all" | "image" | "video" | "doc" | "archive"
+  const [showAddFriend, setShowAddFriend] = useState(false);
+  const [isUploadingMedia, setIsUploadingMedia] = useState(false);
   const [pinnedIds, setPinnedIds] = useState(() => {
     try { return JSON.parse(localStorage.getItem('pinned-rooms')) || []; } catch(e) { return []; }
   });
@@ -263,6 +298,75 @@ export default function ChatPage({ defaultCloud = false }) {
       socketService.disconnect();
     };
   }, []);
+
+  // Load My Documents files from backend when entering cloud view
+  const activeIsCloudCheck = !!activeRoom && (activeRoom._id === 'mock-cloud-id' || activeRoom.type === 'cloud');
+  useEffect(() => {
+    if (!activeIsCloudCheck) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const { getMyMedia } = await import("../../services/mediaService");
+        const data = await getMyMedia(1, 50);
+        if (!cancelled) setCloudFiles(data?.media || []);
+      } catch {
+        // Cloudinary chưa configure hoặc lỗi mạng — bỏ qua, cho phép upload bình thường
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [activeIsCloudCheck]);
+
+  // ── Upload file handler ──────────────────────────────
+  const handleFileUpload = useCallback(async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    // Reset input để có thể chọn lại cùng file
+    e.target.value = "";
+
+    setUploadError("");
+    setUploadProgress({ name: file.name, percent: 0 });
+
+    try {
+      const media = await uploadFile(file, {
+        folder: `zaloapp/cloud/${user?.id}`,
+        onProgress: (pct) => setUploadProgress({ name: file.name, percent: pct }),
+      });
+      setCloudFiles((prev) => [{ ...media, uploadedAt: new Date().toISOString() }, ...prev]);
+    } catch (err) {
+      setUploadError(err.message || "Upload thất bại");
+    } finally {
+      setUploadProgress(null);
+    }
+  }, [user]);
+
+  const handleDeleteCloudFile = useCallback(async (mediaId) => {
+    if (!window.confirm("Xoá file này khỏi My Documents?")) return;
+    try {
+      await deleteMedia(mediaId);
+      setCloudFiles((prev) => prev.filter((f) => f._id !== mediaId));
+    } catch {
+      alert("Xoá thất bại, vui lòng thử lại.");
+    }
+  }, []);
+
+  const handleMediaSelect = useCallback(async (e) => {
+    const file = e.target.files?.[0];
+    if (!file || !activeRoom) return;
+    e.target.value = "";
+
+    try {
+      setIsUploadingMedia(true);
+      const media = await uploadFile(file, {
+        folder: `zaloapp/chats/${activeRoom._id}`,
+      });
+      // Gửi tin nhắn kèm mediaId
+      await sendMessage(activeRoom._id, null, [media._id || media.id]);
+    } catch (err) {
+      alert("Gửi file thất bại: " + (err.message || "Lỗi không xác định"));
+    } finally {
+      setIsUploadingMedia(false);
+    }
+  }, [activeRoom, sendMessage]);
 
   // Handle auto-select for defaultCloud
   useEffect(() => {
@@ -358,9 +462,14 @@ export default function ChatPage({ defaultCloud = false }) {
         <div className="rs-header">
           <span className="rs-title">Tin nhắn</span>
           {!defaultCloud && (
-            <button className="rs-add-btn">
-              <FaPlus size={12} />
-            </button>
+            <div className="rs-header-actions">
+              <button className="rs-add-btn" onClick={() => setShowAddFriend(true)} title="Thêm bạn">
+                <FaUserPlus size={16} />
+              </button>
+              <button className="rs-add-btn" title="Tạo nhóm">
+                <FaPlus size={12} />
+              </button>
+            </div>
           )}
         </div>
         {!defaultCloud && (
@@ -481,34 +590,72 @@ export default function ChatPage({ defaultCloud = false }) {
             </div>
 
             {/* Input */}
-            <div className="chat-input-bar">
-              <button className="cib-btn">
-                <FaPaperclip size={15} />
-              </button>
-              <button className="cib-btn">
-                <FaImage size={15} />
-              </button>
-              <button className="cib-btn">
-                <FaVideo size={15} />
-              </button>
-              <div className="cib-input">
+            {activeIsCloud ? (
+              /* ── Cloud Upload Bar ── */
+              <div className="chat-input-bar" style={{ gap: 10, flexWrap: "wrap", minHeight: 60, alignItems: "center" }}>
                 <input
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  placeholder="Nhập tin nhắn..."
-                  onKeyDown={(e) => e.key === "Enter" && handleSend()}
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip,.rar,.7z,.tar,.gz"
+                  style={{ display: "none" }}
+                  onChange={handleFileUpload}
                 />
+                {uploadProgress ? (
+                  <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 4 }}>
+                    <span style={{ fontSize: 12, color: "var(--text-secondary)" }}>Đang upload: {uploadProgress.name}</span>
+                    <div style={{ height: 6, background: "var(--border-color)", borderRadius: 3, overflow: "hidden" }}>
+                      <div style={{ height: "100%", width: `${uploadProgress.percent}%`, background: "var(--primary)", transition: "width 0.2s ease", borderRadius: 3 }} />
+                    </div>
+                    <span style={{ fontSize: 11, color: "var(--primary)" }}>{uploadProgress.percent}%</span>
+                  </div>
+                ) : (
+                  <>
+                    <button className="cib-btn" style={{ fontSize: 13, gap: 6, display: "flex", alignItems: "center", padding: "8px 14px", background: "var(--primary)", color: "#fff", borderRadius: 8, border: "none", cursor: "pointer", fontWeight: 600 }}
+                      onClick={() => fileInputRef.current?.click()}>
+                      <FaPlus size={12} /> Tải lên file
+                    </button>
+                    <span style={{ fontSize: 12, color: "var(--text-tertiary)" }}>Hỗ trợ: Ảnh, Video, PDF, Word, ZIP, RAR,...</span>
+                  </>
+                )}
+                {uploadError && <span style={{ fontSize: 12, color: "#EF4444", flex: "0 0 100%" }}>{uploadError}</span>}
               </div>
-              <button className="cib-btn">
-                <FaSmile size={15} />
-              </button>
-              <button className="cib-send" onClick={handleSend}>
-                <FaPaperPlane size={14} />
-              </button>
-            </div>
+            ) : (
+              <div className="chat-input-bar">
+                <input
+                  type="file"
+                  id="chat-file-input"
+                  style={{ display: "none" }}
+                  onChange={handleMediaSelect}
+                />
+                <button className="cib-btn" onClick={() => document.getElementById('chat-file-input').click()} disabled={isUploadingMedia}>
+                  {isUploadingMedia ? <FaSpinner className="spin" /> : <FaPaperclip size={15} />}
+                </button>
+                <button className="cib-btn" onClick={() => document.getElementById('chat-file-input').click()} disabled={isUploadingMedia}>
+                  <FaImage size={15} />
+                </button>
+                <button className="cib-btn" onClick={() => document.getElementById('chat-file-input').click()} disabled={isUploadingMedia}>
+                  <FaVideo size={15} />
+                </button>
+                <div className="cib-input">
+                  <input
+                    value={input}
+                    onChange={(e) => setInput(e.target.value)}
+                    placeholder="Nhập tin nhắn..."
+                    onKeyDown={(e) => e.key === "Enter" && handleSend()}
+                  />
+                </div>
+                <button className="cib-btn">
+                  <FaSmile size={15} />
+                </button>
+                <button className="cib-send" onClick={handleSend}>
+                  <FaPaperPlane size={14} />
+                </button>
+              </div>
+            )}
           </>
         )}
       </div>
+
 
       {/* ── RIGHT PANEL ── */}
       {activeUiRoom && (
@@ -518,37 +665,79 @@ export default function ChatPage({ defaultCloud = false }) {
               <div className="cloud-panel-header">
                 <div className="cp-icon"><FaCloud size={24} /></div>
                 <h3>My Documents</h3>
-                <p>Lưu trữ và truy cập nhanh những nội dung quan trọng của bạn ngay trên Zalo</p>
+                <p>Lưu trữ và truy cập nhanh. Tải lên ảnh, video, tài liệu và file nén.</p>
               </div>
-              
+
               <div className="cp-storage">
                 <div className="cp-storage-top">
-                  <span>Dung lượng</span>
-                  <span className="cp-storage-value">{storageData.used} MB / 1 GB</span>
+                   <span>Dung lượng</span>
+                   <span className="cp-storage-value">{storageData.used} MB / 1 GB</span>
                 </div>
                 <div className="cp-progress">
                   <div className="cp-pg-bar image" style={{ width: `${(storageData.images / storageData.total) * 100}%` }}></div>
-                  <div className="cp-pg-bar video" style={{ width: `0%` }}></div>
+                  <div className="cp-pg-bar video" style={{ width: "0%" }}></div>
                   <div className="cp-pg-bar file" style={{ width: `${(storageData.files / storageData.total) * 100}%` }}></div>
                   <div className="cp-pg-bar other" style={{ width: `${((storageData.used - storageData.images - storageData.files) / storageData.total) * 100}%` }}></div>
                 </div>
                 <div className="cp-legend">
-                  <span><div className="lg-dot image"></div>Ảnh</span>
-                  <span><div className="lg-dot video"></div>Video</span>
-                  <span><div className="lg-dot file"></div>File</span>
+                  <span><div className="lg-dot image"></div>Ảnh ({cloudFiles.filter(f => f.providerResourceType === "image").length})</span>
+                  <span><div className="lg-dot video"></div>Video ({cloudFiles.filter(f => f.providerResourceType === "video").length})</span>
+                  <span><div className="lg-dot file"></div>File ({cloudFiles.filter(f => f.providerResourceType === "raw").length})</span>
                   <span><div className="lg-dot other"></div>Khác</span>
                 </div>
-                
-                <button className="cp-clean-btn">Xem và dọn dẹp My Documents</button>
               </div>
 
-              <div className="cp-upgrade-card">
-                <div className="cp-upgrade-icon">🚀</div>
-                <div className="cp-upgrade-info">
-                  <h4>Nâng cấp dung lượng My Documents</h4>
-                  <p>Mở rộng lên đến 100GB. Đồng bộ dữ liệu vĩnh viễn với zCloud.</p>
+              {/* ── Section: Ảnh/Video ── */}
+              <div className="cp-section-card">
+                <div className="cp-card-header">
+                  <h4>Ảnh/Video</h4>
+                  <button className="cp-view-all" onClick={() => setCloudTab("image")}>Xem tất cả</button>
                 </div>
-                <button className="cp-upgrade-btn">Thêm dung lượng</button>
+                <div className="cp-media-grid">
+                  {cloudFiles.filter(f => f.providerResourceType === "image").slice(0, 4).map(f => (
+                    <div key={f._id} className="cp-media-item">
+                      <img src={f.url} alt="" />
+                    </div>
+                  ))}
+                  {cloudFiles.filter(f => f.providerResourceType === "image").length === 0 && (
+                    <div style={{ gridColumn: "span 4", textAlign: "center", fontSize: 11, color: "var(--text-tertiary)", padding: "10px 0" }}>Trống</div>
+                  )}
+                </div>
+              </div>
+
+              {/* ── Section: File ── */}
+              <div className="cp-section-card">
+                <div className="cp-card-header">
+                  <h4>File</h4>
+                  <button className="cp-view-all" onClick={() => setCloudTab("doc")}>Xem tất cả</button>
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  {cloudFiles.filter(f => f.providerResourceType === "raw").slice(0, 3).map(f => {
+                    const ext = f.fileName?.split(".").pop();
+                    const cat = getFileCategory(`.${ext}`);
+                    return (
+                      <div key={f._id} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                        <FileIcon category={cat} ext={ext} />
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                           <div style={{ fontSize: 12, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{f.fileName}</div>
+                           <div style={{ fontSize: 10, color: "var(--text-tertiary)" }}>{formatBytes(f.size)} • {format(new Date(f.createdAt), "dd/MM/yyyy")}</div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {cloudFiles.filter(f => f.providerResourceType === "raw").length === 0 && (
+                    <div style={{ textAlign: "center", fontSize: 11, color: "var(--text-tertiary)" }}>Trống</div>
+                  )}
+                </div>
+              </div>
+
+              {/* ── Section: Link ── */}
+              <div className="cp-section-card">
+                <div className="cp-card-header">
+                  <h4>Link</h4>
+                  <button className="cp-view-all">Xem tất cả</button>
+                </div>
+                <div style={{ textAlign: "center", fontSize: 11, color: "var(--text-tertiary)" }}>Chưa có link nào được lưu</div>
               </div>
             </div>
           ) : (
@@ -559,7 +748,6 @@ export default function ChatPage({ defaultCloud = false }) {
                 </div>
                 <div className="crp-name">{activeUiRoom.name}</div>
               </div>
-
               <div className="crp-section">
                 <div className="crp-section-title">Thành viên</div>
                 {activeUiRoom.raw.participants?.map((m) => (
@@ -575,6 +763,8 @@ export default function ChatPage({ defaultCloud = false }) {
           )}
         </div>
       )}
+      {/* ── MODALS ── */}
+      <AddFriendModal isOpen={showAddFriend} onClose={() => setShowAddFriend(false)} />
     </div>
   );
 }

@@ -56,8 +56,8 @@ export default function RegisterPage() {
 
     if (!form.identifier.trim()) {
       errs.identifier = tab === "email" ? "Vui lòng nhập email" : "Vui lòng nhập số điện thoại";
-    } else if (tab === "email" && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.identifier)) {
-      errs.identifier = "Email không hợp lệ";
+    } else if (tab === "email" && !/^[^\s@]+@gmail\.com$/.test(form.identifier)) {
+      errs.identifier = "Chỉ hỗ trợ đăng ký bằng tài khoản @gmail.com";
     } else if (tab === "phone" && !/^\+?\d{9,15}$/.test(form.identifier.replace(/\s/g, ""))) {
       errs.identifier = "Số điện thoại không hợp lệ (VD: 0912345678)";
     }

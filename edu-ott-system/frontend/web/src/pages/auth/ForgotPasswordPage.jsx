@@ -62,8 +62,8 @@ export default function ForgotPasswordPage() {
       setIdentifierError(tab === "email" ? "Vui lòng nhập email" : "Vui lòng nhập số điện thoại");
       return;
     }
-    if (tab === "email" && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(identifier)) {
-      setIdentifierError("Email không hợp lệ");
+    if (tab === "email" && !/^[^\s@]+@gmail\.com$/.test(identifier)) {
+      setIdentifierError("Chỉ hỗ trợ tài khoản @gmail.com");
       return;
     }
     if (tab === "phone" && !/^\+?\d{9,15}$/.test(identifier.replace(/\s/g, ""))) {

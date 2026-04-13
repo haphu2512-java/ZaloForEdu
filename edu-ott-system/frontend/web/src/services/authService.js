@@ -15,6 +15,28 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
+// Auto handle 401 errors
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    const isAuthError = error.response?.status === 401;
+    const isSessionExpired = error.response?.data?.errorCode === "SESSION_EXPIRED";
+
+    if (isAuthError || isSessionExpired) {
+      // Clear all local session data
+      localStorage.removeItem("token");
+      localStorage.removeItem("refreshToken");
+      localStorage.removeItem("user");
+      
+      // Force reload to trigger App.jsx auth redirection logic
+      if (!window.location.pathname.startsWith("/login")) {
+        window.location.href = "/login?expired=true";
+      }
+    }
+    return Promise.reject(error);
+  }
+);
+
 export const authService = {
   // Nhận object { email?, phone?, password, device }
   login: (payload) => api.post("/auth/login", payload),
@@ -48,6 +70,11 @@ export const authService = {
     api.post("/auth/reset-password", { token, newPassword }),
 
   changePassword: (data) => api.post("/auth/change-password", data),
+
+  // Chặn hoặc bỏ chặn người dùng
+  // action: 'block' | 'unblock'
+  blockOrUnblockUser: (targetId, action = "block") =>
+    api.put(`/users/${targetId}/block`, { action }),
 };
 
 export default api;

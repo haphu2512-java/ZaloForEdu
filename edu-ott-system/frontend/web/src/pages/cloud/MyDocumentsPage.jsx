@@ -1,18 +1,32 @@
-import { FaCloud, FaDownload, FaFile, FaImage, FaVideo, FaPlus, FaSearch, FaFolder } from "react-icons/fa";
+import { useState, useEffect, useCallback } from "react";
+import { FaCloud, FaDownload, FaFile, FaImage, FaVideo, FaPlus, FaSearch, FaTrash, FaSpinner } from "react-icons/fa";
 import { useLanguage } from "../../contexts/LanguageContext";
+import { getMyMedia, uploadFile, deleteMedia, FILE_COLORS } from "../../services/mediaService";
 
-// Mock files data
-const MOCK_FILES = [
-  { id: 1, name: "chapter7.pptx.pdf", size: "2.1 MB", type: "pdf", date: "10/04/2026 10:20", onCloud: true },
-  { id: 2, name: "Nhom20_PM.mpp",     size: "999.5 KB", type: "mpp", date: "10/04/2026 09:06", onCloud: true },
-  { id: 3, name: "BaocaoNhom.docx",   size: "1.4 MB",  type: "doc", date: "08/04/2026 14:30", onCloud: false },
-];
+function FileCard({ file, onDelete }) {
+  const extension = file.fileName.split(".").pop().toLowerCase();
+  const color = FILE_COLORS[extension] || "#10B981";
+  const extLabel = extension.toUpperCase();
 
-const FILE_COLORS = { pdf: "#EF4444", doc: "#3B82F6", mpp: "#8B5CF6", img: "#F59E0B", default: "#10B981" };
+  const handleDownload = () => {
+    if (file.url) {
+      window.open(file.url, "_blank");
+    }
+  };
 
-function FileCard({ file }) {
-  const color = FILE_COLORS[file.type] || FILE_COLORS.default;
-  const ext = file.name.split(".").pop().toUpperCase();
+  const formatSize = (bytes) => {
+    if (!bytes) return "0 B";
+    const k = 1024;
+    const sizes = ["B", "KB", "MB", "GB"];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
+  };
+
+  const formatDate = (dateStr) => {
+    const d = new Date(dateStr);
+    return d.toLocaleDateString("vi-VN") + " " + d.toLocaleTimeString("vi-VN", { hour: '2-digit', minute: '2-digit' });
+  };
+
   return (
     <div style={{
       display: "flex", alignItems: "center", gap: 14, padding: "14px 16px",
@@ -27,46 +41,106 @@ function FileCard({ file }) {
         display: "flex", alignItems: "center", justifyContent: "center",
         color: "white", fontWeight: 700, fontSize: 11, flexShrink: 0,
         boxShadow: `0 2px 8px ${color}55`,
-      }}>{ext}</div>
+      }}>{extLabel}</div>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)", marginBottom: 4,
-          whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{file.name}</div>
+          whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{file.fileName}</div>
         <div style={{ fontSize: 12, color: "var(--text-tertiary)", display: "flex", gap: 8, alignItems: "center" }}>
-          <span>{file.size}</span>
-          {file.onCloud && (
-            <span style={{ display: "flex", alignItems: "center", gap: 4, color: "#0068FF" }}>
-              <FaCloud size={10} /> Đã có trên Cloud
-            </span>
-          )}
+          <span>{formatSize(file.size)}</span>
+          <span style={{ display: "flex", alignItems: "center", gap: 4, color: "#0068FF" }}>
+            <FaCloud size={10} /> Cloud
+          </span>
         </div>
       </div>
-      <div style={{ fontSize: 12, color: "var(--text-tertiary)", marginRight: 12, whiteSpace: "nowrap" }}>{file.date}</div>
-      <button style={{
-        width: 32, height: 32, borderRadius: "50%", border: "1px solid var(--border-color)",
-        background: "var(--bg-secondary)", color: "var(--text-secondary)",
-        display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer",
-        transition: "all 0.2s",
-      }}
-        onMouseEnter={e => { e.currentTarget.style.background = "#eff6ff"; e.currentTarget.style.color = "#0068FF"; }}
-        onMouseLeave={e => { e.currentTarget.style.background = "var(--bg-secondary)"; e.currentTarget.style.color = "var(--text-secondary)"; }}
-      >
-        <FaDownload size={13} />
-      </button>
+      <div style={{ fontSize: 12, color: "var(--text-tertiary)", marginRight: 12, whiteSpace: "nowrap" }}>{formatDate(file.createdAt)}</div>
+      
+      <div style={{ display: "flex", gap: 8 }}>
+        <button 
+          onClick={handleDownload}
+          style={{
+            width: 32, height: 32, borderRadius: "50%", border: "1px solid var(--border-color)",
+            background: "var(--bg-secondary)", color: "var(--text-secondary)",
+            display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer",
+            transition: "all 0.2s",
+          }}
+          onMouseEnter={e => { e.currentTarget.style.background = "#eff6ff"; e.currentTarget.style.color = "#0068FF"; }}
+          onMouseLeave={e => { e.currentTarget.style.background = "var(--bg-secondary)"; e.currentTarget.style.color = "var(--text-secondary)"; }}
+        >
+          <FaDownload size={13} />
+        </button>
+        <button 
+          onClick={() => onDelete(file._id)}
+          style={{
+            width: 32, height: 32, borderRadius: "50%", border: "1px solid var(--border-color)",
+            background: "var(--bg-secondary)", color: "var(--text-secondary)",
+            display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer",
+            transition: "all 0.2s",
+          }}
+          onMouseEnter={e => { e.currentTarget.style.background = "#fef2f2"; e.currentTarget.style.color = "#ef4444"; }}
+          onMouseLeave={e => { e.currentTarget.style.background = "var(--bg-secondary)"; e.currentTarget.style.color = "var(--text-secondary)"; }}
+        >
+          <FaTrash size={12} />
+        </button>
+      </div>
     </div>
   );
 }
 
 export default function MyDocumentsPage() {
   const { t } = useLanguage();
+  const [files, setFiles] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [isUploading, setIsUploading] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
 
-  // Storage mock
-  const usedMB = 522;
-  const totalMB = 1024;
-  const imageMB = 120;
-  const videoMB = 0;
-  const fileMB = 250;
-  const otherMB = usedMB - imageMB - videoMB - fileMB;
-  const pct = (v) => `${((v / totalMB) * 100).toFixed(1)}%`;
+  const loadFiles = useCallback(async () => {
+    try {
+      setLoading(true);
+      const data = await getMyMedia(1, 50);
+      setFiles(data.media || []);
+    } catch (error) {
+      console.error("Failed to load files", error);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadFiles();
+  }, [loadFiles]);
+
+  const handleUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    try {
+      setIsUploading(true);
+      await uploadFile(file);
+      await loadFiles();
+    } catch (error) {
+      alert(error.message || "Tải lên thất bại");
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handleDelete = async (id) => {
+    if (!window.confirm("Bạn có chắc muốn xóa tệp này?")) return;
+    try {
+      await deleteMedia(id);
+      setFiles(prev => prev.filter(f => f._id !== id));
+    } catch (error) {
+      alert("Xóa thất bại");
+    }
+  };
+
+  const filteredFiles = files.filter(f => 
+    f.fileName.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  const totalBytes = files.reduce((acc, f) => acc + (f.size || 0), 0);
+  const limitBytes = 1024 * 1024 * 1024; // 1 GB
+  const pctUsed = (totalBytes / limitBytes) * 100;
 
   return (
     <div style={{
@@ -89,25 +163,27 @@ export default function MyDocumentsPage() {
         </div>
         <div style={{ flex: 1 }}>
           <h2 style={{ margin: 0, fontSize: 17, fontWeight: 800, color: "var(--text-primary)" }}>
-            My Documents
+            Cloud của tôi
           </h2>
           <span style={{ fontSize: 12, color: "var(--text-secondary)" }}>
-            {t("upgradeDesc")}
+            Lưu trữ tài liệu cá nhân an toàn
           </span>
         </div>
-        <button style={{
+        
+        <label style={{
           display: "flex", alignItems: "center", gap: 8,
           padding: "9px 18px", borderRadius: 10, border: "none",
-          background: "#0068FF", color: "white", fontWeight: 600, fontSize: 13,
-          cursor: "pointer", fontFamily: "inherit",
+          background: isUploading ? "#94A3B8" : "#0068FF", color: "white", fontWeight: 600, fontSize: 13,
+          cursor: isUploading ? "default" : "pointer", fontFamily: "inherit",
         }}>
-          <FaPlus size={12} /> Tải lên
-        </button>
+          {isUploading ? <FaSpinner className="spin" /> : <FaPlus size={12} />}
+          {isUploading ? "Đang tải..." : "Tải lên"}
+          <input type="file" onChange={handleUpload} style={{ display: "none" }} disabled={isUploading} />
+        </label>
       </div>
 
       {/* BODY */}
       <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
-        {/* LEFT - File list */}
         <div style={{ flex: 1, padding: "24px 28px", overflowY: "auto" }}>
           {/* Search bar */}
           <div style={{
@@ -116,31 +192,39 @@ export default function MyDocumentsPage() {
             borderRadius: 10, padding: "10px 14px", marginBottom: 20,
           }}>
             <FaSearch size={14} color="var(--text-tertiary)" />
-            <input placeholder="Tìm kiếm tài liệu..." style={{
-              flex: 1, border: "none", background: "transparent", outline: "none",
-              fontSize: 13, color: "var(--text-primary)", fontFamily: "inherit",
-            }} />
+            <input 
+              placeholder="Tìm kiếm tài liệu..." 
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              style={{
+                flex: 1, border: "none", background: "transparent", outline: "none",
+                fontSize: 13, color: "var(--text-primary)", fontFamily: "inherit",
+              }} 
+            />
           </div>
 
-          {/* Section: Recent */}
           <div style={{ marginBottom: 8 }}>
             <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text-tertiary)",
               textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 12 }}>
-              Gần đây
+              Tất cả tài liệu ({filteredFiles.length})
             </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              {MOCK_FILES.map(f => <FileCard key={f.id} file={f} />)}
-            </div>
+            {loading ? (
+              <div style={{ textAlign: "center", padding: "40px" }}><FaSpinner className="spin" size={24} color="#0068FF" /></div>
+            ) : filteredFiles.length === 0 ? (
+              <div style={{ textAlign: "center", padding: "40px", color: "var(--text-tertiary)" }}>Chưa có tài liệu nào</div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {filteredFiles.map(f => <FileCard key={f._id} file={f} onDelete={handleDelete} />)}
+              </div>
+            )}
           </div>
         </div>
 
-        {/* RIGHT - Storage Panel */}
         <div style={{
           width: 260, flexShrink: 0, borderLeft: "1px solid var(--border-color)",
           background: "var(--bg-primary)", padding: "24px 20px",
           display: "flex", flexDirection: "column", gap: 24, overflowY: "auto",
         }}>
-          {/* Cloud icon */}
           <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12,
             paddingBottom: 20, borderBottom: "1px solid var(--border-color)" }}>
             <div style={{
@@ -152,63 +236,38 @@ export default function MyDocumentsPage() {
               <FaCloud size={22} />
             </div>
             <div style={{ textAlign: "center" }}>
-              <div style={{ fontWeight: 800, fontSize: 15, color: "var(--text-primary)" }}>My Documents</div>
+              <div style={{ fontWeight: 800, fontSize: 15, color: "var(--text-primary)" }}>Cloud của tôi</div>
               <div style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 4, lineHeight: 1.4 }}>
-                Lưu trữ và truy cập nhanh nội dung quan trọng
+                Dung lượng miễn phí: 1 GB
               </div>
             </div>
           </div>
 
-          {/* Storage */}
           <div>
             <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13,
               fontWeight: 600, color: "var(--text-primary)", marginBottom: 10 }}>
-              <span>{t("cloudStorage")}</span>
-              <span style={{ color: "var(--text-secondary)", fontWeight: 400 }}>{usedMB} MB / {totalMB / 1024} GB</span>
+              <span>Dung lượng đã dùng</span>
+              <span style={{ color: "var(--text-secondary)", fontWeight: 400 }}>{pctUsed.toFixed(1)}%</span>
             </div>
-            {/* Progress Bar */}
             <div style={{ height: 12, background: "var(--bg-secondary)", borderRadius: 6,
               overflow: "hidden", display: "flex", boxShadow: "inset 0 1px 3px rgba(0,0,0,0.08)" }}>
-              <div style={{ width: pct(imageMB), background: "#F59E0B", transition: "width 0.5s" }} />
-              <div style={{ width: pct(videoMB), background: "#10B981" }} />
-              <div style={{ width: pct(fileMB), background: "#3B82F6" }} />
-              <div style={{ width: pct(otherMB), background: "#94A3B8" }} />
+              <div style={{ width: `${pctUsed}%`, background: "#0068FF", transition: "width 0.5s" }} />
             </div>
-            {/* Legend */}
-            <div style={{ display: "flex", justifyContent: "space-between", marginTop: 10, fontSize: 11,
-              color: "var(--text-secondary)" }}>
-              {[["#F59E0B","Ảnh"],["#10B981","Video"],["#3B82F6","File"],["#94A3B8","Khác"]].map(([c,l]) => (
-                <span key={l} style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                  <span style={{ width: 8, height: 8, borderRadius: "50%", background: c, display: "inline-block" }} />
-                  {l}
-                </span>
-              ))}
+            <div style={{ marginTop: 10, fontSize: 11, color: "var(--text-secondary)", textAlign: "center" }}>
+              Đã dùng {(totalBytes / (1024 * 1024)).toFixed(1)} MB trên 1024 MB
             </div>
           </div>
 
-          {/* Clean button */}
-          <button style={{
-            padding: 12, background: "var(--bg-secondary)", border: "1px solid var(--border-color)",
-            borderRadius: 8, fontWeight: 600, fontSize: 13, color: "var(--text-primary)",
-            cursor: "pointer", fontFamily: "inherit", transition: "background 0.2s",
-          }}
-            onMouseEnter={e => e.currentTarget.style.background = "var(--bg-hover)"}
-            onMouseLeave={e => e.currentTarget.style.background = "var(--bg-secondary)"}
-          >
-            {t("cleanupBtn")}
-          </button>
-
-          {/* Upgrade card */}
           <div style={{
             background: "linear-gradient(135deg, #eff6ff, #e0eeff)",
             border: "1px solid #bfdbfe", borderRadius: 12, padding: 16,
           }}>
             <div style={{ fontSize: 22, marginBottom: 10 }}>🚀</div>
             <div style={{ fontSize: 13, fontWeight: 700, color: "#1e3a8a", marginBottom: 6 }}>
-              {t("upgradeTitle")}
+              Nâng cấp dung lượng
             </div>
             <div style={{ fontSize: 12, color: "#3b82f6", lineHeight: 1.5, marginBottom: 12 }}>
-              {t("upgradeDesc")}
+              Nhận ngay 100GB lưu trữ và nhiều tính năng ưu việt khác.
             </div>
             <button style={{
               width: "100%", padding: "9px 0", borderRadius: 8,
@@ -216,7 +275,7 @@ export default function MyDocumentsPage() {
               color: "#2563eb", fontWeight: 700, fontSize: 13,
               cursor: "pointer", fontFamily: "inherit",
             }}>
-              {t("upgradeBtn")}
+              Xem các gói cước
             </button>
           </div>
         </div>

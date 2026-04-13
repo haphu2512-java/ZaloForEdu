@@ -46,7 +46,7 @@ function getAvatarColor(name = "") {
 
 // ── SETTINGS MODAL ──────────────────────────────────────────────────────────
 function SettingsModal({ onClose }) {
-  const { theme, setTheme } = useTheme();
+  const { themeMode, setThemeMode } = useTheme();
   const { language, changeLanguage, t } = useLanguage();
   const [activeTab, setActiveTab] = useState("general");
   const [notifications, setNotifications] = useState(true);
@@ -94,22 +94,35 @@ function SettingsModal({ onClose }) {
                   <h3>{t("appearance")}</h3>
                   <div className="theme-picker">
                     <button
-                      className={`theme-opt ${theme === "light" ? "active" : ""}`}
-                      onClick={() => setTheme("light")}
+                      className={`theme-opt ${themeMode === "light" ? "active" : ""}`}
+                      onClick={() => setThemeMode("light")}
                     >
                       <FaSun size={20} />
                       <span>{t("themeLight")}</span>
-                      {theme === "light" && <FaCheck className="theme-check" size={12} />}
+                      {themeMode === "light" && <FaCheck className="theme-check" size={12} />}
                     </button>
                     <button
-                      className={`theme-opt ${theme === "dark" ? "active" : ""}`}
-                      onClick={() => setTheme("dark")}
+                      className={`theme-opt ${themeMode === "dark" ? "active" : ""}`}
+                      onClick={() => setThemeMode("dark")}
                     >
                       <FaMoon size={20} />
                       <span>{t("themeDark")}</span>
-                      {theme === "dark" && <FaCheck className="theme-check" size={12} />}
+                      {themeMode === "dark" && <FaCheck className="theme-check" size={12} />}
+                    </button>
+                    <button
+                      className={`theme-opt ${themeMode === "system" ? "active" : ""}`}
+                      onClick={() => setThemeMode("system")}
+                    >
+                      <FaCog size={20} />
+                      <span>{t("themeSystem")}</span>
+                      {themeMode === "system" && <FaCheck className="theme-check" size={12} />}
                     </button>
                   </div>
+                  {themeMode === "system" && (
+                    <p style={{ fontSize: "11px", color: "var(--text-secondary)", marginTop: "8px" }}>
+                      * Tự động chuyển sang Tối sau 18:00 và Sáng sau 06:00.
+                    </p>
+                  )}
                 </div>
 
                 {/* Notifications */}

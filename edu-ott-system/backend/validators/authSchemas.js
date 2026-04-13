@@ -8,7 +8,7 @@ const phoneSchema = z
 const registerSchema = z
   .object({
     username: z.string().trim().min(3).max(50).optional(),
-    email: z.string().trim().email().optional(),
+    email: z.string().trim().email().regex(/@gmail\.com$/, 'Chỉ hỗ trợ đăng ký bằng @gmail.com').optional(),
     password: z.string().min(6).max(100),
     phone: phoneSchema.optional(),
   })
@@ -18,7 +18,7 @@ const registerSchema = z
 
 const loginSchema = z
   .object({
-    email: z.string().trim().email().optional(),
+    email: z.string().trim().email().regex(/@gmail\.com$/, 'Chỉ hỗ trợ Gmail').optional(),
     username: z.string().trim().min(3).max(50).optional(),
     phone: phoneSchema.optional(),
     password: z.string().min(6).max(100),
@@ -33,7 +33,7 @@ const refreshSchema = z.object({
 
 const forgotPasswordSchema = z
   .object({
-    email: z.string().trim().email().optional(),
+    email: z.string().trim().email().regex(/@gmail\.com$/, 'Chỉ hỗ trợ Gmail').optional(),
     phone: phoneSchema.optional(),
   })
   .refine((input) => input.email || input.phone, {
@@ -55,7 +55,7 @@ const verifyEmailSchema = z.object({
 });
 
 const resendVerificationSchema = z.object({
-  email: z.string().trim().email(),
+  email: z.string().trim().email().regex(/@gmail\.com$/, 'Chỉ hỗ trợ Gmail'),
 });
 
 module.exports = {

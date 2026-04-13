@@ -99,16 +99,12 @@ export const useChatStore = create((set, get) => ({
     }
   },
 
-  sendMessage: async (conversationId, content, type = 'text') => {
+  sendMessage: async (conversationId, content, mediaIds = []) => {
     try {
-      const payload = { conversationId, content };
-      // Real API would handle files in mediaIds, but for now we just send content
+      const payload = { conversationId, content, mediaIds };
       const res = await chatService.sendMessage(payload);
       if (res.data?.success) {
-        const newMessage = res.data.data;
-        // Append locally right away if you want, but socket event 'new_message' will also catch it
-        // We will rely on socket 'new_message' to avoid duplicate if possible, 
-        // but if relying on socket, it might have slight delay.
+        // Socket 'new_message' will handle updating the UI
         return true;
       }
       return false;

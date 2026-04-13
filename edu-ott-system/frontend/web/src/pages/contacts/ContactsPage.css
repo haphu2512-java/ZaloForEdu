@@ -1,173 +1,301 @@
+/* ═══════════════════════════════════════════════════════════════
+   ContactsPage.css — Zalo Dashboard Style (Theme-Aware)
+   ═══════════════════════════════════════════════════════════════ */
+
 .contacts-page {
   display: flex;
   height: 100vh;
   width: 100%;
-  background: #f1f5f9;
+  background: var(--bg-secondary);
+  overflow: hidden;
 }
 
+/* ── SIDEBAR (Left) ─────────────────────────────────────────── */
 .contacts-sidebar {
-  width: 340px;
-  background: #ffffff;
-  border-right: 1px solid #e2e8f0;
+  width: 320px;
+  background: var(--bg-primary);
+  border-right: 1px solid var(--border-color);
   display: flex;
   flex-direction: column;
+  flex-shrink: 0;
 }
 
 .cs-header {
-  padding: 18px 20px;
+  padding: 20px 16px;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  border-bottom: 1px solid #f1f5f9;
+  border-bottom: 1px solid var(--border-color);
 }
 
 .cs-title {
-  font-size: 20px;
+  font-size: 18px;
   font-weight: 800;
-  color: #0f172a;
-}
-
-.cs-add-btn {
-  background: #f1f5f9;
-  border: none;
-  color: #3b82f6;
-  cursor: pointer;
-  width: 32px;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 50%;
-  transition: all 0.2s;
-}
-.cs-add-btn:hover {
-  background: #e2e8f0;
-  color: #2563eb;
+  color: var(--text-primary);
 }
 
 .cs-search {
-  margin: 16px 20px;
-  padding: 0 16px;
-  height: 40px;
-  background: #f1f5f9;
-  border-radius: 20px;
+  margin: 16px;
+  padding: 0 12px;
+  height: 36px;
+  background: var(--bg-secondary);
+  border-radius: 8px;
   display: flex;
   align-items: center;
   gap: 10px;
   border: 1px solid transparent;
-  transition: border-color 0.2s;
 }
+
 .cs-search:focus-within {
-  border-color: #cbd5e1;
-  background: #ffffff;
+  border-color: var(--primary-color);
+  background: var(--bg-primary);
 }
+
 .cs-search input {
   border: none;
   background: transparent;
   width: 100%;
   font-size: 14px;
   outline: none;
-  color: #0f172a;
-}
-.cs-search input::placeholder {
-  color: #94a3b8;
+  color: var(--text-primary);
 }
 
 .cs-menu {
   flex: 1;
-  padding: 8px 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+  padding: 8px;
+  overflow-y: auto;
 }
 
 .cs-menu-item {
   display: flex;
   align-items: center;
-  gap: 14px;
-  padding: 12px 14px;
-  border-radius: 12px;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
   cursor: pointer;
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 600;
-  color: #334155;
+  color: var(--text-primary);
   transition: all 0.2s;
+  margin-bottom: 2px;
 }
+
 .cs-menu-item:hover {
-  background: #f8fafc;
+  background: var(--bg-hover);
 }
+
 .cs-menu-item.active {
-  background: #eff6ff;
-  color: #2563eb;
+  background: var(--bg-active);
+  color: var(--primary-color);
 }
 
 .cs-icon {
-  width: 38px;
-  height: 38px;
-  border-radius: 12px;
+  width: 32px;
+  height: 32px;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: white;
-  box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+  color: inherit;
 }
-.cs-icon.friends { background: linear-gradient(135deg, #3b82f6, #6366f1); }
-.cs-icon.groups { background: linear-gradient(135deg, #10b981, #059669); }
-.cs-icon.requests { background: linear-gradient(135deg, #f59e0b, #d97706); }
 
-/* MAIN VIEW */
+/* ── MAIN CONTENT (Right) ───────────────────────────────────── */
 .contacts-main {
   flex: 1;
   display: flex;
+  flex-direction: column;
+  background: var(--bg-primary);
+}
+
+.contacts-header {
+  height: 64px;
+  padding: 0 24px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.contacts-header .ch-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.contacts-scroll-area {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px;
+  background: var(--bg-secondary);
+}
+
+.friends-count {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 16px;
+}
+
+/* ── Filter Bar ─────────────────────────────────────────────── */
+.contacts-filter-bar {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+}
+
+.filter-input-wrap {
+  flex: 1;
+  min-width: 200px;
+  height: 36px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  gap: 8px;
+}
+
+.filter-input-wrap input {
+  border: none;
+  background: transparent;
+  width: 100%;
+  font-size: 13px;
+  outline: none;
+  color: var(--text-primary);
+}
+
+.filter-select {
+  height: 36px;
+  padding: 0 12px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+  outline: none;
+  cursor: pointer;
+}
+
+/* ── Friend Alphabet List ───────────────────────────────────── */
+.alphabet-group {
+  margin-bottom: 24px;
+}
+
+.group-letter {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--text-primary);
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border-color);
+  margin-bottom: 8px;
+}
+
+.friend-item {
+  display: flex;
+  align-items: center;
+  padding: 12px 16px;
+  border-radius: 12px;
+  transition: background 0.2s;
+  cursor: pointer;
+  position: relative;
+}
+
+.friend-item:hover {
+  background: var(--bg-hover);
+}
+
+.friend-avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  border: 1px solid var(--border-color);
+  margin-right: 16px;
+  object-fit: cover;
+}
+
+.friend-name {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+  flex: 1;
+}
+
+.friend-actions {
+  position: relative;
+}
+
+.action-dot-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
   align-items: center;
   justify-content: center;
-  background: #f8fafc;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  transition: all 0.2s;
+  background: transparent;
+  border: none;
 }
 
-.contacts-placeholder {
-  text-align: center;
-  max-width: 420px;
-  animation: fadeUp 0.6s ease;
+.action-dot-btn:hover {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
 }
 
-@keyframes fadeUp {
-  from { opacity: 0; transform: translateY(20px); }
+/* ── Context Menu (Dropdown) ────────────────────────────────── */
+.context-menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  width: 180px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+  z-index: 1000;
+  padding: 6px;
+  animation: menuFadeIn 0.2s ease;
+}
+
+@keyframes menuFadeIn {
+  from { opacity: 0; transform: translateY(-10px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
-.contacts-illustration {
-  width: 100%;
-  max-width: 320px;
-  margin-bottom: 32px;
-}
-
-.contacts-placeholder h3 {
-  margin: 0 0 12px 0;
-  color: #0f172a;
-  font-size: 22px;
-  font-weight: 800;
-}
-
-.contacts-placeholder p {
-  color: #64748b;
-  font-size: 15px;
-  line-height: 1.6;
-  margin: 0 0 28px 0;
-}
-
-.contacts-btn {
-  background: #2563eb;
-  color: white;
-  border: none;
-  padding: 12px 32px;
-  border-radius: 30px;
+.menu-item {
+  padding: 10px 12px;
+  font-size: 13px;
   font-weight: 600;
-  font-size: 14px;
+  color: var(--text-primary);
+  border-radius: 6px;
   cursor: pointer;
-  transition: all 0.2s;
-  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.25);
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
-.contacts-btn:hover {
-  background: #1d4ed8;
-  transform: translateY(-1px);
+
+.menu-item:hover {
+  background: var(--bg-hover);
+}
+
+.menu-item.danger {
+  color: #ef4444;
+}
+
+.menu-item.danger:hover {
+  background: #fef2f2;
+}
+
+/* Alphabet Scrollbar helper (optional feature for many friends) */
+.page-loading {
+  display: flex;
+  justify-content: center;
+  padding: 40px;
+  color: var(--primary-color);
 }
