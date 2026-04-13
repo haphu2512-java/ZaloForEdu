@@ -14,13 +14,17 @@ export const useNotificationStore = create((set, get) => ({
       const page = refresh ? 1 : get().page;
       const res = await notificationService.getNotifications(page, 20);
       const data = res.data?.data;
-      const items = data?.notifications || data?.items || [];
+      // Backend trả về { items, pagination }
+      const items = data?.items || data?.notifications || [];
       const total = data?.pagination?.total || items.length;
       set((state) => ({
         notifications: refresh ? items : [...state.notifications, ...items],
         hasMore: (refresh ? items.length : state.notifications.length + items.length) < total,
         page: refresh ? 2 : state.page + 1,
         isLoading: false,
+        unreadCount: refresh
+          ? items.filter((n) => !n.isRead).length
+          : state.unreadCount,
       }));
     } catch {
       set({ isLoading: false });
