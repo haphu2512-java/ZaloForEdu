@@ -2,13 +2,11 @@ import React, { useState, useEffect, useRef, useMemo, useCallback } from "react"
 import { useLocation } from "react-router-dom";
 import axios from "axios";
 import io from "socket.io-client";
-import { FaSearch, FaPaperPlane, FaPhoneAlt, FaVideo, FaInfoCircle, FaBell, FaThumbtack, FaUsers, FaSun, FaMoon } from "react-icons/fa";
+import { FaSearch, FaPaperPlane, FaPhoneAlt, FaVideo, FaInfoCircle, FaBell, FaThumbtack, FaUsers, FaSun, FaMoon, FaFileAlt, FaTimes, FaSpinner } from "react-icons/fa";
 import toast from "react-hot-toast";
 
-// Import thư viện gọi file và store bạn bè của bạn
 import { uploadFile } from "../../services/mediaService"; 
 import { useFriendStore } from "../../store/friendStore"; 
-
 import { MessageBubble } from "./MessageBubble";
 import "./ChatPage.css";
 
@@ -40,19 +38,20 @@ export default function ChatPage() {
   const [searchQuery, setSearchQuery] = useState(""); 
   const [theme, setTheme] = useState("light");
   
+  const [pendingFiles, setPendingFiles] = useState([]);
+  const [isSending, setIsSending] = useState(false);
+
   const imageInputRef = useRef(null);
   const videoInputRef = useRef(null);
   const fileInputRef = useRef(null);
+  const folderInputRef = useRef(null);
   
   const location = useLocation();
   const messagesEndRef = useRef(null);
-  const token = localStorage.getItem("token");
-
-  // ── LẤY DANH SÁCH BẠN BÈ TỪ STORE ──
+  
   const { friends, fetchFriends } = useFriendStore();
 
   useEffect(() => {
-    // Load danh sách bạn bè nếu chưa có
     if (friends.length === 0) fetchFriends();
   }, [friends.length, fetchFriends]);
 
@@ -62,9 +61,11 @@ export default function ChatPage() {
     try {
       const userObj = JSON.parse(localStorage.getItem("user") || "{}");
       if (userObj && (userObj._id || userObj.id)) return String(userObj._id || userObj.id).trim();
-    } catch (e) { return null; }
+    } catch (e) {}
     return null;
-  }, [token]);
+  }, []); 
+
+  const token = localStorage.getItem("token");
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -72,10 +73,12 @@ export default function ChatPage() {
 
   const getOtherParticipant = useCallback((conv) => {
     if (!conv || !conv.participants) return null;
-    return conv.participants.find(p => {
+    const others = conv.participants.filter(p => {
       const pId = typeof p === 'string' ? p : (p._id || p.id);
       return String(pId) !== String(userId);
     });
+    if (others.length > 0) return others[0];
+    return null;
   }, [userId]);
 
   const getConversationName = useCallback((conv) => {
@@ -83,7 +86,7 @@ export default function ChatPage() {
     if (conv.type === 'group' || conv.roomModel === 'Group') return conv.name || 'Nhóm chat';
     const other = getOtherParticipant(conv);
     if (other && typeof other === 'object') return other.username || other.fullName || other.name || 'Người dùng';
-    return 'Người dùng';
+    return 'Người dùng ẩn danh';
   }, [getOtherParticipant]);
 
   const getConversationAvatar = useCallback((conv) => {
@@ -99,26 +102,35 @@ export default function ChatPage() {
     return avatar || `https://ui-avatars.com/api/?name=${name}&background=random`;
   }, [getOtherParticipant]);
 
-  // ── GỘP HỘI THOẠI VÀ BẠN BÈ (HIỂN THỊ TOÀN BỘ) ──
   const mergedConversations = useMemo(() => {
-    const convs = [...conversations];
+    const validConvs = conversations.filter(c => {
+      if (c.type === 'group' || c.roomModel === 'Group') return true;
+      if (c.participants && c.participants.length > 0) {
+        const others = c.participants.filter(p => String(p._id || p.id || p) !== String(userId));
+        return others.length > 0; 
+      }
+      return false;
+    });
+
+    const convs = [...validConvs];
     const directMap = new Set();
     
-    // Đánh dấu những người đã có phòng chat thật
     convs.forEach(c => {
       if (c.type === 'direct' && !c.isMock) {
-        const other = c.participants?.find(p => String(p._id || p.id || p) !== String(userId));
-        if (other) directMap.add(String(other._id || other.id || other));
+        const other = getOtherParticipant(c);
+        if (other) {
+          const oId = typeof other === 'string' ? other : (other._id || other.id);
+          directMap.add(String(oId));
+        }
       }
     });
 
-    // Duyệt qua bạn bè, ai chưa có phòng thì tạo phòng ảo (Mock)
     friends.forEach(friend => {
       const fId = String(friend._id || friend.id);
       if (!directMap.has(fId)) {
         convs.push({
           _id: `mock_${fId}`,
-          isMock: true, // Cờ đánh dấu đây là phòng ảo
+          isMock: true, 
           type: 'direct',
           participants: [{ _id: userId }, friend],
           latestMessage: null,
@@ -127,19 +139,17 @@ export default function ChatPage() {
       }
     });
 
-    // Sắp xếp: Ai có tin nhắn mới nhất lên đầu
     convs.sort((a, b) => {
       const timeA = a.latestMessage ? new Date(a.latestMessage.createdAt).getTime() : 0;
       const timeB = b.latestMessage ? new Date(b.latestMessage.createdAt).getTime() : 0;
       return timeB - timeA;
     });
 
-    // Xử lý bộ lọc tìm kiếm
     if (!searchQuery.trim()) return convs;
     return convs.filter(conv => 
       getConversationName(conv).toLowerCase().includes(searchQuery.toLowerCase())
     );
-  }, [conversations, friends, searchQuery, userId, getConversationName]);
+  }, [conversations, friends, searchQuery, userId, getConversationName, getOtherParticipant]);
 
   useEffect(() => {
     if (!token) return;
@@ -173,6 +183,7 @@ export default function ChatPage() {
         const newConvs = [...prevConvs];
         const [target] = newConvs.splice(index, 1);
         target.latestMessage = msg;
+        // Đếm unreadCount nếu đang không ở phòng đó
         if (activeConversation?._id !== target._id) {
             target.unreadCount = (target.unreadCount || 0) + 1;
         }
@@ -181,17 +192,16 @@ export default function ChatPage() {
     });
 
     return () => socket.disconnect();
-  }, [token, location.state]);
+  }, [token, location.state, activeConversation?._id]);
 
-  // ── TẢI TIN NHẮN TRONG PHÒNG ──
   useEffect(() => {
     if (!activeConversation) return;
 
-    // Nếu là phòng Ảo (Chưa nhắn câu nào) -> Không cần gọi API
-    if (activeConversation.isMock) {
-      setMessages([]);
-      return;
-    }
+    setMessages([]);
+    setPendingFiles([]); 
+    setTextInput("");
+
+    if (activeConversation.isMock) return; 
 
     const fetchMessages = async () => {
       try {
@@ -202,7 +212,7 @@ export default function ChatPage() {
         const fetchedMessages = res.data.data?.items || res.data.items || [];
         setMessages(fetchedMessages.reverse());
         
-        // Reset unreadCount = 0
+        // Đặt unreadCount về 0 khi chọn vào phòng
         setConversations(prev => prev.map(c => String(c._id) === String(activeConversation._id) ? { ...c, unreadCount: 0 } : c));
       } catch (err) { setMessages([]); }
     };
@@ -215,92 +225,90 @@ export default function ChatPage() {
     };
   }, [activeConversation?._id, token]);
 
-  useEffect(() => { scrollToBottom(); }, [messages]);
+  useEffect(() => { scrollToBottom(); }, [messages, pendingFiles]);
 
-  // ── XỬ LÝ GỬI TIN NHẮN THÔNG MINH ──
+  const getSenderIdStr = (msg) => {
+    if (!msg) return null;
+    const s = msg.senderId || msg.sender;
+    if (!s) return null;
+    if (typeof s === 'object') return String(s._id || s.id);
+    return String(s);
+  };
+
+  const handleFileInput = (e) => {
+    if (e.target.files && e.target.files.length > 0) {
+      setPendingFiles(prev => [...prev, ...Array.from(e.target.files)]);
+    }
+    e.target.value = ""; 
+  };
+  const removePendingFile = (index) => {
+    setPendingFiles(prev => prev.filter((_, i) => i !== index));
+  };
+
   const handleSend = async (e) => {
     if (e) e.preventDefault();
     const content = textInput.trim();
-    if (!content || !activeConversation) return;
-    setTextInput("");
+    if ((!content && pendingFiles.length === 0) || !activeConversation || isSending) return;
+
+    setIsSending(true);
 
     try {
       let currentConvId = activeConversation._id;
 
-      // KIỂM TRA: NẾU ĐANG Ở PHÒNG ẢO -> TẠO PHÒNG THẬT TRƯỚC
       if (activeConversation.isMock) {
         const otherParticipant = getOtherParticipant(activeConversation);
         const targetId = otherParticipant._id || otherParticipant.id;
         
         const createRes = await axios.post(`${API_BASE_URL}/conversations`, {
-          type: "direct",
-          participantIds: [targetId]
+          type: "direct", participantIds: [targetId]
         }, { headers: { Authorization: `Bearer ${token}` } });
         
         const realConv = createRes.data.data || createRes.data;
+        realConv.participants = activeConversation.participants; 
         currentConvId = realConv._id || realConv.id;
         
-        // Cập nhật giao diện: Đổi phòng ảo thành phòng thật
         setActiveConversation(realConv);
-        setConversations(prev => [...prev, realConv]);
+        setConversations(prev => [realConv, ...prev.filter(c => c._id !== activeConversation._id)]);
         socket.emit("join:room", currentConvId);
       }
 
-      // GỬI TIN VÀO PHÒNG THẬT
+      let uploadedMediaIds = [];
+      let uploadedMediaObjects = [];
+
+      if (pendingFiles.length > 0) {
+        for (let file of pendingFiles) {
+          const media = await uploadFile(file, { folder: "zaloapp/chat" });
+          uploadedMediaIds.push(media._id || media.id);
+          uploadedMediaObjects.push(media);
+        }
+      }
+
       const res = await axios.post(`${API_BASE_URL}/messages/send`,
-        { content: content, conversationId: currentConvId },
+        { content: content, conversationId: currentConvId, mediaIds: uploadedMediaIds },
         { headers: { Authorization: `Bearer ${token}` } }
       );
+      
       const newMsg = res.data.data || res.data; 
       if (newMsg) {
+        // Gắn đối tượng file vào message để hiện ngay
+        if (uploadedMediaObjects.length > 0) {
+          newMsg.attachments = uploadedMediaObjects; 
+        }
+
         setMessages(prev => {
           if (prev.find(m => String(m._id) === String(newMsg._id))) return prev;
           return [...prev, newMsg];
         });
       }
+
+      setTextInput("");
+      setPendingFiles([]);
     } catch (err) { 
       console.error("Gửi tin thất bại", err);
-      setTextInput(content);
+      toast.error("Gửi tin nhắn/file thất bại!");
+    } finally {
+      setIsSending(false);
     }
-  };
-
-  const handleUploadFile = async (file) => {
-    if (!activeConversation) return;
-    try {
-      let currentConvId = activeConversation._id;
-      
-      // Xử lý tạo phòng y hệt như lúc chat Text nếu đang ở phòng ảo
-      if (activeConversation.isMock) {
-        const otherParticipant = getOtherParticipant(activeConversation);
-        const targetId = otherParticipant._id || otherParticipant.id;
-        const createRes = await axios.post(`${API_BASE_URL}/conversations`, {
-          type: "direct", participantIds: [targetId]
-        }, { headers: { Authorization: `Bearer ${token}` } });
-        const realConv = createRes.data.data || createRes.data;
-        currentConvId = realConv._id || realConv.id;
-        setActiveConversation(realConv);
-        setConversations(prev => [...prev, realConv]);
-        socket.emit("join:room", currentConvId);
-      }
-
-      const media = await uploadFile(file, { folder: "zaloapp/chat" });
-      const res = await axios.post(`${API_BASE_URL}/messages/send`,
-        { content: "", mediaIds: [media._id || media.id], conversationId: currentConvId },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      const newMsg = res.data.data || res.data;
-      if (newMsg) {
-          newMsg.attachments = [media]; 
-          setMessages(prev => [...prev, newMsg]);
-      }
-    } catch (err) {
-      toast.error(err.message || "Tải lên thất bại");
-    }
-  };
-
-  const handleFileInput = (e) => {
-    Array.from(e.target.files).forEach(handleUploadFile);
-    e.target.value = "";
   };
 
   const handleReaction = async (messageId, emoji) => {
@@ -308,7 +316,7 @@ export default function ChatPage() {
       await axios.put(`${API_BASE_URL}/messages/${messageId}/react`, 
         { emoji }, { headers: { Authorization: `Bearer ${token}` } }
       );
-    } catch (err) { console.error("Lỗi thả tim:", err); }
+    } catch (err) {}
   };
 
   const toggleTheme = () => { setTheme(prev => prev === "light" ? "dark" : "light"); };
@@ -341,15 +349,18 @@ export default function ChatPage() {
                 <img className="cli-avatar" src={getConversationAvatar(conv)} alt="avt" />
                 <div className="cli-info">
                   <div className="cli-top">
-                    <span className="cli-name" style={{ fontWeight: unread > 0 ? 800 : 600 }}>{getConversationName(conv)}</span>
+                    <span className="cli-name" style={{ fontWeight: unread > 0 ? 800 : 600, color: unread > 0 ? 'var(--z-text-primary)' : '' }}>
+                        {getConversationName(conv)}
+                    </span>
                     <span className="cli-time" style={{ color: unread > 0 ? 'var(--z-primary)' : 'var(--z-text-muted)' }}>
                         {conv.latestMessage ? formatChatTimestamp(conv.latestMessage.createdAt) : ''}
                     </span>
                   </div>
                   <div className="cli-bottom">
                     <span className="cli-msg" style={{ fontWeight: unread > 0 ? 700 : 400, color: unread > 0 ? 'var(--z-text-primary)' : 'var(--z-text-secondary)' }}>
-                        {conv.latestMessage?.content || (conv.latestMessage?.mediaIds?.length > 0 ? '[Hình ảnh/File]' : 'Chưa có tin nhắn')}
+                        {conv.latestMessage?.content || (conv.latestMessage?.mediaIds?.length > 0 || conv.latestMessage?.attachments?.length > 0 ? '[Hình ảnh/File]' : 'Chưa có tin nhắn')}
                     </span>
+                    {/* THÊM BADGE ĐỎ Ở ĐÂY */}
                     {unread > 0 && <div className="cli-unread">{unread > 99 ? '99+' : unread}</div>}
                   </div>
                 </div>
@@ -399,7 +410,7 @@ export default function ChatPage() {
               <>
                 {messages.map((msg, index) => {
                   const showDate = shouldShowDateDivider(msg, messages[index - 1]);
-                  const isMe = String(msg.senderId?._id || msg.senderId || msg.sender?._id) === String(userId);
+                  const isMe = getSenderIdStr(msg) === String(userId);
                   return (
                     <React.Fragment key={msg._id}>
                       {showDate && <div className="msg-date">{formatChatTimestamp(msg.createdAt)}</div>}
@@ -412,15 +423,40 @@ export default function ChatPage() {
             )}
           </div>
 
+          {/* HIỂN THỊ FILE ĐANG CHỜ GỬI TRƯỚC KHI BẤM SEND */}
+          {pendingFiles.length > 0 && (
+            <div className="pending-files-container">
+              {pendingFiles.map((file, idx) => {
+                const isImg = file.type.startsWith('image/');
+                return (
+                  <div key={idx} className="pending-file-item">
+                    {isImg ? (
+                      <img src={URL.createObjectURL(file)} alt="preview" className="pf-img" />
+                    ) : (
+                      <div className="pf-doc">
+                        <FaFileAlt size={20} color="var(--z-primary)" />
+                        <span className="pf-doc-name">{file.name}</span>
+                      </div>
+                    )}
+                    <button type="button" className="pf-remove" onClick={() => removePendingFile(idx)}>
+                      <FaTimes size={10} />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
           <div className="chat-toolbar">
             <input ref={imageInputRef} type="file" accept="image/*" multiple style={{display:"none"}} onChange={handleFileInput}/>
             <input ref={videoInputRef} type="file" accept="video/*" multiple style={{display:"none"}} onChange={handleFileInput}/>
             <input ref={fileInputRef} type="file" multiple style={{display:"none"}} onChange={handleFileInput} accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip,.rar,.7z"/>
+            <input ref={folderInputRef} type="file" webkitdirectory="true" multiple style={{display:"none"}} onChange={handleFileInput} />
             
             <button className="chat-tool-btn" title="Gửi ảnh" onClick={()=>imageInputRef.current?.click()}><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg></button>
             <button className="chat-tool-btn" title="Đính kèm file" onClick={()=>fileInputRef.current?.click()}><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg></button>
             <button className="chat-tool-btn" title="Gửi video" onClick={()=>videoInputRef.current?.click()}><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg></button>
-            <button className="chat-tool-btn" title="Gửi thư mục" onClick={()=>{if(fileInputRef.current){fileInputRef.current.setAttribute("webkitdirectory","");fileInputRef.current.click();}}}><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg></button>
+            <button className="chat-tool-btn" title="Gửi thư mục" onClick={()=>folderInputRef.current?.click()}><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg></button>
           </div>
 
           <form className="chat-input-area" onSubmit={handleSend}>
@@ -432,13 +468,13 @@ export default function ChatPage() {
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault();
-                    if (textInput.trim()) handleSend(e);
+                    if (textInput.trim() || pendingFiles.length > 0) handleSend(e);
                   }
                 }}
               />
             </div>
-            <button type="submit" className="btn-send" disabled={!textInput.trim()}>
-              <FaPaperPlane size={16} />
+            <button type="submit" className="btn-send" disabled={(textInput.trim() === "" && pendingFiles.length === 0) || isSending}>
+              {isSending ? <FaSpinner className="spin" size={16} color="white" /> : <FaPaperPlane size={16} />}
             </button>
           </form>
         </main>

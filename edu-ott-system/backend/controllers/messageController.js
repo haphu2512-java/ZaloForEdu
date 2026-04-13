@@ -23,6 +23,9 @@ const sendMessage = asyncHandler(async (req, res) => {
     forwardFrom,
   });
 
+  await message.populate('mediaIds', 'fileName url size mimeType providerResourceType');
+  await message.populate('senderId', 'username avatarUrl');
+
   socketService.emitToConversation(conversationId, 'new_message', message);
   await socketService.emitConversationUpdated(conversationId, {
     conversationId,
@@ -39,11 +42,11 @@ const listMessagesByConversation = asyncHandler(async (req, res) => {
 
   await ensureConversationMember(conversationId, req.user._id);
 
-  const query = { 
+  const query = {
     conversationId,
     deletedBy: { $ne: req.user._id } // Do not fetch messages deleted by this user
   };
-  
+
   if (cursor) {
     const parsedCursor = decodeCursor(cursor);
     if (!parsedCursor) {
@@ -60,11 +63,12 @@ const listMessagesByConversation = asyncHandler(async (req, res) => {
   }
 
   const messages = await Message.find(query)
-    .sort({ createdAt: -1, _id: -1 })
-    .limit(limit + 1)
-    .populate('senderId', 'username avatarUrl')
-    .populate('replyTo')
-    .populate('forwardFrom');
+      .sort({ createdAt: -1, _id: -1 })
+      .limit(limit + 1)
+      .populate('senderId', 'username avatarUrl')
+      .populate('mediaIds', 'fileName url size mimeType providerResourceType')
+      .populate('replyTo')
+      .populate('forwardFrom');
 
   let nextCursor = null;
   let finalItems = messages;
@@ -79,13 +83,13 @@ const listMessagesByConversation = asyncHandler(async (req, res) => {
   }
 
   return successResponse(
-    res,
-    {
-      items: finalItems,
-      nextCursor,
-      limit,
-    },
-    'Messages fetched',
+      res,
+      {
+        items: finalItems,
+        nextCursor,
+        limit,
+      },
+      'Messages fetched',
   );
 });
 
@@ -116,7 +120,7 @@ const deleteMessageForMe = asyncHandler(async (req, res) => {
   }
 
   await ensureConversationMember(message.conversationId, req.user._id);
-  
+
   // Save user _id to deletedBy array
   if (!message.deletedBy.includes(req.user._id)) {
     message.deletedBy.push(req.user._id);
@@ -159,7 +163,7 @@ const reactToMessage = asyncHandler(async (req, res) => {
 
   // Check if reaction exists
   const existingReactionIndex = message.reactions.findIndex(
-    (r) => r.userId.toString() === req.user._id.toString()
+      (r) => r.userId.toString() === req.user._id.toString()
   );
 
   if (existingReactionIndex >= 0) {

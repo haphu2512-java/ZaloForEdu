@@ -27,7 +27,7 @@ function MsgBubble({msg,onDelete,onPreview}){
   const menuRef=useRef(null);
   useEffect(()=>{if(!showMenu)return;const h=(e)=>{if(menuRef.current&&!menuRef.current.contains(e.target))setShowMenu(false);};document.addEventListener("mousedown",h);return()=>document.removeEventListener("mousedown",h);},[showMenu]);
   if(msg.isRecalled)return(<div className="mdc-msg-wrap me"><div className="mdc-msg-body"><div className="mdc-recalled">Tin nhắn đã được thu hồi</div><div className="mdc-msg-time">{fmtTime(msg.createdAt)}</div></div></div>);
-  const media=msg.media?.[0]||null;
+  const media=msg.mediaIds?.[0]||msg.media?.[0]||null;
   const hasMedia=!!media;
   const isImage=hasMedia&&IMAGE_EXTS.includes(getExt(media.fileName||""));
   return(
@@ -92,18 +92,14 @@ export default function MyDocumentsPage(){
 
   useEffect(()=>{messagesEndRef.current?.scrollIntoView({behavior:"smooth"});},[messages,uploads]);
 
-useEffect(()=>{
+  useEffect(()=>{
     if(!convId)return;
     socketService.connect();
-    const handler=(msg)=>{
-        const cid=msg.conversationId?._id||msg.conversationId;
-        // Bắt buộc kiểm tra ID phòng
-        if(String(cid) !== String(convId)) return; 
-        setMessages(prev=>prev.some(m=>m._id===msg._id)?prev:[...prev,msg]);
-    };
+    const handler=(msg)=>{const cid=msg.conversationId?._id||msg.conversationId;if(cid===convId)setMessages(prev=>prev.some(m=>m._id===msg._id)?prev:[...prev,msg]);};
     socketService.on("new_message",handler);
     return()=>socketService.off("new_message",handler);
   },[convId]);
+
   useEffect(()=>{
     const zone=pageRef.current;if(!zone)return;
     const onDragOver=(e)=>{e.preventDefault();setIsDragging(true);};
@@ -145,7 +141,7 @@ useEffect(()=>{
 
   const filtered=messages.filter(msg=>{
     if(filterTab==="all")return true;
-    const media=msg.media?.[0];
+    const media=msg.mediaIds?.[0]||msg.media?.[0];
     if(filterTab==="text")return!media&&!!msg.content;
     if(!media)return false;
     const cat=getCategory(media.fileName||"");
@@ -155,7 +151,7 @@ useEffect(()=>{
   });
 
   const grouped=filtered.reduce((acc,msg)=>{const key=fmtDateSep(msg.createdAt);if(!acc[key])acc[key]=[];acc[key].push(msg);return acc;},{});
-  const allMedia=messages.flatMap(m=>m.media||[]);
+  const allMedia=messages.flatMap(m=>m.mediaIds||m.media||[]);
   const totalBytes=allMedia.reduce((s,m)=>s+(m.size||0),0);
   const pctUsed=Math.min(100,(totalBytes/(1024*1024*1024))*100);
   const imgFiles=allMedia.filter(m=>["image","video"].includes(getCategory(m.fileName)));
