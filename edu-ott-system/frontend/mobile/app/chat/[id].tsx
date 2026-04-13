@@ -31,7 +31,7 @@ import {
   reactToMessage,
   getConversations,
 } from '../../utils/messageService';
-import { getPinnedMessages, pinMessage } from '../../utils/groupFeatureService';
+import { getPinnedMessages, pinMessage, unpinMessage } from '../../utils/groupFeatureService';
 import { uploadMediaBase64, getMediaById, uploadImageToCloudinary } from '../../utils/mediaService';
 import {
   connectSocket,
@@ -110,7 +110,7 @@ export default function ChatScreen() {
   const [mediaById, setMediaById] = useState<Record<string, MediaItem>>({});
 
   // Action Menu
-  const [actionMenu, setActionMenu] = useState<{ visible: boolean; options: {text: string, onPress: () => void, isDestructive?: boolean}[] }>({ visible: false, options: [] });
+  const [actionMenu, setActionMenu] = useState<{ visible: boolean; options: { text: string, onPress: () => void, isDestructive?: boolean }[] }>({ visible: false, options: [] });
 
   // Image viewer
   const [viewImageUrl, setViewImageUrl] = useState<string | null>(null);
@@ -119,6 +119,13 @@ export default function ChatScreen() {
     if (!value) return '';
     if (typeof value === 'string') return value;
     return value._id || value.id || '';
+  };
+
+  const getPinnedMessageId = (pinnedItem: any): string => {
+    const messageRef = pinnedItem?.messageId;
+    if (!messageRef) return '';
+    if (typeof messageRef === 'string') return messageRef;
+    return messageRef._id || messageRef.id || '';
   };
 
   const otherParticipant =
@@ -166,7 +173,7 @@ export default function ChatScreen() {
       const matched = (convRes.items || []).find((item) => (item._id || item.id) === conversationId) || null;
       setConversation(matched);
       if (matched && matched.type === 'group') {
-        getPinnedMessages(matched._id || matched.id).then(setPinnedItems).catch(console.error);
+        getPinnedMessages(conversationId).then(setPinnedItems).catch(console.error);
       }
     } catch (error) {
       console.log('Error loading messages', error);
@@ -228,7 +235,7 @@ export default function ChatScreen() {
       const unreadMessages = messages.filter((m) => {
         const mid = getMessageIdStr(m);
         if (markedMessageIds.current.has(mid)) return false;
-        
+
         const senderId = typeof m.senderId === 'string' ? m.senderId : m.senderId?._id || m.senderId?.id;
         // Don't mark our own messages as read
         if (senderId === currentUserId) return false;
@@ -520,12 +527,12 @@ export default function ChatScreen() {
   const handleReactToMessage = async (msg: Message) => {
     Alert.alert(
       'Chọn cảm xúc', '',
-      [...QUICK_EMOJIS, 'Gỡ cảm xúc', 'Hủy'].map((emoji) => ({
+      [...QUICK_EMOJIS, 'Gửi cảm xúc', 'Hủy'].map((emoji) => ({
         text: emoji,
         onPress: async () => {
           if (emoji === 'Hủy') return;
           try {
-            const reactions = await reactToMessage(getMessageId(msg), emoji === 'Gỡ cảm xúc' ? undefined : emoji);
+            const reactions = await reactToMessage(getMessageId(msg), emoji === 'Gửi cảm xúc' ? undefined : emoji);
             setMessages((prev) =>
               prev.map((m) => getMessageId(m) === getMessageId(msg) ? { ...m, reactions: reactions || [] } : m),
             );
@@ -545,10 +552,12 @@ export default function ChatScreen() {
   const handleMessageLongPress = (msg: Message) => {
     const isMine = getMessageSenderId(msg) === currentUserId;
     const isGroup = conversation?.type === 'group';
-    const buttons: any[] = [{ text: 'Hủy', style: 'cancel' }];
+    const messageId = getMessageId(msg);
+    const isPinned = pinnedItems.some((item) => getPinnedMessageId(item) === messageId);
+    const buttons: any[] = [{ text: 'Hủy', style: 'cancel', onPress: () => {} }];
 
     if (!msg.isRecalled) {
-      buttons.push({ text: '↩️ Trả lời', onPress: () => setReplyTo(msg) });
+      buttons.push({ text: '↩ Trả lời', onPress: () => setReplyTo(msg) });
     }
     if (isMine && !msg.isRecalled) {
       buttons.push({
@@ -563,7 +572,7 @@ export default function ChatScreen() {
     }
     if (!msg.isRecalled) {
       buttons.push({
-        text: '🗑️ Xóa phía tôi',
+        text: '✕ Xóa phía tôi',
         isDestructive: true,
         onPress: async () => {
           try {
@@ -572,19 +581,19 @@ export default function ChatScreen() {
           } catch { Alert.alert('Lỗi', 'Không thể xóa'); }
         },
       });
-      buttons.push({ text: '😊 Thả cảm xúc', onPress: () => handleReactToMessage(msg) });
-      buttons.push({ text: '↗️ Chuyển tiếp', onPress: () => openForwardModal(msg) });
+      buttons.push({ text: '😊 thả cảm xúc', onPress: () => handleReactToMessage(msg) });
+      buttons.push({ text: '↗ Chuyển tiếp', onPress: () => openForwardModal(msg) });
     }
     if (isGroup && !msg.isRecalled) {
       buttons.push({
-        text: '📌 Ghim tin nhắn',
+        text: isPinned ? 'Bỏ ghim' : 'Ghim tin nhắn',
         onPress: async () => {
           try {
-            const updatedItems = await pinMessage(conversationId, getMessageId(msg));
+            const updatedItems = isPinned ? await unpinMessage(conversationId, messageId) : await pinMessage(conversationId, messageId);
             setPinnedItems(updatedItems);
-            Alert.alert('Thành công', 'Đã ghim tin nhắn');
-          } catch (err: any) { 
-            Alert.alert('Lỗi', err.message || 'Không thể ghim'); 
+            Alert.alert('Thành công', isPinned ? 'Đã gỡ ghim tin nhắn' : 'Đã ghim tin nhắn');
+          } catch (err: any) {
+            Alert.alert('Lỗi', err.message || (isPinned ? 'Không thể gỡ ghim tin nhắn' : 'Không thể ghim tin nhắn'));
           }
         },
       });
@@ -631,12 +640,12 @@ export default function ChatScreen() {
     if (item.type === 'poll' && item.pollId) {
       return (
         <View style={{ marginBottom: 8 }}>
-          <PollBubble 
-            poll={item.pollId as any} 
-            currentUserId={currentUserId} 
-            colors={colors} 
-            brand="#0068FF" 
-            isMyMessage={isMine} 
+          <PollBubble
+            poll={item.pollId as any}
+            currentUserId={currentUserId}
+            colors={colors}
+            brand="#0068FF"
+            isMyMessage={isMine}
           />
         </View>
       );
@@ -668,14 +677,14 @@ export default function ChatScreen() {
                   {typeof (replyMsg as any).senderId === 'object' ? (replyMsg as any).senderId?.username : 'Tin nhắn'}
                 </Text>
                 <Text style={{ color: isMine ? 'rgba(255,255,255,0.7)' : colors.muted, fontSize: 12 }} numberOfLines={2}>
-                  {(replyMsg as any).content || 'File đính kèm'}
+                  {(replyMsg as any).content || 'File đính kèm...'}
                 </Text>
               </View>
             )}
 
             {/* Forward tag */}
             {item.forwardFrom && (
-              <Text style={{ color: isMine ? '#DBEAFE' : colors.muted, fontSize: 11, marginBottom: 4, fontStyle: 'italic' }}>↗ Chuyển tiếp</Text>
+              <Text style={{ color: isMine ? '#DBEAFE' : colors.muted, fontSize: 11, marginBottom: 4, fontStyle: 'italic' }}>↪ Chuyển tiếp</Text>
             )}
 
             {/* Text content */}
@@ -717,7 +726,7 @@ export default function ChatScreen() {
                         if (!media?.url) return;
                         const supported = await Linking.canOpenURL(media.url);
                         if (supported) await Linking.openURL(media.url);
-                        else Alert.alert('Lỗi', 'Không thể mở tệp');
+                        else Alert.alert('Lỗi', 'Không thể mở tập');
                       }}
                       style={[styles.fileAttachment, { backgroundColor: isMine ? '#1D4ED8' : colors.border }]}
                     >
@@ -766,6 +775,9 @@ export default function ChatScreen() {
             </View>
           ),
           headerShown: true,
+          headerStyle: { backgroundColor: colors.surface },
+          headerShadowVisible: true,
+          headerTitleAlign: 'left',
           headerBackVisible: false,
           headerLeft: () => (
             <TouchableOpacity onPress={() => router.back()} style={{ padding: 8, marginLeft: 4 }}>
@@ -789,7 +801,7 @@ export default function ChatScreen() {
 
       {/* Pinned message */}
       {conversation?.type === 'group' && pinnedItems.length > 0 && (
-        <PinnedBar 
+        <PinnedBar
           pinnedItems={pinnedItems}
           colors={colors}
           brand="#0068FF"
@@ -885,10 +897,10 @@ export default function ChatScreen() {
               </View>
               <Text style={{ color: colors.text, fontSize: 13, fontWeight: '600', marginTop: 4 }}>Tệp tài liệu</Text>
             </TouchableOpacity>
-            
+
             {conversation?.type === 'group' && (
-              <TouchableOpacity 
-                style={styles.mediaMenuItem} 
+              <TouchableOpacity
+                style={styles.mediaMenuItem}
                 onPress={() => {
                   setShowMediaMenu(false);
                   router.push({ pathname: '/create-poll', params: { conversationId } } as any);
@@ -952,7 +964,7 @@ export default function ChatScreen() {
                 style={[styles.actionMenuBtn, index > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border }]}
                 onPress={() => {
                   setActionMenu({ visible: false, options: [] });
-                  opt.onPress();
+                  opt.onPress?.();
                 }}
               >
                 <Text style={{ fontSize: 16, color: opt.isDestructive ? '#EF4444' : colors.text, fontWeight: opt.style === 'cancel' ? '700' : '400' }}>
@@ -994,3 +1006,5 @@ const styles = StyleSheet.create({
   actionMenuContainer: { borderRadius: 14, overflow: 'hidden', paddingBottom: Platform.OS === 'ios' ? 20 : 0 },
   actionMenuBtn: { paddingVertical: 16, alignItems: 'center', justifyContent: 'center' },
 });
+
+

@@ -101,6 +101,7 @@ export interface Message {
   readBy?: string[];
   deletedBy?: string[];
   reactions: Reaction[];
+  pollId?: any;
   createdAt: string;
   updatedAt: string;
   /** Client-only */

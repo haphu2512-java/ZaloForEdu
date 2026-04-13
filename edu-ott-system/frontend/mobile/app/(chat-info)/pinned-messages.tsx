@@ -120,6 +120,8 @@ export default function PinnedMessagesScreen() {
           headerTitle: '📌 Bảng tin nhóm',
           headerStyle: { backgroundColor: colors.surface },
           headerTintColor: colors.text,
+          headerShadowVisible:true,
+          headerTitleStyle: { fontWeight: '700' },
         }}
       />
 
