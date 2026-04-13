@@ -119,8 +119,9 @@ router.post(
  * @openapi
  * /users/admin/status:
  *   post:
- *     tags: [Users]
- *     summary: [ADMIN] Force disable/enable account
+ *     tags:
+ *       - Users
+ *     summary: "[ADMIN] Force disable/enable account"
  *     security:
  *       - bearerAuth: []
  *     requestBody:
@@ -131,9 +132,12 @@ router.post(
  *             type: object
  *             required: [targetUserId, isActive]
  *             properties:
- *               targetUserId: { type: string }
- *               isActive: { type: boolean }
- *               banReason: { type: string }
+ *               targetUserId:  
+ *                 type: string
+ *               isActive:
+ *                 type: boolean
+ *               banReason:
+ *                 type: string
  */
 router.post('/admin/status', auth, userController.updateUserStatus);
 
