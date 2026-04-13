@@ -1,9 +1,16 @@
 .main-layout {
   display: flex;
+  flex-direction: column;
   height: 100vh;
   overflow: hidden;
   font-family: "Be Vietnam Pro", system-ui, sans-serif;
   background: #f0f2f5;
+}
+
+.main-layout-body {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
 }
 
 /* ── SIDEBAR (Zalo Style) ── */

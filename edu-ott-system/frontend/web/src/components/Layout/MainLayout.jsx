@@ -260,7 +260,6 @@ export default function MainLayout() {
   const [showNotifications, setShowNotifications] = useState(false);
   const menuRef = useRef(null);
   const { unreadCount, fetchUnreadCount } = useNotificationStore();
-  const { user } = useAuthStore();
 
   // Banner: nhắc user bổ sung thông tin còn thiếu
   const missingPhone = user && !user.phone;
@@ -323,6 +322,7 @@ export default function MainLayout() {
         </div>
       )}
       {/* ── SIDEBAR ── */}
+      <div className="main-layout-body">
       <aside className="sidebar">
         {/* Logo */}
         <div className="sidebar-logo">
@@ -436,6 +436,7 @@ export default function MainLayout() {
 
       {/* ── SETTINGS MODAL ── */}
       {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}
+      </div>{/* end main-layout-body */}
     </div>
   );
 }
