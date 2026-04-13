@@ -32,6 +32,10 @@ const auth = asyncHandler(async (req, _res, next) => {
     throw new ApiError(401, 'UNAUTHORIZED', 'User not found');
   }
 
+  if (user.isActive === false) {
+    throw new ApiError(403, 'ACCOUNT_DISABLED', user.banReason || 'Tài khoản của bạn đã bị vô hiệu hóa. Vui lòng liên hệ hỗ trợ.');
+  }
+
   // Device-specific token version check (Zalo-style single session per device type)
   const device = payload.device || 'web';
   const expectedVersion = getDeviceTokenVersion(user, device);

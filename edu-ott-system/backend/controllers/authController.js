@@ -229,6 +229,10 @@ const login = asyncHandler(async (req, res) => {
     throw new ApiError(401, 'INVALID_CREDENTIALS', 'Email/SĐT hoặc mật khẩu không đúng');
   }
 
+  if (user.isActive === false) {
+    throw new ApiError(403, 'ACCOUNT_DISABLED', user.banReason || 'Tài khoản của bạn đã bị vô hiệu hóa. Vui lòng liên hệ hỗ trợ.');
+  }
+
   const passwordToCompare = user.passwordHash || user.password;
   if (!passwordToCompare) {
     throw new ApiError(401, 'INVALID_CREDENTIALS', 'Tài khoản không hợp lệ');
