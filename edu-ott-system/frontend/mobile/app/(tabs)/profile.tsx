@@ -189,15 +189,16 @@ export default function ProfileScreen() {
 
   const handleUpdateTheme = async (theme: ThemeMode) => {
     if (!settings || isSavingSettings) return;
+    if (settings.theme === theme) return; // no change
     const previous = settings;
     const next = { ...settings, theme };
-    setSettings(next);
+    setSettings(next); // optimistic update
     setIsSavingSettings(true);
     try {
       await updateMySettings({ theme });
-      Alert.alert('Thành công', 'Đã lưu cài đặt giao diện');
+      // Theme changes silently - the color scheme hook reacts immediately
     } catch (error: any) {
-      setSettings(previous);
+      setSettings(previous); // rollback on error
       Alert.alert('Lỗi', error.message || 'Không thể lưu cài đặt giao diện');
     } finally {
       setIsSavingSettings(false);
@@ -868,6 +869,20 @@ export default function ProfileScreen() {
           color="#0EA5E9"
 >>>>>>> Refactor_Project:edu-ott-system/frontend/mobile/app/(tabs)/profile.tsx
         />
+        <MenuItem
+          ionIcon="archive-outline"
+          title="Tin nhắn lưu trữ"
+          subtitle="Xem các cuộc trò chuyện đã ẩn"
+          onPress={() => router.push('/archived-conversations' as any)}
+          color="#8B5CF6"
+        />
+        <MenuItem
+          ionIcon="ban-outline"
+          title="Danh sách chặn"
+          subtitle="Quản lý người dùng đã chặn"
+          onPress={() => router.push('/blocked-users' as any)}
+          color="#EF4444"
+        />
       </View>
 
       {/* ==================== OTHER SETTINGS ==================== */}
@@ -886,13 +901,17 @@ export default function ProfileScreen() {
 =======
         <View style={[styles.preferenceWrap, { borderBottomColor: colors.border }]}>
           <View style={{ flex: 1, backgroundColor: 'transparent' }}>
-            <Text style={[styles.menuText, { color: colors.text }]}>Theme</Text>
+            <Text style={[styles.menuText, { color: colors.text }]}>Giao diện (Theme)</Text>
             <Text style={{ fontSize: 12, color: colors.muted, marginTop: 2 }}>
-              Chọn giao diện ứng dụng
+              Hiện tại: {settings?.theme === 'light' ? '☀️ Sáng' : settings?.theme === 'dark' ? '🌙 Tối' : '📱 Hệ thống'}
             </Text>
           </View>
-          <View style={{ flexDirection: 'row', gap: 8, backgroundColor: 'transparent' }}>
-            {(['light', 'dark', 'system'] as ThemeMode[]).map((mode) => {
+          <View style={{ flexDirection: 'row', gap: 6, backgroundColor: 'transparent' }}>
+            {([
+              { mode: 'light', label: 'Sáng', icon: 'sunny' },
+              { mode: 'dark', label: 'Tối', icon: 'moon' },
+              { mode: 'system', label: 'Auto', icon: 'phone-portrait' },
+            ] as { mode: ThemeMode; label: string; icon: any }[]).map(({ mode, label, icon }) => {
               const active = settings?.theme === mode;
               return (
                 <TouchableOpacity
@@ -903,12 +922,13 @@ export default function ProfileScreen() {
                     styles.themeChip,
                     {
                       borderColor: active ? colors.tint : colors.border,
-                      backgroundColor: active ? colors.tint + '20' : 'transparent',
+                      backgroundColor: active ? colors.tint : 'transparent',
                     },
                   ]}
                 >
-                  <Text style={{ color: active ? colors.tint : colors.muted, fontWeight: '700', fontSize: 12 }}>
-                    {mode === 'light' ? 'Sáng' : mode === 'dark' ? 'Tối' : 'System'}
+                  <Ionicons name={icon} size={13} color={active ? '#fff' : colors.muted} />
+                  <Text style={{ color: active ? '#fff' : colors.muted, fontWeight: '700', fontSize: 11, marginTop: 2 }}>
+                    {label}
                   </Text>
                 </TouchableOpacity>
               );
@@ -1724,10 +1744,12 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   themeChip: {
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderRadius: 10,
-    paddingHorizontal: 10,
+    paddingHorizontal: 8,
     paddingVertical: 6,
+    alignItems: 'center',
+    minWidth: 48,
   },
 
   profileRow: {

@@ -43,6 +43,21 @@ const router = express.Router();
  *         description: Conversations fetched
  */
 router.get('/', auth, validate({ query: conversationPaginationQuerySchema }), conversationController.listConversations);
+
+/**
+ * @openapi
+ * /conversations/archived:
+ *   get:
+ *     tags: [Conversations]
+ *     summary: List archived (hidden) conversations
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Archived conversations fetched
+ */
+router.get('/archived', auth, conversationController.listArchivedConversations);
+
 /**
  * @openapi
  * /conversations:

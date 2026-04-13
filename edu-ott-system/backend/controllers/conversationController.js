@@ -102,13 +102,13 @@ const listConversations = asyncHandler(async (req, res) => {
   }
 
   const conversationIds = finalItems.map((conversation) => conversation._id);
-  
-  const latestMessagePromises = conversationIds.map((cid) => 
+
+  const latestMessagePromises = conversationIds.map((cid) =>
     Message.findOne({ conversationId: cid, deletedBy: { $ne: req.user._id } })
       .sort({ createdAt: -1, _id: -1 })
       .populate('senderId', 'username avatarUrl')
   );
-  
+
   const latestMessagesArr = await Promise.all(latestMessagePromises);
 
   const items = finalItems.map((conversation, index) => {
@@ -354,6 +354,43 @@ const unpinGroupMessage = asyncHandler(async (req, res) => {
   return successResponse(res, conversation, 'Group pinned message cleared');
 });
 
+const listArchivedConversations = asyncHandler(async (req, res) => {
+  // Find conversations marked as hidden by the current user
+  const hiddenPrefs = await ConversationPreference.find({
+    userId: req.user._id,
+    isHidden: true,
+    isDeleted: { $ne: true },
+  }).select('conversationId');
+
+  const hiddenIds = hiddenPrefs.map((p) => p.conversationId);
+
+  if (hiddenIds.length === 0) {
+    return successResponse(res, { items: [], nextCursor: null, limit: 50 }, 'Archived conversations fetched');
+  }
+
+  const conversations = await Conversation.find({
+    _id: { $in: hiddenIds },
+    participants: req.user._id,
+  })
+    .populate('participants', 'username email avatarUrl isOnline lastSeen')
+    .sort({ lastMessageAt: -1, _id: -1 });
+
+  const conversationIds = conversations.map((c) => c._id);
+  const latestMessagePromises = conversationIds.map((cid) =>
+    Message.findOne({ conversationId: cid, deletedBy: { $ne: req.user._id } })
+      .sort({ createdAt: -1 })
+      .populate('senderId', 'username avatarUrl'),
+  );
+  const latestMessagesArr = await Promise.all(latestMessagePromises);
+
+  const items = conversations.map((conv, idx) => ({
+    ...conv.toObject(),
+    latestMessage: latestMessagesArr[idx] ? latestMessagesArr[idx].toObject() : null,
+  }));
+
+  return successResponse(res, { items, nextCursor: null, limit: 50 }, 'Archived conversations fetched');
+});
+
 const updateConversationPreference = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const conversation = await Conversation.findById(id);
@@ -371,6 +408,7 @@ const updateConversationPreference = asyncHandler(async (req, res) => {
 
 module.exports = {
   listConversations,
+  listArchivedConversations,
   createConversation,
   updateGroupName,
   addGroupMembers,
@@ -385,3 +423,4 @@ module.exports = {
   unpinGroupMessage,
   updateConversationPreference,
 };
+

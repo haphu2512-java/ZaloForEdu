@@ -162,10 +162,15 @@ export default function MessagesScreen() {
         },
       },
       {
-        text: 'Ẩn cuộc trò chuyện',
+        text: 'Lưu trữ tin nhắn',
         onPress: async () => {
-          await updateConversationPreference(item._id, { isHidden: true });
-          await loadConversations();
+          try {
+            await updateConversationPreference(item._id, { isHidden: true });
+            await loadConversations();
+            Alert.alert('Đã lưu trữ', 'Bạn có thể xem lại tin nhắn này trong mục Cá nhân > Tin nhắn lưu trữ');
+          } catch (error: any) {
+            Alert.alert('Lỗi', error.message || 'Không thể lưu trữ tin nhắn');
+          }
         },
       },
       {
