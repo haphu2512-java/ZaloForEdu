@@ -1,126 +1,4 @@
-<<<<<<< HEAD:edu-ott-system/frontend/mobile-app/app/chat/[id].tsx
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import {
-  View,
-  FlatList,
-  KeyboardAvoidingView,
-  Platform,
-  SafeAreaView,
-  ActivityIndicator,
-  Alert,
-  Text,
-  StyleSheet,
-} from 'react-native';
-import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
-
-import type { Message, RoomModel } from '@/types/chat';
-import * as messageService from '@/utils/messageService';
-import { MessageBubble } from '@/components/chat/MessageBubble';
-import { MessageInput } from '@/components/chat/MessageInput';
-import { ChatHeader } from '@/components/chat/ChatHeader';
-import { TypingIndicator } from '@/components/chat/TypingIndicator';
-import { ReactionPicker } from '@/components/chat/ReactionPicker';
-import { useAuth } from '@/context/auth';
-import { connectSocket, getSocket, joinRoom, leaveRoom, emitTypingStart, emitTypingStop } from '@/utils/socketService';
-
-// ============================================================
-// ChatDetailScreen - Production-ready, tích hợp API backend
-// Features: Infinite scroll, reply, reactions, mark as read,
-//           edit/delete, typing indicator, error handling
-// ============================================================
-
-const PAGE_SIZE = 30;
-
-export default function ChatDetailScreen() {
-  const { user } = useAuth();
-  const currentUserId = user?._id || '';
-  const { id, name, avatar, roomModel } = useLocalSearchParams<{
-    id: string;
-    name: string;
-    avatar: string;
-    roomModel: string;
-  }>();
-  const router = useRouter();
-  const flatListRef = useRef<FlatList>(null);
-
-  // --- State ---
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isLoadingMore, setIsLoadingMore] = useState(false);
-  const [hasMore, setHasMore] = useState(true);
-  const [page, setPage] = useState(1);
-  const [error, setError] = useState<string | null>(null);
-
-  // Reply state
-  const [replyingTo, setReplyingTo] = useState<Message | null>(null);
-
-  // Reaction picker state
-  const [reactionTarget, setReactionTarget] = useState<Message | null>(null);
-  const [showReactionPicker, setShowReactionPicker] = useState(false);
-
-  // Typing state
-  const [typingUsers, setTypingUsers] = useState<Set<string>>(new Set());
-  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-
-  // --- Real-time Socket Connection ---
-  useEffect(() => {
-    let active = true;
-
-    const setupSocket = async () => {
-      if (!id) return;
-      
-      const socket = await connectSocket();
-      if (!socket || !active) return;
-
-      joinRoom(id);
-
-      // Listen for socket events
-      const handleNewMessage = (msg: Message) => {
-        // Prevent duplicate if we sent it (optimistic update sets temp ID, real response updates it, but socket also broadcasts)
-        // Actually, backend broadcasts to `socket.to(roomId)`, so the sender doesn't get `message:new` via this event.
-        setMessages((prev) => {
-          if (prev.some((m) => m._id === msg._id)) return prev;
-          return [...prev, msg];
-        });
-        
-        // Auto scroll to bottom
-        setTimeout(() => {
-          flatListRef.current?.scrollToEnd({ animated: true });
-        }, 100);
-
-        // Mark as read if not from us
-        if (msg.sender?._id !== currentUserId) {
-          messageService.markAsRead(msg._id).catch(() => {});
-        }
-      };
-
-      const handleTypingStart = ({ fullName, userId }: { fullName?: string; userId?: string }) => {
-        const typingKey = fullName || userId;
-        if (!typingKey) return;
-        setTypingUsers((prev) => new Set(prev).add(typingKey));
-      };
-
-      const handleTypingStop = ({ fullName, userId }: { fullName?: string; userId?: string }) => {
-        const typingKey = fullName || userId;
-        if (!typingKey) return;
-        setTypingUsers((prev) => {
-          const next = new Set(prev);
-          next.delete(typingKey);
-          return next;
-        });
-      };
-
-      socket.on('message:new', handleNewMessage);
-      socket.on('typing:start', handleTypingStart);
-      socket.on('typing:stop', handleTypingStop);
-
-      return () => {
-        socket.off('message:new', handleNewMessage);
-        socket.off('typing:start', handleTypingStart);
-        socket.off('typing:stop', handleTypingStop);
-        leaveRoom(id);
-=======
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -131,13 +9,15 @@ import {
   Platform,
   ActivityIndicator,
   Alert,
-  ActionSheetIOS,
   Modal,
   Linking,
   StyleSheet,
+  Image,
+  Pressable,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
+import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -153,10 +33,8 @@ import {
   createConversation,
   pinGroupMessage,
   unpinGroupMessage,
-  updateConversationPreference,
 } from '../../utils/messageService';
-import { uploadMediaBase64 } from '../../utils/mediaService';
-import { getMediaById } from '../../utils/mediaService';
+import { uploadMediaBase64, getMediaById, uploadImageToCloudinary } from '../../utils/mediaService';
 import { connectSocket, getSocket, joinConversation } from '../../utils/socketService';
 import type { Message, Conversation, MediaItem } from '../../types/chat';
 import { useColorScheme } from '@/components/useColorScheme';
@@ -184,6 +62,11 @@ function getConversationTitle(conv: Conversation, currentUserId: string) {
   return otherUser?.username || 'Cuộc trò chuyện';
 }
 
+function isImageMimeType(mimeType?: string): boolean {
+  if (!mimeType) return false;
+  return mimeType.startsWith('image/');
+}
+
 export default function ChatScreen() {
   const { id: conversationId } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
@@ -201,20 +84,22 @@ export default function ChatScreen() {
   const [isFetchingMore, setIsFetchingMore] = useState(false);
   const [isSocketReady, setIsSocketReady] = useState(false);
   const [showEmojiPanel, setShowEmojiPanel] = useState(false);
+  const [showMediaMenu, setShowMediaMenu] = useState(false);
 
+  // Reply
+  const [replyTo, setReplyTo] = useState<Message | null>(null);
+
+  // Forwarding
   const [forwardModalVisible, setForwardModalVisible] = useState(false);
   const [forwardSource, setForwardSource] = useState<Message | null>(null);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [isForwarding, setIsForwarding] = useState(false);
+
   const [conversation, setConversation] = useState<Conversation | null>(null);
   const [mediaById, setMediaById] = useState<Record<string, MediaItem>>({});
-  const [editorVisible, setEditorVisible] = useState(false);
-  const [editorTitle, setEditorTitle] = useState('');
-  const [editorPlaceholder, setEditorPlaceholder] = useState('');
-  const [editorValue, setEditorValue] = useState('');
-  const [editorSubmit, setEditorSubmit] = useState<null | ((value: string) => void)>(null);
-  const [commonGroupsVisible, setCommonGroupsVisible] = useState(false);
-  const [commonGroups, setCommonGroups] = useState<Conversation[]>([]);
+
+  // Image viewer
+  const [viewImageUrl, setViewImageUrl] = useState<string | null>(null);
 
   const getUserId = (value: any): string => {
     if (!value) return '';
@@ -231,18 +116,9 @@ export default function ChatScreen() {
     conversation?.preference?.nickname ||
     (conversation ? getConversationTitle(conversation, currentUserId) : 'Trò chuyện');
 
-  const openTextEditor = (
-    title: string,
-    placeholder: string,
-    onSubmit: (value: string) => void,
-    defaultValue: string = '',
-  ) => {
-    setEditorTitle(title);
-    setEditorPlaceholder(placeholder);
-    setEditorValue(defaultValue);
-    setEditorSubmit(() => onSubmit);
-    setEditorVisible(true);
-  };
+  const headerAvatarUrl = conversation?.type === 'group'
+    ? conversation.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(conversationTitle)}&background=8B5CF6&color=fff&size=150&bold=true`
+    : otherParticipant?.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(conversationTitle)}&background=2563EB&color=fff&size=150&bold=true`;
 
   const ensureMediaLoaded = useCallback(async (mediaIds: string[]) => {
     const uniqueIds = Array.from(new Set((mediaIds || []).filter(Boolean)));
@@ -287,6 +163,30 @@ export default function ChatScreen() {
     loadInitialMessages();
   }, [loadInitialMessages]);
 
+  const markedMessageIds = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (messages.length > 0 && currentUserId) {
+      const getMessageIdStr = (m: any) => typeof m._id === 'string' ? m._id : m.id;
+      const unreadMessages = messages.filter((m) => {
+        const mid = getMessageIdStr(m);
+        if (markedMessageIds.current.has(mid)) return false;
+        
+        const senderId = typeof m.senderId === 'string' ? m.senderId : m.senderId?._id || m.senderId?.id;
+        // Don't mark our own messages as read
+        if (senderId === currentUserId) return false;
+
+        const seenList = (m.seenBy || []).map((u: any) => typeof u === 'string' ? u : u._id || u.id);
+        return !seenList.includes(currentUserId);
+      });
+
+      if (unreadMessages.length > 0) {
+        unreadMessages.forEach(m => markedMessageIds.current.add(getMessageIdStr(m)));
+        Promise.all(unreadMessages.map((m) => markMessageRead(getMessageIdStr(m)))).catch(() => null);
+      }
+    }
+  }, [messages, currentUserId]);
+
   useEffect(() => {
     const ids = messages.flatMap((m) => m.mediaIds || []);
     if (ids.length) {
@@ -305,20 +205,21 @@ export default function ChatScreen() {
       joinConversation(conversationId);
       setIsSocketReady(socket.connected);
 
-      const onConnect = () => {
-        setIsSocketReady(true);
-        joinConversation(conversationId);
-      };
+      const onConnect = () => { setIsSocketReady(true); joinConversation(conversationId); };
       const onDisconnect = () => setIsSocketReady(false);
 
       const onNewMessage = (message: Message) => {
-        const messageConversationId = getConversationIdFromMessage(message);
-        if (messageConversationId !== conversationId) return;
-        setMessages((prev) =>
-          prev.some((m) => getMessageId(m) === getMessageId(message))
-            ? prev
-            : [message, ...prev],
-        );
+        const msgConvId = getConversationIdFromMessage(message);
+        if (msgConvId !== conversationId) return;
+        setMessages((prev) => {
+          if (prev.some((m) => getMessageId(m) === getMessageId(message))) return prev;
+          let enhancedMessage = { ...message };
+          if (enhancedMessage.replyTo && typeof enhancedMessage.replyTo === 'string') {
+            const originalMsg = prev.find((m) => getMessageId(m) === enhancedMessage.replyTo);
+            if (originalMsg) enhancedMessage.replyTo = originalMsg;
+          }
+          return [enhancedMessage, ...prev];
+        });
         if (getMessageSenderId(message) !== currentUserId) {
           markMessageRead(getMessageId(message)).catch(() => null);
         }
@@ -335,11 +236,7 @@ export default function ChatScreen() {
         setMessages((prev) =>
           prev.map((m) =>
             getMessageId(m) === payload.messageId
-              ? {
-                ...m,
-                seenBy: Array.from(new Set([...(m.seenBy || []), payload.userId])),
-                deliveredTo: Array.from(new Set([...(m.deliveredTo || []), payload.userId])),
-              }
+              ? { ...m, seenBy: Array.from(new Set([...(m.seenBy || []), payload.userId])), deliveredTo: Array.from(new Set([...(m.deliveredTo || []), payload.userId])) }
               : m,
           ),
         );
@@ -349,10 +246,7 @@ export default function ChatScreen() {
         setMessages((prev) =>
           prev.map((m) =>
             getMessageId(m) === payload.messageId
-              ? {
-                ...m,
-                deliveredTo: Array.from(new Set([...(m.deliveredTo || []), payload.userId])),
-              }
+              ? { ...m, deliveredTo: Array.from(new Set([...(m.deliveredTo || []), payload.userId])) }
               : m,
           ),
         );
@@ -361,9 +255,7 @@ export default function ChatScreen() {
       const onMessageReacted = (payload: { messageId: string; reactions: Message['reactions'] }) => {
         setMessages((prev) =>
           prev.map((m) =>
-            getMessageId(m) === payload.messageId
-              ? { ...m, reactions: payload.reactions || [] }
-              : m,
+            getMessageId(m) === payload.messageId ? { ...m, reactions: payload.reactions || [] } : m,
           ),
         );
       };
@@ -384,367 +276,13 @@ export default function ChatScreen() {
         socket.off('message_seen', onMessageSeen);
         socket.off('message_delivered', onMessageDelivered);
         socket.off('message_reacted', onMessageReacted);
->>>>>>> Refactor_Project:edu-ott-system/frontend/mobile/app/chat/[id].tsx
       };
     };
 
     const cleanupPromise = setupSocket();
-<<<<<<< HEAD:edu-ott-system/frontend/mobile-app/app/chat/[id].tsx
-
-    return () => {
-      active = false;
-      cleanupPromise.then((cleanup) => cleanup && cleanup());
-    };
-  }, [id, currentUserId]);
-
-  // --- Fetch messages ---
-  const fetchMessages = useCallback(
-    async (pageNum: number, prepend = false) => {
-      if (!id) return;
-
-      try {
-        const response = await messageService.getMessages({
-          roomId: id,
-          roomModel: (roomModel as RoomModel) || 'Conversation',
-          page: pageNum,
-          limit: PAGE_SIZE,
-        });
-
-        const newMessages = response.data.messages;
-
-        if (prepend) {
-          setMessages((prev) => [...newMessages, ...prev]);
-        } else {
-          setMessages(newMessages);
-        }
-
-        setHasMore(newMessages.length === PAGE_SIZE);
-        setError(null);
-      } catch (err: any) {
-        console.error('Failed to fetch messages:', err);
-        setError(err.message || 'Không thể tải tin nhắn');
-      }
-    },
-    [id, roomModel]
-  );
-
-  // Initial load
-  useEffect(() => {
-    const load = async () => {
-      setIsLoading(true);
-      await fetchMessages(1);
-      setIsLoading(false);
-    };
-    load();
-  }, [fetchMessages]);
-
-  // --- Infinite scroll (load older messages) ---
-  const handleLoadMore = useCallback(async () => {
-    if (isLoadingMore || !hasMore) return;
-
-    setIsLoadingMore(true);
-    const nextPage = page + 1;
-    await fetchMessages(nextPage, true);
-    setPage(nextPage);
-    setIsLoadingMore(false);
-  }, [isLoadingMore, hasMore, page, fetchMessages]);
-
-  // --- Send message ---
-  const handleSendMessage = useCallback(
-    async (content: string, attachments?: any[], replyToId?: string) => {
-      if (!id) return;
-
-      // Optimistic update
-      const optimisticMsg: Message = {
-        _id: `temp-${Date.now()}`,
-        content,
-        type: 'text',
-        sender: { _id: currentUserId, fullName: user?.fullName || 'Tôi' },
-        room: id,
-        roomModel: (roomModel as RoomModel) || 'Conversation',
-        attachments: attachments || [],
-        isEdited: false,
-        isDeleted: false,
-        replyTo: replyingTo || undefined,
-        readBy: [],
-        reactions: [],
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        status: 'sending',
-      };
-
-      setMessages((prev) => [...prev, optimisticMsg]);
-      setReplyingTo(null);
-
-      // Scroll to bottom
-      setTimeout(() => {
-        flatListRef.current?.scrollToEnd({ animated: true });
-      }, 100);
-
-      try {
-        const response = await messageService.sendMessage({
-          content,
-          roomId: id,
-          roomModel: (roomModel as RoomModel) || 'Conversation',
-          attachments,
-          replyTo: replyToId,
-        });
-
-        // Replace optimistic message with real one
-        setMessages((prev) =>
-          prev.map((msg) =>
-            msg._id === optimisticMsg._id
-              ? { ...response.data.message, status: 'sent' as const }
-              : msg
-          )
-        );
-      } catch (err: any) {
-        // Mark as failed
-        setMessages((prev) =>
-          prev.map((msg) =>
-            msg._id === optimisticMsg._id
-              ? { ...msg, status: 'failed' as const }
-              : msg
-          )
-        );
-        Alert.alert('Lỗi', 'Không thể gửi tin nhắn. Vui lòng thử lại.');
-      }
-    },
-    [id, roomModel, replyingTo, currentUserId, user]
-  );
-
-  // --- Long press actions ---
-  const handleLongPress = useCallback((message: Message) => {
-    const isMyMessage = message.sender?._id === currentUserId;
-
-    const buttons: any[] = [
-      {
-        text: 'Trả lời',
-        onPress: () => setReplyingTo(message),
-      },
-      {
-        text: 'Thả cảm xúc',
-        onPress: () => {
-          setReactionTarget(message);
-          setShowReactionPicker(true);
-        },
-      },
-    ];
-
-    if (isMyMessage) {
-      buttons.push({
-        text: 'Xóa tin nhắn',
-        style: 'destructive' as const,
-        onPress: async () => {
-          try {
-            await messageService.deleteMessage(message._id);
-            setMessages((prev) =>
-              prev.map((msg) =>
-                msg._id === message._id ? { ...msg, isDeleted: true } : msg
-              )
-            );
-          } catch {
-            Alert.alert('Lỗi', 'Không thể xóa tin nhắn');
-          }
-        },
-      });
-    }
-
-    buttons.push({ text: 'Huỷ', style: 'cancel' as const });
-
-    Alert.alert('Tuỳ chọn tin nhắn', undefined, buttons);
-  }, [currentUserId]);
-
-  // --- Reaction ---
-  const handleReaction = useCallback(
-    async (emoji: string) => {
-      if (!reactionTarget) return;
-      setShowReactionPicker(false);
-
-      try {
-        const response = await messageService.addReaction(reactionTarget._id, { emoji });
-        setMessages((prev) =>
-          prev.map((msg) =>
-            msg._id === reactionTarget._id ? response.data.message : msg
-          )
-        );
-      } catch {
-        Alert.alert('Lỗi', 'Không thể thêm cảm xúc');
-      }
-
-      setReactionTarget(null);
-    },
-    [reactionTarget]
-  );
-
-  // --- Mark as read ---
-  const handleViewableItemsChanged = useCallback(
-    ({ viewableItems }: any) => {
-      viewableItems?.forEach((item: any) => {
-        const msg = item.item as Message;
-        if (msg.sender?._id !== currentUserId) {
-          const alreadyRead = msg.readBy?.some((r) => r.user === currentUserId);
-          if (!alreadyRead) {
-            messageService.markAsRead(msg._id).catch(() => {});
-          }
-        }
-      });
-    },
-    [currentUserId]
-  );
-
-  // --- Render ---
-  const renderMessage = useCallback(
-    ({ item }: { item: Message }) => (
-      <MessageBubble
-        message={item}
-        isMe={item.sender?._id === currentUserId}
-        currentUserId={currentUserId}
-        onLongPress={handleLongPress}
-        onReplyPress={(msg) => setReplyingTo(msg)}
-        onReactionPress={(msg) => {
-          setReactionTarget(msg);
-          setShowReactionPicker(true);
-        }}
-      />
-    ),
-    [handleLongPress, currentUserId]
-  );
-
-  const renderHeader = () => {
-    if (isLoadingMore) {
-      return (
-        <View style={styles.loadingMore}>
-          <ActivityIndicator size="small" color="#3b82f6" />
-        </View>
-      );
-    }
-    return null;
-  };
-
-  return (
-    <SafeAreaView style={styles.container}>
-      <Stack.Screen options={{ headerShown: false }} />
-
-      {/* Custom Header */}
-      <ChatHeader
-        name={(name as string) || 'Chat'}
-        avatar={avatar as string}
-        isOnline={true}
-        onBackPress={() => router.back()}
-        onCallPress={() => {}}
-        onVideoPress={() => {}}
-        onInfoPress={() => {}}
-      />
-
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        style={styles.flex1}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
-      >
-        {/* Loading state */}
-        {isLoading ? (
-          <View style={styles.centerContainer}>
-            <ActivityIndicator size="large" color="#3b82f6" />
-            <Text style={styles.loadingText}>Đang tải tin nhắn...</Text>
-          </View>
-        ) : error ? (
-          <View style={styles.centerContainer}>
-            <Text style={styles.errorText}>{error}</Text>
-          </View>
-        ) : messages.length === 0 ? (
-          <View style={styles.centerContainer}>
-            <Text style={styles.emptyText}>Chưa có tin nhắn nào</Text>
-            <Text style={styles.emptySubtext}>Hãy gửi tin nhắn đầu tiên!</Text>
-          </View>
-        ) : (
-          <FlatList
-            ref={flatListRef}
-            data={messages}
-            keyExtractor={(item) => item._id}
-            renderItem={renderMessage}
-            ListHeaderComponent={renderHeader}
-            contentContainerStyle={{ paddingVertical: 8 }}
-            onEndReached={handleLoadMore}
-            onEndReachedThreshold={0.3}
-            onContentSizeChange={() => {
-              if (page === 1) {
-                flatListRef.current?.scrollToEnd({ animated: false });
-              }
-            }}
-            onViewableItemsChanged={handleViewableItemsChanged}
-            viewabilityConfig={{ itemVisiblePercentThreshold: 50 }}
-            showsVerticalScrollIndicator={false}
-          />
-        )}
-
-        {/* Typing indicator */}
-        <TypingIndicator
-          isVisible={typingUsers.size > 0}
-          text={
-            typingUsers.size === 1
-              ? `${Array.from(typingUsers)[0]} đang nhập tin nhắn...`
-              : `${typingUsers.size} người đang nhập tin nhắn...`
-          }
-        />
-
-        {/* Message input */}
-        <MessageInput
-          onSendMessage={handleSendMessage}
-          replyingTo={replyingTo}
-          onCancelReply={() => setReplyingTo(null)}
-          disabled={isLoading}
-          onTyping={() => {
-            if (id) {
-              emitTypingStart(id);
-              if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
-              typingTimeoutRef.current = setTimeout(() => {
-                emitTypingStop(id);
-              }, 3000);
-            }
-          }}
-        />
-      </KeyboardAvoidingView>
-
-      {/* Reaction Picker Modal */}
-      <ReactionPicker
-        visible={showReactionPicker}
-        onSelect={handleReaction}
-        onClose={() => {
-          setShowReactionPicker(false);
-          setReactionTarget(null);
-        }}
-        currentUserReaction={
-          reactionTarget?.reactions?.find((r) => r.user === currentUserId)?.emoji
-        }
-      />
-    </SafeAreaView>
-  );
-}
-
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F9FAFB' },
-  flex1: { flex: 1 },
-  loadingMore: { paddingVertical: 16, alignItems: 'center' },
-  centerContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 },
-  loadingText: { color: '#9CA3AF', marginTop: 8, fontSize: 14 },
-  errorText: { color: '#EF4444', textAlign: 'center', fontSize: 15 },
-  emptyText: { color: '#6B7280', fontSize: 17, fontWeight: '600', marginBottom: 4 },
-  emptySubtext: { color: '#9CA3AF', fontSize: 14 },
-});
-=======
     return () => {
       mounted = false;
-      Promise.resolve(cleanupPromise).then((cleanup) => {
-        if (typeof cleanup === 'function') cleanup();
-      });
-      if (socketRef) {
-        socketRef.off('new_message');
-        socketRef.off('message_recalled');
-        socketRef.off('message_seen');
-        socketRef.off('message_delivered');
-        socketRef.off('message_reacted');
-      }
+      Promise.resolve(cleanupPromise).then((cleanup) => { if (typeof cleanup === 'function') cleanup(); });
     };
   }, [conversationId, currentUserId]);
 
@@ -769,22 +307,19 @@ const styles = StyleSheet.create({
   const handleSendText = async () => {
     const text = inputText.trim();
     if (!text) return;
-
     setIsSending(true);
+    const replyId = replyTo ? getMessageId(replyTo) : undefined;
+    setReplyTo(null);
     try {
-      const newMsg = await sendMessage({
-        conversationId,
-        content: text,
+      const newMsg = await sendMessage({ conversationId, content: text, replyTo: replyId });
+      setMessages((prev) => {
+        if (prev.some((m) => getMessageId(m) === getMessageId(newMsg))) return prev;
+        let enhancedMessage = { ...newMsg };
+        if (enhancedMessage.replyTo && typeof enhancedMessage.replyTo === 'string' && replyTo) {
+          enhancedMessage.replyTo = replyTo;
+        }
+        return [enhancedMessage, ...prev];
       });
-      setMessages((prev) =>
-        prev.some((m) => getMessageId(m) === getMessageId(newMsg))
-          ? prev
-          : [newMsg, ...prev],
-      );
-      const socket = getSocket();
-      if (!socket?.connected) {
-        Alert.alert('Đã gửi qua API', 'Tin nhắn đã gửi. Realtime sẽ đồng bộ khi socket kết nối lại.');
-      }
       setInputText('');
       setShowEmojiPanel(false);
     } catch (error) {
@@ -794,43 +329,58 @@ const styles = StyleSheet.create({
     }
   };
 
-  const handleDocumentPick = async () => {
+  const handlePickImage = async () => {
+    setShowMediaMenu(false);
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert('Lỗi', 'Bạn cần cấp quyền truy cập thư viện ảnh');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      quality: 0.85,
+      allowsMultipleSelection: false,
+    });
+    if (result.canceled || !result.assets?.length) return;
+    setIsSending(true);
     try {
-      const result = await DocumentPicker.getDocumentAsync({
-        copyToCacheDirectory: true,
-      });
-      if (result.canceled || !result.assets?.length) return;
+      const asset = result.assets[0];
+      const uploadedUrl = await uploadImageToCloudinary(asset.uri);
+      // Register as media item through base64 approach (fallback: send with URL as content)
+      const base64 = await FileSystem.readAsStringAsync(asset.uri, { encoding: FileSystem.EncodingType.Base64 });
+      const ext = asset.uri.split('.').pop()?.toLowerCase() || 'jpg';
+      const mimeType = ext === 'png' ? 'image/png' : 'image/jpeg';
+      const media = await uploadMediaBase64({ fileName: `photo-${Date.now()}.${ext}`, mimeType, contentBase64: base64 });
+      const newMsg = await sendMessage({ conversationId, mediaIds: [media._id], content: '' });
+      setMessages((prev) =>
+        prev.some((m) => getMessageId(m) === getMessageId(newMsg)) ? prev : [newMsg, ...prev],
+      );
+    } catch (err) {
+      Alert.alert('Lỗi', 'Không thể gửi ảnh');
+    } finally {
+      setIsSending(false);
+    }
+  };
 
+  const handleDocumentPick = async () => {
+    setShowMediaMenu(false);
+    try {
+      const result = await DocumentPicker.getDocumentAsync({ copyToCacheDirectory: true });
+      if (result.canceled || !result.assets?.length) return;
       const asset = result.assets[0];
       setIsSending(true);
-
       try {
-        const base64 = await FileSystem.readAsStringAsync(asset.uri, {
-          encoding: FileSystem.EncodingType.Base64,
-        });
-
+        const base64 = await FileSystem.readAsStringAsync(asset.uri, { encoding: FileSystem.EncodingType.Base64 });
         const media = await uploadMediaBase64({
           fileName: asset.name,
           mimeType: asset.mimeType || 'application/octet-stream',
           contentBase64: base64,
         });
-
-        const newMsg = await sendMessage({
-          conversationId,
-          mediaIds: [media._id],
-          content: `Đã gửi file: ${asset.name}`,
-        });
+        const newMsg = await sendMessage({ conversationId, mediaIds: [media._id], content: `Đã gửi file: ${asset.name}` });
         setMessages((prev) =>
-          prev.some((m) => getMessageId(m) === getMessageId(newMsg))
-            ? prev
-            : [newMsg, ...prev],
+          prev.some((m) => getMessageId(m) === getMessageId(newMsg)) ? prev : [newMsg, ...prev],
         );
-        const socket = getSocket();
-        if (!socket?.connected) {
-          Alert.alert('Đã gửi file', 'File đã gửi qua API. Realtime sẽ cập nhật khi socket ổn định.');
-        }
       } catch (uploadErr) {
-        console.log(uploadErr);
         Alert.alert('Lỗi', 'Không thể tải lên file');
       } finally {
         setIsSending(false);
@@ -856,8 +406,7 @@ const styles = StyleSheet.create({
     if (!forwardSource) return;
     setIsForwarding(true);
     try {
-      const fallbackContent =
-        forwardSource.content?.trim() || (forwardSource.mediaIds?.length ? 'Tin nhắn được chuyển tiếp' : '');
+      const fallbackContent = forwardSource.content?.trim() || (forwardSource.mediaIds?.length ? 'Tin nhắn được chuyển tiếp' : '');
       await sendMessage({
         conversationId: targetConversationId,
         content: fallbackContent || 'Tin nhắn được chuyển tiếp',
@@ -875,25 +424,16 @@ const styles = StyleSheet.create({
   };
 
   const handleReactToMessage = async (msg: Message) => {
-    const options = [...QUICK_EMOJIS, 'Gỡ cảm xúc', 'Hủy'];
     Alert.alert(
-      'Chọn cảm xúc',
-      '',
-      options.map((emoji) => ({
+      'Chọn cảm xúc', '',
+      [...QUICK_EMOJIS, 'Gỡ cảm xúc', 'Hủy'].map((emoji) => ({
         text: emoji,
         onPress: async () => {
           if (emoji === 'Hủy') return;
           try {
-            const reactions = await reactToMessage(
-              getMessageId(msg),
-              emoji === 'Gỡ cảm xúc' ? undefined : emoji,
-            );
+            const reactions = await reactToMessage(getMessageId(msg), emoji === 'Gỡ cảm xúc' ? undefined : emoji);
             setMessages((prev) =>
-              prev.map((m) =>
-                getMessageId(m) === getMessageId(msg)
-                  ? { ...m, reactions: reactions || [] }
-                  : m,
-              ),
+              prev.map((m) => getMessageId(m) === getMessageId(msg) ? { ...m, reactions: reactions || [] } : m),
             );
           } catch (_e) {
             Alert.alert('Lỗi', 'Không thể thả cảm xúc');
@@ -903,255 +443,183 @@ const styles = StyleSheet.create({
     );
   };
 
-  const loadCommonGroupsWithUser = async () => {
-    if (!otherParticipant) return;
-    const otherUserId = getUserId(otherParticipant);
-    const allConversations = conversations.length ? conversations : (await getConversations(null, 100)).items || [];
-    const sharedGroups = allConversations.filter((conv) => {
-      if (conv.type !== 'group') return false;
-      const participantIds = (conv.participants || []).map((p) => getUserId(p));
-      return participantIds.includes(currentUserId) && participantIds.includes(otherUserId);
-    });
-    setCommonGroups(sharedGroups);
-    setCommonGroupsVisible(true);
-  };
-
   const handleOpenConversationOptions = () => {
     if (!conversation) return;
-    const options = ['Hủy'];
-    const actions: Array<() => void> = [() => { }];
-
-    options.push('Đặt biệt danh');
-    actions.push(() =>
-      openTextEditor(
-        'Đặt biệt danh cuộc trò chuyện',
-        'Nhập biệt danh',
-        (value) =>
-          void (async () => {
-            try {
-              await updateConversationPreference(conversationId, { nickname: value });
-              setConversation((prev) =>
-                prev
-                  ? { ...prev, preference: { ...(prev.preference || {}), nickname: value } }
-                  : prev,
-              );
-            } catch (e: any) {
-              Alert.alert('Lỗi', e.message || 'Không thể cập nhật biệt danh');
-            }
-          })(),
-        conversation.preference?.nickname || '',
-      ),
-    );
-
-    if (conversation.type === 'direct' && otherParticipant) {
-      options.push('Xem nhóm chung');
-      actions.push(() => {
-        void loadCommonGroupsWithUser();
-      });
-
-      options.push('Tạo nhóm với người này');
-      actions.push(() =>
-        openTextEditor(
-          'Tạo nhóm',
-          'Nhập tên nhóm',
-          (value) =>
-            void (async () => {
-              try {
-                const created = await createConversation({
-                  type: 'group',
-                  name: value,
-                  participantIds: [getUserId(otherParticipant)],
-                });
-                const newId = created._id || created.id;
-                if (newId) router.push(`/chat/${newId}`);
-              } catch (e: any) {
-                Alert.alert('Lỗi', e.message || 'Không thể tạo nhóm');
-              }
-            })(),
-          `Nhóm với ${otherParticipant.username || 'bạn'}`,
-        ),
-      );
-    }
-
-    if (Platform.OS === 'ios') {
-      ActionSheetIOS.showActionSheetWithOptions({ options, cancelButtonIndex: 0 }, (idx) => {
-        actions[idx]?.();
-      });
-      return;
-    }
-
-    Alert.alert(
-      'Tùy chọn cuộc trò chuyện',
-      '',
-      options.map((text, idx) => ({
-        text,
-        style: idx === 0 ? 'cancel' : 'default',
-        onPress: actions[idx],
-      })),
-    );
+    router.push({ pathname: '/conversation-details', params: { id: conversationId } });
   };
 
   const handleMessageLongPress = (msg: Message) => {
     const isMine = getMessageSenderId(msg) === currentUserId;
-    const options = ['Hủy'];
-    const actions: Array<() => void> = [() => { }];
     const isGroup = conversation?.type === 'group';
+    const buttons: any[] = [{ text: 'Hủy', style: 'cancel' }];
 
+    if (!msg.isRecalled) {
+      buttons.push({ text: '↩️ Trả lời', onPress: () => setReplyTo(msg) });
+    }
     if (isMine && !msg.isRecalled) {
-      options.push('Thu hồi tin nhắn');
-      actions.push(async () => {
-        try {
-          await recallMessage(getMessageId(msg));
-          setMessages((prev) =>
-            prev.map((m) => (getMessageId(m) === getMessageId(msg) ? { ...m, isRecalled: true } : m)),
-          );
-        } catch (_e) {
-          Alert.alert('Lỗi', 'Không thể thu hồi tin nhắn');
-        }
+      buttons.push({
+        text: '↩ Thu hồi',
+        onPress: async () => {
+          try {
+            await recallMessage(getMessageId(msg));
+            setMessages((prev) => prev.map((m) => getMessageId(m) === getMessageId(msg) ? { ...m, isRecalled: true } : m));
+          } catch { Alert.alert('Lỗi', 'Không thể thu hồi'); }
+        },
       });
     }
-
     if (!msg.isRecalled) {
-      options.push('Xóa tin nhắn phía tôi');
-      actions.push(async () => {
-        try {
-          await deleteMessage(getMessageId(msg));
-          setMessages((prev) => prev.filter((m) => getMessageId(m) !== getMessageId(msg)));
-        } catch (_e) {
-          Alert.alert('Lỗi', 'Không thể xóa tin nhắn');
-        }
+      buttons.push({
+        text: '🗑️ Xóa phía tôi',
+        onPress: async () => {
+          try {
+            await deleteMessage(getMessageId(msg));
+            setMessages((prev) => prev.filter((m) => getMessageId(m) !== getMessageId(msg)));
+          } catch { Alert.alert('Lỗi', 'Không thể xóa'); }
+        },
       });
-    }
-
-    if (!msg.isRecalled) {
-      options.push('Thả cảm xúc');
-      actions.push(() => {
-        handleReactToMessage(msg);
-      });
-    }
-
-    if (!msg.isRecalled) {
-      options.push('Chuyển tiếp');
-      actions.push(() => {
-        openForwardModal(msg);
-      });
+      buttons.push({ text: '😊 Thả cảm xúc', onPress: () => handleReactToMessage(msg) });
+      buttons.push({ text: '↗️ Chuyển tiếp', onPress: () => openForwardModal(msg) });
     }
     if (isGroup && !msg.isRecalled) {
-      options.push('Ghim tin nhắn');
-      actions.push(async () => {
-        try {
-          const updated = await pinGroupMessage(conversationId, getMessageId(msg));
-          setConversation(updated);
-          Alert.alert('Thành công', 'Đã ghim tin nhắn');
-        } catch (_e) {
-          Alert.alert('Lỗi', 'Không thể ghim tin nhắn');
-        }
+      buttons.push({
+        text: '📌 Ghim tin nhắn',
+        onPress: async () => {
+          try {
+            const updated = await pinGroupMessage(conversationId, getMessageId(msg));
+            setConversation(updated);
+            Alert.alert('Thành công', 'Đã ghim tin nhắn');
+          } catch { Alert.alert('Lỗi', 'Không thể ghim'); }
+        },
       });
     }
+    Alert.alert('Tùy chọn', '', buttons);
+  };
 
-    if (Platform.OS === 'ios') {
-      ActionSheetIOS.showActionSheetWithOptions(
-        { options, cancelButtonIndex: 0 },
-        (buttonIndex) => {
-          actions[buttonIndex]();
-        },
-      );
-    } else {
-      Alert.alert(
-        'Tùy chọn tin nhắn',
-        '',
-        options.map((btn, idx) => ({
-          text: btn,
-          onPress: actions[idx],
-          style: idx === 0 ? 'cancel' : 'default',
-        })),
-      );
-    }
+  /** Render message status icon for my messages */
+  const renderMessageStatus = (item: Message) => {
+    if (item.status === 'sending') return <Ionicons name="time-outline" size={11} color="rgba(255,255,255,0.6)" />;
+    const seenBy = (item.seenBy || []).filter((id) => id !== currentUserId);
+    if (seenBy.length > 0) return <Ionicons name="checkmark-done" size={11} color="#60EFFF" />;
+    const deliveredTo = (item.deliveredTo || []).filter((id) => id !== currentUserId);
+    if (deliveredTo.length > 0) return <Ionicons name="checkmark-done" size={11} color="rgba(255,255,255,0.7)" />;
+    return <Ionicons name="checkmark" size={11} color="rgba(255,255,255,0.6)" />;
   };
 
   const renderMessage = ({ item }: { item: Message }) => {
     const isMine = getMessageSenderId(item) === currentUserId;
-    const senderName = typeof item.senderId === 'string' ? 'Khách' : item.senderId?.username || 'Khách';
+    const senderName = typeof item.senderId === 'string' ? '' : item.senderId?.username || '';
+    const senderAvatarUrl = typeof item.senderId === 'string' ? null : item.senderId?.avatarUrl;
 
     if (item.isRecalled) {
       return (
-        <View
-          style={[
-            { padding: 10, marginVertical: 4, marginHorizontal: 16, borderRadius: 16, maxWidth: '75%' },
-            isMine
-              ? { alignSelf: 'flex-end', backgroundColor: colors.surface }
-              : { alignSelf: 'flex-start', backgroundColor: colors.surface },
-          ]}
-        >
-          <Text style={{ color: '#94A3B8', fontStyle: 'italic' }}>Tin nhắn đã bị thu hồi</Text>
+        <View style={[styles.bubbleWrapper, isMine ? styles.myWrapper : styles.theirWrapper]}>
+          <View style={[styles.bubble, { backgroundColor: colorScheme === 'dark' ? '#374151' : '#F1F5F9' }]}>
+            <Text style={{ color: '#94A3B8', fontStyle: 'italic', fontSize: 14 }}>Tin nhắn đã bị thu hồi</Text>
+          </View>
         </View>
       );
     }
 
+    // Get reply info
+    const replyMsg = item.replyTo ? (typeof item.replyTo === 'object' ? item.replyTo : null) : null;
+
     return (
-      <TouchableOpacity
-        onLongPress={() => handleMessageLongPress(item)}
-        activeOpacity={0.85}
-        style={[
-          { padding: 12, marginVertical: 4, marginHorizontal: 16, borderRadius: 16, maxWidth: '75%' },
-          isMine
-            ? { alignSelf: 'flex-end', backgroundColor: '#0068FF', borderBottomRightRadius: 4 }
-            : { alignSelf: 'flex-start', backgroundColor: colors.surface, borderBottomLeftRadius: 4 },
-        ]}
-      >
-        {!isMine && <Text style={{ fontSize: 12, color: '#64748B', marginBottom: 4 }}>{senderName}</Text>}
-        {item.forwardFrom && (
-          <Text style={{ color: isMine ? '#DBEAFE' : '#64748B', fontSize: 12, marginBottom: 6 }}>Tin nhắn chuyển tiếp</Text>
+      <Pressable onLongPress={() => handleMessageLongPress(item)} style={[styles.bubbleWrapper, isMine ? styles.myWrapper : styles.theirWrapper]}>
+        {/* Avatar for their messages */}
+        {!isMine && (
+          <Image
+            source={{ uri: senderAvatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(senderName || 'U')}&background=0EA5E9&color=fff&size=60&bold=true` }}
+            style={styles.senderAvatar}
+          />
         )}
-        {item.content ? <Text style={{ color: isMine ? '#fff' : colors.text, fontSize: 16 }}>{item.content}</Text> : null}
-        {!!item.reactions?.length && (
-          <Text style={{ marginTop: 6, color: isMine ? '#DBEAFE' : '#475569', fontSize: 13 }}>
-            {item.reactions.map((r) => r.emoji).join(' ')}
-          </Text>
-        )}
-        {!!item.mediaIds?.length && (
-          <View style={{ marginTop: 8, gap: 6 }}>
-            {item.mediaIds.map((mediaId, idx) => {
-              const media = mediaById[mediaId];
-              const fileName = media?.fileName || `Tệp đính kèm ${idx + 1}`;
-              const canOpen = !!media?.url;
-              return (
-                <TouchableOpacity
-                  key={`${mediaId}-${idx}`}
-                  disabled={!canOpen}
-                  onPress={async () => {
-                    if (!media?.url) return;
-                    const supported = await Linking.canOpenURL(media.url);
-                    if (supported) {
-                      await Linking.openURL(media.url);
-                    } else {
-                      Alert.alert('Lỗi', 'Không thể mở tệp này trên thiết bị');
-                    }
-                  }}
-                  style={{
-                    borderRadius: 10,
-                    paddingHorizontal: 10,
-                    paddingVertical: 8,
-                    backgroundColor: isMine ? '#1D4ED8' : colors.border,
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    gap: 8,
-                    opacity: canOpen ? 1 : 0.7,
-                  }}
-                >
-                  <Ionicons name="document-attach-outline" size={16} color={isMine ? '#DBEAFE' : '#334155'} />
-                  <Text
-                    numberOfLines={1}
-                    style={{ flex: 1, color: isMine ? '#DBEAFE' : '#334155', fontSize: 12, fontWeight: '600' }}
-                  >
-                    {fileName}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
+        <View style={{ flex: 1, alignItems: isMine ? 'flex-end' : 'flex-start', maxWidth: '80%' }}>
+          {/* Sender name in groups */}
+          {!isMine && conversation?.type === 'group' && senderName ? (
+            <Text style={{ fontSize: 11, color: colors.tint, fontWeight: '600', marginBottom: 2, marginLeft: 4 }}>{senderName}</Text>
+          ) : null}
+
+          <View style={[styles.bubble, isMine ? { backgroundColor: '#0068FF' } : { backgroundColor: colorScheme === 'dark' ? '#374151' : '#F1F5F9' }]}>
+            {/* Reply quote */}
+            {replyMsg && (
+              <View style={[styles.replyQuote, { borderLeftColor: isMine ? 'rgba(255,255,255,0.5)' : colors.tint }]}>
+                <Text style={{ color: isMine ? 'rgba(255,255,255,0.6)' : colors.tint, fontSize: 11, fontWeight: '600' }} numberOfLines={1}>
+                  {typeof (replyMsg as any).senderId === 'object' ? (replyMsg as any).senderId?.username : 'Tin nhắn'}
+                </Text>
+                <Text style={{ color: isMine ? 'rgba(255,255,255,0.7)' : colors.muted, fontSize: 12 }} numberOfLines={2}>
+                  {(replyMsg as any).content || 'File đính kèm'}
+                </Text>
+              </View>
+            )}
+
+            {/* Forward tag */}
+            {item.forwardFrom && (
+              <Text style={{ color: isMine ? '#DBEAFE' : colors.muted, fontSize: 11, marginBottom: 4, fontStyle: 'italic' }}>↗ Chuyển tiếp</Text>
+            )}
+
+            {/* Text content */}
+            {item.content ? (
+              <Text style={{ color: isMine ? '#fff' : colors.text, fontSize: 16, lineHeight: 22 }}>{item.content}</Text>
+            ) : null}
+
+            {/* Reactions */}
+            {!!item.reactions?.length && (
+              <Text style={{ marginTop: 4, fontSize: 14 }}>{item.reactions.map((r) => r.emoji).join(' ')}</Text>
+            )}
+
+            {/* Media attachments */}
+            {!!item.mediaIds?.length && (
+              <View style={{ marginTop: item.content ? 8 : 0, gap: 6 }}>
+                {item.mediaIds.map((mediaId, idx) => {
+                  const media = mediaById[mediaId];
+                  const isImage = isImageMimeType(media?.mimeType);
+                  const fileName = media?.fileName || `Tệp đính kèm ${idx + 1}`;
+                  const canOpen = !!media?.url;
+
+                  if (isImage && media?.url) {
+                    return (
+                      <TouchableOpacity key={`${mediaId}-${idx}`} onPress={() => setViewImageUrl(media.url)} activeOpacity={0.9}>
+                        <Image
+                          source={{ uri: media.url }}
+                          style={styles.inlineImage}
+                          resizeMode="cover"
+                        />
+                      </TouchableOpacity>
+                    );
+                  }
+
+                  return (
+                    <TouchableOpacity
+                      key={`${mediaId}-${idx}`}
+                      disabled={!canOpen}
+                      onPress={async () => {
+                        if (!media?.url) return;
+                        const supported = await Linking.canOpenURL(media.url);
+                        if (supported) await Linking.openURL(media.url);
+                        else Alert.alert('Lỗi', 'Không thể mở tệp');
+                      }}
+                      style={[styles.fileAttachment, { backgroundColor: isMine ? '#1D4ED8' : colors.border }]}
+                    >
+                      <Ionicons name="document-attach-outline" size={18} color={isMine ? '#DBEAFE' : colors.text} />
+                      <Text numberOfLines={1} style={{ flex: 1, color: isMine ? '#DBEAFE' : colors.text, fontSize: 13, fontWeight: '600' }}>
+                        {fileName}
+                      </Text>
+                      {canOpen && <Ionicons name="download-outline" size={16} color={isMine ? '#DBEAFE' : colors.muted} />}
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            )}
+
+            {/* Time + Status */}
+            <View style={[styles.msgMeta, { justifyContent: isMine ? 'flex-end' : 'flex-start' }]}>
+              <Text style={{ color: isMine ? 'rgba(255,255,255,0.5)' : colors.muted, fontSize: 10 }}>
+                {new Date(item.createdAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
+              </Text>
+              {isMine && <View style={{ marginLeft: 4 }}>{renderMessageStatus(item)}</View>}
+            </View>
           </View>
-        )}
-      </TouchableOpacity>
+        </View>
+      </Pressable>
     );
   };
 
@@ -1167,7 +635,14 @@ const styles = StyleSheet.create({
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
       <Stack.Screen
         options={{
-          title: conversationTitle,
+          headerTitle: () => (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+              <Image source={{ uri: headerAvatarUrl }} style={{ width: 34, height: 34, borderRadius: 17 }} />
+              <Text style={{ fontSize: 17, fontWeight: '600', color: colors.text }} numberOfLines={1}>
+                {conversationTitle}
+              </Text>
+            </View>
+          ),
           headerShown: true,
           headerBackVisible: false,
           headerLeft: () => (
@@ -1183,35 +658,28 @@ const styles = StyleSheet.create({
         }}
       />
 
+      {/* Socket offline banner */}
       {!isSocketReady && (
-        <View style={{ paddingVertical: 6, backgroundColor: colorScheme === 'dark' ? '#78350F' : '#FEF3C7', alignItems: 'center' }}>
-          <Text style={{ color: colorScheme === 'dark' ? '#FDE68A' : '#92400E', fontSize: 12 }}>Đang thiết lập kết nối chat...</Text>
+        <View style={{ paddingVertical: 5, backgroundColor: colorScheme === 'dark' ? '#78350F' : '#FEF3C7', alignItems: 'center' }}>
+          <Text style={{ color: colorScheme === 'dark' ? '#FDE68A' : '#92400E', fontSize: 11 }}>Đang kết nối...</Text>
         </View>
       )}
+
+      {/* Pinned message */}
       {conversation?.type === 'group' && conversation?.pinnedMessageId && (
-        <View style={{ paddingVertical: 8, backgroundColor: colorScheme === 'dark' ? '#1E3A5F' : '#EEF4FF', alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 8 }}>
-          <Ionicons name="pin" size={14} color={colors.tint} />
+        <View style={{ paddingVertical: 7, backgroundColor: colorScheme === 'dark' ? '#1E3A5F' : '#EEF4FF', alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 8 }}>
+          <Ionicons name="pin" size={13} color={colors.tint} />
           <Text style={{ color: colors.tint, fontSize: 12 }}>Nhóm đang có tin nhắn ghim</Text>
-          <TouchableOpacity
-            onPress={async () => {
-              try {
-                const updated = await unpinGroupMessage(conversationId);
-                setConversation(updated);
-              } catch (_e) {
-                Alert.alert('Lỗi', 'Không thể bỏ ghim');
-              }
-            }}
-          >
+          <TouchableOpacity onPress={async () => {
+            try { const updated = await unpinGroupMessage(conversationId); setConversation(updated); }
+            catch { Alert.alert('Lỗi', 'Không thể bỏ ghim'); }
+          }}>
             <Text style={{ color: colors.tint, fontWeight: '700', fontSize: 12 }}>Bỏ ghim</Text>
           </TouchableOpacity>
         </View>
       )}
 
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior="padding"
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
-      >
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding" keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}>
         <FlatList
           data={messages}
           keyExtractor={(item) => getMessageId(item)}
@@ -1221,55 +689,49 @@ const styles = StyleSheet.create({
           onEndReached={loadMoreMessages}
           onEndReachedThreshold={0.5}
           ListFooterComponent={isFetchingMore ? <ActivityIndicator style={{ margin: 16 }} /> : null}
+          contentContainerStyle={{ paddingVertical: 8 }}
         />
 
+        {/* Emoji panel */}
         {showEmojiPanel && (
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 12, paddingVertical: 8, gap: 8, backgroundColor: colors.surface }}>
             {QUICK_EMOJIS.map((emoji) => (
-              <TouchableOpacity
-                key={emoji}
-                onPress={() => setInputText((prev) => `${prev}${emoji}`)}
-                style={{ paddingVertical: 6, paddingHorizontal: 10, borderRadius: 12, backgroundColor: colors.tint + '20' }}
-              >
+              <TouchableOpacity key={emoji} onPress={() => setInputText((prev) => `${prev}${emoji}`)}
+                style={{ paddingVertical: 6, paddingHorizontal: 10, borderRadius: 12, backgroundColor: colors.tint + '20' }}>
                 <Text style={{ fontSize: 20 }}>{emoji}</Text>
               </TouchableOpacity>
             ))}
           </View>
         )}
 
-        <View
-          style={{
-            flexDirection: 'row',
-            alignItems: 'center',
-            padding: 12,
-            paddingBottom: Math.max(12, insets.bottom),
-            borderTopWidth: StyleSheet.hairlineWidth,
-            borderTopColor: colors.border,
-            backgroundColor: colors.surface,
-          }}
-        >
-          <TouchableOpacity onPress={() => setShowEmojiPanel((prev) => !prev)} style={{ marginRight: 10 }}>
-            <Ionicons name="happy-outline" size={24} color={colors.muted} />
+        {/* Reply preview */}
+        {replyTo && (
+          <View style={[styles.replyPreview, { backgroundColor: colors.surface, borderTopColor: colors.border }]}>
+            <View style={[styles.replyPreviewBar, { backgroundColor: colors.tint }]} />
+            <View style={{ flex: 1 }}>
+              <Text style={{ color: colors.tint, fontSize: 12, fontWeight: '700' }}>
+                Trả lời: {typeof (replyTo as any).senderId === 'object' ? (replyTo as any).senderId?.username : 'tin nhắn'}
+              </Text>
+              <Text style={{ color: colors.muted, fontSize: 12 }} numberOfLines={1}>{replyTo.content || 'File đính kèm'}</Text>
+            </View>
+            <TouchableOpacity onPress={() => setReplyTo(null)} style={{ padding: 6 }}>
+              <Ionicons name="close" size={18} color={colors.muted} />
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Input bar */}
+        <View style={[styles.inputBar, { borderTopColor: colors.border, backgroundColor: colors.surface, paddingBottom: Math.max(12, insets.bottom) }]}>
+          <TouchableOpacity onPress={() => setShowEmojiPanel((prev) => !prev)} style={styles.iconBtn}>
+            <Ionicons name={showEmojiPanel ? 'happy' : 'happy-outline'} size={24} color={showEmojiPanel ? colors.tint : colors.muted} />
           </TouchableOpacity>
 
-          <TouchableOpacity onPress={handleDocumentPick} style={{ marginRight: 10 }}>
-            <Ionicons name="attach" size={24} color={colors.muted} />
+          <TouchableOpacity onPress={() => setShowMediaMenu(true)} style={styles.iconBtn}>
+            <Ionicons name="add-circle-outline" size={26} color={colors.muted} />
           </TouchableOpacity>
 
           <TextInput
-            style={{
-              flex: 1,
-              backgroundColor: colors.background,
-              borderWidth: 1,
-              borderColor: colors.border,
-              borderRadius: 24,
-              paddingHorizontal: 16,
-              paddingTop: 10,
-              paddingBottom: 10,
-              fontSize: 16,
-              maxHeight: 100,
-              color: colors.text,
-            }}
+            style={[styles.textInput, { backgroundColor: colors.background, borderColor: colors.border, color: colors.text }]}
             placeholder="Nhắn tin..."
             placeholderTextColor={colors.muted}
             value={inputText}
@@ -1280,115 +742,95 @@ const styles = StyleSheet.create({
           <TouchableOpacity
             onPress={handleSendText}
             disabled={isSending || inputText.trim().length === 0}
-            style={{
-              marginLeft: 12,
-              width: 44,
-              height: 44,
-              borderRadius: 22,
-              backgroundColor: inputText.trim().length > 0 ? '#0068FF' : '#D1D5DB',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
+            style={[styles.sendBtn, { backgroundColor: inputText.trim().length > 0 ? '#0068FF' : '#D1D5DB' }]}
           >
-            {isSending ? <ActivityIndicator color="#fff" /> : <Ionicons name="send" size={20} color="#fff" style={{ marginLeft: 4 }} />}
+            {isSending ? <ActivityIndicator color="#fff" size="small" /> : <Ionicons name="send" size={18} color="#fff" style={{ marginLeft: 3 }} />}
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
 
+      {/* Media menu modal */}
+      <Modal visible={showMediaMenu} transparent animationType="fade" onRequestClose={() => setShowMediaMenu(false)}>
+        <TouchableOpacity style={styles.mediaMenuOverlay} activeOpacity={1} onPress={() => setShowMediaMenu(false)}>
+          <View style={[styles.mediaMenu, { backgroundColor: colors.surface }]}>
+            <TouchableOpacity style={styles.mediaMenuItem} onPress={handlePickImage}>
+              <View style={[styles.mediaMenuIcon, { backgroundColor: '#EEF2FF' }]}>
+                <Ionicons name="image" size={26} color="#4F46E5" />
+              </View>
+              <Text style={{ color: colors.text, fontSize: 13, fontWeight: '600', marginTop: 4 }}>Thư viện ảnh</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.mediaMenuItem} onPress={handleDocumentPick}>
+              <View style={[styles.mediaMenuIcon, { backgroundColor: '#ECFDF5' }]}>
+                <Ionicons name="document-attach" size={26} color="#10B981" />
+              </View>
+              <Text style={{ color: colors.text, fontSize: 13, fontWeight: '600', marginTop: 4 }}>Tệp tài liệu</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Image viewer */}
+      <Modal visible={!!viewImageUrl} transparent animationType="fade" onRequestClose={() => setViewImageUrl(null)}>
+        <View style={styles.imageViewerOverlay}>
+          <TouchableOpacity style={styles.imageViewerClose} onPress={() => setViewImageUrl(null)}>
+            <Ionicons name="close" size={30} color="#fff" />
+          </TouchableOpacity>
+          {viewImageUrl && (
+            <Image source={{ uri: viewImageUrl }} style={styles.imageViewerImg} resizeMode="contain" />
+          )}
+        </View>
+      </Modal>
+
+      {/* Forward modal */}
       <Modal visible={forwardModalVisible} animationType="slide" onRequestClose={() => setForwardModalVisible(false)}>
         <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
           <View style={{ paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: colors.surface }}>
             <TouchableOpacity onPress={() => setForwardModalVisible(false)}>
               <Text style={{ color: colors.tint, fontWeight: '700' }}>Đóng</Text>
             </TouchableOpacity>
-            <Text style={{ fontSize: 18, fontWeight: '700', color: colors.text }}>Chuyển tiếp tin nhắn</Text>
+            <Text style={{ fontSize: 18, fontWeight: '700', color: colors.text }}>Chuyển tiếp</Text>
             <View style={{ width: 36 }} />
           </View>
-
           <FlatList
             data={conversations}
             keyExtractor={(item) => item._id}
-            ListEmptyComponent={
-              <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingVertical: 40 }}>
-                <Text style={{ color: colors.muted }}>Không có cuộc trò chuyện phù hợp</Text>
-              </View>
-            }
             renderItem={({ item }) => (
               <TouchableOpacity
                 disabled={isForwarding}
                 onPress={() => handleForward(item._id || item.id || '')}
-                style={{ paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border, backgroundColor: colors.surface }}
+                style={{ paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border }}
               >
-                <Text style={{ fontSize: 16, color: colors.text }}>{getConversationTitle(item, user?.id || '')}</Text>
+                <Text style={{ fontSize: 16, color: colors.text }}>{getConversationTitle(item, currentUserId)}</Text>
               </TouchableOpacity>
             )}
           />
         </SafeAreaView>
-      </Modal>
-
-      <Modal visible={commonGroupsVisible} animationType="slide" onRequestClose={() => setCommonGroupsVisible(false)}>
-        <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
-          <View style={{ paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: colors.surface }}>
-            <TouchableOpacity onPress={() => setCommonGroupsVisible(false)}>
-              <Text style={{ color: colors.tint, fontWeight: '700' }}>Đóng</Text>
-            </TouchableOpacity>
-            <Text style={{ fontSize: 18, fontWeight: '700', color: colors.text }}>Nhóm chung</Text>
-            <View style={{ width: 36 }} />
-          </View>
-          <FlatList
-            data={commonGroups}
-            keyExtractor={(item) => item._id || item.id || String(Math.random())}
-            ListEmptyComponent={
-              <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingVertical: 40 }}>
-                <Text style={{ color: colors.muted }}>Chưa có nhóm chung</Text>
-              </View>
-            }
-            renderItem={({ item }) => (
-              <TouchableOpacity
-                onPress={() => {
-                  setCommonGroupsVisible(false);
-                  router.push(`/chat/${item._id || item.id}`);
-                }}
-                style={{ paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border, backgroundColor: colors.surface }}
-              >
-                <Text style={{ fontSize: 16, color: colors.text }}>{item.name || 'Nhóm chat'}</Text>
-              </TouchableOpacity>
-            )}
-          />
-        </SafeAreaView>
-      </Modal>
-
-      <Modal visible={editorVisible} transparent animationType="fade" onRequestClose={() => setEditorVisible(false)}>
-        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 }}>
-          <View style={{ width: '100%', borderRadius: 16, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, padding: 20, gap: 14, backgroundColor: colors.surface }}>
-            <Text style={{ fontSize: 17, fontWeight: '700', color: colors.text }}>{editorTitle}</Text>
-            <TextInput
-              value={editorValue}
-              onChangeText={setEditorValue}
-              placeholder={editorPlaceholder}
-              placeholderTextColor={colors.muted}
-              style={{ borderWidth: 1, borderColor: colors.border, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, color: colors.text, fontSize: 16, backgroundColor: colors.background }}
-            />
-            <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 8 }}>
-              <TouchableOpacity onPress={() => setEditorVisible(false)} style={{ borderRadius: 8, paddingHorizontal: 14, paddingVertical: 10, backgroundColor: colors.border }}>
-                <Text style={{ color: colors.text, fontWeight: '700' }}>Hủy</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={() => {
-                  const value = editorValue.trim();
-                  if (!value || !editorSubmit) return;
-                  setEditorVisible(false);
-                  editorSubmit(value);
-                }}
-                style={{ borderRadius: 8, paddingHorizontal: 14, paddingVertical: 10, backgroundColor: colors.tint }}
-              >
-                <Text style={{ color: '#fff', fontWeight: '700' }}>Lưu</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
       </Modal>
     </SafeAreaView>
   );
 }
->>>>>>> Refactor_Project:edu-ott-system/frontend/mobile/app/chat/[id].tsx
+
+const styles = StyleSheet.create({
+  bubbleWrapper: { flexDirection: 'row', marginVertical: 2, marginHorizontal: 12, alignItems: 'flex-end' },
+  myWrapper: { justifyContent: 'flex-end' },
+  theirWrapper: { justifyContent: 'flex-start' },
+  senderAvatar: { width: 28, height: 28, borderRadius: 14, marginRight: 6, marginBottom: 2 },
+  bubble: { borderRadius: 18, padding: 10, maxWidth: '100%' },
+  replyQuote: { borderLeftWidth: 3, paddingLeft: 8, marginBottom: 6, opacity: 0.85 },
+  msgMeta: { flexDirection: 'row', alignItems: 'center', marginTop: 4, gap: 2 },
+  inlineImage: { width: 200, height: 160, borderRadius: 12 },
+  fileAttachment: { flexDirection: 'row', alignItems: 'center', gap: 8, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 8 },
+  replyPreview: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 8, borderTopWidth: 1, gap: 8 },
+  replyPreviewBar: { width: 3, height: '100%', borderRadius: 2, minHeight: 30 },
+  inputBar: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingTop: 10, borderTopWidth: StyleSheet.hairlineWidth, gap: 6 },
+  iconBtn: { padding: 4 },
+  textInput: { flex: 1, borderWidth: 1, borderRadius: 22, paddingHorizontal: 14, paddingVertical: 8, fontSize: 16, maxHeight: 100 },
+  sendBtn: { width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center' },
+  mediaMenuOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
+  mediaMenu: { flexDirection: 'row', padding: 20, borderTopLeftRadius: 20, borderTopRightRadius: 20, gap: 20 },
+  mediaMenuItem: { alignItems: 'center', flex: 1 },
+  mediaMenuIcon: { width: 56, height: 56, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
+  imageViewerOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.95)', justifyContent: 'center', alignItems: 'center' },
+  imageViewerClose: { position: 'absolute', top: 50, right: 20, zIndex: 10, padding: 8 },
+  imageViewerImg: { width: '100%', height: '80%' },
+});

@@ -115,4 +115,26 @@ router.post(
   userController.blockOrUnblockUser,
 );
 
+/**
+ * @openapi
+ * /users/admin/status:
+ *   post:
+ *     tags: [Users]
+ *     summary: [ADMIN] Force disable/enable account
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [targetUserId, isActive]
+ *             properties:
+ *               targetUserId: { type: string }
+ *               isActive: { type: boolean }
+ *               banReason: { type: string }
+ */
+router.post('/admin/status', auth, userController.updateUserStatus);
+
 module.exports = router;

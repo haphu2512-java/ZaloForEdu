@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useFocusEffect } from 'expo-router';
 import {
   StyleSheet,
   SectionList,
@@ -42,6 +43,9 @@ import {
 import { searchUsers } from '@/utils/searchService';
 import { blockOrUnblockUser } from '@/utils/userService';
 import type { UserInfo, FriendRequest, Conversation } from '@/types/chat';
+import CreateGroupModal from '@/components/contacts/CreateGroupModal';
+import FriendRequestsModal from '@/components/contacts/FriendRequestsModal';
+import GroupManageModal from '@/components/contacts/GroupManageModal';
 
 type ContactTab = 'friends' | 'groups' | 'oa';
 type FilterTab = 'all' | 'recent';
@@ -102,14 +106,20 @@ export default function ContactsScreen() {
     }
   }, []);
 
-  useEffect(() => {
-    const init = async () => {
-      setLoading(true);
-      await loadContacts();
-      setLoading(false);
-    };
-    init();
-  }, [loadContacts]);
+  useFocusEffect(
+    useCallback(() => {
+      let isActive = true;
+      const init = async () => {
+        if (friends.length === 0 && groups.length === 0) setLoading(true); // Don't block UI if we already have data
+        await loadContacts();
+        if (isActive) setLoading(false);
+      };
+      init();
+      return () => {
+        isActive = false;
+      };
+    }, [loadContacts])
+  );
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -260,8 +270,7 @@ export default function ContactsScreen() {
   }, []);
 
   const openManageGroup = (group: Conversation) => {
-    setSelectedGroup(group);
-    setGroupManageVisible(true);
+    router.push({ pathname: '/conversation-details', params: { id: group._id } });
   };
 
   const toggleMemberSelection = (friendId: string) => {
@@ -612,294 +621,54 @@ export default function ContactsScreen() {
         />
       )}
 
-      <Modal visible={requestModalVisible} animationType="slide" onRequestClose={() => setRequestModalVisible(false)}>
-        <View style={[styles.modalContainer, { backgroundColor: colors.background }]}>
-          <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
-            <TouchableOpacity onPress={() => setRequestModalVisible(false)}>
-              <Text style={{ color: brand, fontWeight: '700' }}>Đóng</Text>
-            </TouchableOpacity>
-            <Text style={[styles.modalTitle, { color: colors.text }]}>Lời mời kết bạn</Text>
-            <View style={{ width: 40 }} />
-          </View>
+            <FriendRequestsModal
+        visible={requestModalVisible}
+        onClose={() => setRequestModalVisible(false)}
+        brand={brand}
+        colors={colors}
+        incomingRequests={incomingRequests}
+        processingRequestId={processingRequestId}
+        handleRespondRequest={handleRespondRequest}
+        getRequestSender={getRequestSender}
+      />
 
-          <FlatList
-            data={incomingRequests}
-            keyExtractor={(item) => item._id}
-            ListEmptyComponent={
-              <View style={styles.emptyContainer}>
-                <Text style={{ color: colors.muted }}>Không có lời mời nào</Text>
-              </View>
-            }
-            renderItem={({ item }) => {
-              const sender = getRequestSender(item);
-              return (
-                <View style={[styles.requestRow, { borderBottomColor: colors.border }]}>
-                  <Image
-                    source={{
-                      uri:
-                        sender?.avatarUrl ||
-                        `https://ui-avatars.com/api/?name=${encodeURIComponent(sender?.username || 'User')}&background=2563EB&color=fff&size=100&bold=true`,
-                    }}
-                    style={styles.avatar}
-                  />
-                  <View style={{ flex: 1, backgroundColor: 'transparent' }}>
-                    <Text style={[styles.userName, { color: colors.text }]}>{sender?.username || 'Người dùng'}</Text>
-                    <Text style={{ color: colors.muted, fontSize: 12 }}>
-                      {sender?.email || sender?.phone || 'Đã gửi lời mời kết bạn'}
-                    </Text>
-                  </View>
-                  <TouchableOpacity
-                    style={[styles.smallBtn, { backgroundColor: '#DCFCE7' }]}
-                    disabled={processingRequestId === item._id}
-                    onPress={() => handleRespondRequest(item._id, 'accept')}
-                  >
-                    <Text style={{ color: '#166534', fontWeight: '700', fontSize: 12 }}>Đồng ý</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.smallBtn, { backgroundColor: '#F3F4F6' }]}
-                    disabled={processingRequestId === item._id}
-                    onPress={() => handleRespondRequest(item._id, 'reject')}
-                  >
-                    <Text style={{ color: '#374151', fontWeight: '700', fontSize: 12 }}>Từ chối</Text>
-                  </TouchableOpacity>
-                </View>
-              );
-            }}
-          />
-        </View>
-      </Modal>
+      <CreateGroupModal
+        visible={createGroupVisible}
+        onClose={() => setCreateGroupVisible(false)}
+        brand={brand}
+        colors={colors}
+        groupActionLoading={groupActionLoading}
+        handleCreateGroup={handleCreateGroup}
+        groupNameInput={groupNameInput}
+        setGroupNameInput={setGroupNameInput}
+        friends={friends}
+        selectedGroupMembers={selectedGroupMembers}
+        toggleMemberSelection={toggleMemberSelection}
+        getUserId={getUserId}
+      />
 
-      <Modal visible={createGroupVisible} animationType="slide" onRequestClose={() => setCreateGroupVisible(false)}>
-        <View style={[styles.modalContainer, { backgroundColor: colors.background }]}>
-          <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
-            <TouchableOpacity onPress={() => setCreateGroupVisible(false)}>
-              <Text style={{ color: brand, fontWeight: '700' }}>Đóng</Text>
-            </TouchableOpacity>
-            <Text style={[styles.modalTitle, { color: colors.text }]}>Tạo nhóm</Text>
-            <TouchableOpacity disabled={groupActionLoading} onPress={handleCreateGroup}>
-              <Text style={{ color: groupActionLoading ? colors.muted : brand, fontWeight: '700' }}>Tạo</Text>
-            </TouchableOpacity>
-          </View>
-          <View style={{ padding: 16, gap: 12, backgroundColor: 'transparent' }}>
-            <TextInput
-              value={groupNameInput}
-              onChangeText={setGroupNameInput}
-              placeholder="Nhập tên nhóm"
-              placeholderTextColor={colors.muted}
-              style={[styles.groupInput, { borderColor: colors.border, color: colors.text }]}
-            />
-            <Text style={{ color: colors.muted, fontSize: 13 }}>Chọn tối thiểu 2 bạn bè để tạo nhóm</Text>
-          </View>
-          {friends.length <= 0 ? (
-            <View style={styles.emptyContainer}>
-              <Text style={{ color: colors.muted }}>Bạn chưa có bạn bè để tạo nhóm</Text>
-            </View>
-          ) : null}
-
-          <FlatList
-            data={friends}
-            keyExtractor={(item, index) => getUserId(item) || `member-${index}`}
-            ListEmptyComponent={
-              <View style={styles.emptyContainer}>
-                <Text style={{ color: colors.muted }}>Bạn chưa có bạn bè để tạo nhóm</Text>
-              </View>
-            }
-            renderItem={({ item }) => {
-              const fid = getUserId(item);
-              const checked = selectedGroupMembers.includes(fid);
-              return (
-                <TouchableOpacity
-                  style={[styles.userRow, { backgroundColor: colors.surface }]}
-                  onPress={() => toggleMemberSelection(fid)}
-                >
-                  <Image
-                    source={{
-                      uri:
-                        item.avatarUrl ||
-                        `https://ui-avatars.com/api/?name=${encodeURIComponent(item.username)}&background=2563EB&color=fff&size=100&bold=true`,
-                    }}
-                    style={styles.avatar}
-                  />
-                  <View style={{ flex: 1, backgroundColor: 'transparent' }}>
-                    <Text style={[styles.userName, { color: colors.text }]}>{item.username}</Text>
-                  </View>
-                  <Ionicons name={checked ? 'checkbox' : 'square-outline'} size={24} color={checked ? brand : colors.muted} />
-                </TouchableOpacity>
-              );
-            }}
-          />
-        </View>
-      </Modal>
-
-      <Modal visible={groupManageVisible} animationType="slide" onRequestClose={() => setGroupManageVisible(false)}>
-        <View style={[styles.modalContainer, { backgroundColor: colors.background }]}>
-          <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
-            <TouchableOpacity onPress={() => setGroupManageVisible(false)}>
-              <Text style={{ color: brand, fontWeight: '700' }}>Đóng</Text>
-            </TouchableOpacity>
-            <Text style={[styles.modalTitle, { color: colors.text }]}>Quản lý nhóm</Text>
-            <View style={{ width: 40 }} />
-          </View>
-          {selectedGroup ? (
-            <FlatList
-              data={selectedGroup.participants || []}
-              keyExtractor={(item, index) => getUserId(item) || `participant-${index}`}
-              ListHeaderComponent={
-                <View style={{ padding: 16, gap: 10, backgroundColor: 'transparent' }}>
-                  <Text style={[styles.userName, { color: colors.text }]}>{selectedGroup.name || 'Nhóm không tên'}</Text>
-                  <TouchableOpacity
-                    style={[styles.groupActionBtn, { backgroundColor: colorScheme === 'dark' ? '#312E81' : '#EEF2FF', borderColor: colors.border }]}
-                    disabled={groupActionLoading}
-                    onPress={() =>
-                      openTextEditor(
-                        'Đổi tên nhóm',
-                        'Nhập tên mới',
-                        (value) =>
-                          void handleGroupAction(
-                            () => updateGroupName(selectedGroup._id, value),
-                            'Đã cập nhật tên nhóm',
-                          ),
-                        selectedGroup.name || '',
-                      )
-                    }
-                  >
-                    <Text style={{ color: colorScheme === 'dark' ? '#A5B4FC' : '#3730A3', fontWeight: '700' }}>Đổi tên nhóm</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.groupActionBtn, { backgroundColor: colorScheme === 'dark' ? '#4C1D95' : '#F3E8FF', borderColor: colors.border }]}
-                    disabled={groupActionLoading}
-                    onPress={() =>
-                      openTextEditor(
-                        'Đổi ảnh nhóm',
-                        'Nhập URL ảnh nhóm',
-                        (value) =>
-                          void handleGroupAction(
-                            () => updateGroupAvatar(selectedGroup._id, value),
-                            'Đã cập nhật ảnh nhóm',
-                          ),
-                        selectedGroup.avatarUrl || '',
-                      )
-                    }
-                  >
-                    <Text style={{ color: colorScheme === 'dark' ? '#DDD6FE' : '#7E22CE', fontWeight: '700' }}>Đổi ảnh nhóm</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.groupActionBtn, { backgroundColor: colorScheme === 'dark' ? '#064E3B' : '#ECFDF5', borderColor: colors.border }]}
-                    disabled={groupActionLoading}
-                    onPress={() => {
-                      setSelectedMembersToAdd([]);
-                      setAddMembersVisible(true);
-                    }}
-                  >
-                    <Text style={{ color: colorScheme === 'dark' ? '#6EE7B7' : '#065F46', fontWeight: '700' }}>Thêm thành viên</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.groupActionBtn, { backgroundColor: colorScheme === 'dark' ? '#7F1D1D' : '#FEE2E2', borderColor: colors.border }]}
-                    disabled={groupActionLoading}
-                    onPress={() =>
-                      handleGroupAction(() => leaveGroup(selectedGroup._id), 'Bạn đã rời nhóm')
-                    }
-                  >
-                    <Text style={{ color: '#991B1B', fontWeight: '700' }}>Rời nhóm</Text>
-                  </TouchableOpacity>
-                </View>
-              }
-              renderItem={({ item }) => {
-                const uid = getUserId(item);
-                const ownerId = getConversationUserId(selectedGroup.ownerId) || selectedGroup.createdBy;
-                const adminIds = (selectedGroup.adminIds || []).map((admin) => getConversationUserId(admin));
-                const isOwner = ownerId === uid;
-                const isAdmin = adminIds.includes(uid);
-                const iAmOwner = ownerId === currentUserId;
-                const iAmAdmin = iAmOwner || adminIds.includes(currentUserId);
-
-                return (
-                  <View style={[styles.requestRow, { borderBottomColor: colors.border }]}>
-                    <Image
-                      source={{
-                        uri:
-                          item.avatarUrl ||
-                          `https://ui-avatars.com/api/?name=${encodeURIComponent(item.username)}&background=2563EB&color=fff&size=100&bold=true`,
-                      }}
-                      style={styles.avatar}
-                    />
-                    <View style={{ flex: 1, backgroundColor: 'transparent' }}>
-                      <Text style={[styles.userName, { color: colors.text }]}>{item.username}</Text>
-                      <Text style={{ color: colors.muted, fontSize: 12 }}>
-                        {isOwner ? 'Trưởng nhóm' : isAdmin ? 'Phó nhóm' : 'Thành viên'}
-                      </Text>
-                    </View>
-                    {iAmOwner && !isOwner && (
-                      <TouchableOpacity
-                        style={[styles.smallBtn, { backgroundColor: '#E0E7FF' }]}
-                        onPress={() =>
-                          handleGroupAction(
-                            () =>
-                              isAdmin
-                                ? demoteGroupAdmin(selectedGroup._id, uid)
-                                : promoteGroupAdmin(selectedGroup._id, uid),
-                            isAdmin ? 'Đã hạ quyền admin' : 'Đã nâng quyền admin',
-                          )
-                        }
-                      >
-                        <Text style={{ color: '#3730A3', fontWeight: '700', fontSize: 12 }}>{isAdmin ? 'Hạ quyền' : 'Nâng quyền'}</Text>
-                      </TouchableOpacity>
-                    )}
-                    {iAmAdmin && !isOwner && uid !== currentUserId && (
-                      <TouchableOpacity
-                        style={[styles.smallBtn, { backgroundColor: '#FEE2E2' }]}
-                        onPress={() =>
-                          handleGroupAction(
-                            () => removeGroupMember(selectedGroup._id, uid),
-                            'Đã xóa thành viên',
-                          )
-                        }
-                      >
-                        <Text style={{ color: '#991B1B', fontWeight: '700', fontSize: 12 }}>Xóa</Text>
-                      </TouchableOpacity>
-                    )}
-                    {iAmOwner && !isOwner && (
-                      <TouchableOpacity
-                        style={[styles.smallBtn, { backgroundColor: '#DCFCE7' }]}
-                        onPress={() =>
-                          handleGroupAction(
-                            () => transferGroupOwner(selectedGroup._id, { newOwnerId: uid }),
-                            'Đã chuyển quyền trưởng nhóm',
-                          )
-                        }
-                      >
-                        <Text style={{ color: '#166534', fontWeight: '700', fontSize: 12 }}>Chuyển quyền</Text>
-                      </TouchableOpacity>
-                    )}
-                    {iAmAdmin && (
-                      <TouchableOpacity
-                        style={[styles.smallBtn, { backgroundColor: '#FEF3C7' }]}
-                        onPress={() =>
-                          openTextEditor(
-                            'Đặt biệt danh',
-                            `Biệt danh cho ${item.username}`,
-                            (value) =>
-                              void handleGroupAction(
-                                () => updateGroupNickname(selectedGroup._id, uid, value),
-                                'Đã cập nhật biệt danh',
-                              ),
-                          )
-                        }
-                      >
-                        <Text style={{ color: '#92400E', fontWeight: '700', fontSize: 12 }}>Biệt danh</Text>
-                      </TouchableOpacity>
-                    )}
-                  </View>
-                );
-              }}
-            />
-          ) : (
-            <View style={styles.emptyContainer}>
-              <Text style={{ color: colors.muted }}>Không có dữ liệu nhóm</Text>
-            </View>
-          )}
-        </View>
-      </Modal>
+      <GroupManageModal
+        visible={groupManageVisible}
+        onClose={() => setGroupManageVisible(false)}
+        brand={brand}
+        colors={colors}
+        colorScheme={colorScheme as 'light'|'dark'}
+        selectedGroup={selectedGroup}
+        groupActionLoading={groupActionLoading}
+        currentUserId={currentUserId}
+        getUserId={getUserId}
+        getConversationUserId={getConversationUserId}
+        openTextEditor={openTextEditor}
+        handleGroupAction={handleGroupAction}
+        updateGroupName={updateGroupName}
+        updateGroupAvatar={updateGroupAvatar}
+        setAddMembersVisible={setAddMembersVisible}
+        setSelectedMembersToAdd={setSelectedMembersToAdd}
+        promoteGroupAdmin={promoteGroupAdmin}
+        demoteGroupAdmin={demoteGroupAdmin}
+        removeGroupMember={removeGroupMember}
+        leaveGroup={leaveGroup}
+      />
 
       <Modal visible={addMembersVisible} animationType="slide" onRequestClose={() => setAddMembersVisible(false)}>
         <View style={[styles.modalContainer, { backgroundColor: colors.background }]}>

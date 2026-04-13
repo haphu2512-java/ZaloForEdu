@@ -11,6 +11,7 @@ interface ChatListItemProps {
   unreadCount?: number;
   roomModel?: 'Conversation' | 'Class' | 'Group';
   isOnline?: boolean;
+  isActive?: boolean;
   onPress?: () => void;
   onLongPress?: () => void;
   colors?: {
@@ -42,6 +43,7 @@ export const ChatListItem: React.FC<ChatListItemProps> = ({
   unreadCount,
   roomModel,
   isOnline,
+  isActive = true,
   onPress,
   onLongPress,
   colors,
@@ -65,7 +67,7 @@ export const ChatListItem: React.FC<ChatListItemProps> = ({
           source={{
             uri: avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=0068FF&color=fff&size=100&bold=true`,
           }}
-          style={styles.avatar}
+          style={[styles.avatar, !isActive && { opacity: 0.4, tintColor: 'gray' as any }]}
         />
         {badge && (
           <View style={[styles.badgeIcon, { backgroundColor: badge.color }]}>
@@ -88,6 +90,11 @@ export const ChatListItem: React.FC<ChatListItemProps> = ({
           >
             {name}
           </Text>
+          {!isActive && (
+            <Text style={{ fontSize: 10, color: '#EF4444', fontWeight: 'bold', marginLeft: 6 }}>
+              VÔ HIỆU HÓA
+            </Text>
+          )}
           <Text style={[styles.time, { color: colors?.muted || '#8A8A8A' }, hasUnread && styles.timeUnread]}>
             {time}
           </Text>
