@@ -18,19 +18,22 @@ export type {
   AuthData,
   AuthResponse,
   LoginPayload,
-  // Chat
+} from './auth';
+
+export type {
   Conversation,
   Message,
   ConversationType,
   MessageStatus,
   UserInfo,
   SenderInfo,
-  // Friend
+} from './chat';
+
+export type {
   FriendRequest,
-  // Notification
-  Notification,
-  // Settings
-  UserSettings,
-  // Search
-  SearchResult,
-} from './index';
+  SendFriendRequestPayload,
+} from './friend';
+
+export type { Notification } from './notification';
+export type { UserSettings } from './settings';
+export type { SearchResult } from './search';

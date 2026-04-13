@@ -1,19 +1,12 @@
 import { fetchAPI } from './api';
 import type { UserInfo, PaginatedResponse } from '../types/chat';
+import { normalizeUser } from './normalizers';
 
 // ============================================================
 // Search Service - Backend endpoints: /api/v1/search/*
 // ============================================================
 
 const SEARCH_ENDPOINT = '/search';
-
-function normalizeUser(user: UserInfo): UserInfo {
-  return {
-    ...user,
-    _id: user._id || user.id || '',
-    id: user.id || user._id || '',
-  };
-}
 
 /**
  * Tìm kiếm users theo username, email hoặc phone

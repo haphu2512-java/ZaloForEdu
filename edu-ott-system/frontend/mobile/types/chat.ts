@@ -107,18 +107,6 @@ export interface Message {
   status?: MessageStatus;
 }
 
-/** Backend FriendRequest model */
-export interface FriendRequest {
-  _id: string;
-  id?: string;
-  fromUserId: string | UserInfo;
-  toUserId: string | UserInfo;
-  status: 'pending' | 'accepted' | 'rejected';
-  respondedAt?: string | null;
-  createdAt: string;
-  updatedAt: string;
-}
-
 // --- API Payloads ---
 
 /** POST /messages/send body */
@@ -139,11 +127,6 @@ export interface CreateConversationPayload {
 
 export interface TransferGroupOwnerPayload {
   newOwnerId: string;
-}
-
-/** POST /friends/request body */
-export interface SendFriendRequestPayload {
-  toUserId: string;
 }
 
 // --- API Responses ---

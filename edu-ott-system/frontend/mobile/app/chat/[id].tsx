@@ -30,17 +30,24 @@ import {
   recallMessage,
   reactToMessage,
   getConversations,
-  createConversation,
 } from '../../utils/messageService';
-import { getPinnedMessages, pinMessage, unpinMessage } from '../../utils/groupFeatureService';
+import { getPinnedMessages, pinMessage } from '../../utils/groupFeatureService';
 import { uploadMediaBase64, getMediaById, uploadImageToCloudinary } from '../../utils/mediaService';
-import { connectSocket, getSocket, joinConversation } from '../../utils/socketService';
+import {
+  connectSocket,
+  joinConversation,
+  emitTyping,
+  emitStopTyping,
+  emitMessageDelivered,
+  emitMessageSeen,
+} from '../../utils/socketService';
 import type { Message, Conversation, MediaItem } from '../../types/chat';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
 
 import PinnedBar from '@/components/chat/PinnedBar';
 import PollBubble from '@/components/chat/PollBubble';
+import { TypingIndicator } from '@/components/chat/TypingIndicator';
 
 const QUICK_EMOJIS = ['😀', '😂', '😍', '🥰', '👍', '❤️', '🔥', '😭', '🙏', '🎉'];
 
@@ -87,6 +94,7 @@ export default function ChatScreen() {
   const [isSocketReady, setIsSocketReady] = useState(false);
   const [showEmojiPanel, setShowEmojiPanel] = useState(false);
   const [showMediaMenu, setShowMediaMenu] = useState(false);
+  const [typingUserIds, setTypingUserIds] = useState<string[]>([]);
 
   // Reply
   const [replyTo, setReplyTo] = useState<Message | null>(null);
@@ -173,6 +181,46 @@ export default function ChatScreen() {
   }, [loadInitialMessages]);
 
   const markedMessageIds = useRef<Set<string>>(new Set());
+  const isTypingRef = useRef(false);
+  const typingStopTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const getNormalizedUserIds = useCallback((ids: any[] = []): string[] => (
+    ids
+      .map((u: any) => (typeof u === 'string' ? u : u?._id || u?.id || ''))
+      .filter(Boolean)
+  ), []);
+
+  const stopTypingWithEmit = useCallback(() => {
+    if (typingStopTimeoutRef.current) {
+      clearTimeout(typingStopTimeoutRef.current);
+      typingStopTimeoutRef.current = null;
+    }
+    if (!isTypingRef.current) return;
+    emitStopTyping(conversationId);
+    isTypingRef.current = false;
+  }, [conversationId]);
+
+  const handleInputChange = useCallback((text: string) => {
+    setInputText(text);
+
+    if (!isSocketReady) return;
+    if (!text.trim()) {
+      stopTypingWithEmit();
+      return;
+    }
+
+    if (!isTypingRef.current) {
+      emitTyping(conversationId);
+      isTypingRef.current = true;
+    }
+
+    if (typingStopTimeoutRef.current) {
+      clearTimeout(typingStopTimeoutRef.current);
+    }
+    typingStopTimeoutRef.current = setTimeout(() => {
+      stopTypingWithEmit();
+    }, 1500);
+  }, [conversationId, isSocketReady, stopTypingWithEmit]);
 
   useEffect(() => {
     if (messages.length > 0 && currentUserId) {
@@ -185,16 +233,29 @@ export default function ChatScreen() {
         // Don't mark our own messages as read
         if (senderId === currentUserId) return false;
 
-        const seenList = (m.seenBy || []).map((u: any) => typeof u === 'string' ? u : u._id || u.id);
+        const seenList = getNormalizedUserIds(m.seenBy || []);
         return !seenList.includes(currentUserId);
       });
 
       if (unreadMessages.length > 0) {
         unreadMessages.forEach(m => markedMessageIds.current.add(getMessageIdStr(m)));
-        Promise.all(unreadMessages.map((m) => markMessageRead(getMessageIdStr(m)))).catch(() => null);
+        Promise.all(
+          unreadMessages.map(async (m) => {
+            const messageId = getMessageIdStr(m);
+            emitMessageDelivered(messageId);
+            try {
+              await markMessageRead(messageId);
+            } catch {
+              // Keep socket read receipt even if HTTP call fails.
+            }
+            emitMessageSeen(messageId);
+          }),
+        ).catch(() => null);
       }
     }
-  }, [messages, currentUserId]);
+  }, [messages, currentUserId, getNormalizedUserIds]);
+
+  useEffect(() => () => stopTypingWithEmit(), [stopTypingWithEmit]);
 
   useEffect(() => {
     const ids = messages.flatMap((m) => m.mediaIds || []);
@@ -230,7 +291,12 @@ export default function ChatScreen() {
           return [enhancedMessage, ...prev];
         });
         if (getMessageSenderId(message) !== currentUserId) {
-          markMessageRead(getMessageId(message)).catch(() => null);
+          const messageId = getMessageId(message);
+          emitMessageDelivered(messageId);
+          markMessageRead(messageId)
+            .catch(() => null)
+            .finally(() => emitMessageSeen(messageId));
+          setTypingUserIds((prev) => prev.filter((id) => id !== getMessageSenderId(message)));
         }
       };
 
@@ -261,6 +327,16 @@ export default function ChatScreen() {
         );
       };
 
+      const onTyping = (payload: { conversationId: string; userId: string }) => {
+        if (payload.conversationId !== conversationId || payload.userId === currentUserId) return;
+        setTypingUserIds((prev) => (prev.includes(payload.userId) ? prev : [...prev, payload.userId]));
+      };
+
+      const onStopTyping = (payload: { conversationId: string; userId: string }) => {
+        if (payload.conversationId !== conversationId || payload.userId === currentUserId) return;
+        setTypingUserIds((prev) => prev.filter((id) => id !== payload.userId));
+      };
+
       const onPinnedItemsUpdated = (items: any[]) => {
         setPinnedItems(items);
       };
@@ -277,6 +353,8 @@ export default function ChatScreen() {
       socket.on('message_recalled', onMessageRecalled);
       socket.on('message_seen', onMessageSeen);
       socket.on('message_delivered', onMessageDelivered);
+      socket.on('typing', onTyping);
+      socket.on('stop_typing', onStopTyping);
       socket.on('pinned_items_updated', onPinnedItemsUpdated);
       socket.on('message_reacted', onMessageReacted);
 
@@ -287,6 +365,8 @@ export default function ChatScreen() {
         socket.off('message_recalled', onMessageRecalled);
         socket.off('message_seen', onMessageSeen);
         socket.off('message_delivered', onMessageDelivered);
+        socket.off('typing', onTyping);
+        socket.off('stop_typing', onStopTyping);
         socket.off('pinned_items_updated', onPinnedItemsUpdated);
         socket.off('message_reacted', onMessageReacted);
       };
@@ -320,6 +400,7 @@ export default function ChatScreen() {
   const handleSendText = async () => {
     const text = inputText.trim();
     if (!text) return;
+    stopTypingWithEmit();
     setIsSending(true);
     const replyId = replyTo ? getMessageId(replyTo) : undefined;
     setReplyTo(null);
@@ -514,12 +595,22 @@ export default function ChatScreen() {
   /** Render message status icon for my messages */
   const renderMessageStatus = (item: Message) => {
     if (item.status === 'sending') return <Ionicons name="time-outline" size={11} color="rgba(255,255,255,0.6)" />;
-    const seenBy = (item.seenBy || []).filter((id) => id !== currentUserId);
+    const seenBy = getNormalizedUserIds(item.seenBy || []).filter((id) => id !== currentUserId);
     if (seenBy.length > 0) return <Ionicons name="checkmark-done" size={11} color="#60EFFF" />;
-    const deliveredTo = (item.deliveredTo || []).filter((id) => id !== currentUserId);
+    const deliveredTo = getNormalizedUserIds(item.deliveredTo || []).filter((id) => id !== currentUserId);
     if (deliveredTo.length > 0) return <Ionicons name="checkmark-done" size={11} color="rgba(255,255,255,0.7)" />;
     return <Ionicons name="checkmark" size={11} color="rgba(255,255,255,0.6)" />;
   };
+
+  const typingParticipants = typingUserIds
+    .map((uid) => conversation?.participants?.find((p) => (p._id || p.id || '') === uid)?.username || 'Ai đó')
+    .filter(Boolean);
+  const typingText =
+    typingParticipants.length === 0
+      ? ''
+      : typingParticipants.length === 1
+        ? `${typingParticipants[0]} đang nhập...`
+        : `${typingParticipants[0]} và ${typingParticipants.length - 1} người khác đang nhập...`;
 
   const renderMessage = ({ item }: { item: Message }) => {
     const isMine = getMessageSenderId(item) === currentUserId;
@@ -718,6 +809,7 @@ export default function ChatScreen() {
           ListFooterComponent={isFetchingMore ? <ActivityIndicator style={{ margin: 16 }} /> : null}
           contentContainerStyle={{ paddingVertical: 8 }}
         />
+        <TypingIndicator isVisible={typingParticipants.length > 0} text={typingText} />
 
         {/* Emoji panel */}
         {showEmojiPanel && (
@@ -762,8 +854,9 @@ export default function ChatScreen() {
             placeholder="Nhắn tin..."
             placeholderTextColor={colors.muted}
             value={inputText}
-            onChangeText={setInputText}
+            onChangeText={handleInputChange}
             multiline
+            onBlur={stopTypingWithEmit}
           />
 
           <TouchableOpacity
