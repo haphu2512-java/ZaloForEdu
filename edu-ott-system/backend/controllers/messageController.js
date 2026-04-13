@@ -23,6 +23,10 @@ const sendMessage = asyncHandler(async (req, res) => {
     forwardFrom,
   });
 
+  // Populate media để frontend hiển thị ngay
+  await message.populate('mediaIds', 'fileName url size mimeType providerResourceType');
+  await message.populate('senderId', 'username avatarUrl');
+
   socketService.emitToConversation(conversationId, 'new_message', message);
   await socketService.emitConversationUpdated(conversationId, {
     conversationId,
@@ -63,6 +67,7 @@ const listMessagesByConversation = asyncHandler(async (req, res) => {
     .sort({ createdAt: -1, _id: -1 })
     .limit(limit + 1)
     .populate('senderId', 'username avatarUrl')
+    .populate('mediaIds', 'fileName url size mimeType providerResourceType')
     .populate('replyTo')
     .populate('forwardFrom');
 
