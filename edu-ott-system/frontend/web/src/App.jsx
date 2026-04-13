@@ -10,6 +10,8 @@ import ProfilePage from "./pages/profile/ProfilePage";
 import ChatbotPage from "./pages/chatbot/ChatbotPage";
 import ContactsPage from "./pages/contacts/ContactsPage";
 import MyDocumentsPage from "./pages/cloud/MyDocumentsPage";
+import BlockedUsersPage from "./pages/blocked/BlockedUsersPage";
+import ArchivedConversationsPage from "./pages/archived/ArchivedConversationsPage";
 import AdminDashboard from "./pages/admin/AdminDashboard";
 
 function PrivateRoute({ children }) {
@@ -95,6 +97,8 @@ export default function App() {
           <Route path="chatbot" element={<ChatbotPage />} />
           <Route path="cloud" element={<ChatPage defaultCloud={true} />} />
           <Route path="profile" element={<ProfilePage />} />
+          <Route path="blocked" element={<BlockedUsersPage />} />
+          <Route path="archived" element={<ArchivedConversationsPage />} />
         </Route>
         <Route
           path="/admin/*"

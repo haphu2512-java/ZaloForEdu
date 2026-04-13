@@ -22,6 +22,8 @@ import {
 import { useAuthStore } from "../../store/authStore";
 import { useTheme } from "../../contexts/ThemeContext";
 import { useLanguage } from "../../contexts/LanguageContext";
+import { useNotificationStore } from "../../store/notificationStore";
+import NotificationsPanel from "../../pages/notifications/NotificationsPanel";
 import "./MainLayout.css";
 
 function getInitials(name = "") {
@@ -164,7 +166,18 @@ function SettingsModal({ onClose }) {
                 <div className="sm-section">
                   <h3>{t("securityTitle")}</h3>
                   <p className="sm-desc">{t("securityDesc")}</p>
-                  <button className="sm-action-btn">{t("changePassword")}</button>
+                  <button className="sm-action-btn" onClick={() => { onClose(); window.location.href = "/profile"; }}>{t("changePassword")}</button>
+                </div>
+                <div className="sm-section">
+                  <h3>Quyền riêng tư</h3>
+                  <div className="sm-row">
+                    <span>Danh sách chặn</span>
+                    <button className="sm-action-btn" onClick={() => { onClose(); window.location.href = "/blocked"; }}>Xem danh sách</button>
+                  </div>
+                  <div className="sm-row">
+                    <span>Hội thoại đã lưu trữ</span>
+                    <button className="sm-action-btn" onClick={() => { onClose(); window.location.href = "/archived"; }}>Xem lưu trữ</button>
+                  </div>
                 </div>
               </div>
             )}
@@ -244,7 +257,15 @@ export default function MainLayout() {
   const navigate = useNavigate();
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showNotifications, setShowNotifications] = useState(false);
   const menuRef = useRef(null);
+  const { unreadCount, fetchUnreadCount } = useNotificationStore();
+
+  useEffect(() => {
+    fetchUnreadCount();
+    const interval = setInterval(fetchUnreadCount, 30000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Nav items dùng t() để đa ngôn ngữ
   const NAV_ITEMS = [
@@ -312,9 +333,21 @@ export default function MainLayout() {
         {/* Bottom */}
         <div className="sidebar-bottom">
           {/* Notification bell */}
-          <button className="sidebar-icon-btn" title={t("notifications")}>
-            <FaBell size={17} />
-          </button>
+          <div className="sidebar-notif-wrap">
+            <button
+              className={`sidebar-icon-btn ${showNotifications ? "active" : ""}`}
+              title={t("notifications")}
+              onClick={() => setShowNotifications(!showNotifications)}
+            >
+              <FaBell size={17} />
+              {unreadCount > 0 && (
+                <span className="sidebar-notif-badge">{unreadCount > 99 ? "99+" : unreadCount}</span>
+              )}
+            </button>
+            {showNotifications && (
+              <NotificationsPanel onClose={() => setShowNotifications(false)} />
+            )}
+          </div>
 
           {/* Avatar + user menu */}
           <div className="sidebar-avatar-wrap" ref={menuRef}>

@@ -473,6 +473,32 @@
   background: #fef2f2;
 }
 
+/* Notification wrap */
+.sidebar-notif-wrap {
+  position: relative;
+}
+
+.sidebar-icon-btn.active {
+  background: rgba(255, 255, 255, 0.15);
+  color: white;
+}
+
+.sidebar-notif-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  background: #ef4444;
+  color: white;
+  font-size: 9px;
+  font-weight: 700;
+  padding: 2px 4px;
+  border-radius: 8px;
+  min-width: 16px;
+  text-align: center;
+  border: 1.5px solid #0068FF;
+  pointer-events: none;
+}
+
 /* ── MAIN CONTENT ── */
 .main-content {
   flex: 1;
