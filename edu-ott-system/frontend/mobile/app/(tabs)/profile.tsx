@@ -75,6 +75,7 @@ export default function ProfileScreen() {
     useCallback(() => {
       let isActive = true;
       const load = async () => {
+        if (!user?.id) return; // Prevent fetching if logged out
         try {
           if (!settings) setIsLoadingSettings(true);
           await Promise.all([
@@ -93,17 +94,18 @@ export default function ProfileScreen() {
       return () => {
         isActive = false;
       };
-    }, [refreshUser])
+    }, [refreshUser, user?.id])
   );
 
   const onRefresh = useCallback(async () => {
+    if (!user?.id) return; // Prevent fetching if logged out
     setRefreshing(true);
     await Promise.all([
       refreshUser(),
       getMySettings().then(setSettings).catch((error: any) => console.log('Failed to refresh settings:', error.message)),
     ]);
     setRefreshing(false);
-  }, [refreshUser]);
+  }, [refreshUser, user?.id]);
 
   const handleUpdateTheme = async (theme: ThemeMode) => {
     if (!settings || isSavingSettings) return;

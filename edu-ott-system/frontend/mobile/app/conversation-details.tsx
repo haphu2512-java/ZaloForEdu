@@ -293,16 +293,52 @@ export default function ConversationDetailsScreen() {
         </View>
 
         {!isGroup && (
-          <View style={styles.actionGrid}>
-            <TouchableOpacity
-              style={[styles.gridBtn, { backgroundColor: colors.surface }]}
-              onPress={() => openEditor('Đổi biệt danh', conversation.preference?.nickname || otherParticipant?.username || '', (val) => handleAction(() => updateConversationPreference(conversation._id, { nickname: val }), 'Đã đổi biệt danh'))}
-            >
-              <View style={[styles.iconCircle, { backgroundColor: '#FEF3C7' }]}>
-                <Ionicons name="pencil" size={24} color="#D97706" />
-              </View>
-              <Text style={[styles.gridBtnText, { color: colors.text }]}>Đổi biệt danh</Text>
-            </TouchableOpacity>
+          <View style={{ marginTop: 20 }}>
+            <View style={[styles.section, { backgroundColor: colors.surface }]}>
+              <Text style={[styles.sectionTitle, { color: colors.muted, fontSize: 13, textTransform: 'uppercase' }]}>Hành động khác</Text>
+              
+              <TouchableOpacity style={styles.optionItem} onPress={() => router.push({ pathname: '/create-group', params: { preselectedUserId: getUserId(otherParticipant) } } as any)}>
+                <Ionicons name="people" size={24} color={colors.text} style={{ width: 30, marginRight: 15 }} />
+                <Text style={{ flex: 1, color: colors.text, fontSize: 16 }}>Tạo nhóm chat với {otherParticipant?.username}</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.optionItem} onPress={() => openEditor('Đổi biệt danh', conversation.preference?.nickname || otherParticipant?.username || '', (val) => handleAction(() => updateConversationPreference(conversation._id, { nickname: val }), 'Đã đổi biệt danh'))}>
+                <Ionicons name="pencil" size={24} color={colors.text} style={{ width: 30, marginRight: 15 }} />
+                <Text style={{ flex: 1, color: colors.text, fontSize: 16 }}>Đổi biệt danh</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.optionItem} onPress={() => Alert.alert('Thông báo', 'Tính năng đang cập nhật')}>
+                <Ionicons name="images" size={24} color={colors.text} style={{ width: 30, marginRight: 15 }} />
+                <Text style={{ flex: 1, color: colors.text, fontSize: 16 }}>Xem file phương tiện, file và liên kết</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.optionItem} onPress={() => Alert.alert('Thông báo', 'Tính năng đang cập nhật')}>
+                <Ionicons name="pin" size={24} color={colors.text} style={{ width: 30, marginRight: 15 }} />
+                <Text style={{ flex: 1, color: colors.text, fontSize: 16 }}>Tin nhắn đã ghim</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity style={styles.optionItem} onPress={() => Alert.alert('Thông báo', 'Tính năng đang cập nhật')}>
+                <Ionicons name="search" size={24} color={colors.text} style={{ width: 30, marginRight: 15 }} />
+                <Text style={{ flex: 1, color: colors.text, fontSize: 16 }}>Tìm kiếm trong cuộc trò chuyện</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={[styles.section, { backgroundColor: colors.surface, marginTop: 15 }]}>
+              <Text style={[styles.sectionTitle, { color: colors.muted, fontSize: 13, textTransform: 'uppercase' }]}>Quyền riêng tư và hỗ trợ</Text>
+
+              <TouchableOpacity style={styles.optionItem} onPress={() => Alert.alert('Thông báo', 'Tính năng đang cập nhật')}>
+                <Ionicons name="shield-checkmark" size={24} color={colors.text} style={{ width: 30, marginRight: 15 }} />
+                <Text style={{ flex: 1, color: colors.text, fontSize: 16 }}>Quyền với tin nhắn</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.optionItem} onPress={() => Alert.alert('Thông báo', 'Tính năng đang cập nhật')}>
+                <Ionicons name="timer" size={24} color={colors.text} style={{ width: 30, marginRight: 15 }} />
+                <View style={{ flex: 1 }}>
+                  <Text style={{ color: colors.text, fontSize: 16 }}>Tin nhắn tự hủy</Text>
+                  <Text style={{ color: colors.muted, fontSize: 12, marginTop: 2 }}>Tắt</Text>
+                </View>
+              </TouchableOpacity>
+            </View>
           </View>
         )}
 
@@ -520,4 +556,9 @@ const styles = StyleSheet.create({
   editorOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: 20 },
   editorCard: { borderRadius: 16, padding: 20, elevation: 5, shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 10 },
   editorInput: { borderWidth: 1, borderRadius: 8, padding: 12, fontSize: 16 },
+  optionItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+  },
 });

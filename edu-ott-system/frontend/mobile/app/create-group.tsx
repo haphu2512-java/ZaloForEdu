@@ -8,7 +8,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { Stack, useRouter } from 'expo-router';
+import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
 
 import { Text } from '@/components/Themed';
 import Colors from '@/constants/Colors';
@@ -27,9 +27,11 @@ export default function CreateGroupScreen() {
   const colors = Colors[colorScheme];
   const router = useRouter();
 
+  const { preselectedUserId } = useLocalSearchParams<{ preselectedUserId?: string }>();
+
   const [name, setName] = useState('');
   const [friends, setFriends] = useState<UserInfo[]>([]);
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [selectedIds, setSelectedIds] = useState<string[]>(preselectedUserId ? [preselectedUserId] : []);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
 
@@ -37,7 +39,7 @@ export default function CreateGroupScreen() {
     const run = async () => {
       try {
         setLoading(true);
-        const res = await getFriendList(null, 200);
+        const res = await getFriendList(null, 100);
         setFriends(res.items || []);
       } finally {
         setLoading(false);
@@ -60,8 +62,8 @@ export default function CreateGroupScreen() {
       Alert.alert('Lỗi', 'Vui lòng nhập tên nhóm');
       return;
     }
-    if (selectedIds.length < 1) {
-      Alert.alert('Lỗi', 'Vui lòng chọn ít nhất 1 thành viên');
+    if (selectedIds.length < 2) {
+      Alert.alert('Lỗi', 'Vui lòng chọn ít nhất 2 thành viên (Nhóm phải có tối thiểu 3 người bao gồm bạn)');
       return;
     }
 
@@ -103,7 +105,7 @@ export default function CreateGroupScreen() {
         </View>
       ) : (
         <FlatList
-          data={friends}
+          data={friends.filter(f => getUserId(f) !== preselectedUserId)}
           keyExtractor={(item, index) => getUserId(item) || `friend-${index}`}
           renderItem={({ item }) => {
             const id = getUserId(item);
