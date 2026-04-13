@@ -38,6 +38,33 @@ const updateUserById = asyncHandler(async (req, res) => {
   if (typeof updates.phone !== 'undefined') user.phone = updates.phone || null;
   if (typeof updates.avatarUrl !== 'undefined') user.avatarUrl = updates.avatarUrl || null;
 
+  // Update phone
+  if (typeof updates.phone !== 'undefined') {
+    const nextPhone = updates.phone ? String(updates.phone).trim() : null;
+    const currentPhone = user.phone ? String(user.phone).trim() : null;
+
+    if (nextPhone && nextPhone !== currentPhone) {
+      const duplicated = await User.findOne({
+        _id: { $ne: user._id },
+        phone: nextPhone,
+        deletedAt: null,
+      });
+      if (duplicated) {
+        throw new ApiError(409, 'PHONE_EXISTS', 'Số điện thoại đã được sử dụng bởi tài khoản khác');
+      }
+      user.phone = nextPhone;
+      // Phone added manually (not via OTP) → mark as unverified
+      // But if user already had phone verified, keep it
+      if (!user.isPhoneVerified) {
+        user.isPhoneVerified = false;
+      }
+    } else if (!nextPhone) {
+      user.phone = null;
+      user.isPhoneVerified = false;
+    }
+  }
+
+  // Update email
   if (typeof updates.email !== 'undefined') {
     const nextEmail = updates.email ? String(updates.email).trim().toLowerCase() : null;
     const currentEmail = user.email ? String(user.email).trim().toLowerCase() : null;
@@ -51,6 +78,7 @@ const updateUserById = asyncHandler(async (req, res) => {
       user.emailVerificationToken = createEmailOtp();
       user.emailVerificationExpires = new Date(Date.now() + 10 * 60 * 1000);
 
+      await sendVerificationOtp({ email: nextEmail, otp: user.emailVerificationToken });
       await sendVerificationOtp({ email: nextEmail, otp: user.emailVerificationToken });
     } else if (!nextEmail) {
       user.email = null;

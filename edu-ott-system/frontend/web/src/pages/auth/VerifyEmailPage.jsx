@@ -72,7 +72,12 @@ export default function VerifyOtpPage() {
     const result = await verifyOtp(payload);
     if (result.success) {
       setSuccess(true);
-      setTimeout(() => navigate("/login"), 2000);
+      // Redirect to complete profile page to add missing contact info
+      setTimeout(() => {
+        const registeredWith = email ? "email" : "phone";
+        // userId not available here, just go to login - profile can be completed later in settings
+        navigate(`/login?verified=1`);
+      }, 2000);
     } else {
       setError(result.error || "Mã OTP không hợp lệ");
       setDigits(Array(OTP_LENGTH).fill(""));

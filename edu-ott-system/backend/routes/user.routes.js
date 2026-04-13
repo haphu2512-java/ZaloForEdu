@@ -12,7 +12,7 @@ router.get('/', userController.getAllUsers);
  * /users/me/blocked:
  *   get:
  *     tags: [Users]
- *     summary: Get current user's blocked users list
+ *     summary: Get current user blocked users list
  *     security:
  *       - bearerAuth: []
  *     responses:
@@ -121,7 +121,7 @@ router.post(
  * /users/admin/status:
  *   post:
  *     tags: [Users]
- *     summary: [ADMIN] Force disable/enable account
+ *     summary: "ADMIN - Force disable/enable account"
  *     security:
  *       - bearerAuth: []
  *     requestBody:
@@ -137,6 +137,7 @@ router.post(
  *               banReason: { type: string }
  */
 router.post('/admin/status', auth, userController.updateUserStatus);
+router.post('/report/:id', auth, userController.reportUser);
 
 // Cho phép người dùng report tài khoản khác
 router.post('/report/:id', auth, userController.reportUser);

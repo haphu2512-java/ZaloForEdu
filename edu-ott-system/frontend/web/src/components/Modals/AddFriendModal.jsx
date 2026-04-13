@@ -75,7 +75,7 @@ export default function AddFriendModal({ isOpen, onClose }) {
         setResult(found);
         saveRecentSearch(phone.trim());
       } else {
-        setError("Không tìm thấy kết quả. Vui lòng kiểm tra lại số điện thoại.");
+        setError("Không tìm thấy kết quả. Vui lòng thử tìm bằng SĐT, email hoặc tên người dùng khác.");
       }
     } catch (err) {
       setError("Đã xảy ra lỗi khi kết nối với máy chủ.");
@@ -138,7 +138,7 @@ export default function AddFriendModal({ isOpen, onClose }) {
         <div className="modal-header">
           <div className="header-text">
             <h3>Thêm bạn mới</h3>
-            <p>Kết nối với bạn bè qua số điện thoại</p>
+            <p>Tìm kiếm qua số điện thoại, email hoặc tên người dùng</p>
           </div>
           <button className="close-btn" onClick={onClose}><FaTimes /></button>
         </div>
@@ -149,8 +149,8 @@ export default function AddFriendModal({ isOpen, onClose }) {
               <div className="premium-input-group">
                 <FaSearch className="input-icon" />
                 <input
-                  type="tel"
-                  placeholder="Nhập số điện thoại cần tìm..."
+                  type="text"
+                  placeholder="Nhập SĐT, email hoặc tên người dùng..."
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
                   autoFocus
@@ -203,7 +203,7 @@ export default function AddFriendModal({ isOpen, onClose }) {
               
               <div className="profile-info">
                 <h4>{result.username}</h4>
-                <p className="phone-sub">{result.phone}</p>
+                <p className="phone-sub">{result.phone || result.email || ""}</p>
               </div>
 
               <div className={`relationship-badge ${status}`}>
@@ -250,7 +250,7 @@ export default function AddFriendModal({ isOpen, onClose }) {
         
         <div className="modal-footer">
           <div className="footer-tip">
-            <FaInfoCircle /> Mẹo: Bạn có thể tìm kiếm theo cả số điện thoại quốc tế.
+            <FaInfoCircle /> Tìm kiếm bằng số điện thoại, email hoặc tên người dùng.
           </div>
         </div>
       </div>
