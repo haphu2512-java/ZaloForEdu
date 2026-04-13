@@ -90,6 +90,10 @@ const login = asyncHandler(async (req, res) => {
     throw new ApiError(401, 'INVALID_CREDENTIALS', 'Invalid credentials');
   }
 
+  if (!user.isActive) {
+    throw new ApiError(403, 'ACCOUNT_DISABLED', user.banReason || 'Your account has been disabled. Please contact support.');
+  }
+
   const validPassword = await bcrypt.compare(password, user.passwordHash);
   if (!validPassword) {
     throw new ApiError(401, 'INVALID_CREDENTIALS', 'Invalid credentials');

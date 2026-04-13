@@ -36,6 +36,13 @@ import {
 import { uploadImageToCloudinary } from '@/utils/mediaService';
 import type { Conversation, UserInfo } from '@/types/chat';
 import { getFriendList } from '@/utils/friendService';
+import { Share, Clipboard } from 'react-native';
+import {
+  getInviteLink,
+  resetInviteLink,
+  updateGroupSettings,
+  type InviteLinkResponse,
+} from '@/utils/groupFeatureService';
 
 export default function ConversationDetailsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -59,6 +66,10 @@ export default function ConversationDetailsScreen() {
   const [editorValue, setEditorValue] = useState('');
   const [editorSubmit, setEditorSubmit] = useState<null | ((val: string) => void)>(null);
   const [transferLeaveVisible, setTransferLeaveVisible] = useState(false);
+  // Feature 4 & 5
+  const [approvalEnabled, setApprovalEnabled] = useState(false);
+  const [inviteLink, setInviteLink] = useState<string | null>(null);
+  const [inviteLoading, setInviteLoading] = useState(false);
 
   const currentUserId = user?.id || '';
 
@@ -72,6 +83,10 @@ export default function ConversationDetailsScreen() {
       const matched = (convRes?.items || []).find((c) => c._id === id || c.id === id);
       setConversation(matched || null);
       setFriends(friendsRes?.items || []);
+      // Sync approval setting
+      if (matched?.settings?.isApprovalRequired !== undefined) {
+        setApprovalEnabled(matched.settings.isApprovalRequired);
+      }
     } catch (error: any) {
       console.log('Failed to load conversation details', error.message);
     }
@@ -376,6 +391,59 @@ export default function ConversationDetailsScreen() {
               </View>
               <Text style={[styles.gridBtnText, { color: colors.text }]}>Thêm TV</Text>
             </TouchableOpacity>
+
+            {/* Feature 5: Invite link */}
+            <TouchableOpacity
+              style={[styles.gridBtn, { backgroundColor: colors.surface }]}
+              disabled={inviteLoading}
+              onPress={async () => {
+                try {
+                  setInviteLoading(true);
+                  const res = await getInviteLink(conversation._id);
+                  setInviteLink(res.inviteLink);
+                  Alert.alert(
+                    '🔗 Link mời',
+                    res.inviteLink,
+                    [
+                      { text: 'Sao chép', onPress: () => { Clipboard.setString(res.inviteLink); Alert.alert('Đã sao chép!'); } },
+                      { text: 'Chia sẻ', onPress: () => Share.share({ message: res.inviteLink }) },
+                      { text: 'Đóng', style: 'cancel' },
+                    ]
+                  );
+                } catch (err: any) {
+                  Alert.alert('Lỗi', err.message);
+                } finally {
+                  setInviteLoading(false);
+                }
+              }}
+            >
+              <View style={[styles.iconCircle, { backgroundColor: '#FEF3C7' }]}>
+                {inviteLoading ? <ActivityIndicator color="#92400E" size="small" /> : <Ionicons name="link" size={22} color="#92400E" />}
+              </View>
+              <Text style={[styles.gridBtnText, { color: colors.text }]}>Link mời</Text>
+            </TouchableOpacity>
+
+            {/* Feature 4: Join approval */}
+            <TouchableOpacity
+              style={[styles.gridBtn, { backgroundColor: colors.surface }]}
+              onPress={() => router.push({ pathname: '/join-requests', params: { id: conversation._id } } as any)}
+            >
+              <View style={[styles.iconCircle, { backgroundColor: '#FEE2E2' }]}>
+                <Ionicons name="people-circle" size={24} color="#EF4444" />
+              </View>
+              <Text style={[styles.gridBtnText, { color: colors.text }]}>Duyệt TV</Text>
+            </TouchableOpacity>
+
+            {/* Feature 2: Pinned messages board */}
+            <TouchableOpacity
+              style={[styles.gridBtn, { backgroundColor: colors.surface }]}
+              onPress={() => router.push({ pathname: '/pinned-messages', params: { id: conversation._id } } as any)}
+            >
+              <View style={[styles.iconCircle, { backgroundColor: '#ECFDF5' }]}>
+                <Ionicons name="pin" size={22} color="#059669" />
+              </View>
+              <Text style={[styles.gridBtnText, { color: colors.text }]}>Bảng tin</Text>
+            </TouchableOpacity>
           </View>
         )}
 
@@ -539,10 +607,10 @@ const styles = StyleSheet.create({
   headerProfile: { alignItems: 'center', paddingVertical: 24 },
   mainAvatar: { width: 100, height: 100, borderRadius: 50, marginBottom: 16 },
   mainTitle: { fontSize: 24, fontWeight: 'bold' },
-  actionGrid: { flexDirection: 'row', justifyContent: 'space-around', paddingHorizontal: 16, marginBottom: 20 },
-  gridBtn: { flex: 1, alignItems: 'center', padding: 16, marginHorizontal: 4, borderRadius: 16, elevation: 1, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 5 },
+  actionGrid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 12, marginBottom: 20, gap: 8 },
+  gridBtn: { width: '30%', alignItems: 'center', padding: 12, borderRadius: 16, elevation: 1, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 5 },
   iconCircle: { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center', marginBottom: 8 },
-  gridBtnText: { fontSize: 13, fontWeight: '600' },
+  gridBtnText: { fontSize: 12, fontWeight: '600', textAlign: 'center' },
   section: { paddingVertical: 8, paddingHorizontal: 16, borderTopWidth: 1, borderBottomWidth: 1, borderColor: 'transparent' },
   sectionTitle: { fontSize: 14, fontWeight: 'bold', marginBottom: 8, textTransform: 'uppercase' },
   memberRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth },

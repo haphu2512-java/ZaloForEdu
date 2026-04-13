@@ -21,6 +21,7 @@ export interface UserInfo {
   avatarUrl?: string | null;
   isOnline?: boolean;
   lastSeen?: string | null;
+  isActive?: boolean;
 }
 
 /** Sender info khi populate senderId */
@@ -30,6 +31,7 @@ export interface SenderInfo {
   avatarUrl?: string | null;
   fullName?: string;
   avatar?: string | null;
+  isActive?: boolean;
 }
 
 // --- Core Models ---

@@ -28,6 +28,8 @@ import { deleteMyAccount } from '@/utils/userService';
 import { getMySettings, updateMySettings, type UserSettings, type ThemeMode } from '@/utils/settingsService';
 import { useRouter } from 'expo-router';
 import EditProfileModal from '@/components/profile/EditProfileModal';
+import ChangeAvatarModal from '@/components/profile/ChangeAvatarModal';
+import ChangePasswordModal from '@/components/profile/ChangePasswordModal';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -639,170 +641,34 @@ export default function ProfileScreen() {
 
 
       {/* ==================== CHANGE AVATAR MODAL ==================== */}
-      <Modal
+      <ChangeAvatarModal
         visible={avatarModalVisible}
-        animationType="slide"
-        onRequestClose={() => setAvatarModalVisible(false)}
-      >
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          style={{ flex: 1, backgroundColor: colors.background }}
-        >
-          {/* Modal Header */}
-          <View style={[styles.modalHeader, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
-            <TouchableOpacity onPress={() => { setAvatarModalVisible(false); setAvatarUrl(''); }}>
-              <Text style={{ color: colors.error, fontSize: 16, fontWeight: '600' }}>Hủy</Text>
-            </TouchableOpacity>
-            <Text style={[styles.modalTitle, { color: colors.text }]}>Đổi ảnh đại diện</Text>
-            <View style={{ width: 40 }} />
-          </View>
-
-          <ScrollView style={{ padding: 20 }} contentContainerStyle={{ alignItems: 'center' }}>
-            {/* Current Avatar Preview */}
-            <View style={{ marginBottom: 28, alignItems: 'center' }}>
-              <Image
-                style={{ width: 140, height: 140, borderRadius: 70, borderWidth: 4, borderColor: colors.tint + '30' }}
-                source={{ uri: avatarUrl || user.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.username)}&background=6366F1&color=fff&size=200&bold=true` }}
-              />
-              <Text style={{ color: colors.muted, marginTop: 12, fontSize: 14 }}>Xem trước ảnh đại diện</Text>
-            </View>
-
-            {/* URL Input */}
-            <View style={{ width: '100%' }}>
-              <Text style={[styles.inputLabel, { color: colors.text }]}>URL hình ảnh</Text>
-              <View style={[styles.passwordInput, { borderColor: colors.border, backgroundColor: colorScheme === 'dark' ? '#374151' : '#F8FAFC' }]}>
-                <Ionicons name="link-outline" size={20} color={colors.muted} />
-                <TextInput
-                  placeholder="https://example.com/avatar.jpg"
-                  placeholderTextColor={colors.muted}
-                  value={avatarUrl}
-                  onChangeText={setAvatarUrl}
-                  autoCapitalize="none"
-                  keyboardType="url"
-                  style={[styles.passwordTextInput, { color: colors.text }]}
-                />
-              </View>
-
-              <TouchableOpacity
-                onPress={handlePickAvatarFromLibrary}
-                disabled={isUploadingAvatar}
-                style={{
-                  backgroundColor: '#0EA5E9',
-                  borderRadius: 12,
-                  paddingVertical: 12,
-                  alignItems: 'center',
-                  marginBottom: 12,
-                }}
-              >
-                {isUploadingAvatar ? (
-                  <ActivityIndicator size="small" color="#fff" />
-                ) : (
-                  <Text style={{ color: '#fff', fontWeight: '700' }}>Chọn ảnh từ thư viện (Cloudinary)</Text>
-                )}
-              </TouchableOpacity>
-
-              {/* Quick Avatars */}
-              <Text style={[styles.inputLabel, { color: colors.text, marginTop: 8 }]}>Hoặc chọn avatar mẫu:</Text>
-              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginTop: 8, justifyContent: 'center' }}>
-                {['6366F1', 'EF4444', '10B981', 'F59E0B', 'EC4899', '8B5CF6'].map((bg, idx) => {
-                  const url = `https://ui-avatars.com/api/?name=${encodeURIComponent(user.username)}&background=${bg}&color=fff&size=200&bold=true`;
-                  return (
-                    <TouchableOpacity
-                      key={idx}
-                      onPress={() => setAvatarUrl(url)}
-                      style={{
-                        borderWidth: 3,
-                        borderColor: avatarUrl === url ? colors.tint : 'transparent',
-                        borderRadius: 32,
-                        padding: 2,
-                      }}
-                    >
-                      <Image source={{ uri: url }} style={{ width: 56, height: 56, borderRadius: 28 }} />
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-
-              {/* Submit Button */}
-              <TouchableOpacity
-                onPress={handleChangeAvatar}
-                disabled={isUploadingAvatar}
-                activeOpacity={0.8}
-                style={{
-                  backgroundColor: isUploadingAvatar ? '#FCD34D' : '#F59E0B',
-                  borderRadius: 16, paddingVertical: 16, alignItems: 'center',
-                  flexDirection: 'row', justifyContent: 'center', marginTop: 28,
-                  shadowColor: '#F59E0B', shadowOffset: { width: 0, height: 8 },
-                  shadowOpacity: 0.3, shadowRadius: 12, elevation: 8,
-                }}
-              >
-                {isUploadingAvatar ? <ActivityIndicator color="white" style={{ marginRight: 8 }} /> : null}
-                <Text style={{ color: '#fff', fontWeight: '700', fontSize: 16 }}>Cập nhật ảnh đại diện</Text>
-              </TouchableOpacity>
-            </View>
-          </ScrollView>
-        </KeyboardAvoidingView>
-      </Modal>
+        onClose={() => setAvatarModalVisible(false)}
+        colors={colors}
+        colorScheme={colorScheme as 'light' | 'dark'}
+        user={user}
+        avatarUrl={avatarUrl}
+        setAvatarUrl={setAvatarUrl}
+        handlePickAvatarFromLibrary={handlePickAvatarFromLibrary}
+        handleChangeAvatar={handleChangeAvatar}
+        isUploadingAvatar={isUploadingAvatar}
+      />
 
       {/* ==================== CHANGE PASSWORD MODAL ==================== */}
-      <Modal
+      <ChangePasswordModal
         visible={passwordModalVisible}
-        animationType="slide"
-        onRequestClose={() => setPasswordModalVisible(false)}
-      >
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          style={{ flex: 1, backgroundColor: colors.background }}
-        >
-          {/* Modal Header */}
-          <View style={[styles.modalHeader, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
-            <TouchableOpacity onPress={() => { setPasswordModalVisible(false); setCurrentPassword(''); setNewPassword(''); }}>
-              <Text style={{ color: colors.error, fontSize: 16, fontWeight: '600' }}>Hủy</Text>
-            </TouchableOpacity>
-            <Text style={[styles.modalTitle, { color: colors.text }]}>Đổi mật khẩu</Text>
-            <TouchableOpacity onPress={handleChangePassword} disabled={isChangingPassword}>
-              {isChangingPassword ? (
-                <ActivityIndicator size="small" color={colors.tint} />
-              ) : (
-                <Text style={{ color: colors.tint, fontSize: 16, fontWeight: '700' }}>Lưu</Text>
-              )}
-            </TouchableOpacity>
-          </View>
-
-          <ScrollView style={{ padding: 20 }}>
-            <View style={{ marginBottom: 20 }}>
-              <Text style={[styles.inputLabel, { color: colors.text }]}>Mật khẩu hiện tại</Text>
-              <View style={[styles.passwordInput, { borderColor: colors.border, backgroundColor: colors.background }]}>
-                <Ionicons name="lock-closed-outline" size={20} color={colors.muted} />
-                <TextInput
-                  placeholder="Nhập mật khẩu cũ"
-                  placeholderTextColor={colors.muted}
-                  secureTextEntry={!showPassword}
-                  value={currentPassword}
-                  onChangeText={setCurrentPassword}
-                  style={[styles.passwordTextInput, { color: colors.text }]}
-                />
-                <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
-                  <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={20} color={colors.muted} />
-                </TouchableOpacity>
-              </View>
-            </View>
-
-            <View style={{ marginBottom: 20 }}>
-              <Text style={[styles.inputLabel, { color: colors.text }]}>Mật khẩu mới</Text>
-              <View style={[styles.passwordInput, { borderColor: colors.border, backgroundColor: colors.background }]}>
-                <Ionicons name="key-outline" size={20} color={colors.muted} />
-                <TextInput
-                  placeholder="Ít nhất 6 ký tự"
-                  placeholderTextColor={colors.muted}
-                  secureTextEntry={!showPassword}
-                  value={newPassword}
-                  onChangeText={setNewPassword}
-                  style={[styles.passwordTextInput, { color: colors.text }]}
-                />
-              </View>
-            </View>
-          </ScrollView>
+        onClose={() => setPasswordModalVisible(false)}
+        colors={colors}
+        currentPassword={currentPassword}
+        setCurrentPassword={setCurrentPassword}
+        newPassword={newPassword}
+        setNewPassword={setNewPassword}
+        showPassword={showPassword}
+        setShowPassword={setShowPassword}
+        isChangingPassword={isChangingPassword}
+        handleChangePassword={handleChangePassword}
+      />
+    </ScrollView>
         </KeyboardAvoidingView>
       </Modal>
     </ScrollView>
