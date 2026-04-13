@@ -9,7 +9,7 @@ import { useFriendStore } from "../../store/friendStore";
 import { useAuthStore } from "../../store/authStore";
 import { useNavigate } from "react-router-dom";
 import "./AddFriendModal.css";
-
+import axios from 'axios';
 export default function AddFriendModal({ isOpen, onClose }) {
   const { t } = useLanguage();
   const navigate = useNavigate();
@@ -122,11 +122,35 @@ export default function AddFriendModal({ isOpen, onClose }) {
 
   const status = getFriendStatus();
 
-  const handleAction = () => {
+ const handleAction = async () => {
     if (status === "friend") {
-      // In a real app, we'd navigate to chat room. For now, just close.
-      onClose();
-      // Logic for navigate to room if possible...
+      try {
+        setLoading(true);
+        const targetId = result._id || result.id;
+        const token = localStorage.getItem("token"); // Lấy token xác thực
+
+        // Gọi API để lấy hoặc tạo mới cuộc trò chuyện 1-1
+        const res = await axios.post(
+          "http://localhost:5000/api/v1/conversations", 
+          { 
+            type: "direct", 
+            participantIds: [targetId] 
+          },
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+
+        onClose(); // Đóng modal
+
+        // Chuyển hướng sang trang Chat và truyền ID của hội thoại qua state
+        const conversationId = res.data.data._id;
+        navigate("/chat", { state: { activeConversationId: conversationId } });
+
+      } catch (err) {
+        setError("Không thể mở cuộc trò chuyện lúc này.");
+      } finally {
+        setLoading(false);
+      }
+
     } else if (status === "none") {
       handleAddFriend();
     }

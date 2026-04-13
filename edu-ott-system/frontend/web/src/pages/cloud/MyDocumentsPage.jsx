@@ -92,14 +92,18 @@ export default function MyDocumentsPage(){
 
   useEffect(()=>{messagesEndRef.current?.scrollIntoView({behavior:"smooth"});},[messages,uploads]);
 
-  useEffect(()=>{
+useEffect(()=>{
     if(!convId)return;
     socketService.connect();
-    const handler=(msg)=>{const cid=msg.conversationId?._id||msg.conversationId;if(cid===convId)setMessages(prev=>prev.some(m=>m._id===msg._id)?prev:[...prev,msg]);};
+    const handler=(msg)=>{
+        const cid=msg.conversationId?._id||msg.conversationId;
+        // Bắt buộc kiểm tra ID phòng
+        if(String(cid) !== String(convId)) return; 
+        setMessages(prev=>prev.some(m=>m._id===msg._id)?prev:[...prev,msg]);
+    };
     socketService.on("new_message",handler);
     return()=>socketService.off("new_message",handler);
   },[convId]);
-
   useEffect(()=>{
     const zone=pageRef.current;if(!zone)return;
     const onDragOver=(e)=>{e.preventDefault();setIsDragging(true);};
