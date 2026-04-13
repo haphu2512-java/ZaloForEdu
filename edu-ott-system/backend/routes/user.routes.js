@@ -19,6 +19,7 @@ const router = express.Router();
  *       200:
  *         description: Blocked users fetched
  */
+router.get('/', auth, userController.getAllUsers);
 router.get('/me/blocked', auth, userController.getBlockedUsers);
 
 /**
@@ -136,5 +137,6 @@ router.post(
  *               banReason: { type: string }
  */
 router.post('/admin/status', auth, userController.updateUserStatus);
+router.post('/report/:id', auth, userController.reportUser);
 
 module.exports = router;

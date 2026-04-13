@@ -4,6 +4,8 @@ const ApiError = require('../utils/apiError');
 const { successResponse } = require('../utils/apiResponse');
 const { sendEmail } = require('../utils/email');
 
+const { getRedis, isRedisAvailable, keyWithPrefix } = require('../services/redisClient');
+
 const createEmailOtp = () => String(Math.floor(100000 + Math.random() * 900000));
 
 const sendVerificationOtp = async ({ email, otp }) => {
@@ -187,6 +189,58 @@ const updateUserStatus = asyncHandler(async (req, res) => {
   }, 'User status updated');
 });
 
+const reportUser = asyncHandler(async (req, res) => {
+  const targetId = req.params.id;
+  const reporterId = req.user._id.toString();
+  const { reason } = req.body;
+
+  if (reporterId === targetId) throw new ApiError(400, 'INVALID_ACTION', 'Không thể tự báo cáo chính mình');
+
+  const target = await User.findById(targetId);
+  if (!target || target.deletedAt) throw new ApiError(404, 'USER_NOT_FOUND', 'Người dùng không tồn tại');
+  if (target.isActive === false) return successResponse(res, {}, 'Tài khoản này đã bị khóa từ trước.');
+
+  if (isRedisAvailable()) {
+    const redis = getRedis();
+    const reportKey = keyWithPrefix(`reports_received:${targetId}`);
+    const isNewReport = await redis.sAdd(reportKey, reporterId);
+    if (isNewReport) {
+      await redis.expire(reportKey, 7 * 24 * 60 * 60);
+      const totalReports = await redis.sCard(reportKey);
+      if (totalReports >= 10) {
+        target.isActive = false;
+        target.banReason = `Khóa tự động: Nhận ${totalReports} báo cáo từ cộng đồng (Gần nhất: ${reason})`;
+        target.tokenVersion += 1;
+        await target.save();
+      }
+    }
+  }
+
+  return successResponse(res, {}, 'Đã gửi báo cáo thành công.');
+});
+
+const getAllUsers = asyncHandler(async (req, res) => {
+  const users = await User.find({ deletedAt: null })
+    .select('-passwordHash -tokenVersion -resetPasswordToken')
+    .sort({ createdAt: -1 })
+    .lean();
+
+  const redis = isRedisAvailable() ? getRedis() : null;
+  const usersWithWarnings = await Promise.all(users.map(async (user) => {
+    let warnings = 0;
+    if (redis) {
+      try {
+        const warnKey = keyWithPrefix(`warnings:${user._id.toString()}`);
+        const val = await redis.get(warnKey);
+        if (val) warnings = parseInt(val, 10);
+      } catch (e) { /* ignore */ }
+    }
+    return { ...user, id: user._id, warningCount: warnings };
+  }));
+
+  return successResponse(res, { users: usersWithWarnings }, 'Lấy danh sách người dùng thành công');
+});
+
 module.exports = {
   getUserById,
   updateUserById,
@@ -194,4 +248,6 @@ module.exports = {
   blockOrUnblockUser,
   getBlockedUsers,
   updateUserStatus,
+  reportUser,
+  getAllUsers,
 };
