@@ -128,7 +128,11 @@ export default function ProfilePage() {
       } else {
         updateData.phone = null;
       }
-
+      if (profile.email && profile.email.trim() !== '') {
+        updateData.email = profile.email.trim();
+      } else {
+        updateData.email = null;
+      }
       if (finalAvatarUrl && finalAvatarUrl.startsWith('http')) {
         updateData.avatarUrl = finalAvatarUrl;
       } else {
@@ -143,7 +147,8 @@ export default function ProfilePage() {
           ...prev, 
           avatarUrl: updatedUser.avatarUrl || prev.avatarUrl,
           username: updatedUser.username || prev.username,
-          phone: updatedUser.phone || prev.phone
+          phone: updatedUser.phone || prev.phone,
+          email: updatedUser.email !== undefined ? updatedUser.email : prev.email
         }));
       }
       
@@ -349,9 +354,16 @@ export default function ProfilePage() {
                         <input type="text" name="phone" value={profile.phone} onChange={handleChange} style={styles.editInput} placeholder="Nhập số điện thoại..." />
                       </div>
                       <div style={styles.editGroup}>
-                        <label style={styles.editLabel}>Email (Không thể thay đổi)</label>
-                        <input type="text" value={profile.email} readOnly style={{...styles.editInput, backgroundColor: 'var(--bg-secondary)', color: 'var(--text-tertiary)'}} />
-                      </div>
+                      <label style={styles.editLabel}>Email</label>
+                      <input 
+                        type="email" 
+                        name="email" 
+                        value={profile.email} 
+                        onChange={handleChange} 
+                        style={styles.editInput} 
+                        placeholder="Nhập email..." 
+                      />
+                    </div>
 
                       <div style={styles.actionRow}>
                         <button onClick={() => { setAvatarFile(null); setActiveTab('view_profile'); }} style={styles.btnSecondary} disabled={isSaving}>Hủy bỏ</button>
