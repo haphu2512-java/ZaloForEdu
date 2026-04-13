@@ -95,7 +95,7 @@ export default function App() {
           <Route path="chat/:roomId" element={<ChatPage />} />
           <Route path="contacts" element={<ContactsPage />} />
           <Route path="chatbot" element={<ChatbotPage />} />
-          <Route path="cloud" element={<ChatPage defaultCloud={true} />} />
+          <Route path="cloud" element={<MyDocumentsPage />} />
           <Route path="profile" element={<ProfilePage />} />
           <Route path="blocked" element={<BlockedUsersPage />} />
           <Route path="archived" element={<ArchivedConversationsPage />} />
