@@ -31,10 +31,8 @@ import {
   reactToMessage,
   getConversations,
   createConversation,
-  pinGroupMessage,
-  unpinGroupMessage,
 } from '../../utils/messageService';
-import { getPinnedMessages } from '../../utils/groupFeatureService';
+import { getPinnedMessages, pinMessage, unpinMessage } from '../../utils/groupFeatureService';
 import { uploadMediaBase64, getMediaById, uploadImageToCloudinary } from '../../utils/mediaService';
 import { connectSocket, getSocket, joinConversation } from '../../utils/socketService';
 import type { Message, Conversation, MediaItem } from '../../types/chat';
@@ -263,11 +261,13 @@ export default function ChatScreen() {
         );
       };
 
-      const onMessageReacted = (payload: { messageId: string; reactions: Message['reactions'] }) => {
+      const onPinnedItemsUpdated = (items: any[]) => {
+        setPinnedItems(items);
+      };
+
+      const onMessageReacted = (payload: { messageId: string; reactions: any[] }) => {
         setMessages((prev) =>
-          prev.map((m) =>
-            getMessageId(m) === payload.messageId ? { ...m, reactions: payload.reactions || [] } : m,
-          ),
+          prev.map((m) => (getMessageId(m) === payload.messageId ? { ...m, reactions: payload.reactions } : m)),
         );
       };
 
@@ -277,6 +277,7 @@ export default function ChatScreen() {
       socket.on('message_recalled', onMessageRecalled);
       socket.on('message_seen', onMessageSeen);
       socket.on('message_delivered', onMessageDelivered);
+      socket.on('pinned_items_updated', onPinnedItemsUpdated);
       socket.on('message_reacted', onMessageReacted);
 
       return () => {
@@ -286,6 +287,7 @@ export default function ChatScreen() {
         socket.off('message_recalled', onMessageRecalled);
         socket.off('message_seen', onMessageSeen);
         socket.off('message_delivered', onMessageDelivered);
+        socket.off('pinned_items_updated', onPinnedItemsUpdated);
         socket.off('message_reacted', onMessageReacted);
       };
     };
@@ -497,10 +499,12 @@ export default function ChatScreen() {
         text: '📌 Ghim tin nhắn',
         onPress: async () => {
           try {
-            const updated = await pinGroupMessage(conversationId, getMessageId(msg));
-            setConversation(updated);
+            const updatedItems = await pinMessage(conversationId, getMessageId(msg));
+            setPinnedItems(updatedItems);
             Alert.alert('Thành công', 'Đã ghim tin nhắn');
-          } catch { Alert.alert('Lỗi', 'Không thể ghim'); }
+          } catch (err: any) { 
+            Alert.alert('Lỗi', err.message || 'Không thể ghim'); 
+          }
         },
       });
     }
