@@ -1,5 +1,7 @@
 const Poll = require('../models/Poll');
 const Conversation = require('../models/Conversation');
+const Message = require('../models/Message');
+const socketService = require('../services/socketService');
 const asyncHandler = require('../utils/asyncHandler');
 const ApiError = require('../utils/apiError');
 const { successResponse } = require('../utils/apiResponse');
@@ -46,6 +48,24 @@ const createPoll = asyncHandler(async (req, res) => {
   });
 
   await poll.populate('createdBy', 'username avatarUrl');
+
+  // Tạo Message kiểu poll
+  const message = await Message.create({
+    conversationId,
+    senderId: req.user._id,
+    type: 'poll',
+    pollId: poll._id,
+    content: `Bình chọn: ${question}`, // Fallback
+  });
+  await message.populate('senderId', 'username avatarUrl');
+  await message.populate({ path: 'pollId', populate: { path: 'createdBy', select: 'username avatarUrl' } });
+
+  // Phát socket sự kiện
+  socketService.emitToConversation(conversationId, 'new_message', message);
+  await socketService.emitConversationUpdated(conversationId, {
+    conversationId,
+    latestMessage: message,
+  });
 
   return successResponse(res, poll, 'Poll created', 201);
 });

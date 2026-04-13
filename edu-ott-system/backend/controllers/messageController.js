@@ -64,7 +64,11 @@ const listMessagesByConversation = asyncHandler(async (req, res) => {
     .limit(limit + 1)
     .populate('senderId', 'username avatarUrl')
     .populate('replyTo')
-    .populate('forwardFrom');
+    .populate('forwardFrom')
+    .populate({
+      path: 'pollId',
+      populate: { path: 'createdBy', select: 'username avatarUrl' }
+    });
 
   let nextCursor = null;
   let finalItems = messages;

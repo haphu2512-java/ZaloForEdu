@@ -293,7 +293,6 @@ const options = {
             resourceType: { type: 'string', enum: ['image', 'video', 'raw', 'auto'], default: 'auto' },
           },
         },
-      },
         // ===================== NEW EDU SCHEMAS =====================
         PollOption: {
           type: 'object',
@@ -379,8 +378,9 @@ const options = {
             inviteLink: { type: 'string', example: 'zaloedu://join/a1b2c3d4e5f6g7h8' },
           },
         },
+      },
       responses: {
-        UnauthorizedError: {
+        Unauthorized: {
           description: 'Access token is missing or invalid',
           content: {
             'application/json': {

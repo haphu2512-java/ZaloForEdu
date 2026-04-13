@@ -2,7 +2,7 @@
  * pollService.ts
  * Feature 1: Bình chọn (Polls) - API service cho Mobile
  */
-import api from './api';
+import { fetchAPI } from './api';
 
 export interface PollOption {
   _id: string;
@@ -36,30 +36,39 @@ export interface CreatePollPayload {
 
 /** Tạo bình chọn mới */
 export const createPoll = async (payload: CreatePollPayload): Promise<Poll> => {
-  const res = await api.post('/polls', payload);
-  return res.data.data;
+  const res = await fetchAPI('/polls', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+  return res.data;
 };
 
 /** Lấy danh sách polls trong nhóm */
 export const listPolls = async (conversationId: string, limit = 20): Promise<Poll[]> => {
-  const res = await api.get('/polls', { params: { conversationId, limit } });
-  return res.data.data.items;
+  const params = new URLSearchParams({ conversationId, limit: String(limit) });
+  const res = await fetchAPI(`/polls?${params.toString()}`);
+  return res.data.items;
 };
 
 /** Lấy chi tiết 1 poll */
 export const getPoll = async (pollId: string): Promise<Poll> => {
-  const res = await api.get(`/polls/${pollId}`);
-  return res.data.data;
+  const res = await fetchAPI(`/polls/${pollId}`);
+  return res.data;
 };
 
 /** Vote bình chọn */
 export const votePoll = async (pollId: string, optionIndexes: number[]): Promise<Poll> => {
-  const res = await api.post(`/polls/${pollId}/vote`, { optionIndexes });
-  return res.data.data;
+  const res = await fetchAPI(`/polls/${pollId}/vote`, {
+    method: 'POST',
+    body: JSON.stringify({ optionIndexes }),
+  });
+  return res.data;
 };
 
 /** Đóng bình chọn (Admin/Creator) */
 export const closePoll = async (pollId: string): Promise<Poll> => {
-  const res = await api.put(`/polls/${pollId}/close`);
-  return res.data.data;
+  const res = await fetchAPI(`/polls/${pollId}/close`, {
+    method: 'PUT',
+  });
+  return res.data;
 };

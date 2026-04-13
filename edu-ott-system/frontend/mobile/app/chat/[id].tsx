@@ -34,11 +34,15 @@ import {
   pinGroupMessage,
   unpinGroupMessage,
 } from '../../utils/messageService';
+import { getPinnedMessages } from '../../utils/groupFeatureService';
 import { uploadMediaBase64, getMediaById, uploadImageToCloudinary } from '../../utils/mediaService';
 import { connectSocket, getSocket, joinConversation } from '../../utils/socketService';
 import type { Message, Conversation, MediaItem } from '../../types/chat';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
+
+import PinnedBar from '@/components/chat/PinnedBar';
+import PollBubble from '@/components/chat/PollBubble';
 
 const QUICK_EMOJIS = ['😀', '😂', '😍', '🥰', '👍', '❤️', '🔥', '😭', '🙏', '🎉'];
 
@@ -96,7 +100,11 @@ export default function ChatScreen() {
   const [isForwarding, setIsForwarding] = useState(false);
 
   const [conversation, setConversation] = useState<Conversation | null>(null);
+  const [pinnedItems, setPinnedItems] = useState<any[]>([]); // Bảng tin
   const [mediaById, setMediaById] = useState<Record<string, MediaItem>>({});
+
+  // Action Menu
+  const [actionMenu, setActionMenu] = useState<{ visible: boolean; options: {text: string, onPress: () => void, isDestructive?: boolean}[] }>({ visible: false, options: [] });
 
   // Image viewer
   const [viewImageUrl, setViewImageUrl] = useState<string | null>(null);
@@ -151,6 +159,9 @@ export default function ChatScreen() {
       const convRes = await getConversations(null, 100);
       const matched = (convRes.items || []).find((item) => (item._id || item.id) === conversationId) || null;
       setConversation(matched);
+      if (matched && matched.type === 'group') {
+        getPinnedMessages(matched._id || matched.id).then(setPinnedItems).catch(console.error);
+      }
     } catch (error) {
       console.log('Error loading messages', error);
       Alert.alert('Lỗi', 'Không thể tải tin nhắn');
@@ -470,6 +481,7 @@ export default function ChatScreen() {
     if (!msg.isRecalled) {
       buttons.push({
         text: '🗑️ Xóa phía tôi',
+        isDestructive: true,
         onPress: async () => {
           try {
             await deleteMessage(getMessageId(msg));
@@ -492,7 +504,7 @@ export default function ChatScreen() {
         },
       });
     }
-    Alert.alert('Tùy chọn', '', buttons);
+    setActionMenu({ visible: true, options: buttons });
   };
 
   /** Render message status icon for my messages */
@@ -516,6 +528,21 @@ export default function ChatScreen() {
           <View style={[styles.bubble, { backgroundColor: colorScheme === 'dark' ? '#374151' : '#F1F5F9' }]}>
             <Text style={{ color: '#94A3B8', fontStyle: 'italic', fontSize: 14 }}>Tin nhắn đã bị thu hồi</Text>
           </View>
+        </View>
+      );
+    }
+
+    // Is it a poll?
+    if (item.type === 'poll' && item.pollId) {
+      return (
+        <View style={{ marginBottom: 8 }}>
+          <PollBubble 
+            poll={item.pollId as any} 
+            currentUserId={currentUserId} 
+            colors={colors} 
+            brand="#0068FF" 
+            isMyMessage={isMine} 
+          />
         </View>
       );
     }
@@ -666,17 +693,13 @@ export default function ChatScreen() {
       )}
 
       {/* Pinned message */}
-      {conversation?.type === 'group' && conversation?.pinnedMessageId && (
-        <View style={{ paddingVertical: 7, backgroundColor: colorScheme === 'dark' ? '#1E3A5F' : '#EEF4FF', alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 8 }}>
-          <Ionicons name="pin" size={13} color={colors.tint} />
-          <Text style={{ color: colors.tint, fontSize: 12 }}>Nhóm đang có tin nhắn ghim</Text>
-          <TouchableOpacity onPress={async () => {
-            try { const updated = await unpinGroupMessage(conversationId); setConversation(updated); }
-            catch { Alert.alert('Lỗi', 'Không thể bỏ ghim'); }
-          }}>
-            <Text style={{ color: colors.tint, fontWeight: '700', fontSize: 12 }}>Bỏ ghim</Text>
-          </TouchableOpacity>
-        </View>
+      {conversation?.type === 'group' && pinnedItems.length > 0 && (
+        <PinnedBar 
+          pinnedItems={pinnedItems}
+          colors={colors}
+          brand="#0068FF"
+          onPress={() => router.push({ pathname: '/pinned-messages', params: { id: conversationId } } as any)}
+        />
       )}
 
       <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding" keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}>
@@ -765,6 +788,21 @@ export default function ChatScreen() {
               </View>
               <Text style={{ color: colors.text, fontSize: 13, fontWeight: '600', marginTop: 4 }}>Tệp tài liệu</Text>
             </TouchableOpacity>
+            
+            {conversation?.type === 'group' && (
+              <TouchableOpacity 
+                style={styles.mediaMenuItem} 
+                onPress={() => {
+                  setShowMediaMenu(false);
+                  router.push({ pathname: '/create-poll', params: { conversationId } } as any);
+                }}
+              >
+                <View style={[styles.mediaMenuIcon, { backgroundColor: '#FEF3C7' }]}>
+                  <Ionicons name="stats-chart" size={26} color="#D97706" />
+                </View>
+                <Text style={{ color: colors.text, fontSize: 13, fontWeight: '600', marginTop: 4 }}>Bình chọn</Text>
+              </TouchableOpacity>
+            )}
           </View>
         </TouchableOpacity>
       </Modal>
@@ -806,6 +844,28 @@ export default function ChatScreen() {
           />
         </SafeAreaView>
       </Modal>
+
+      {/* Custom Action Menu for Message Long Press */}
+      <Modal visible={actionMenu.visible} transparent animationType="fade" onRequestClose={() => setActionMenu({ visible: false, options: [] })}>
+        <TouchableOpacity style={styles.actionMenuOverlay} activeOpacity={1} onPress={() => setActionMenu({ visible: false, options: [] })}>
+          <View style={[styles.actionMenuContainer, { backgroundColor: colors.surface }]}>
+            {actionMenu.options.map((opt, index) => (
+              <TouchableOpacity
+                key={index}
+                style={[styles.actionMenuBtn, index > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border }]}
+                onPress={() => {
+                  setActionMenu({ visible: false, options: [] });
+                  opt.onPress();
+                }}
+              >
+                <Text style={{ fontSize: 16, color: opt.isDestructive ? '#EF4444' : colors.text, fontWeight: opt.style === 'cancel' ? '700' : '400' }}>
+                  {opt.text}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -833,4 +893,7 @@ const styles = StyleSheet.create({
   imageViewerOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.95)', justifyContent: 'center', alignItems: 'center' },
   imageViewerClose: { position: 'absolute', top: 50, right: 20, zIndex: 10, padding: 8 },
   imageViewerImg: { width: '100%', height: '80%' },
+  actionMenuOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end', padding: 16 },
+  actionMenuContainer: { borderRadius: 14, overflow: 'hidden', paddingBottom: Platform.OS === 'ios' ? 20 : 0 },
+  actionMenuBtn: { paddingVertical: 16, alignItems: 'center', justifyContent: 'center' },
 });

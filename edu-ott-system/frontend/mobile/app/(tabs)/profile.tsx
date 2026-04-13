@@ -669,9 +669,6 @@ export default function ProfileScreen() {
         handleChangePassword={handleChangePassword}
       />
     </ScrollView>
-        </KeyboardAvoidingView>
-      </Modal>
-    </ScrollView>
   );
 }
 
