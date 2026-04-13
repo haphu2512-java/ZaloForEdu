@@ -12,6 +12,7 @@ import ContactsPage from "./pages/contacts/ContactsPage";
 import MyDocumentsPage from "./pages/cloud/MyDocumentsPage";
 import BlockedUsersPage from "./pages/blocked/BlockedUsersPage";
 import ArchivedConversationsPage from "./pages/archived/ArchivedConversationsPage";
+import CompleteProfilePage from "./pages/auth/CompleteProfilePage";
 import AdminDashboard from "./pages/admin/AdminDashboard";
 
 function PrivateRoute({ children }) {
@@ -63,24 +64,9 @@ export default function App() {
             </PublicRoute>
           }
         />
-        {/* /verify-otp — dùng chung cho cả email & phone */}
-        <Route
-          path="/verify-otp"
-          element={
-            <PublicRoute>
-              <VerifyEmailPage />
-            </PublicRoute>
-          }
-        />
-        {/* Alias cũ, giữ để không break link cũ */}
-        <Route
-          path="/verify-email"
-          element={
-            <PublicRoute>
-              <VerifyEmailPage />
-            </PublicRoute>
-          }
-        />
+        <Route path="/verify-otp" element={<PublicRoute><VerifyEmailPage /></PublicRoute>} />
+        <Route path="/verify-email" element={<PublicRoute><VerifyEmailPage /></PublicRoute>} />
+        <Route path="/complete-profile" element={<CompleteProfilePage />} />
 
         <Route
           path="/"

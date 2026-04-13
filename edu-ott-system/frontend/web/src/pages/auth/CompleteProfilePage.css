@@ -1,0 +1,33 @@
+.cpl-benefits {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 24px;
+}
+
+.cpl-benefit {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  color: rgba(255,255,255,0.85);
+}
+
+.cpl-skip-btn {
+  width: 100%;
+  padding: 12px;
+  background: none;
+  border: 1.5px solid var(--border-color);
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-family: inherit;
+  margin-top: 8px;
+  transition: all 0.2s;
+}
+.cpl-skip-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}

@@ -260,6 +260,12 @@ export default function MainLayout() {
   const [showNotifications, setShowNotifications] = useState(false);
   const menuRef = useRef(null);
   const { unreadCount, fetchUnreadCount } = useNotificationStore();
+  const { user } = useAuthStore();
+
+  // Banner: nhắc user bổ sung thông tin còn thiếu
+  const missingPhone = user && !user.phone;
+  const missingEmail = user && !user.email;
+  const [showBanner, setShowBanner] = useState(true);
 
   useEffect(() => {
     fetchUnreadCount();
@@ -300,6 +306,22 @@ export default function MainLayout() {
 
   return (
     <div className="main-layout">
+      {/* ── MISSING INFO BANNER ── */}
+      {showBanner && (missingPhone || missingEmail) && (
+        <div className="missing-info-banner">
+          <span>
+            {missingPhone && missingEmail
+              ? "⚠️ Tài khoản chưa có email và số điện thoại — bạn bè sẽ không tìm thấy bạn."
+              : missingPhone
+              ? "📱 Thêm số điện thoại để bạn bè dễ tìm thấy bạn hơn."
+              : "📧 Thêm email để bảo mật tài khoản và khôi phục mật khẩu."}
+          </span>
+          <button className="mib-action" onClick={() => { navigate("/profile"); setShowBanner(false); }}>
+            Cập nhật ngay
+          </button>
+          <button className="mib-close" onClick={() => setShowBanner(false)}>✕</button>
+        </div>
+      )}
       {/* ── SIDEBAR ── */}
       <aside className="sidebar">
         {/* Logo */}
