@@ -7,19 +7,20 @@ const { blockUserBodySchema, updateUserSchema, userIdParamSchema } = require('..
 
 const router = express.Router();
 
+router.get('/', auth, userController.getAllUsers);
+
 /**
  * @openapi
  * /users/me/blocked:
  *   get:
  *     tags: [Users]
- *     summary: Get current user's blocked users list
+ *     summary: Get current user blocked users list
  *     security:
  *       - bearerAuth: []
  *     responses:
  *       200:
  *         description: Blocked users fetched
  */
-router.get('/', auth, userController.getAllUsers);
 router.get('/me/blocked', auth, userController.getBlockedUsers);
 
 /**
@@ -121,7 +122,7 @@ router.post(
  * /users/admin/status:
  *   post:
  *     tags: [Users]
- *     summary: [ADMIN] Force disable/enable account
+ *     summary: "ADMIN - Force disable/enable account"
  *     security:
  *       - bearerAuth: []
  *     requestBody:
