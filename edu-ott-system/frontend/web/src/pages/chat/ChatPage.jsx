@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import axios from "axios";
 import io from "socket.io-client";
-import { FaSearch, FaBell, FaThumbtack, FaUsers, FaCloud, FaSpinner, FaLink, FaUserSecret } from "react-icons/fa";
+import { FaSearch, FaBell, FaThumbtack, FaUsers, FaCloud, FaSpinner, FaLink, FaUserSecret, FaArrowLeft } from "react-icons/fa";
 import toast from "react-hot-toast";
 
 import { uploadFile } from "../../services/mediaService"; 
@@ -785,7 +785,7 @@ export default function ChatPage() {
             {/* Header */}
             <div style={{ padding:'16px 20px', borderBottom:'1px solid var(--z-border)', display:'flex', alignItems:'center', gap:12 }}>
               <button onClick={() => setShowStrangerPanel(false)} style={{ background:'none', border:'none', cursor:'pointer', color:'var(--z-text-primary)', padding:4 }}>
-                ←
+                <FaArrowLeft size={16} />
               </button>
               <span style={{ fontWeight:700, fontSize:16, color:'var(--z-text-primary)' }}>Tin nhắn từ người lạ</span>
             </div>

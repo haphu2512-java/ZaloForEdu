@@ -35,11 +35,12 @@ export default function AddFriendModal({ isOpen, onClose }) {
 
   const getStatus = () => {
     if (!result || !currentUser) return null;
-    const id = result._id || result.id;
-    if (id === (currentUser._id || currentUser.id)) return "self";
-    if (friends.some(f => (f._id || f.id) === id)) return "friend";
-    if (outgoingRequests.some(r => (r.toUserId?._id || r.toUserId) === id)) return "outgoing";
-    if (incomingRequests.some(r => (r.fromUserId?._id || r.fromUserId) === id)) return "incoming";
+    const id = String(result._id || result.id);
+    const myId = String(currentUser._id || currentUser.id);
+    if (id === myId) return "self";
+    if (friends.some(f => String(f._id || f.id) === id)) return "friend";
+    if (outgoingRequests.some(r => String(r.toUserId?._id || r.toUserId || '') === id)) return "outgoing";
+    if (incomingRequests.some(r => String(r.fromUserId?._id || r.fromUserId || '') === id)) return "incoming";
     return "none";
   };
 
@@ -48,19 +49,25 @@ export default function AddFriendModal({ isOpen, onClose }) {
   // Lấy requestId của lời mời đã gửi (để hủy)
   const getOutgoingRequestId = () => {
     if (!result) return null;
-    const id = result._id || result.id;
-    const req = outgoingRequests.find(r => (r.toUserId?._id || r.toUserId) === id);
+    const id = String(result._id || result.id);
+    const req = outgoingRequests.find(r => {
+      const toId = String(r.toUserId?._id || r.toUserId || '');
+      return toId === id;
+    });
     return req?._id;
   };
 
   const handleCancelRequest = async () => {
     const requestId = getOutgoingRequestId();
-    if (!requestId) return;
+    if (!requestId) {
+      setError("Không tìm thấy lời mời để hủy.");
+      return;
+    }
     setCancelLoading(true);
     try {
       await friendService.cancelFriendRequest(requestId);
       setRequestSent(false);
-      fetchOutgoingRequests();
+      await fetchOutgoingRequests();
     } catch (err) {
       setError(err.response?.data?.message || "Không thể hủy lời mời.");
     } finally { setCancelLoading(false); }

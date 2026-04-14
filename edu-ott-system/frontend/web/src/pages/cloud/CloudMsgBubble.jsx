@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { FaDownload, FaSpinner, FaCloud, FaThumbtack, FaTrash, FaCopy, FaStar, FaEllipsisH, FaTimes, FaSmile, FaShare } from 'react-icons/fa';
+import { FaDownload, FaSpinner, FaCloud, FaThumbtack, FaTrash, FaCopy, FaStar, FaEllipsisH, FaTimes, FaSmile, FaShare, FaCheck } from 'react-icons/fa';
 import toast from 'react-hot-toast';
 import { fmtTime, getCategory, getExt, getFileColor, formatBytes } from './CloudUtils';
 
@@ -181,7 +181,7 @@ export function CloudMsgBubble({msg, onDelete, onPreview, onReaction, pinnedIds,
 
         <div className="mdc-msg-time">
           {fmtTime(msg.createdAt)}
-          <span className="mdc-msg-sent">✓ Đã gửi</span>
+          <span className="mdc-msg-sent"><FaCheck size={10} /> Đã gửi</span>
         </div>
       </div>
 
