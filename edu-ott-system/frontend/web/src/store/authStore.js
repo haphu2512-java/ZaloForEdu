@@ -11,7 +11,7 @@ const detectDevice = () => {
 const getErrorMessage = (err, fallback) => {
   if (err.code === "ECONNABORTED") return "Kết nối quá thời gian. Vui lòng kiểm tra server backend.";
   if (err.code === "ERR_NETWORK") return "Không thể kết nối đến server. Vui lòng kiểm tra backend đang chạy.";
-  return err.response?.data?.message || fallback;
+  return err.response?.data?.error?.message || err.response?.data?.message || fallback;
 };
 
 export const useAuthStore = create((set, get) => ({
@@ -35,14 +35,14 @@ export const useAuthStore = create((set, get) => ({
       return { success: true, role: user.role };
     } catch (err) {
       // Session expired on another device
-      if (err.response?.data?.errorCode === "SESSION_EXPIRED") {
+      if (err.response?.data?.error?.code === "SESSION_EXPIRED") {
         const msg = "Tài khoản của bạn đã đăng nhập trên thiết bị khác.";
         set({ isLoading: false, error: msg });
         return { success: false, error: msg, errorCode: "SESSION_EXPIRED" };
       }
       const msg = getErrorMessage(err, "Đăng nhập thất bại");
       set({ isLoading: false, error: msg });
-      return { success: false, error: msg, errorCode: err.response?.data?.errorCode };
+      return { success: false, error: msg, errorCode: err.response?.data?.error?.code };
     }
   },
 
@@ -57,7 +57,7 @@ export const useAuthStore = create((set, get) => ({
     } catch (err) {
       const msg = getErrorMessage(err, "Đăng ký thất bại");
       set({ isLoading: false, error: msg });
-      return { success: false, error: msg, errorCode: err.response?.data?.errorCode };
+      return { success: false, error: msg, errorCode: err.response?.data?.error?.code };
     }
   },
 
@@ -99,7 +99,7 @@ export const useAuthStore = create((set, get) => ({
     } catch (err) {
       const msg = getErrorMessage(err, "Gửi OTP thất bại");
       set({ isLoading: false, error: msg });
-      return { success: false, error: msg, errorCode: err.response?.data?.errorCode };
+      return { success: false, error: msg, errorCode: err.response?.data?.error?.code };
     }
   },
 
