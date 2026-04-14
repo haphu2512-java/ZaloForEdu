@@ -40,6 +40,7 @@ const friendRequestLimiter = createRateLimiter({
  *         description: Friend request sent
  */
 router.post('/request', auth, friendRequestLimiter, validate({ body: requestFriendSchema }), friendController.sendFriendRequest);
+router.delete('/request/:id/cancel', auth, validate({ params: requestIdParamSchema }), friendController.cancelFriendRequest);
 /**
  * @openapi
  * /friends/request/{id}/accept:

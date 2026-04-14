@@ -20,6 +20,7 @@ export default function AddFriendModal({ isOpen, onClose }) {
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
   const [requestSent, setRequestSent] = useState(false);
+  const [cancelLoading, setCancelLoading] = useState(false);
 
   useEffect(() => {
     if (isOpen && currentUser) {
@@ -43,6 +44,27 @@ export default function AddFriendModal({ isOpen, onClose }) {
   };
 
   const status = getStatus();
+
+  // Lấy requestId của lời mời đã gửi (để hủy)
+  const getOutgoingRequestId = () => {
+    if (!result) return null;
+    const id = result._id || result.id;
+    const req = outgoingRequests.find(r => (r.toUserId?._id || r.toUserId) === id);
+    return req?._id;
+  };
+
+  const handleCancelRequest = async () => {
+    const requestId = getOutgoingRequestId();
+    if (!requestId) return;
+    setCancelLoading(true);
+    try {
+      await friendService.cancelFriendRequest(requestId);
+      setRequestSent(false);
+      fetchOutgoingRequests();
+    } catch (err) {
+      setError(err.response?.data?.message || "Không thể hủy lời mời.");
+    } finally { setCancelLoading(false); }
+  };
 
   const handleSearch = async (e) => {
     e?.preventDefault();
@@ -159,11 +181,10 @@ export default function AddFriendModal({ isOpen, onClose }) {
               {/* Status badge */}
               <div style={{ fontSize:12, padding:'4px 12px', borderRadius:20, background:'var(--bg-secondary)', color:'var(--text-secondary)', display:'flex', alignItems:'center', gap:5 }}>
                 {status === 'friend' && <><FaUserFriends size={11} /> Đã là bạn bè</>}
-                {status === 'outgoing' && <><FaClock size={11} /> Đã gửi lời mời kết bạn</>}
+                {(status === 'outgoing' || requestSent) && <><FaClock size={11} /> Đã gửi lời mời, chờ xác nhận</>}
                 {status === 'incoming' && <><FaClock size={11} /> Đang chờ bạn xác nhận</>}
                 {status === 'self' && <>Đây là tài khoản của bạn</>}
                 {status === 'none' && !requestSent && <>Chưa có kết nối</>}
-                {status === 'none' && requestSent && <><FaCheck size={11} color="#10B981" /> Đã gửi lời mời kết bạn</>}
               </div>
 
               {/* Actions */}
@@ -192,10 +213,15 @@ export default function AddFriendModal({ isOpen, onClose }) {
                   </button>
                 )}
 
-                {/* Đã gửi lời mời */}
+                {/* Đã gửi lời mời — có nút hủy */}
                 {(status === 'outgoing' || requestSent) && (
-                  <button disabled style={{ display:'flex', alignItems:'center', gap:6, padding:'8px 16px', borderRadius:8, border:'1px solid var(--border-color)', background:'var(--bg-secondary)', color:'var(--text-secondary)', cursor:'not-allowed', fontWeight:600, fontSize:13 }}>
-                    <FaCheck size={13} /> Đã gửi lời mời
+                  <button
+                    onClick={handleCancelRequest}
+                    disabled={cancelLoading}
+                    style={{ display:'flex', alignItems:'center', gap:6, padding:'8px 16px', borderRadius:8, border:'1px solid #ef4444', background:'transparent', color:'#ef4444', cursor:'pointer', fontWeight:600, fontSize:13 }}
+                  >
+                    {cancelLoading ? <FaSpinner size={13} className="spin" /> : <FaTimes size={13} />}
+                    Hủy lời mời
                   </button>
                 )}
 

@@ -35,6 +35,12 @@ export const friendService = {
     return response.data.data;
   },
 
+  // Hủy lời mời kết bạn đã gửi
+  cancelFriendRequest: async (requestId) => {
+    const response = await api.delete(`/friends/request/${requestId}/cancel`);
+    return response.data.data;
+  },
+
   // Xóa bạn bè
   removeFriend: async (friendId) => {
     const response = await api.delete(`/friends/${friendId}`);
