@@ -15,6 +15,7 @@ import ArchivedConversationsPage from "./pages/archived/ArchivedConversationsPag
 import CompleteProfilePage from "./pages/auth/CompleteProfilePage";
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import VideoCallPage from './pages/chat/VideoCallPage';
+import CreateGroupPage from "./pages/group/CreateGroupPage";
 
 function PrivateRoute({ children }) {
   const { isAuthenticated } = useAuthStore();
@@ -87,6 +88,7 @@ export default function App() {
           <Route path="profile" element={<ProfilePage />} />
           <Route path="blocked" element={<BlockedUsersPage />} />
           <Route path="archived" element={<ArchivedConversationsPage />} />
+          <Route path="group/create" element={<CreateGroupPage />} />
         </Route>
         <Route
           path="/admin/*"

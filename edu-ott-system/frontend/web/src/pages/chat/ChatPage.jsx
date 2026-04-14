@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import axios from "axios";
 import io from "socket.io-client";
-import { FaSearch, FaBell, FaThumbtack, FaUsers, FaCloud, FaSpinner, FaLink } from "react-icons/fa";
+import { useParams, useNavigate } from "react-router-dom";
+import { FaSearch, FaBell, FaThumbtack, FaUsers, FaCloud, FaSpinner, FaLink, FaTrashAlt, FaSignOutAlt } from "react-icons/fa";
 import toast from "react-hot-toast";
 
 import { uploadFile } from "../../services/mediaService"; 
@@ -13,6 +14,7 @@ import { ChatHeader } from "./ChatHeader";
 import { MessageInput } from "./MessageInput"; 
 import { useTheme } from '../../contexts/ThemeContext'; 
 import "./ChatPage.css";
+import { conversationService } from "../../services/conversationService";
 
 const API_BASE_URL = "http://localhost:5000/api/v1";
 
@@ -74,6 +76,8 @@ function UploadBubble({ name, percent }) {
 }
 
 export default function ChatPage() {
+  const navigate = useNavigate();
+  const { roomId } = useParams();
   const [conversations, setConversations] = useState([]);
   const [activeConversation, setActiveConversation] = useState(null);
   const [messages, setMessages] = useState([]);
@@ -124,7 +128,7 @@ export default function ChatPage() {
     if (conv.type === 'group' || conv.roomModel === 'Group') return conv.name || 'Nhóm chat';
     const other = getOtherParticipant(conv);
     if (other && typeof other === 'object') return other.username || other.fullName || other.name || 'Người dùng';
-    return 'Người dùng ẩn danh';
+    return null;
   }, [getOtherParticipant]);
 
   const getConversationAvatar = useCallback((conv) => {
@@ -183,7 +187,14 @@ export default function ChatPage() {
     if (!searchQuery.trim()) return convs;
     return convs.filter(conv => getConversationName(conv).toLowerCase().includes(searchQuery.toLowerCase()));
   }, [conversations, friends, searchQuery, userId, getConversationName, getOtherParticipant]);
-
+  useEffect(() => {
+      if (roomId && mergedConversations.length > 0) {
+        const targetRoom = mergedConversations.find(c => String(c._id) === String(roomId));
+        if (targetRoom && (!activeConversation || String(activeConversation._id) !== String(roomId))) {
+          setActiveConversation(targetRoom);
+        }
+      }
+    }, [roomId, mergedConversations, activeConversation])
   useEffect(() => {
     activeConvIdRef.current = activeConversation?._id;
   }, [activeConversation]);
@@ -462,6 +473,39 @@ export default function ChatPage() {
     setShareModalOpen(true);
   };
 
+  // --- Hàm xử lý Xóa cuộc trò chuyện cá nhân ---
+  const handleDeleteConversation = async () => {
+    if (!activeConversation) return;
+    if (window.confirm(`Bạn có chắc chắn muốn xóa cuộc trò chuyện với ${getConversationName(activeConversation)} không?`)) {
+      try {
+        // Tạm thời gọi hàm Archive để làm nó biến mất vì BE chưa có API Delete thật
+        await conversationService.archiveConversation(activeConversation._id);
+        toast.success("Đã xóa cuộc trò chuyện");
+        setActiveConversation(null); // Clear màn hình chat
+        navigate('/chat');           // Đẩy URL về mặc định
+        fetchConversationsData();    // Load lại danh sách bên trái
+      } catch (err) {
+        toast.error("Có lỗi xảy ra khi xóa cuộc trò chuyện");
+      }
+    }
+  };
+
+  // --- Hàm xử lý Rời nhóm ---
+  const handleLeaveGroup = async () => {
+    if (!activeConversation) return;
+    if (window.confirm(`Bạn có chắc chắn muốn rời khỏi nhóm ${getConversationName(activeConversation)} không?`)) {
+      try {
+        await conversationService.leaveGroup(activeConversation._id);
+        toast.success("Đã rời nhóm thành công");
+        setActiveConversation(null);
+        navigate('/chat');
+        fetchConversationsData();
+      } catch (err) {
+        toast.error(err.response?.data?.message || "Lỗi khi rời nhóm");
+      }
+    }
+  };
+
   const executeForward = async (friend) => {
     try {
       const targetId = friend._id || friend.id;
@@ -534,6 +578,8 @@ export default function ChatPage() {
         <div className="rs-list">
           {mergedConversations.map((conv) => {
             const isActive = activeConversation?._id === conv._id;
+            const convName = getConversationName(conv);
+            if (!convName) return null;
             const unread = conv.unreadCount || 0;
             return (
               <div key={conv._id} className={`chat-list-item ${isActive ? 'active' : ''}`} onClick={() => setActiveConversation(conv)}>
@@ -631,7 +677,26 @@ export default function ChatPage() {
             <div className="crp-actions">
               <div className="crp-action-btn"><div className="crp-action-icon"><FaBell size={16}/></div>Tắt thông báo</div>
               <div className="crp-action-btn"><div className="crp-action-icon"><FaThumbtack size={16}/></div>Ghim</div>
-              <div className="crp-action-btn"><div className="crp-action-icon"><FaUsers size={16}/></div>Tạo nhóm</div>
+               {/* nut tao nhom */}
+             {activeConversation.type !== 'group' ? (
+              // NẾU LÀ CHAT 1-1
+              <>
+                <div className="crp-action-btn" onClick={() => navigate('/group/create')}>
+                  <div className="crp-action-icon"><FaUsers size={16}/></div>Tạo nhóm
+                </div>
+                <div className="crp-action-btn" onClick={handleDeleteConversation}>
+                  <div className="crp-action-icon" style={{color: '#ef4444'}}><FaTrashAlt size={16}/></div>
+                  <span style={{color: '#ef4444'}}>Xóa chat</span>
+                </div>
+              </>
+            ) : (
+              // NẾU LÀ NHÓM CHAT
+              <div className="crp-action-btn" onClick={handleLeaveGroup}>
+                <div className="crp-action-icon" style={{color: '#ef4444'}}><FaSignOutAlt size={16}/></div>
+                <span style={{color: '#ef4444'}}>Rời nhóm</span>
+              </div>
+            )}
+              {/* <div className="crp-action-btn"><div className="crp-action-icon"><FaUsers size={16}/></div>Tạo nhóm</div> */}
             </div>
           </div>
           
