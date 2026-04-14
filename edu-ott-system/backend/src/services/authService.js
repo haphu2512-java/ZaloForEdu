@@ -94,6 +94,7 @@ exports.loginUser = async (email, password, ipAddress) => {
     );
   }
 
+
   // Kiểm tra mật khẩu
   const isPasswordMatch = await user.comparePassword(password);
 
@@ -103,8 +104,9 @@ exports.loginUser = async (email, password, ipAddress) => {
     let message = "Email hoặc mật khẩu không chính xác";
     let errorCode = "INVALID_CREDENTIALS";
 
+
     if (user.loginAttempts >= 5) {
-      user.lockUntil = Date.now() + 15 * 60 * 1000;
+      user.lockUntil = Date.now() + 15 * 60 * 1000; // ← đổi số 15 thành số phút bạn muốn
       message =
         "Tài khoản đã bị tạm khóa 15 phút do nhập sai mật khẩu quá 5 lần.";
       errorCode = "ACCOUNT_LOCKED_JUST_NOW";

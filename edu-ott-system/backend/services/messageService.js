@@ -30,8 +30,7 @@ const createMessage = async ({ conversationId, senderId, content = '', mediaIds 
     seenBy: [senderId],
   });
 
-  conversation.lastMessageAt = new Date();
-  await conversation.save();
+  await Conversation.findByIdAndUpdate(conversationId, { lastMessageAt: new Date() });
 
   return message;
 };
