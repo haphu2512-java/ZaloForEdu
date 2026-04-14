@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { 
   FaDownload, FaCheckDouble, FaCheck, FaClock, FaSmile, 
-  FaShare, FaReply, FaEllipsisH, FaUndo, FaTrash 
+  FaShare, FaReply, FaEllipsisH, FaUndo, FaTrash, FaCopy, FaThumbtack 
 } from 'react-icons/fa';
 import { getExt, getCategory, getFileColor, formatBytes } from './ChatPage';
 
@@ -138,19 +138,30 @@ const sender = message.senderId || message.sender || message.actualSender;
               <button title="Thả cảm xúc" onClick={() => { setShowEmojiPicker(!showEmojiPicker); setShowMoreMenu(false); }} style={{ width: '28px', height: '28px', borderRadius: '50%', border: 'none', background: '#F0F2F5', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><FaSmile size={12} color="#65676B"/></button>
               
               <button title="Trả lời" onClick={() => onReply?.(message)} style={{ width: '28px', height: '28px', borderRadius: '50%', border: 'none', background: '#F0F2F5', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><FaReply size={12} color="#65676B"/></button>
-              <button title="Chuyển tiếp" onClick={() => onForward?.(message)} style={{ width: '28px', height: '28px', borderRadius: '50%', border: 'none', background: '#F0F2F5', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><FaShare size={12} color="#65676B"/></button>
               <button title="Thêm" onClick={() => { setShowMoreMenu(!showMoreMenu); setShowEmojiPicker(false); }} style={{ width: '28px', height: '28px', borderRadius: '50%', border: 'none', background: '#F0F2F5', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><FaEllipsisH size={12} color="#65676B"/></button>
               
-              {/* Menu con Thu Hồi / Xóa */}
+              {/* Menu con: Sao chép / Ghim / Thu hồi / Xóa */}
               {showMoreMenu && (
-                <div style={{ position: 'absolute', bottom: '100%', right: isMe ? 0 : 'auto', left: isMe ? 'auto' : 0, marginBottom: '8px', background: '#fff', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', borderRadius: '8px', width: '160px', zIndex: 10, padding: '8px 0', border: '1px solid #E5E7EB' }}>
-                  {isMe && (
-                    <div onClick={() => { onRecall?.(_id); setShowMoreMenu(false); }} style={{ padding: '10px 16px', display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', color: '#050505', fontSize: '14px' }}>
-                      <FaUndo size={14} color="#65676B" /> Thu hồi
+                <div style={{ position: 'absolute', bottom: '100%', right: isMe ? 0 : 'auto', left: isMe ? 'auto' : 0, marginBottom: '8px', background: '#fff', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', borderRadius: '8px', width: '170px', zIndex: 10, padding: '8px 0', border: '1px solid #E5E7EB' }}>
+                  {content && (
+                    <div onClick={() => { navigator.clipboard.writeText(content); setShowMoreMenu(false); }} style={{ padding: '10px 16px', display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', color: '#050505', fontSize: '14px' }}>
+                      <FaCopy size={13} color="#65676B" /> Sao chép
                     </div>
                   )}
+                  <div onClick={() => { onForward?.(message); setShowMoreMenu(false); }} style={{ padding: '10px 16px', display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', color: '#050505', fontSize: '14px' }}>
+                    <FaShare size={13} color="#65676B" /> Chuyển tiếp
+                  </div>
+                  <div onClick={() => { setShowMoreMenu(false); }} style={{ padding: '10px 16px', display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', color: '#050505', fontSize: '14px' }}>
+                    <FaThumbtack size={13} color="#F59E0B" /> Ghim tin nhắn
+                  </div>
+                  {isMe && (
+                    <div onClick={() => { onRecall?.(_id); setShowMoreMenu(false); }} style={{ padding: '10px 16px', display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', color: '#050505', fontSize: '14px' }}>
+                      <FaUndo size={13} color="#65676B" /> Thu hồi
+                    </div>
+                  )}
+                  <div style={{ borderTop: '1px solid #F0F2F5', margin: '4px 0' }} />
                   <div onClick={() => { onDelete?.(_id); setShowMoreMenu(false); }} style={{ padding: '10px 16px', display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', color: '#E11D48', fontSize: '14px' }}>
-                    <FaTrash size={14} /> Xóa {isMe && 'ở phía tôi'}
+                    <FaTrash size={13} /> Xóa {isMe && 'ở phía tôi'}
                   </div>
                 </div>
               )}

@@ -32,6 +32,15 @@ const emitConversationUpdated = async (conversationId, payload) => {
   });
 };
 
+const emitMessageRecalled = async (conversationId, payload) => {
+  if (!io) return;
+  const conversation = await Conversation.findById(conversationId).select('participants');
+  if (!conversation) return;
+  conversation.participants.forEach((participantId) => {
+    io.to(`user:${participantId.toString()}`).emit('message_recalled', payload);
+  });
+};
+
 const closeSocket = async () => {
   if (!io) return;
   await new Promise((resolve) => {
@@ -213,4 +222,5 @@ const initSocket = (server) => {
 module.exports = initSocket;
 module.exports.emitToConversation = emitToConversation;
 module.exports.emitConversationUpdated = emitConversationUpdated;
+module.exports.emitMessageRecalled = emitMessageRecalled;
 module.exports.closeSocket = closeSocket;

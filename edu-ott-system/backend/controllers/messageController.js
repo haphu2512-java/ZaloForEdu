@@ -88,13 +88,13 @@ const listMessagesByConversation = asyncHandler(async (req, res) => {
   }
 
   return successResponse(
-      res,
-      {
-        items: finalItems,
-        nextCursor,
-        limit,
-      },
-      'Messages fetched',
+    res,
+    {
+      items: finalItems,
+      nextCursor,
+      limit,
+    },
+    'Messages fetched',
   );
 });
 
@@ -154,6 +154,11 @@ const recallMessage = asyncHandler(async (req, res) => {
     conversationId: message.conversationId,
   });
 
+  await socketService.emitMessageRecalled(message.conversationId.toString(), {
+    messageId: message._id,
+    conversationId: message.conversationId,
+  });
+
   return successResponse(res, message, 'Message recalled successfully');
 });
 
@@ -168,7 +173,7 @@ const reactToMessage = asyncHandler(async (req, res) => {
 
   // Check if reaction exists
   const existingReactionIndex = message.reactions.findIndex(
-      (r) => r.userId.toString() === req.user._id.toString()
+    (r) => r.userId.toString() === req.user._id.toString()
   );
 
   if (existingReactionIndex >= 0) {
