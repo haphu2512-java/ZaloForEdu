@@ -221,15 +221,12 @@ export default function ChatPage() {
       if (isOtherFriend) {
         friendConvs.push(conv);
       } else {
-        // Vào "Người lạ" nếu người kia là người TẠO conversation (nhắn trước)
-        // Dùng createdBy thay vì latestMessage để tránh bị đổi khi mình reply
+        // Phân loại dựa vào người tạo conversation
         const createdBy = String(conv.createdBy?._id || conv.createdBy || '');
         const iCreated = !createdBy || createdBy === String(userId);
         if (iCreated) {
-          // Mình tạo conversation (mình nhắn trước) → hiện bình thường
           friendConvs.push(conv);
         } else {
-          // Người lạ tạo conversation (họ nhắn trước) → vào "Tin nhắn từ người lạ"
           strangerConvs.push(conv);
         }
       }
