@@ -16,7 +16,7 @@ export const MessageBubble = ({
   onForward, 
   onReply 
 }) => {
-const sender = message.senderId || message.sender || message.actualSender;
+  const sender = message.senderId || message.sender || message.actualSender;
 
   const { _id, content, type, status, isEdited, isRecalled, replyTo, createdAt, reactions } = message;
   
@@ -25,14 +25,12 @@ const sender = message.senderId || message.sender || message.actualSender;
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const menuRef = useRef(null);
 
-  // FIX: Nếu tin nhắn đã thu hồi thì không lấy danh sách media nữa
   const mediaList = isRecalled ? [] : (message.attachments || message.mediaIds || message.media || []);
   
   const timeString = new Date(createdAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
   const avatar = sender?.avatarUrl || sender?.avatar || 'https://i.pravatar.cc/150';
   const name = sender?.fullName || sender?.username || 'Người dùng';
 
-  // Click ra ngoài để đóng menu
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (menuRef.current && !menuRef.current.contains(event.target)) {
@@ -47,9 +45,21 @@ const sender = message.senderId || message.sender || message.actualSender;
   if (type === 'system') {
     return <div style={{ textAlign: 'center', margin: '16px 0', fontSize: '12px', color: '#8A8D91' }}><span>{content}</span></div>;
   }
+
   const bubbleStyle = isMe 
     ? { backgroundColor: '#0084FF', color: '#FFFFFF', borderRadius: '18px 18px 4px 18px', padding: '10px 14px', position: 'relative' } 
     : { backgroundColor: '#FFFFFF', color: '#050505', borderRadius: '18px 18px 18px 4px', padding: '10px 14px', position: 'relative', border: '1px solid #E5E7EB' };
+
+  // Tách riêng Ảnh/Video và File Document
+  const images = mediaList.filter(att => {
+    if (typeof att === 'string') return false;
+    return ["image", "video"].includes(getCategory(att.name || att.fileName));
+  });
+
+  const docs = mediaList.filter(att => {
+    if (typeof att === 'string') return false;
+    return !["image", "video"].includes(getCategory(att.name || att.fileName));
+  });
 
   return (
     <div 
@@ -67,11 +77,9 @@ const sender = message.senderId || message.sender || message.actualSender;
           </div>
         )}
         
-        {/* VÙNG CHỨA BONG BÓNG VÀ MENU */}
         <div style={{ display: 'flex', alignItems: 'flex-end', gap: '8px', flexDirection: isMe ? 'row-reverse' : 'row' }} ref={menuRef}>
           
           <div style={bubbleStyle}>
-            {/* THU HỒI TIN NHẮN */}
             {isRecalled ? (
               <span style={{ fontStyle: 'italic', color: isMe ? '#E4E6EB' : '#8A8D91', fontSize: '14px' }}>Tin nhắn đã thu hồi</span>
             ) : (
@@ -85,16 +93,61 @@ const sender = message.senderId || message.sender || message.actualSender;
 
                 {content && <p style={{ margin: 0, fontSize: '15px', lineHeight: '1.4', color: isMe ? '#FFFFFF' : '#050505', wordBreak: 'break-word' }}>{content}</p>}
 
-                {mediaList.length > 0 && (
+                {/* KHU VỰC RENDER MEDIA */}
+                {(images.length > 0 || docs.length > 0) && (
                   <div style={{ marginTop: content ? '8px' : '0', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    {mediaList.map((att, i) => {
-                      if (typeof att === 'string') return null; 
+                    
+                    {/* Render GRID Ảnh Zalo-style */}
+                    {images.length > 0 && (
+                      <div style={{
+                        display: 'grid',
+                        gap: '4px',
+                        width: '100%',
+                        maxWidth: '320px',
+                        borderRadius: '8px',
+                        overflow: 'hidden',
+                        gridTemplateColumns: images.length === 1 ? '1fr' : '1fr 1fr',
+                        gridTemplateRows: images.length > 2 ? '1fr 1fr' : '1fr'
+                      }}>
+                        {images.slice(0, 4).map((att, i) => {
+                          const isLast = i === 3;
+                          const remain = images.length - 4;
+                          const isVideo = getCategory(att.name || att.fileName) === 'video';
+
+                          return (
+                            <div key={i} style={{
+                              position: 'relative',
+                              width: '100%',
+                              aspectRatio: images.length === 1 ? 'auto' : '1 / 1',
+                              gridColumn: (images.length === 3 && i === 0) ? 'span 2' : 'auto',
+                              cursor: 'pointer'
+                            }}>
+                              {isVideo ? (
+                                <video src={att.url} controls style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                              ) : (
+                                <img src={att.url} alt="attachment" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                              )}
+                              {/* Overlay hiển thị số ảnh dư */}
+                              {isLast && remain > 0 && (
+                                <div style={{
+                                  position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.5)',
+                                  color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                  fontSize: '24px', fontWeight: 'bold'
+                                }}>
+                                  +{remain}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {/* Render Danh sách File Tài liệu */}
+                    {docs.length > 0 && docs.map((att, i) => {
                       const fileName = att.name || att.fileName || `Tệp ${i+1}`;
-                      const isImg = ["image", "video"].includes(getCategory(fileName));
-                      return isImg ? (
-                        <img key={i} src={att.url} alt="attachment" style={{ maxWidth: '100%', maxHeight: '200px', borderRadius: '8px', objectFit: 'cover' }} />
-                      ) : (
-                        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '8px', background: isMe ? 'rgba(255,255,255,0.2)' : '#F0F2F5', padding: '8px', borderRadius: '8px' }}>
+                      return (
+                        <div key={`doc-${i}`} style={{ display: 'flex', alignItems: 'center', gap: '8px', background: isMe ? 'rgba(255,255,255,0.2)' : '#F0F2F5', padding: '8px', borderRadius: '8px' }}>
                           <div style={{ background: getFileColor(fileName), color: '#fff', fontSize: '10px', fontWeight: 'bold', padding: '4px 6px', borderRadius: '4px' }}>
                             {getExt(fileName).toUpperCase().slice(0,4)}
                           </div>
@@ -117,7 +170,6 @@ const sender = message.senderId || message.sender || message.actualSender;
               </>
             )}
 
-            {/* HIỂN THỊ REACTIONS */}
             {!isRecalled && reactions?.length > 0 && (
               <div style={{ position: 'absolute', bottom: '-14px', right: isMe ? '12px' : 'auto', left: isMe ? 'auto' : '12px', display: 'flex', background: '#FFFFFF', padding: '2px 6px', borderRadius: '12px', boxShadow: '0 2px 4px rgba(0,0,0,0.15)', gap: '2px', zIndex: 2, border: '1px solid #E5E7EB' }}>
                 {reactions.slice(0, 3).map((r, i) => (
@@ -127,21 +179,15 @@ const sender = message.senderId || message.sender || message.actualSender;
                 ))}
               </div>
             )}
-            
           </div>
 
-          {/* DẢI MENU NÚT TRÒN (REPLY, SHARE, MORE) */}
           {!isRecalled && (isHovered || showMoreMenu || showEmojiPicker) && (
             <div style={{ display: 'flex', gap: '6px', color: '#65676B', position: 'relative', paddingBottom: '4px' }}>
-              
-              {/* Nút Emoji */}
               <button title="Thả cảm xúc" onClick={() => { setShowEmojiPicker(!showEmojiPicker); setShowMoreMenu(false); }} style={{ width: '28px', height: '28px', borderRadius: '50%', border: 'none', background: '#F0F2F5', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><FaSmile size={12} color="#65676B"/></button>
-              
               <button title="Trả lời" onClick={() => onReply?.(message)} style={{ width: '28px', height: '28px', borderRadius: '50%', border: 'none', background: '#F0F2F5', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><FaReply size={12} color="#65676B"/></button>
               <button title="Chuyển tiếp" onClick={() => onForward?.(message)} style={{ width: '28px', height: '28px', borderRadius: '50%', border: 'none', background: '#F0F2F5', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><FaShare size={12} color="#65676B"/></button>
               <button title="Thêm" onClick={() => { setShowMoreMenu(!showMoreMenu); setShowEmojiPicker(false); }} style={{ width: '28px', height: '28px', borderRadius: '50%', border: 'none', background: '#F0F2F5', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><FaEllipsisH size={12} color="#65676B"/></button>
               
-              {/* Menu con Thu Hồi / Xóa */}
               {showMoreMenu && (
                 <div style={{ position: 'absolute', bottom: '100%', right: isMe ? 0 : 'auto', left: isMe ? 'auto' : 0, marginBottom: '8px', background: '#fff', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', borderRadius: '8px', width: '160px', zIndex: 10, padding: '8px 0', border: '1px solid #E5E7EB' }}>
                   {isMe && (
@@ -155,7 +201,6 @@ const sender = message.senderId || message.sender || message.actualSender;
                 </div>
               )}
 
-              {/* BẢNG CHỌN EMOJI  */}
               {showEmojiPicker && (
                 <div style={{ position: 'absolute', bottom: '100%', right: isMe ? '0' : 'auto', left: isMe ? 'auto' : '0', marginBottom: '8px', background: '#fff', padding: '4px 8px', borderRadius: '20px', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', display: 'flex', gap: '6px', zIndex: 10, border: '1px solid #E5E7EB' }}>
                   {EMOJIS.map(e => (
