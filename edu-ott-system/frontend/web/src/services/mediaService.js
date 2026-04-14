@@ -1,5 +1,18 @@
 import api from "./authService";
 
+const API_ORIGIN = (import.meta.env.VITE_API_URL || "http://localhost:5000/api/v1").replace(/\/api\/v1\/?$/, "");
+
+const toAbsoluteUrl = (url) => {
+  if (!url) return url;
+  if (/^https?:\/\//i.test(url)) return url;
+  return `${API_ORIGIN}${url.startsWith("/") ? "" : "/"}${url}`;
+};
+
+const normalizeMedia = (item) => ({
+  ...item,
+  url: toAbsoluteUrl(item.url),
+});
+
 // Các định dạng file được phép
 export const ALLOWED_EXTENSIONS = {
   image: ["jpg", "jpeg", "png", "gif", "webp", "svg"],
@@ -113,9 +126,20 @@ export const registerMedia = async ({ fileName, mimeType, size, url, publicId, r
 };
 
 /**
- * Upload hoàn chỉnh: lấy signature → upload cloudinary → đăng ký backend
+ * Helper: đọc file thành base64
  */
-export const uploadFile = async (file, { onProgress, folder } = {}) => {
+const toBase64 = (file) =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result.split(",")[1]);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+
+/**
+ * Upload hoàn chỉnh: đọc file → gửi base64 lên backend (giống mobile)
+ */
+export const uploadFile = async (file, { onProgress } = {}) => {
   const ext = getExtension(file.name);
   const extNoDot = ext.replace(".", "").toLowerCase();
 
@@ -125,25 +149,18 @@ export const uploadFile = async (file, { onProgress, folder } = {}) => {
     );
   }
 
-  const resourceType = getResourceType(ext);
+  onProgress?.(30);
+  const contentBase64 = await toBase64(file);
+  onProgress?.(60);
 
-  // 1. Lấy signature
-  const signatureData = await getUploadSignature({ resourceType, folder });
-
-  // 2. Upload lên Cloudinary
-  const { secureUrl, publicId } = await uploadToCloudinary(file, signatureData, onProgress);
-
-  // 3. Đăng ký với backend
-  const media = await registerMedia({
+  const response = await api.post("/media/upload", {
     fileName: file.name,
     mimeType: file.type || "application/octet-stream",
-    size: file.size,
-    url: secureUrl,
-    publicId,
-    resourceType,
+    contentBase64,
   });
 
-  return media;
+  onProgress?.(100);
+  return normalizeMedia(response.data.data);
 };
 
 export const deleteMedia = async (mediaId) => {

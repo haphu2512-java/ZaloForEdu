@@ -19,6 +19,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system/legacy';
+import * as ImageManipulator from 'expo-image-manipulator';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../context/auth';
@@ -32,7 +33,7 @@ import {
   getConversations,
 } from '../../utils/messageService';
 import { getPinnedMessages, pinMessage, unpinMessage } from '../../utils/groupFeatureService';
-import { uploadMediaBase64, getMediaById, uploadImageToCloudinary } from '../../utils/mediaService';
+import { uploadMediaBase64, getMediaById, uploadImageToCloudinary, toAbsoluteMediaUrl } from '../../utils/mediaService';
 import {
   connectSocket,
   joinConversation,
@@ -167,7 +168,14 @@ export default function ChatScreen() {
     setIsLoading(true);
     try {
       const res = await getMessages({ conversationId, limit: 30 });
-      setMessages(res.items);
+      // Normalize URL cho mediaIds đã populate
+      const normalizedItems = (res.items || []).map((msg: any) => ({
+        ...msg,
+        mediaIds: (msg.mediaIds || []).map((m: any) =>
+          typeof m === 'object' && m.url ? { ...m, url: toAbsoluteMediaUrl(m.url) } : m
+        ),
+      }));
+      setMessages(normalizedItems);
       setNextCursor(res.nextCursor);
       const convRes = await getConversations(null, 100);
       const matched = (convRes.items || []).find((item) => (item._id || item.id) === conversationId) || null;
@@ -265,7 +273,10 @@ export default function ChatScreen() {
   useEffect(() => () => stopTypingWithEmit(), [stopTypingWithEmit]);
 
   useEffect(() => {
-    const ids = messages.flatMap((m) => m.mediaIds || []);
+    // mediaIds có thể là string[] hoặc object[] (khi đã populate)
+    const ids = messages.flatMap((m) => (m.mediaIds || []).map((mid: any) =>
+      typeof mid === 'string' ? mid : mid?._id || mid?.id
+    ).filter(Boolean));
     if (ids.length) {
       void ensureMediaLoaded(ids);
     }
@@ -291,6 +302,12 @@ export default function ChatScreen() {
         setMessages((prev) => {
           if (prev.some((m) => getMessageId(m) === getMessageId(message))) return prev;
           let enhancedMessage = { ...message };
+          // Normalize URL cho mediaIds được populate từ socket
+          if (enhancedMessage.mediaIds?.length) {
+            enhancedMessage.mediaIds = (enhancedMessage.mediaIds as any[]).map((m: any) =>
+              typeof m === 'object' && m.url ? { ...m, url: toAbsoluteMediaUrl(m.url) } : m
+            );
+          }
           if (enhancedMessage.replyTo && typeof enhancedMessage.replyTo === 'string') {
             const originalMsg = prev.find((m) => getMessageId(m) === enhancedMessage.replyTo);
             if (originalMsg) enhancedMessage.replyTo = originalMsg;
@@ -438,7 +455,7 @@ export default function ChatScreen() {
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: ['images'],
       quality: 0.85,
       allowsMultipleSelection: false,
     });
@@ -446,12 +463,14 @@ export default function ChatScreen() {
     setIsSending(true);
     try {
       const asset = result.assets[0];
-      const uploadedUrl = await uploadImageToCloudinary(asset.uri);
-      // Register as media item through base64 approach (fallback: send with URL as content)
-      const base64 = await FileSystem.readAsStringAsync(asset.uri, { encoding: FileSystem.EncodingType.Base64 });
-      const ext = asset.uri.split('.').pop()?.toLowerCase() || 'jpg';
-      const mimeType = ext === 'png' ? 'image/png' : 'image/jpeg';
-      const media = await uploadMediaBase64({ fileName: `photo-${Date.now()}.${ext}`, mimeType, contentBase64: base64 });
+      // Resize về max 800px để giảm kích thước Base64
+      const compressed = await ImageManipulator.manipulateAsync(
+        asset.uri,
+        [{ resize: { width: 800 } }],
+        { compress: 0.6, format: ImageManipulator.SaveFormat.JPEG }
+      );
+      const base64 = await FileSystem.readAsStringAsync(compressed.uri, { encoding: FileSystem.EncodingType.Base64 });
+      const media = await uploadMediaBase64({ fileName: `photo-${Date.now()}.jpg`, mimeType: 'image/jpeg', contentBase64: base64 });
       const newMsg = await sendMessage({ conversationId, mediaIds: [media._id], content: '' });
       setMessages((prev) =>
         prev.some((m) => getMessageId(m) === getMessageId(newMsg)) ? prev : [newMsg, ...prev],
@@ -471,11 +490,10 @@ export default function ChatScreen() {
       const asset = result.assets[0];
       setIsSending(true);
       try {
-        const base64 = await FileSystem.readAsStringAsync(asset.uri, { encoding: FileSystem.EncodingType.Base64 });
-        const media = await uploadMediaBase64({
+        const media = await uploadMediaForm({
+          uri: asset.uri,
           fileName: asset.name,
           mimeType: asset.mimeType || 'application/octet-stream',
-          contentBase64: base64,
         });
         const newMsg = await sendMessage({ conversationId, mediaIds: [media._id], content: `Đã gửi file: ${asset.name}` });
         setMessages((prev) =>
@@ -700,8 +718,9 @@ export default function ChatScreen() {
             {/* Media attachments */}
             {!!item.mediaIds?.length && (
               <View style={{ marginTop: item.content ? 8 : 0, gap: 6 }}>
-                {item.mediaIds.map((mediaId, idx) => {
-                  const media = mediaById[mediaId];
+                {item.mediaIds.map((mediaId: any, idx: number) => {
+                  // mediaId có thể là string ID hoặc object đã populate
+                  const media = typeof mediaId === 'object' ? mediaId : mediaById[mediaId];
                   const isImage = isImageMimeType(media?.mimeType);
                   const fileName = media?.fileName || `Tệp đính kèm ${idx + 1}`;
                   const canOpen = !!media?.url;

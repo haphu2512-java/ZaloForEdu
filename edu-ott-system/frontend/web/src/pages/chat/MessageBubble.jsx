@@ -27,6 +27,7 @@ const sender = message.senderId || message.sender || message.actualSender;
 
   // FIX: Nếu tin nhắn đã thu hồi thì không lấy danh sách media nữa
   const mediaList = isRecalled ? [] : (message.attachments || message.mediaIds || message.media || []);
+  if (mediaList.length > 0) console.log('[DEBUG] mediaList:', JSON.stringify(mediaList));
   
   const timeString = new Date(createdAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
   const avatar = sender?.avatarUrl || sender?.avatar || 'https://i.pravatar.cc/150';

@@ -15,7 +15,7 @@ type CloudinarySignature = {
 
 const API_ORIGIN = API_BASE_URL.replace(/\/api\/v1$/, '');
 
-function toAbsoluteMediaUrl(url?: string): string {
+export function toAbsoluteMediaUrl(url?: string): string {
   if (!url) return '';
   if (/^https?:\/\//i.test(url)) return url;
   return `${API_ORIGIN}${url.startsWith('/') ? '' : '/'}${url}`;
@@ -30,6 +30,28 @@ function normalizeMedia(item: MediaItem): MediaItem {
   };
 }
 
+export async function uploadMediaForm(payload: {
+  uri: string;
+  fileName: string;
+  mimeType: string;
+}): Promise<MediaItem> {
+  const formData = new FormData();
+  formData.append('file', {
+    uri: payload.uri,
+    name: payload.fileName,
+    type: payload.mimeType,
+  } as any);
+
+  console.log('[uploadMediaForm] Uploading:', payload.fileName, payload.mimeType);
+  const res = await fetchAPI('/media/upload-form', {
+    method: 'POST',
+    body: formData,
+  });
+  console.log('[uploadMediaForm] Response:', JSON.stringify(res));
+  return normalizeMedia(res.data);
+}
+
+// Giữ lại để không break code cũ
 export async function uploadMediaBase64(payload: {
   fileName: string;
   mimeType: string;

@@ -13,8 +13,9 @@ import { MessageInput } from "./MessageInput";
 import { useTheme } from '../../contexts/ThemeContext'; 
 import "./ChatPage.css";
 
-const API_BASE_URL = "http://localhost:5000/api/v1";
-const socket = io("http://localhost:5000", { autoConnect: false, transports: ['websocket'] });
+const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api/v1";
+const API_ORIGIN = API_BASE_URL.replace(/\/api\/v1\/?$/, "");
+const socket = io(API_ORIGIN, { autoConnect: false, transports: ['websocket'] });
 
 const IMAGE_EXTS = ["jpg","jpeg","png","gif","webp","svg"];
 const VIDEO_EXTS = ["mp4","mov","avi","mkv","webm"];
@@ -209,7 +210,16 @@ export default function ChatPage() {
       if (convIdStr === activeIdStr) {
         setMessages(prev => {
           if (prev.some(m => String(m._id) === String(latestMessage._id))) return prev;
-          return [...prev, latestMessage];
+          const normalizedMsg = {
+            ...latestMessage,
+            mediaIds: (latestMessage.mediaIds || []).map(media =>
+              typeof media === 'object' && media.url && !/^https?:\/\//i.test(media.url)
+                ? { ...media, url: `${API_ORIGIN}${media.url}` }
+                : media
+            )
+          };
+          console.log('[DEBUG] normalizedMsg mediaIds:', normalizedMsg.mediaIds);
+          return [...prev, normalizedMsg];
         });
         socket.emit("message_delivered", { messageId: latestMessage._id });
         socket.emit("message_seen", { messageId: latestMessage._id });
@@ -271,7 +281,15 @@ export default function ChatPage() {
       try {
         const res = await axios.get(`${API_BASE_URL}/messages/conversation/${activeConversation._id}?limit=50`, { headers: { Authorization: `Bearer ${token}` } });
         const fetchedMessages = res.data.data?.items || res.data.items || [];
-        setMessages(fetchedMessages.reverse());
+        const normalized = fetchedMessages.map(m => ({
+          ...m,
+          mediaIds: (m.mediaIds || []).map(media =>
+            typeof media === 'object' && media.url && !/^https?:\/\//i.test(media.url)
+              ? { ...media, url: `${API_ORIGIN}${media.url}` }
+              : media
+          )
+        }));
+        setMessages(normalized.reverse());
         setConversations(prev => prev.map(c => String(c._id) === String(activeConversation._id) ? { ...c, unreadCount: 0 } : c));
       } catch (err) { setMessages([]); }
     };

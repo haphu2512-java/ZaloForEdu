@@ -22,7 +22,9 @@ const createApp = () => {
   const app = express();
   const corsAllowAll = env.corsOrigins.includes('*');
 
-  app.use(helmet());
+  app.use(helmet({
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
+  }));
   app.use(
     cors({
       origin: (origin, callback) => {
@@ -50,7 +52,7 @@ const createApp = () => {
     });
     next();
   });
-  app.use(express.json({ limit: '10mb' }));
+  app.use(express.json({ limit: '50mb' }));
   app.use(express.urlencoded({ extended: true }));
 
   app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
