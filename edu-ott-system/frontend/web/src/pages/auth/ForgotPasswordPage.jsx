@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
-  FaEnvelope, FaPhone, FaLock, FaEye, FaEyeSlash,
+  FaEnvelope, FaPhone, FaLock, FaEye, FaEyeSlash, FaUser,
   FaArrowRight, FaSpinner, FaCheckCircle, FaComments, FaQuestionCircle, FaRocket,
 } from "react-icons/fa";
 import { useAuthStore } from "../../store/authStore";
@@ -16,7 +16,6 @@ export default function ForgotPasswordPage() {
 
   // step: 1 = nhập email/phone, 2 = nhập OTP, 3 = mật khẩu mới
   const [step, setStep] = useState(1);
-  const [tab, setTab] = useState("email");
 
   // Step 1
   const [identifier, setIdentifier] = useState("");
@@ -58,22 +57,29 @@ export default function ForgotPasswordPage() {
     setApiError("");
     setIdentifierError("");
 
-    if (!identifier.trim()) {
-      setIdentifierError(tab === "email" ? "Vui lòng nhập email" : "Vui lòng nhập số điện thoại");
+    const idVal = identifier.trim();
+    if (!idVal) {
+      setIdentifierError("Vui lòng nhập Email hoặc Số điện thoại");
       return;
     }
-    if (tab === "email" && !/^[^\s@]+@gmail\.com$/.test(identifier)) {
-      setIdentifierError("Chỉ hỗ trợ tài khoản @gmail.com");
-      return;
-    }
-    if (tab === "phone" && !/^\+?\d{9,15}$/.test(identifier.replace(/\s/g, ""))) {
-      setIdentifierError("Số điện thoại không hợp lệ");
-      return;
+    
+    const isEmail = idVal.includes("@") || /[a-zA-Z]/.test(idVal);
+    if (isEmail) {
+      if (!/^[^\s@]+@gmail\.com$/.test(idVal)) {
+        setIdentifierError("Chỉ hỗ trợ tài khoản @gmail.com");
+        return;
+      }
+    } else {
+      const phoneVal = idVal.replace(/\s/g, "");
+      if (!/^(0|\+84)(3|5|7|8|9)\d{8}$/.test(phoneVal)) {
+        setIdentifierError("Số điện thoại không hợp lệ");
+        return;
+      }
     }
 
-    const payload = tab === "email"
-      ? { email: identifier.toLowerCase() }
-      : { phone: identifier.replace(/\s/g, "") };
+    const payload = isEmail
+      ? { email: idVal.toLowerCase() }
+      : { phone: idVal.replace(/\s/g, "") };
 
     const result = await forgotPassword(payload);
     if (result.success) {
@@ -117,9 +123,13 @@ export default function ForgotPasswordPage() {
       setOtpError("Vui lòng nhập đủ 6 chữ số");
       return;
     }
+    
+    const idVal = identifier.trim();
+    const isEmail = idVal.includes("@") || /[a-zA-Z]/.test(idVal);
+    
     const payload = {
       otp,
-      ...(tab === "email" ? { email: identifier.toLowerCase() } : { phone: identifier.replace(/\s/g, "") }),
+      ...(isEmail ? { email: idVal.toLowerCase() } : { phone: idVal.replace(/\s/g, "") }),
     };
     const result = await verifyForgotOtp(payload);
     if (result.success) {
@@ -135,9 +145,14 @@ export default function ForgotPasswordPage() {
   const handleResend = async () => {
     if (countdown > 0) return;
     clearError();
-    const payload = tab === "email"
-      ? { email: identifier.toLowerCase() }
-      : { phone: identifier.replace(/\s/g, "") };
+    
+    const idVal = identifier.trim();
+    const isEmail = idVal.includes("@") || /[a-zA-Z]/.test(idVal);
+    
+    const payload = isEmail
+      ? { email: idVal.toLowerCase() }
+      : { phone: idVal.replace(/\s/g, "") };
+      
     const result = await forgotPassword(payload);
     if (result.success) {
       setCountdown(RESEND_COUNTDOWN);
@@ -227,35 +242,18 @@ export default function ForgotPasswordPage() {
               Nhập email hoặc số điện thoại để nhận mã OTP xác thực.
             </p>
 
-            <div className="auth-tabs">
-              <button
-                className={`auth-tab ${tab === "email" ? "active" : ""}`}
-                onClick={() => { setTab("email"); setIdentifier(""); setIdentifierError(""); }}
-                type="button"
-              >
-                <FaEnvelope size={13} /> Email
-              </button>
-              <button
-                className={`auth-tab ${tab === "phone" ? "active" : ""}`}
-                onClick={() => { setTab("phone"); setIdentifier(""); setIdentifierError(""); }}
-                type="button"
-              >
-                <FaPhone size={13} /> Số điện thoại
-              </button>
-            </div>
-
             {apiError && <div className="auth-error">{apiError}</div>}
-
+            
             <form onSubmit={handleStep1} className="auth-form">
               <div className="auth-field">
-                <label>{tab === "email" ? "Email" : "Số điện thoại"}</label>
+                <label>Email hoặc Số điện thoại</label>
                 <div className="auth-input-wrap">
                   <span className="auth-input-icon">
-                    {tab === "email" ? <FaEnvelope size={14} /> : <FaPhone size={14} />}
+                    <FaUser size={14} />
                   </span>
                   <input
-                    type={tab === "email" ? "email" : "tel"}
-                    placeholder={tab === "email" ? "you@example.com" : "0912 345 678"}
+                    type="text"
+                    placeholder="you@gmail.com hoặc 0912 345 678"
                     value={identifier}
                     onChange={(e) => { setIdentifier(e.target.value); setIdentifierError(""); }}
                     className={identifierError ? "has-error" : ""}
@@ -282,8 +280,8 @@ export default function ForgotPasswordPage() {
             {renderSteps()}
             <p className="auth-step-title">Nhập mã xác thực</p>
             <p className="auth-step-sub">
-              Mã OTP đã gửi tới <strong>{tab === "phone" ? `SĐT ${identifier}` : identifier}</strong>.
-              {tab === "phone" && (
+              Mã OTP đã gửi tới <strong>{identifier.includes("@") || /[a-zA-Z]/.test(identifier) ? identifier : `SĐT ${identifier}`}</strong>.
+              {!(identifier.includes("@") || /[a-zA-Z]/.test(identifier)) && (
                 <><br /><span style={{ color: "#3b82f6", fontSize: 12 }}>💡 Xem mã trong Terminal Backend</span></>
               )}
             </p>

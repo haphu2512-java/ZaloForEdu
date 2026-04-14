@@ -4,6 +4,7 @@ import * as authService from '../utils/authService';
 import type { User, LoginPayload, RegisterPayload, UpdateProfilePayload } from '../types/auth';
 import { getMySettings } from '../utils/settingsService';
 import { getUserById } from '../utils/userService';
+import { connectSocket, disconnectSocket } from '../utils/socketService';
 
 interface AuthContextType {
   user: User | null;
@@ -69,15 +70,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           const refreshResult = await authService.refreshAccessToken();
           if (refreshResult?.success && refreshResult.user) {
             setUser(refreshResult.user);
+            // Connect socket ngay với token tươi - tránh race condition AsyncStorage
+            if (refreshResult.accessToken) {
+              connectSocket(refreshResult.accessToken);
+            }
             await syncThemeSettings();
-          } else if (!cachedUser) {
-            // No cached user and failed to refresh â€” session expired
-            await authService.removeToken();
-            setUser(null);
+          } else {
+            // Check if authService has removed the token due to expiration
+            const tokenExists = await authService.getToken();
+            if (!tokenExists) {
+              setUser(null);
+            }
           }
         }
       } catch (error) {
-        console.warn('Lá»—i kiá»ƒm tra session:', error);
+        console.warn('Lỗi kiểm tra session:', error);
         await authService.removeToken();
         setUser(null);
       } finally {
@@ -105,8 +112,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [user, segments, isLoading]);
 
   const login = useCallback(async (payload: LoginPayload) => {
+    // Ngắt socket cũ triệt để trước
+    disconnectSocket();
     const res = await authService.login(payload);
     if (!res.user) throw new Error('Đăng nhập thất bại');
+    // Kết nối socket ngay với token tươi trong bộ nhớ - không đợi AsyncStorage
+    if (res.accessToken) {
+      connectSocket(res.accessToken);
+    }
     setUser(res.user);
     await syncThemeSettings();
     return res.user;
@@ -120,6 +133,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const logout = useCallback(async () => {
+    disconnectSocket();
     await authService.logout();
     setUser(null);
   }, []);

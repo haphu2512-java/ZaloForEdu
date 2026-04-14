@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
-  FaEnvelope, FaLock, FaEye, FaEyeSlash, FaPhone,
+  FaEnvelope, FaLock, FaEye, FaEyeSlash, FaPhone, FaUser,
   FaArrowRight, FaSpinner, FaComments, FaHandPeace, FaHeart,
 } from "react-icons/fa";
 import { useAuthStore } from "../../store/authStore";
@@ -11,7 +11,6 @@ export default function LoginPage() {
   const navigate = useNavigate();
   const { login, isLoading, error, clearError } = useAuthStore();
 
-  const [tab, setTab] = useState("email"); // "email" | "phone"
   const [form, setForm] = useState({ identifier: "", password: "" });
   const [showPass, setShowPass] = useState(false);
   const [fieldErrors, setFieldErrors] = useState({});
@@ -22,13 +21,6 @@ export default function LoginPage() {
     return () => clearTimeout(t);
   }, []);
 
-  const handleTabChange = (t) => {
-    setTab(t);
-    setForm({ identifier: "", password: "" });
-    setFieldErrors({});
-    clearError();
-  };
-
   const handleChange = (field, value) => {
     setForm((prev) => ({ ...prev, [field]: value }));
     setFieldErrors((prev) => ({ ...prev, [field]: "" }));
@@ -37,13 +29,23 @@ export default function LoginPage() {
 
   const validate = () => {
     const errs = {};
-    if (!form.identifier.trim()) {
-      errs.identifier = tab === "email" ? "Vui lòng nhập email" : "Vui lòng nhập số điện thoại";
-    } else if (tab === "email" && !/^[^\s@]+@gmail\.com$/.test(form.identifier)) {
-      errs.identifier = "Chỉ hỗ trợ đăng nhập bằng tài khoản @gmail.com";
-    } else if (tab === "phone" && !/^\+?\d{9,15}$/.test(form.identifier.replace(/\s/g, ""))) {
-      errs.identifier = "Số điện thoại không hợp lệ";
+    const idVal = form.identifier.trim();
+    if (!idVal) {
+      errs.identifier = "Vui lòng nhập Email hoặc Số điện thoại";
+    } else {
+      const isEmail = idVal.includes("@") || /[a-zA-Z]/.test(idVal);
+      if (isEmail) {
+        if (!/^[^\s@]+@gmail\.com$/.test(idVal)) {
+          errs.identifier = "Chỉ hỗ trợ tài khoản @gmail.com";
+        }
+      } else {
+        const phoneVal = idVal.replace(/\s/g, "");
+        if (!/^(0|\+84)(3|5|7|8|9)\d{8}$/.test(phoneVal)) {
+          errs.identifier = "Số điện thoại không hợp lệ";
+        }
+      }
     }
+    
     if (!form.password) errs.password = "Vui lòng nhập mật khẩu";
     else if (form.password.length < 6) errs.password = "Mật khẩu tối thiểu 6 ký tự";
     setFieldErrors(errs);
@@ -53,10 +55,13 @@ export default function LoginPage() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!validate()) return;
-    const payload =
-      tab === "email"
-        ? { email: form.identifier, password: form.password }
-        : { phone: form.identifier.replace(/\s/g, ""), password: form.password };
+    
+    const idVal = form.identifier.trim();
+    const isEmail = idVal.includes("@") || /[a-zA-Z]/.test(idVal);
+    const payload = isEmail
+        ? { email: idVal, password: form.password }
+        : { phone: idVal.replace(/\s/g, ""), password: form.password };
+        
     const result = await login(payload);
     if (result.success) {
       navigate(result.role === "admin" ? "/admin" : "/chat");
@@ -103,42 +108,24 @@ export default function LoginPage() {
         </div>
         <p className="auth-tagline">Chào mừng bạn quay trở lại 👋</p>
 
-        {/* Tab switcher */}
-        <div className="auth-tabs">
-          <button
-            className={`auth-tab ${tab === "email" ? "active" : ""}`}
-            onClick={() => handleTabChange("email")}
-            type="button"
-          >
-            <FaEnvelope size={13} /> Email
-          </button>
-          <button
-            className={`auth-tab ${tab === "phone" ? "active" : ""}`}
-            onClick={() => handleTabChange("phone")}
-            type="button"
-          >
-            <FaPhone size={13} /> Số điện thoại
-          </button>
-        </div>
-
         {/* Error */}
         {error && <div className="auth-error">{error}</div>}
 
         <form onSubmit={handleSubmit} className="auth-form">
           {/* Identifier */}
           <div className="auth-field">
-            <label>{tab === "email" ? "Email" : "Số điện thoại"}</label>
+            <label>Email hoặc Số điện thoại</label>
             <div className="auth-input-wrap">
               <span className="auth-input-icon">
-                {tab === "email" ? <FaEnvelope size={14} /> : <FaPhone size={14} />}
+                <FaUser size={14} />
               </span>
               <input
-                type={tab === "email" ? "email" : "tel"}
-                placeholder={tab === "email" ? "you@example.com" : "0912 345 678"}
+                type="text"
+                placeholder="you@gmail.com hoặc 0912 345 678"
                 value={form.identifier}
                 onChange={(e) => handleChange("identifier", e.target.value)}
                 className={fieldErrors.identifier ? "has-error" : ""}
-                autoComplete={tab === "email" ? "email" : "tel"}
+                autoComplete="username"
               />
             </div>
             {fieldErrors.identifier && <p className="auth-field-error">{fieldErrors.identifier}</p>}

@@ -6,7 +6,7 @@ const User = require('../models/User');
 const env = require('../config/env');
 const { createMessage } = require('./messageService');
 const presenceService = require('./presenceService');
-const { verifyAccessToken } = require('./tokenService');
+const { verifyAccessToken, getDeviceTokenVersion } = require('./tokenService');
 const { isTokenBlacklisted } = require('./tokenStore');
 const logger = require('../utils/logger');
 
@@ -29,6 +29,15 @@ const emitConversationUpdated = async (conversationId, payload) => {
   if (!conversation) return;
   conversation.participants.forEach((participantId) => {
     io.to(`user:${participantId.toString()}`).emit('conversation_updated', payload);
+  });
+};
+
+const emitMessageRecalled = async (conversationId, payload) => {
+  if (!io) return;
+  const conversation = await Conversation.findById(conversationId).select('participants');
+  if (!conversation) return;
+  conversation.participants.forEach((participantId) => {
+    io.to(`user:${participantId.toString()}`).emit('message_recalled', payload);
   });
 };
 
@@ -78,7 +87,14 @@ const initSocket = (server) => {
       }
 
       const user = await User.findById(payload.sub);
-      if (!user || user.deletedAt || user.tokenVersion !== payload.tokenVersion) {
+      if (!user || user.deletedAt) {
+        return next(new Error('Unauthorized'));
+      }
+
+      // Dùng device-specific tokenVersion (giống HTTP auth middleware)
+      const device = payload.device || 'web';
+      const expectedVersion = getDeviceTokenVersion(user, device);
+      if (expectedVersion !== payload.tokenVersion) {
         return next(new Error('Unauthorized'));
       }
 
@@ -206,4 +222,5 @@ const initSocket = (server) => {
 module.exports = initSocket;
 module.exports.emitToConversation = emitToConversation;
 module.exports.emitConversationUpdated = emitConversationUpdated;
+module.exports.emitMessageRecalled = emitMessageRecalled;
 module.exports.closeSocket = closeSocket;

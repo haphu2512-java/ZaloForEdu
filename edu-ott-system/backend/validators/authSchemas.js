@@ -3,7 +3,7 @@ const { z } = require('zod');
 const phoneSchema = z
   .string()
   .trim()
-  .regex(/^\+?\d{8,15}$/, 'Phone number is invalid');
+  .regex(/^(0|\+84)(3|5|7|8|9)\d{8}$/, 'Số điện thoại Việt Nam không hợp lệ (VD: 0912345678)');
 
 const registerSchema = z
   .object({

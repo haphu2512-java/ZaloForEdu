@@ -3,22 +3,26 @@ import { Link, useNavigate } from "react-router-dom";
 import {
   FaEnvelope, FaLock, FaEye, FaEyeSlash,
   FaPhone, FaUser, FaArrowRight, FaSpinner, FaComments, FaStar, FaShieldAlt,
+  FaCheckCircle, FaRegCircle
 } from "react-icons/fa";
 import { useAuthStore } from "../../store/authStore";
 import "./RegisterPage.css";
 
 const getStrength = (pw) => {
   if (!pw) return null;
-  if (pw.length < 6) return "weak";
-  if (pw.length < 10 || !/[0-9]/.test(pw)) return "medium";
-  return "strong";
+  const hasLen = pw.length >= 6;
+  const hasNum = /[0-9]/.test(pw);
+  const hasUpper = /[A-Z]/.test(pw);
+  
+  if (!hasLen) return "weak";
+  if (hasLen && hasNum && hasUpper) return "strong";
+  return "medium";
 };
 
 export default function RegisterPage() {
   const navigate = useNavigate();
   const { register, isLoading, error, clearError } = useAuthStore();
 
-  const [tab, setTab] = useState("email"); // "email" | "phone"
   const [form, setForm] = useState({
     username: "",
     identifier: "",  // holds email OR phone
@@ -36,13 +40,6 @@ export default function RegisterPage() {
     return () => clearTimeout(t);
   }, []);
 
-  const handleTabChange = (t) => {
-    setTab(t);
-    setForm((prev) => ({ ...prev, identifier: "" }));
-    setFieldErrors({});
-    clearError();
-  };
-
   const handleChange = (field, value) => {
     setForm((prev) => ({ ...prev, [field]: value }));
     setFieldErrors((prev) => ({ ...prev, [field]: "" }));
@@ -54,12 +51,21 @@ export default function RegisterPage() {
     if (form.username.trim() && form.username.trim().length < 3)
       errs.username = "Tên người dùng tối thiểu 3 ký tự";
 
-    if (!form.identifier.trim()) {
-      errs.identifier = tab === "email" ? "Vui lòng nhập email" : "Vui lòng nhập số điện thoại";
-    } else if (tab === "email" && !/^[^\s@]+@gmail\.com$/.test(form.identifier)) {
-      errs.identifier = "Chỉ hỗ trợ đăng ký bằng tài khoản @gmail.com";
-    } else if (tab === "phone" && !/^\+?\d{9,15}$/.test(form.identifier.replace(/\s/g, ""))) {
-      errs.identifier = "Số điện thoại không hợp lệ (VD: 0912345678)";
+    const idVal = form.identifier.trim();
+    if (!idVal) {
+      errs.identifier = "Vui lòng nhập Email hoặc Số điện thoại";
+    } else {
+      const isEmail = idVal.includes("@") || /[a-zA-Z]/.test(idVal);
+      if (isEmail) {
+        if (!/^[^\s@]+@gmail\.com$/.test(idVal)) {
+          errs.identifier = "Chỉ hỗ trợ tài khoản @gmail.com";
+        }
+      } else {
+        const phoneVal = idVal.replace(/\s/g, "");
+        if (!/^(0|\+84)(3|5|7|8|9)\d{8}$/.test(phoneVal)) {
+          errs.identifier = "Số điện thoại không hợp lệ (VD: 0912345678)";
+        }
+      }
     }
 
     if (!form.password) errs.password = "Vui lòng nhập mật khẩu";
@@ -78,22 +84,40 @@ export default function RegisterPage() {
     e.preventDefault();
     if (!validate()) return;
 
+    const idVal = form.identifier.trim();
+    const isEmail = idVal.includes("@") || /[a-zA-Z]/.test(idVal);
+
     const payload = {
       password: form.password,
       ...(form.username.trim() ? { username: form.username.trim() } : {}),
-      ...(tab === "email"
-        ? { email: form.identifier.toLowerCase() }
-        : { phone: form.identifier.replace(/\s/g, "") }),
+      ...(isEmail
+        ? { email: idVal.toLowerCase() }
+        : { phone: idVal.replace(/\s/g, "") }),
     };
 
     const result = await register(payload);
     if (result.success) {
-      // Redirect to OTP verify page, pass the contact method in query
       const query =
         result.registrationMethod === "email"
           ? `email=${encodeURIComponent(result.email)}`
           : `phone=${encodeURIComponent(result.phone)}`;
       navigate(`/verify-otp?${query}`);
+    } else {
+      // Map global error to specific fields
+      const errMsg = (result.error || "").toLowerCase();
+      const newErrs = {};
+      if (errMsg.includes("email") || errMsg.includes("điện thoại") || errMsg.includes("phone")) {
+        newErrs.identifier = result.error;
+      } else if (errMsg.includes("username") || errMsg.includes("người dùng") || errMsg.includes("tên")) {
+        newErrs.username = result.error;
+      } else if (errMsg.includes("password") || errMsg.includes("mật khẩu")) {
+        newErrs.password = result.error;
+      }
+      
+      if (Object.keys(newErrs).length > 0) {
+        setFieldErrors(newErrs);
+        clearError(); // Remove generic top-level error if it's placed in a field
+      }
     }
   };
 
@@ -139,24 +163,6 @@ export default function RegisterPage() {
         </div>
         <p className="auth-tagline">Tạo tài khoản mới ✨</p>
 
-        {/* Tabs */}
-        <div className="auth-tabs">
-          <button
-            className={`auth-tab ${tab === "email" ? "active" : ""}`}
-            onClick={() => handleTabChange("email")}
-            type="button"
-          >
-            <FaEnvelope size={13} /> Email
-          </button>
-          <button
-            className={`auth-tab ${tab === "phone" ? "active" : ""}`}
-            onClick={() => handleTabChange("phone")}
-            type="button"
-          >
-            <FaPhone size={13} /> Số điện thoại
-          </button>
-        </div>
-
         {error && <div className="auth-error">{error}</div>}
 
         <form onSubmit={handleSubmit} className="auth-form">
@@ -179,18 +185,18 @@ export default function RegisterPage() {
 
           {/* Email or Phone */}
           <div className="auth-field">
-            <label>{tab === "email" ? "Email" : "Số điện thoại"}</label>
+            <label>Email hoặc Số điện thoại</label>
             <div className="auth-input-wrap">
               <span className="auth-input-icon">
-                {tab === "email" ? <FaEnvelope size={14} /> : <FaPhone size={14} />}
+                <FaUser size={14} />
               </span>
               <input
-                type={tab === "email" ? "email" : "tel"}
-                placeholder={tab === "email" ? "you@example.com" : "0912 345 678"}
+                type="text"
+                placeholder="you@gmail.com hoặc 0912 345 678"
                 value={form.identifier}
                 onChange={(e) => handleChange("identifier", e.target.value)}
                 className={fieldErrors.identifier ? "has-error" : ""}
-                autoComplete={tab === "email" ? "email" : "tel"}
+                autoComplete="email"
               />
             </div>
             {fieldErrors.identifier && <p className="auth-field-error">{fieldErrors.identifier}</p>}
@@ -214,21 +220,34 @@ export default function RegisterPage() {
               </button>
             </div>
             {form.password && (
-              <div className="auth-strength-bars">
-                {["weak", "medium", "strong"].map((lvl, i) => (
-                  <div
-                    key={lvl}
-                    className={`auth-strength-bar ${
-                      strength === "weak" && i === 0 ? "weak"
-                      : strength === "medium" && i <= 1 ? "medium"
-                      : strength === "strong" ? "strong"
-                      : ""
-                    }`}
-                  />
-                ))}
-                <span className={`auth-strength-label ${strength}`}>
-                  {strength === "weak" ? "Yếu" : strength === "medium" ? "Vừa" : "Mạnh"}
-                </span>
+              <div className="auth-strength-container">
+                <div className="auth-strength-bars">
+                  {["weak", "medium", "strong"].map((lvl, i) => (
+                    <div
+                      key={lvl}
+                      className={`auth-strength-bar ${
+                        strength === "weak" && i === 0 ? "weak"
+                        : strength === "medium" && i <= 1 ? "medium"
+                        : strength === "strong" ? "strong"
+                        : ""
+                      }`}
+                    />
+                  ))}
+                  <span className={`auth-strength-label ${strength}`}>
+                    {strength === "weak" ? "Yếu" : strength === "medium" ? "Vừa" : "Mạnh"}
+                  </span>
+                </div>
+                <ul className="auth-password-hints">
+                  <li className={form.password.length >= 6 ? "valid" : ""}>
+                    {form.password.length >= 6 ? <FaCheckCircle size={11} /> : <FaRegCircle size={11} />} Ít nhất 6 ký tự
+                  </li>
+                  <li className={/[0-9]/.test(form.password) ? "valid" : ""}>
+                    {/[0-9]/.test(form.password) ? <FaCheckCircle size={11} /> : <FaRegCircle size={11} />} Chứa ít nhất một số
+                  </li>
+                  <li className={/[A-Z]/.test(form.password) ? "valid" : ""}>
+                    {/[A-Z]/.test(form.password) ? <FaCheckCircle size={11} /> : <FaRegCircle size={11} />} Chứa chữ in hoa
+                  </li>
+                </ul>
               </div>
             )}
             {fieldErrors.password && <p className="auth-field-error">{fieldErrors.password}</p>}
