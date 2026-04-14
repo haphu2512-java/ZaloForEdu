@@ -1,7 +1,9 @@
 import React from 'react';
 import { FaCloud, FaSearch, FaEllipsisV } from 'react-icons/fa';
+import { useLanguage } from '../../contexts/LanguageContext';
 
 export const CloudHeader = ({ searchQuery, setSearchQuery, onInfo, currentFilter, onFilterChange }) => {
+  const { t } = useLanguage();
   return (
     <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'0 24px', flexShrink:0, height:72, borderBottom:'1px solid var(--border-color)', backgroundColor:'var(--bg-primary)' }}>
       {/* LEFT: Avatar + Title/Filters */}
@@ -15,10 +17,15 @@ export const CloudHeader = ({ searchQuery, setSearchQuery, onInfo, currentFilter
             My Documents
           </div>
           <div style={{ display: 'flex', gap: 6 }}>
-            {['all', 'image', 'file', 'other'].map(tab => (
+            {[
+              { k: 'all', l: t('allTab') },
+              { k: 'image', l: t('imageVideo') },
+              { k: 'file', l: 'File' },
+              { k: 'other', l: t('noteTab') },
+            ].map(tab => (
               <button
                 key={tab}
-                onClick={() => onFilterChange(tab)}
+                onClick={() => onFilterChange(tab.k)}
                 style={{
                   padding: '4px 12px',
                   borderRadius: 16,
@@ -26,11 +33,11 @@ export const CloudHeader = ({ searchQuery, setSearchQuery, onInfo, currentFilter
                   fontSize: 12,
                   fontWeight: 600,
                   cursor: 'pointer',
-                  background: currentFilter === tab ? 'var(--primary-color)' : 'var(--bg-secondary)',
-                  color: currentFilter === tab ? 'white' : 'var(--text-secondary)'
+                  background: currentFilter === tab.k ? 'var(--primary-color)' : 'var(--bg-secondary)',
+                  color: currentFilter === tab.k ? 'white' : 'var(--text-secondary)'
                 }}
               >
-                {tab === 'all' ? 'Tất cả' : tab === 'image' ? 'Ảnh/Video' : tab === 'file' ? 'File' : 'Ghi chú'}
+                {tab.l}
               </button>
             ))}
           </div>
@@ -43,7 +50,7 @@ export const CloudHeader = ({ searchQuery, setSearchQuery, onInfo, currentFilter
           <input
             type="text"
             style={{ background:'transparent', border:'none', outline:'none', fontSize:13, width:'100%', color:'var(--text-primary)' }}
-            placeholder="Tìm kiếm trong My Documents..."
+            placeholder={t('searchPlaceholder')}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />

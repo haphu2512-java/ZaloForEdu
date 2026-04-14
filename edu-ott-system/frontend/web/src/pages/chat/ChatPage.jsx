@@ -12,6 +12,7 @@ import { ShareMessageModal } from "./Modals/ShareMessageModal";
 import { ChatHeader } from "./ChatHeader"; 
 import { MessageInput } from "./MessageInput"; 
 import { useTheme } from '../../contexts/ThemeContext'; 
+import { useLanguage } from '../../contexts/LanguageContext';
 import "./ChatPage.css";
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api/v1";
@@ -80,7 +81,8 @@ export default function ChatPage() {
   const [messages, setMessages] = useState([]);
   const [searchQuery, setSearchQuery] = useState(""); 
   
-  const { appliedTheme } = useTheme(); 
+  const { appliedTheme } = useTheme();
+  const { t } = useLanguage();
   
   const [uploads, setUploads] = useState([]);
   const [isDragging, setIsDragging] = useState(false);
@@ -546,7 +548,7 @@ export default function ChatPage() {
         </div>
         <div className="rs-search-bar">
           <FaSearch color="var(--z-text-secondary)" size={14} />
-          <input placeholder="Tìm kiếm bạn bè, nhóm..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+          <input placeholder={t('searchPlaceholder')} value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
         </div>
         <div className="rs-list">
           {mergedConversations.map((conv) => {
@@ -564,7 +566,7 @@ export default function ChatPage() {
                   </div>
                   <div className="cli-bottom">
                     <span className="cli-msg" style={{ fontWeight: unread > 0 ? 700 : 400, color: unread > 0 ? 'var(--z-text-primary)' : 'var(--z-text-secondary)' }}>
-                        {conv.latestMessage?.isRecalled ? 'Tin nhắn đã thu hồi' : (conv.latestMessage?.content || (conv.latestMessage?.mediaIds?.length > 0 || conv.latestMessage?.attachments?.length > 0 ? '[Hình ảnh/File]' : 'Chưa có tin nhắn'))}
+                        {conv.latestMessage?.isRecalled ? t('recalledMessage') || 'Tin nhắn đã thu hồi' : (conv.latestMessage?.content || (conv.latestMessage?.mediaIds?.length > 0 || conv.latestMessage?.attachments?.length > 0 ? '[Hình ảnh/File]' : t('noMessages') || 'Chưa có tin nhắn'))}
                     </span>
                     {unread > 0 && <div className="cli-unread">{unread > 99 ? '99+' : unread}</div>}
                   </div>
@@ -653,7 +655,7 @@ export default function ChatPage() {
           </div>
           
           <div className="crp-section">
-            <div className="crp-sec-title">Ảnh/Video</div>
+            <div className="crp-sec-title">{t('imageVideo')}</div>
             {imgFiles.length > 0 ? (
               <>
                 <div className="crp-grid">
@@ -663,7 +665,7 @@ export default function ChatPage() {
                 </div>
                 <button className="crp-view-all">Xem tất cả</button>
               </>
-            ) : <div style={{fontSize: 12, color: 'var(--z-text-muted)'}}>Chưa có Ảnh/Video nào</div>}
+            ) : <div style={{fontSize: 12, color: 'var(--z-text-muted)'}}>{t('noImageVideo')}</div>}
           </div>
 
           <div className="crp-section">
