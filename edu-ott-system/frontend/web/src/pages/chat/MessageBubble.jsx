@@ -6,12 +6,14 @@ export const MessageBubble = ({ message, isMe, onReaction }) => {
   const [showPicker, setShowPicker] = useState(false);
   const emojis = ['👍', '❤️', '😂', '😮', '😢'];
 
+  const actualSender = sender || message.senderId;
+
   // Kết hợp mọi định dạng mảng chứa media (API có lúc trả về attachments, có lúc mediaIds)
   const mediaList = message.attachments || message.mediaIds || message.media || [];
 
   const timeString = new Date(createdAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
-  const avatar = sender?.avatarUrl || sender?.avatar || 'https://i.pravatar.cc/150';
-  const name = sender?.fullName || sender?.username || 'Người dùng';
+  const avatar = actualSender?.avatarUrl || actualSender?.avatar || 'https://i.pravatar.cc/150';
+  const name = actualSender?.fullName || actualSender?.username || 'Người dùng';
 
   if (type === 'system') {
     return <div className="msg-system"><span>{content}</span></div>;
@@ -28,13 +30,13 @@ export const MessageBubble = ({ message, isMe, onReaction }) => {
   return (
     <div className={`msg-wrap ${isMe ? 'me' : 'them'}`} onMouseLeave={() => setShowPicker(false)}>
       {!isMe && (
-        <img src={avatar} className="msg-avatar" alt="avatar" style={sender?.isActive === false ? { filter: 'grayscale(1)', opacity: 0.5 } : {}} />
+        <img src={avatar} className="msg-avatar" alt="avatar" style={actualSender?.isActive === false ? { filter: 'grayscale(1)', opacity: 0.5 } : {}} />
       )}
       
       <div className="msg-body">
-        {!isMe && sender && (
+        {!isMe && actualSender && (
           <div className="msg-sender-name">
-            {name} {sender.isActive === false && <span style={{color: '#EF4444', fontSize: '10px'}}>(Vô hiệu hóa)</span>}
+            {name} {actualSender.isActive === false && <span style={{color: '#EF4444', fontSize: '10px'}}>(Vô hiệu hóa)</span>}
           </div>
         )}
         
