@@ -202,14 +202,26 @@ export default function ChatPage() {
       }
       const other = getOtherParticipant(conv);
       const otherId = other && typeof other === 'object' ? String(other._id || other.id) : null;
-      if (otherId && friendIds.has(otherId)) {
+      const isOtherFriend = otherId && friendIds.has(otherId);
+
+      if (isOtherFriend) {
         friendConvs.push(conv);
       } else {
-        strangerConvs.push(conv);
+        // Chỉ vào "Người lạ" nếu người kia là người gửi tin nhắn đầu tiên
+        // (tức là họ nhắn cho mình, không phải mình chủ động nhắn)
+        const latestSenderId = conv.latestMessage?.senderId?._id || conv.latestMessage?.senderId;
+        const iInitiated = !latestSenderId || String(latestSenderId) === String(userId);
+        if (iInitiated) {
+          // Mình chủ động nhắn → hiện bình thường trong danh sách
+          friendConvs.push(conv);
+        } else {
+          // Người lạ nhắn cho mình → vào "Tin nhắn từ người lạ"
+          strangerConvs.push(conv);
+        }
       }
     });
     return { friendConvs, strangerConvs };
-  }, [mergedConversations, friendIds, getOtherParticipant]);
+  }, [mergedConversations, friendIds, getOtherParticipant, userId]);
 
   const displayedConvs = activeTab === 'strangers' ? strangerConvs : friendConvs;
 

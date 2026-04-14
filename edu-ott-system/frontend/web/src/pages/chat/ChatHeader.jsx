@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FaPhone, FaVideo, FaEllipsisV, FaUsers, FaFileAlt, FaUserPlus } from 'react-icons/fa';
+import { FaPhone, FaVideo, FaEllipsisV, FaUsers, FaFileAlt, FaUserPlus, FaCheck } from 'react-icons/fa';
 import { useAuthStore } from '../../store/authStore';
 import { socketService } from '../../services/socketService';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -11,6 +11,7 @@ export const ChatHeader = ({ room, onCall, onVideo, onInfo }) => {
   const currentUser = useAuthStore((state) => state.user);
   const { appliedTheme } = useTheme();
   const isDark = appliedTheme === 'dark';
+  const [friendRequestSent, setFriendRequestSent] = useState(false);
 
   if (!room) return null;
 
@@ -21,7 +22,7 @@ export const ChatHeader = ({ room, onCall, onVideo, onInfo }) => {
   const handleSendFriendRequest = async () => {
     try {
       await friendService.sendFriendRequest(room.strangerId);
-      alert('Đã gửi lời mời kết bạn!');
+      setFriendRequestSent(true);
     } catch (err) {
       alert(err.response?.data?.message || 'Không thể gửi lời mời kết bạn');
     }
@@ -129,12 +130,21 @@ export const ChatHeader = ({ room, onCall, onVideo, onInfo }) => {
       <div className="flex items-center gap-3">
         {/* Nút Gửi kết bạn khi chat với người lạ */}
         {isStranger && (
-          <button
-            onClick={handleSendFriendRequest}
-            style={{ display:'flex', alignItems:'center', gap:6, padding:'7px 14px', borderRadius:8, border:'1px solid var(--z-primary)', background:'transparent', color:'var(--z-primary)', cursor:'pointer', fontWeight:600, fontSize:13 }}
-          >
-            <FaUserPlus size={13} /> Gửi kết bạn
-          </button>
+          friendRequestSent || room.friendRequestSent ? (
+            <button
+              disabled
+              style={{ display:'flex', alignItems:'center', gap:6, padding:'7px 14px', borderRadius:8, border:'1px solid var(--border-color)', background:'var(--bg-secondary)', color:'var(--text-secondary)', cursor:'not-allowed', fontWeight:600, fontSize:13 }}
+            >
+              <FaCheck size={13} /> Đã gửi lời mời
+            </button>
+          ) : (
+            <button
+              onClick={handleSendFriendRequest}
+              style={{ display:'flex', alignItems:'center', gap:6, padding:'7px 14px', borderRadius:8, border:'1px solid var(--primary-color)', background:'transparent', color:'var(--primary-color)', cursor:'pointer', fontWeight:600, fontSize:13 }}
+            >
+              <FaUserPlus size={13} /> Gửi kết bạn
+            </button>
+          )
         )}
         {isClass && (
           <div className={`flex gap-3 mr-4 border-r ${isDark ? 'border-gray-700' : 'border-gray-200'} pr-5`}>

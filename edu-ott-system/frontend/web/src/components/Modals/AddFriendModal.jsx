@@ -1,282 +1,233 @@
 import { useState, useEffect } from "react";
-import { 
-  FaSearch, FaUserPlus, FaTimes, FaSpinner, FaCheck, 
-  FaInfoCircle, FaCommentDots, FaClock, FaHistory 
+import {
+  FaSearch, FaUserPlus, FaTimes, FaSpinner, FaCheck,
+  FaCommentDots, FaClock, FaUserFriends
 } from "react-icons/fa";
 import { friendService } from "../../services/friendService";
-import { useLanguage } from "../../contexts/LanguageContext";
 import { useFriendStore } from "../../store/friendStore";
 import { useAuthStore } from "../../store/authStore";
 import { useNavigate } from "react-router-dom";
-import "./AddFriendModal.css";
-import axios from 'axios';
+import api from "../../services/authService";
+
 export default function AddFriendModal({ isOpen, onClose }) {
-  const { t } = useLanguage();
   const navigate = useNavigate();
   const { user: currentUser } = useAuthStore();
-  const { 
-    friends, 
-    incomingRequests, 
-    outgoingRequests, 
-    fetchFriends, 
-    fetchIncomingRequests, 
-    fetchOutgoingRequests 
-  } = useFriendStore();
+  const { friends, incomingRequests, outgoingRequests, fetchFriends, fetchIncomingRequests, fetchOutgoingRequests } = useFriendStore();
 
-  const [phone, setPhone] = useState("");
+  const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(false);
+  const [chatLoading, setChatLoading] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
-  const [success, setSuccess] = useState(false);
-  const [recentSearches, setRecentSearches] = useState([]);
+  const [requestSent, setRequestSent] = useState(false);
 
-  // Load friends and requests once to ensure status checks are accurate
   useEffect(() => {
     if (isOpen && currentUser) {
-      if (friends.length === 0) fetchFriends();
-      if (incomingRequests.length === 0) fetchIncomingRequests();
-      if (outgoingRequests.length === 0) fetchOutgoingRequests();
-      
-      const storageKey = `recentSearches_${currentUser._id}`;
-      const saved = JSON.parse(localStorage.getItem(storageKey) || "[]");
-      setRecentSearches(saved);
-      setPhone("");
-      setResult(null);
-      setError("");
-      setSuccess(false);
+      fetchFriends();
+      fetchIncomingRequests();
+      fetchOutgoingRequests();
+      setQuery(""); setResult(null); setError(""); setRequestSent(false);
     }
   }, [isOpen, currentUser]);
 
   if (!isOpen) return null;
 
-  const saveRecentSearch = (phoneNum) => {
-    if (!currentUser) return;
-    const storageKey = `recentSearches_${currentUser._id}`;
-    let updated = [phoneNum, ...recentSearches.filter(p => p !== phoneNum)];
-    updated = updated.slice(0, 5); // Keep last 5
-    setRecentSearches(updated);
-    localStorage.setItem(storageKey, JSON.stringify(updated));
-  };
-
-  const handleSearch = async (e) => {
-    if (e) e.preventDefault();
-    if (!phone.trim()) return;
-
-    setLoading(true);
-    setError("");
-    setResult(null);
-    setSuccess(false);
-
-    try {
-      const data = await friendService.searchUsers(phone.trim());
-      if (data.items && data.items.length > 0) {
-        // Zalo priorities exact phone match
-        const found = data.items.find(u => u.phone === phone.trim()) || data.items[0];
-        setResult(found);
-        saveRecentSearch(phone.trim());
-      } else {
-        setError("Không tìm thấy kết quả. Vui lòng thử tìm bằng SĐT, email hoặc tên người dùng khác.");
-      }
-    } catch (err) {
-      setError("Đã xảy ra lỗi khi kết nối với máy chủ.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleAddFriend = async () => {
-    if (!result) return;
-    setLoading(true);
-    try {
-      await friendService.sendFriendRequest(result._id || result.id);
-      setSuccess(true);
-      fetchOutgoingRequests(); // Refresh status
-    } catch (err) {
-      setError(err.response?.data?.message || "Không thể gửi lời mời kết bạn.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const removeRecent = (e, p) => {
-    e.stopPropagation();
-    if (!currentUser) return;
-    const storageKey = `recentSearches_${currentUser._id}`;
-    const updated = recentSearches.filter(item => item !== p);
-    setRecentSearches(updated);
-    localStorage.setItem(storageKey, JSON.stringify(updated));
-  };
-
-  // Determine relationship status for UI
-  const getFriendStatus = () => {
+  const getStatus = () => {
     if (!result || !currentUser) return null;
-    const targetId = result._id || result.id;
-    
-    if (targetId === currentUser._id) return "self";
-    if (friends.some(f => (f._id || f.id) === targetId)) return "friend";
-    if (outgoingRequests.some(r => r.toUserId?._id === targetId || r.toUserId === targetId)) return "outgoing";
-    if (incomingRequests.some(r => r.fromUserId?._id === targetId || r.fromUserId === targetId)) return "incoming";
-    
+    const id = result._id || result.id;
+    if (id === (currentUser._id || currentUser.id)) return "self";
+    if (friends.some(f => (f._id || f.id) === id)) return "friend";
+    if (outgoingRequests.some(r => (r.toUserId?._id || r.toUserId) === id)) return "outgoing";
+    if (incomingRequests.some(r => (r.fromUserId?._id || r.fromUserId) === id)) return "incoming";
     return "none";
   };
 
-  const status = getFriendStatus();
+  const status = getStatus();
 
- const handleAction = async (forceChat = false) => {
-    if (status === "friend" || forceChat) {
-      try {
-        setLoading(true);
-        const targetId = result._id || result.id;
-        const token = localStorage.getItem("token");
-        const apiBase = import.meta.env.VITE_API_URL || "http://localhost:5000/api/v1";
-        const res = await axios.post(
-          `${apiBase}/conversations`,
-          { type: "direct", participantIds: [targetId] },
-          { headers: { Authorization: `Bearer ${token}` } }
-        );
-        onClose();
-        const conversationId = res.data.data._id;
-        navigate("/chat", { state: { activeConversationId: conversationId } });
-      } catch (err) {
-        setError("Không thể mở cuộc trò chuyện lúc này.");
-      } finally {
-        setLoading(false);
-      }
-    } else if (status === "none") {
-      handleAddFriend();
-    }
+  const handleSearch = async (e) => {
+    e?.preventDefault();
+    if (!query.trim()) return;
+    setLoading(true); setError(""); setResult(null); setRequestSent(false);
+    try {
+      const data = await friendService.searchUsers(query.trim());
+      const found = data.items?.find(u => u.phone === query.trim()) || data.items?.[0];
+      if (found) setResult(found);
+      else setError("Không tìm thấy người dùng nào.");
+    } catch { setError("Lỗi kết nối máy chủ."); }
+    finally { setLoading(false); }
   };
 
+  const handleSendRequest = async () => {
+    setLoading(true);
+    try {
+      await friendService.sendFriendRequest(result._id || result.id);
+      setRequestSent(true);
+      fetchOutgoingRequests();
+    } catch (err) {
+      setError(err.response?.data?.message || "Không thể gửi lời mời.");
+    } finally { setLoading(false); }
+  };
+
+  const handleChat = async () => {
+    setChatLoading(true);
+    try {
+      const res = await api.post("/conversations", {
+        type: "direct",
+        participantIds: [result._id || result.id],
+      });
+      onClose();
+      navigate("/chat", { state: { activeConversationId: res.data.data._id } });
+    } catch { setError("Không thể mở cuộc trò chuyện."); }
+    finally { setChatLoading(false); }
+  };
+
+  const avatarBg = ['#0068FF','#10B981','#F59E0B','#EF4444','#8B5CF6'];
+  const getColor = (name) => avatarBg[(name?.charCodeAt(0) || 0) % avatarBg.length];
+
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content add-friend-modal" onClick={e => e.stopPropagation()}>
-        <div className="modal-header">
-          <div className="header-text">
-            <h3>Thêm bạn mới</h3>
-            <p>Tìm kiếm qua số điện thoại, email hoặc tên người dùng</p>
+    <div
+      style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', zIndex:9999, display:'flex', alignItems:'center', justifyContent:'center' }}
+      onClick={onClose}
+    >
+      <div
+        style={{ background:'var(--bg-primary)', borderRadius:12, width:420, boxShadow:'0 8px 32px rgba(0,0,0,0.18)', overflow:'hidden' }}
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div style={{ padding:'18px 20px 14px', borderBottom:'1px solid var(--border-color)', display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
+          <div>
+            <div style={{ fontWeight:700, fontSize:16, color:'var(--text-primary)' }}>Thêm bạn mới</div>
+            <div style={{ fontSize:12, color:'var(--text-secondary)', marginTop:2 }}>Tìm qua số điện thoại, email hoặc tên người dùng</div>
           </div>
-          <button className="close-btn" onClick={onClose}><FaTimes /></button>
+          <button onClick={onClose} style={{ background:'none', border:'none', cursor:'pointer', color:'var(--text-secondary)', padding:4, borderRadius:6 }}>
+            <FaTimes size={16} />
+          </button>
         </div>
 
-        <div className="modal-body">
-          <div className="search-section">
-            <form onSubmit={handleSearch} className="search-container">
-              <div className="premium-input-group">
-                <FaSearch className="input-icon" />
-                <input
-                  type="text"
-                  placeholder="Nhập SĐT, email hoặc tên người dùng..."
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  autoFocus
-                />
-                {phone && (
-                  <button type="button" className="clear-search-btn" onClick={() => setPhone("")}>
-                    <FaTimes />
-                  </button>
-                )}
-              </div>
-              <button 
-                type="submit" 
-                className="search-btn-premium" 
-                disabled={loading || !phone.trim()}
-              >
-                {loading ? <FaSpinner className="spin" /> : "Tìm kiếm"}
-              </button>
-            </form>
-            {error && <div className="search-error"><FaInfoCircle /> {error}</div>}
-          </div>
-
-          {!result && recentSearches.length > 0 && (
-            <div className="recent-searches">
-              <span className="section-label"><FaHistory /> Tìm kiếm gần đây</span>
-              <div className="recent-list">
-                {recentSearches.map((p, idx) => (
-                  <div key={idx} className="recent-chip" onClick={() => { setPhone(p); }}>
-                    {p}
-                    <button className="remove-recent" onClick={(e) => removeRecent(e, p)}>
-                      <FaTimes fontSize={10} />
-                    </button>
-                  </div>
-                ))}
-              </div>
+        {/* Search */}
+        <div style={{ padding:'16px 20px' }}>
+          <form onSubmit={handleSearch} style={{ display:'flex', gap:8 }}>
+            <div style={{ flex:1, display:'flex', alignItems:'center', gap:8, background:'var(--input-bg)', border:'1px solid var(--border-color)', borderRadius:8, padding:'8px 12px' }}>
+              <FaSearch size={13} color="var(--text-tertiary)" />
+              <input
+                autoFocus
+                value={query}
+                onChange={e => setQuery(e.target.value)}
+                placeholder="Nhập SĐT, email hoặc tên..."
+                style={{ flex:1, border:'none', background:'transparent', outline:'none', fontSize:14, color:'var(--text-primary)' }}
+              />
+              {query && (
+                <button type="button" onClick={() => { setQuery(''); setResult(null); setError(''); }} style={{ background:'none', border:'none', cursor:'pointer', color:'var(--text-tertiary)', padding:0 }}>
+                  <FaTimes size={12} />
+                </button>
+              )}
             </div>
-          )}
+            <button
+              type="submit"
+              disabled={loading || !query.trim()}
+              style={{ padding:'8px 18px', background:'var(--primary-color)', color:'#fff', border:'none', borderRadius:8, fontWeight:600, fontSize:14, cursor:'pointer', opacity: (!query.trim() || loading) ? 0.6 : 1 }}
+            >
+              {loading ? <FaSpinner className="spin" size={14} /> : 'Tìm kiếm'}
+            </button>
+          </form>
 
-          {result && (
-            <div className="profile-card-premium">
-              <div className="profile-avatar-wrap">
-                <div className="status-ring"></div>
-                <div className="premium-avatar">
-                  {result.avatarUrl ? (
-                    <img src={result.avatarUrl} alt="" />
-                  ) : (
-                    result.username?.[0]?.toUpperCase() || "U"
-                  )}
-                </div>
-              </div>
-              
-              <div className="profile-info">
-                <h4>{result.username}</h4>
-                <p className="phone-sub">{result.phone || result.email || ""}</p>
-              </div>
-
-              <div className={`relationship-badge ${status}`}>
-                {status === "friend" && <><FaCheck /> Đã là bạn bè</>}
-                {status === "outgoing" && <><FaClock /> Đã gửi lời mời</>}
-                {status === "incoming" && <><FaClock /> Đang chờ bạn xác nhận</>}
-                {status === "self" && <>Đây là bạn</>}
-                {status === "none" && success && <><FaCheck /> Gửi yêu cầu thành công</>}
-                {status === "none" && !success && <>Chưa có kết nối</>}
-              </div>
-
-              <div className="profile-actions">
-                {status === "friend" && (
-                  <button className="action-btn-premium btn-primary-premium" onClick={handleAction}>
-                    <FaCommentDots /> Nhắn tin ngay
-                  </button>
-                )}
-                
-                {status === "none" && !success && (
-                  <div style={{ display:'flex', gap:8 }}>
-                    <button 
-                      className="action-btn-premium btn-primary-premium" 
-                      onClick={handleAction}
-                      disabled={loading}
-                    >
-                      {loading ? <FaSpinner className="spin" /> : <><FaUserPlus /> Kết bạn</>}
-                    </button>
-                    <button
-                      className="action-btn-premium"
-                      style={{ background:'#f0f2f5', color:'#050505', border:'none' }}
-                      onClick={() => handleAction(true)}
-                      disabled={loading}
-                    >
-                      <FaCommentDots /> Nhắn tin
-                    </button>
-                  </div>
-                )}
-
-                {status === "outgoing" && (
-                  <button className="action-btn-premium btn-disabled-premium" disabled>
-                    Đã gửi yêu cầu
-                  </button>
-                )}
-
-                {status === "incoming" && (
-                  <button className="action-btn-premium btn-primary-premium" onClick={() => navigate("/contacts")}>
-                    Xem lời mời kết bạn
-                  </button>
-                )}
-              </div>
+          {error && (
+            <div style={{ marginTop:10, fontSize:13, color:'#ef4444', display:'flex', alignItems:'center', gap:6 }}>
+              <FaTimes size={12} /> {error}
             </div>
           )}
         </div>
-        
-        <div className="modal-footer">
-          <div className="footer-tip">
-            <FaInfoCircle /> Tìm kiếm bằng số điện thoại, email hoặc tên người dùng.
+
+        {/* Result */}
+        {result && (
+          <div style={{ padding:'0 20px 20px' }}>
+            <div style={{ border:'1px solid var(--border-color)', borderRadius:10, padding:'20px', display:'flex', flexDirection:'column', alignItems:'center', gap:10 }}>
+              {/* Avatar */}
+              <div style={{ width:72, height:72, borderRadius:'50%', overflow:'hidden', background: getColor(result.username), display:'flex', alignItems:'center', justifyContent:'center', fontSize:28, fontWeight:700, color:'#fff', flexShrink:0 }}>
+                {result.avatarUrl
+                  ? <img src={result.avatarUrl} alt="" style={{ width:'100%', height:'100%', objectFit:'cover' }} />
+                  : (result.username?.[0]?.toUpperCase() || 'U')
+                }
+              </div>
+
+              {/* Name & info */}
+              <div style={{ textAlign:'center' }}>
+                <div style={{ fontWeight:700, fontSize:16, color:'var(--text-primary)' }}>{result.username}</div>
+                <div style={{ fontSize:12, color:'var(--text-secondary)', marginTop:2 }}>{result.phone || result.email || ''}</div>
+              </div>
+
+              {/* Status badge */}
+              <div style={{ fontSize:12, padding:'4px 12px', borderRadius:20, background:'var(--bg-secondary)', color:'var(--text-secondary)', display:'flex', alignItems:'center', gap:5 }}>
+                {status === 'friend' && <><FaUserFriends size={11} /> Đã là bạn bè</>}
+                {status === 'outgoing' && <><FaClock size={11} /> Đã gửi lời mời kết bạn</>}
+                {status === 'incoming' && <><FaClock size={11} /> Đang chờ bạn xác nhận</>}
+                {status === 'self' && <>Đây là tài khoản của bạn</>}
+                {status === 'none' && !requestSent && <>Chưa có kết nối</>}
+                {status === 'none' && requestSent && <><FaCheck size={11} color="#10B981" /> Đã gửi lời mời kết bạn</>}
+              </div>
+
+              {/* Actions */}
+              <div style={{ display:'flex', gap:8, marginTop:4 }}>
+                {/* Nhắn tin — luôn hiện trừ self */}
+                {status !== 'self' && (
+                  <button
+                    onClick={handleChat}
+                    disabled={chatLoading}
+                    style={{ display:'flex', alignItems:'center', gap:6, padding:'8px 16px', borderRadius:8, border:'1px solid var(--border-color)', background:'var(--bg-secondary)', color:'var(--text-primary)', cursor:'pointer', fontWeight:600, fontSize:13 }}
+                  >
+                    {chatLoading ? <FaSpinner size={13} className="spin" /> : <FaCommentDots size={13} />}
+                    Nhắn tin
+                  </button>
+                )}
+
+                {/* Kết bạn — chỉ khi chưa kết bạn */}
+                {status === 'none' && !requestSent && (
+                  <button
+                    onClick={handleSendRequest}
+                    disabled={loading}
+                    style={{ display:'flex', alignItems:'center', gap:6, padding:'8px 16px', borderRadius:8, border:'none', background:'var(--primary-color)', color:'#fff', cursor:'pointer', fontWeight:600, fontSize:13 }}
+                  >
+                    {loading ? <FaSpinner size={13} className="spin" /> : <FaUserPlus size={13} />}
+                    Kết bạn
+                  </button>
+                )}
+
+                {/* Đã gửi lời mời */}
+                {(status === 'outgoing' || requestSent) && (
+                  <button disabled style={{ display:'flex', alignItems:'center', gap:6, padding:'8px 16px', borderRadius:8, border:'1px solid var(--border-color)', background:'var(--bg-secondary)', color:'var(--text-secondary)', cursor:'not-allowed', fontWeight:600, fontSize:13 }}>
+                    <FaCheck size={13} /> Đã gửi lời mời
+                  </button>
+                )}
+
+                {/* Xem lời mời đến */}
+                {status === 'incoming' && (
+                  <button
+                    onClick={() => { onClose(); navigate('/contacts'); }}
+                    style={{ display:'flex', alignItems:'center', gap:6, padding:'8px 16px', borderRadius:8, border:'none', background:'var(--primary-color)', color:'#fff', cursor:'pointer', fontWeight:600, fontSize:13 }}
+                  >
+                    <FaCheck size={13} /> Xem lời mời
+                  </button>
+                )}
+
+                {/* Nhắn tin ngay nếu đã là bạn */}
+                {status === 'friend' && (
+                  <button
+                    onClick={handleChat}
+                    disabled={chatLoading}
+                    style={{ display:'flex', alignItems:'center', gap:6, padding:'8px 16px', borderRadius:8, border:'none', background:'var(--primary-color)', color:'#fff', cursor:'pointer', fontWeight:600, fontSize:13 }}
+                  >
+                    {chatLoading ? <FaSpinner size={13} className="spin" /> : <FaCommentDots size={13} />}
+                    Nhắn tin ngay
+                  </button>
+                )}
+              </div>
+            </div>
           </div>
+        )}
+
+        {/* Footer */}
+        <div style={{ padding:'12px 20px', borderTop:'1px solid var(--border-color)', fontSize:12, color:'var(--text-tertiary)', display:'flex', alignItems:'center', gap:6 }}>
+          <FaSearch size={11} /> Tìm kiếm bằng số điện thoại, email hoặc tên người dùng.
         </div>
       </div>
     </div>
