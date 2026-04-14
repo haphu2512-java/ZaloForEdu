@@ -121,7 +121,10 @@ export default function MyDocumentsPage(){
       const sendRes=await chatService.sendMessage(payload);
       const newMsg=sendRes.data?.data;
       if(newMsg){
-        newMsg.media=[{ ...media, url: toAbsoluteUrl(media.url) }];
+        // Gắn media object đầy đủ vào cả media lẫn mediaIds để render ngay
+        const normalizedMedia = { ...media, url: toAbsoluteUrl(media.url) };
+        newMsg.media=[normalizedMedia];
+        newMsg.mediaIds=[normalizedMedia];
         if(replySnapshot && !newMsg.replyTo){
           newMsg.replyTo = replySnapshot;
         }
