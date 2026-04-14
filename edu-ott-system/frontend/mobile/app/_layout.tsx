@@ -54,6 +54,22 @@ function RootLayoutNav() {
   const colorScheme = useColorScheme();
 
   return (
+<<<<<<< HEAD:edu-ott-system/frontend/mobile-app/app/_layout.tsx
+    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+      <AuthProvider>
+        <Stack>
+          <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+          <Stack.Screen name="chat/[id]" options={{ headerShown: false }} />
+          <Stack.Screen name="class/[id]" options={{ headerShown: false }} />
+          <Stack.Screen name="class/create" options={{ headerShown: false, presentation: 'modal' }} />
+          <Stack.Screen name="group/[id]" options={{ headerShown: false }} />
+          <Stack.Screen name="group/create" options={{ headerShown: false, presentation: 'modal' }} />
+          <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
+        </Stack>
+      </AuthProvider>
+    </ThemeProvider>
+=======
     <SafeAreaProvider>
       <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
         <AuthProvider>
@@ -67,6 +83,7 @@ function RootLayoutNav() {
         </AuthProvider>
       </ThemeProvider>
     </SafeAreaProvider>
+>>>>>>> Refactor_Project:edu-ott-system/frontend/mobile/app/_layout.tsx
   );
 }
 

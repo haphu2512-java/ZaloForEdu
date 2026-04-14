@@ -1,0 +1,609 @@
+/* ═══════════════════════════════════════════════════════════════
+   theme.css — Global CSS Variable System (Light / Dark)
+   Áp dụng cho TOÀN BỘ ứng dụng qua data-theme trên <html>
+═══════════════════════════════════════════════════════════════ */
+
+/* ── Light Mode (default) ───────────────────────────────────── */
+:root {
+  --bg-primary:     #ffffff;
+  --bg-secondary:   #f3f4f6;
+  --bg-tertiary:    #f8fafc;
+  --bg-hover:       #f9fafb;
+  --bg-active:      #eff6ff;
+
+  --text-primary:   #111827;
+  --text-secondary: #6b7280;
+  --text-tertiary:  #9ca3af;
+
+  --border-color:   #e5e7eb;
+  --border-light:   #f3f4f6;
+
+  --primary-color:  #0068FF;
+  --primary-hover:  #005AE0;
+  --primary-light:  #eff6ff;
+  --primary-rgb:    0, 104, 255;
+
+  --shadow-sm:      0 1px 3px rgba(0,0,0,0.06);
+  --shadow-md:      0 4px 12px rgba(0,0,0,0.07);
+  --shadow-lg:      0 8px 30px rgba(0,0,0,0.1);
+
+  --input-bg:       #f9fafb;
+  --sidebar-bg:     #0068FF;
+
+  --auth-left-bg:   linear-gradient(135deg, #f0f9ff 0%, #eef2ff 100%);
+  --auth-blob-opacity: 0.6;
+}
+
+/* ── Dark Mode ──────────────────────────────────────────────── */
+[data-theme="dark"] {
+  --bg-primary:     #121212;
+  --bg-secondary:   #0a0a0a;
+  --bg-tertiary:    #1e1e1e;
+  --bg-hover:       #242424;
+  --bg-active:      rgba(59,130,246,0.15);
+
+  --text-primary:   #f8fafc;
+  --text-secondary: #94a3b8;
+  --text-tertiary:  #64748b;
+
+  --border-color:   #2a2a2a;
+  --border-light:   #1e1e1e;
+
+  --primary-color:  #3b82f6;
+  --primary-hover:  #60a5fa;
+  --primary-light:  rgba(59,130,246,0.2);
+  --primary-rgb:    59, 130, 246;
+
+  --shadow-sm:      0 1px 3px rgba(0,0,0,0.5);
+  --shadow-md:      0 4px 12px rgba(0,0,0,0.6);
+  --shadow-lg:      0 8px 30px rgba(0,0,0,0.7);
+
+  --input-bg:       #1e1e1e;
+  --sidebar-bg:     #111827;
+
+  --auth-left-bg:   linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%);
+  --auth-blob-opacity: 0.2;
+}
+
+/* ── Global Transitions ─────────────────────────────────────── */
+*, *::before, *::after {
+  transition: background-color 0.25s ease, border-color 0.25s ease, color 0.2s ease;
+}
+/* Exceptions */
+svg, img, button > svg { transition: none; }
+
+/* ── Force text colors in dark mode ─────────────────────────── */
+/* Ngăn text bị đen khi dark mode kế thừa các CSS cũ có hardcode màu */
+[data-theme="dark"] *:not(button):not(a) {
+  /* KHÔNG override màu tất cả - chỉ ghi đè khi màu được set cứng */
+}
+
+/* Ensure key text containers luôn có màu đúng */
+[data-theme="dark"] .room-name,
+[data-theme="dark"] .rs-title,
+[data-theme="dark"] .ch-name,
+[data-theme="dark"] .crp-name,
+[data-theme="dark"] .cs-title,
+[data-theme="dark"] .mfc-name {
+  color: #f1f5f9 !important;
+}
+
+[data-theme="dark"] .room-last,
+[data-theme="dark"] .room-time,
+[data-theme="dark"] .ch-sub,
+[data-theme="dark"] .msg-time,
+[data-theme="dark"] .msg-sender,
+[data-theme="dark"] .crp-section-title {
+  color: #94a3b8 !important;
+}
+
+[data-theme="dark"] .room-item {
+  border-color: #252525 !important;
+}
+
+/* Room list sidebar - force dark background */
+[data-theme="dark"] .room-sidebar {
+  background-color: #1e1e1e !important;
+}
+
+/* Chat messages area */
+[data-theme="dark"] .chat-messages {
+  background-color: #141414 !important;
+}
+
+/* Room item colors in dark */
+[data-theme="dark"] .room-item:hover {
+  background-color: #252525 !important;
+}
+
+[data-theme="dark"] .room-item.active {
+  background-color: rgba(59,130,246,0.12) !important;
+}
+
+/* rs-search */
+[data-theme="dark"] .rs-search {
+  background-color: #252525 !important;
+  border-color: #2e3a4a !important;
+}
+[data-theme="dark"] .rs-search input {
+  color: #f1f5f9 !important;
+}
+
+/* chat-header */
+[data-theme="dark"] .chat-header {
+  background-color: #1e1e1e !important;
+  border-color: #2e3a4a !important;
+}
+
+/* input bar */
+[data-theme="dark"] .chat-input-bar {
+  background-color: #1e1e1e !important;
+  border-color: #2e3a4a !important;
+}
+[data-theme="dark"] .cib-input {
+  background-color: #252525 !important;
+  border-color: #2e3a4a !important;
+}
+[data-theme="dark"] .cib-input input {
+  color: #f1f5f9 !important;
+}
+[data-theme="dark"] .cib-btn {
+  color: #94a3b8 !important;
+}
+[data-theme="dark"] .cib-btn:hover {
+  color: #3b82f6 !important;
+  background-color: rgba(59,130,246,0.1) !important;
+}
+
+/* Right panel */
+[data-theme="dark"] .chat-right-panel {
+  background-color: #1e1e1e !important;
+  border-color: #2e3a4a !important;
+}
+
+/* Btn icon in header */
+[data-theme="dark"] .ch-btn-icon {
+  background-color: #252525 !important;
+  border-color: #2e3a4a !important;
+  color: #94a3b8 !important;
+}
+[data-theme="dark"] .ch-btn-icon:hover {
+  color: #3b82f6 !important;
+  background-color: rgba(59,130,246,0.1) !important;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   GLOBAL DARK MODE OVERRIDES
+   Áp dụng toàn bộ không cần sửa từng CSS file riêng
+═══════════════════════════════════════════════════════════ */
+
+/* ── Layout ── */
+body {
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
+.main-layout {
+  background-color: var(--bg-secondary);
+}
+
+.sidebar {
+  background-color: var(--sidebar-bg) !important;
+}
+
+.main-content {
+  background-color: var(--bg-secondary);
+}
+
+/* ── Chat Page ── */
+.chat-page {
+  background-color: var(--bg-secondary);
+}
+
+.room-sidebar {
+  background-color: var(--bg-primary) !important;
+  border-color: var(--border-color) !important;
+}
+
+.rs-header {
+  background-color: var(--bg-primary);
+  border-color: var(--border-color);
+}
+
+.rs-title {
+  color: var(--text-primary);
+}
+
+.rs-search {
+  background-color: var(--input-bg);
+  border-color: var(--border-color);
+}
+
+.rs-search input {
+  background-color: transparent;
+  color: var(--text-primary);
+}
+
+.rs-search input::placeholder {
+  color: var(--text-tertiary);
+}
+
+.rs-tabs {
+  border-color: var(--border-color);
+  background-color: var(--bg-primary);
+}
+
+.rs-tab {
+  color: var(--text-tertiary);
+}
+.rs-tab.active {
+  color: var(--primary-color);
+  border-bottom-color: var(--primary-color);
+}
+
+/* Room items */
+.room-item {
+  background-color: var(--bg-primary);
+  border-color: var(--border-light);
+}
+.room-item:hover {
+  background-color: var(--bg-hover);
+}
+.room-item.active {
+  background-color: var(--bg-active);
+}
+.room-name {
+  color: var(--text-primary);
+}
+.room-last, .room-time {
+  color: var(--text-tertiary);
+}
+.room-menu {
+  background-color: var(--bg-primary);
+  border-color: var(--border-color);
+}
+.rm-item {
+  color: var(--text-primary);
+}
+.rm-item:hover {
+  background-color: var(--bg-hover);
+}
+.room-options {
+  color: var(--text-tertiary);
+}
+.room-options:hover {
+  background-color: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+/* Chat main */
+.chat-main {
+  background-color: var(--bg-primary);
+}
+
+.chat-header {
+  background-color: var(--bg-primary);
+  border-color: var(--border-color);
+}
+
+.ch-name {
+  color: var(--text-primary);
+}
+.ch-sub {
+  color: var(--text-secondary);
+}
+
+.ch-btn {
+  background-color: var(--bg-secondary);
+  border-color: var(--border-color);
+  color: var(--text-secondary);
+}
+.ch-btn:hover {
+  background-color: var(--primary-light);
+  border-color: var(--primary-color);
+  color: var(--primary-color);
+}
+
+.ch-btn-icon {
+  background-color: var(--bg-secondary);
+  border-color: var(--border-color);
+  color: var(--text-secondary);
+}
+.ch-btn-icon:hover {
+  background-color: var(--primary-light);
+  color: var(--primary-color);
+}
+
+/* Messages area */
+.chat-messages {
+  background-color: var(--bg-tertiary);
+}
+
+.msg-date-sep {
+  background-color: var(--bg-secondary);
+  border-color: var(--border-color);
+  color: var(--text-tertiary);
+}
+
+.msg-bubble {
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  border-color: var(--border-color);
+}
+.msg-bubble.me {
+  background-color: var(--primary-color) !important;
+  color: #fff !important;
+  border-color: transparent !important;
+}
+
+.msg-sender {
+  color: var(--text-tertiary);
+}
+.msg-time {
+  color: var(--text-tertiary);
+}
+
+/* File card */
+.msg-file-card {
+  background-color: var(--bg-primary);
+  border-color: var(--border-color);
+}
+.msg-wrap.me .msg-file-card {
+  background-color: rgba(var(--primary-rgb), 0.12);
+  border-color: rgba(var(--primary-rgb), 0.2);
+}
+.mfc-name {
+  color: var(--text-primary);
+}
+.mfc-meta {
+  color: var(--text-secondary);
+}
+.mfc-download {
+  background-color: var(--bg-primary);
+  border-color: var(--border-color);
+  color: var(--text-secondary);
+}
+
+/* Input bar */
+.chat-input-bar {
+  background-color: var(--bg-primary);
+  border-color: var(--border-color);
+}
+
+.cib-btn {
+  color: var(--text-tertiary);
+}
+.cib-btn:hover {
+  background-color: var(--bg-hover);
+  color: var(--primary-color);
+}
+
+.cib-input {
+  background-color: var(--input-bg);
+  border-color: var(--border-color);
+}
+.cib-input:focus-within {
+  border-color: var(--primary-color);
+  background-color: var(--primary-light);
+}
+.cib-input input {
+  color: var(--text-primary);
+}
+.cib-input input::placeholder {
+  color: var(--text-tertiary);
+}
+
+.cib-send {
+  background-color: var(--primary-color);
+}
+.cib-send:hover {
+  background-color: var(--primary-hover);
+}
+
+/* Right panel */
+.chat-right-panel {
+  background-color: var(--bg-primary);
+  border-color: var(--border-color);
+}
+.crp-header {
+  border-color: var(--border-color);
+}
+.crp-name {
+  color: var(--text-primary);
+}
+.crp-section {
+  border-color: var(--border-color);
+}
+.crp-section-title {
+  color: var(--text-tertiary);
+}
+.crp-row {
+  color: var(--text-secondary);
+}
+.crp-m-name {
+  color: var(--text-secondary);
+}
+
+/* Cloud panel */
+.cloud-panel-header h3 {
+  color: var(--text-primary);
+}
+.cloud-panel-header p {
+  color: var(--text-secondary);
+}
+.cp-storage-top {
+  color: var(--text-primary);
+}
+.cp-storage-value {
+  color: var(--text-secondary);
+}
+.cp-progress {
+  background-color: var(--bg-hover);
+}
+.cp-legend {
+  color: var(--text-secondary);
+}
+.cp-clean-btn {
+  background-color: var(--bg-secondary);
+  border-color: var(--border-color);
+  color: var(--text-primary);
+}
+.cp-upgrade-card {
+  border-color: rgba(var(--primary-rgb), 0.3);
+  background: linear-gradient(135deg, var(--primary-light), rgba(var(--primary-rgb), 0.08));
+}
+.cp-upgrade-info h4 {
+  color: var(--text-primary);
+}
+.cp-upgrade-info p {
+  color: var(--primary-color);
+}
+.cp-upgrade-btn {
+  background-color: var(--bg-primary);
+  border-color: rgba(var(--primary-rgb), 0.3);
+  color: var(--primary-color);
+}
+
+/* Empty / placeholder states */
+.chat-empty, .contacts-placeholder {
+  background-color: var(--bg-primary);
+  color: var(--text-secondary);
+}
+.chat-empty h3, .contacts-placeholder h3 {
+  color: var(--text-primary);
+}
+.chat-empty p, .contacts-placeholder p {
+  color: var(--text-secondary);
+}
+
+/* ── Contacts Page ── */
+.contacts-page {
+  background-color: var(--bg-secondary);
+}
+.contacts-sidebar {
+  background-color: var(--bg-primary);
+  border-color: var(--border-color);
+}
+.cs-header {
+  border-color: var(--border-color);
+}
+.cs-title {
+  color: var(--text-primary);
+}
+.cs-search {
+  background-color: var(--input-bg);
+  border-color: var(--border-color);
+}
+.cs-search input {
+  color: var(--text-primary);
+}
+.cs-search input::placeholder {
+  color: var(--text-tertiary);
+}
+.cs-menu-item {
+  color: var(--text-primary);
+}
+.cs-menu-item:hover {
+  background-color: var(--bg-hover);
+}
+.cs-menu-item.active {
+  background-color: var(--primary-light);
+  color: var(--primary-color);
+}
+.contacts-main {
+  background-color: var(--bg-secondary);
+}
+
+/* ── Chatbot Page ── */
+.chatbot-header {
+  background-color: var(--bg-primary);
+  border-color: var(--border-color);
+}
+.chatbot-area {
+  background-color: var(--bg-tertiary);
+}
+.chatbot-date-sep {
+  background-color: var(--bg-primary);
+  border-color: var(--border-color);
+  color: var(--text-tertiary);
+}
+.chatbot-bubble {
+  background-color: var(--bg-primary);
+  border-color: var(--border-color);
+  color: var(--text-primary);
+}
+.chatbot-input-bar {
+  background-color: var(--bg-primary);
+  border-color: var(--border-color);
+}
+.chatbot-input-wrap {
+  background-color: var(--input-bg);
+  border-color: var(--border-color);
+}
+.chatbot-input {
+  color: var(--text-primary);
+}
+.chatbot-input::placeholder {
+  color: var(--text-tertiary);
+}
+
+/* ── Profile Page ── */
+.profile-page {
+  background-color: var(--bg-secondary);
+}
+.profile-card, .profile-section, .profile-info-row {
+  background-color: var(--bg-primary);
+  border-color: var(--border-color);
+}
+.profile-name {
+  color: var(--text-primary);
+}
+.profile-email, .profile-role, .profile-label {
+  color: var(--text-secondary);
+}
+.profile-value {
+  color: var(--text-primary);
+}
+
+/* ── Auth Pages ── */
+.auth-page, .login-page, .register-page {
+  background-color: var(--bg-secondary);
+}
+.auth-card, .login-card, .register-card {
+  background-color: var(--bg-primary);
+  border-color: var(--border-color);
+}
+.auth-input, .login-input, .form-input,
+input[type="text"], input[type="email"],
+input[type="password"], input[type="tel"] {
+  background-color: var(--input-bg);
+  border-color: var(--border-color);
+  color: var(--text-primary);
+}
+input::placeholder {
+  color: var(--text-tertiary) !important;
+}
+
+/* ── General Typography ── */
+h1, h2, h3, h4, h5, h6 {
+  color: var(--text-primary);
+}
+p {
+  color: var(--text-secondary);
+}
+
+/* ── Scrollbars (theme-aware) ── */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar-track {
+  background: var(--bg-secondary);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-tertiary);
+}

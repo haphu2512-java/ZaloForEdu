@@ -32,6 +32,7 @@ const auth = asyncHandler(async (req, _res, next) => {
     throw new ApiError(401, 'UNAUTHORIZED', 'User not found');
   }
 
+  // Chặn đứng nếu tài khoản bị Admin khóa
   if (!user.isActive) {
     throw new ApiError(403, 'ACCOUNT_DISABLED', user.banReason || 'Your account has been disabled. Please contact support.');
   }

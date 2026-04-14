@@ -20,4 +20,41 @@ build/
 .DS_Store
 .vscode/
 
+<<<<<<< HEAD
+# Backend specific
+backend/uploads/
+backend/logs/
+
+# React Native specific
+mobile/.expo/
+mobile/.expo-shared/
+mobile/ios/Pods/
+mobile/ios/build/
+mobile/android/app/build/
+mobile/android/.gradle/
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+*.orig.*
+metro-*/
+
+# Web specific
+web/build/
+
+# Misc
+.cache/
+temp/
+tmp/
+
+# IDE
+.idea/
+
+# Local scripts
+backend/scripts/seedAdmin.js
+=======
 backend_review_and_mobile_plan.md
+>>>>>>> Refactor_Project
+
+package-lock.json

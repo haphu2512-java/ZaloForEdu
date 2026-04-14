@@ -1,432 +1,647 @@
-import { useState } from "react";
+import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import axios from "axios";
+import io from "socket.io-client";
+import { FaSearch, FaBell, FaThumbtack, FaUsers, FaCloud, FaSpinner, FaLink } from "react-icons/fa";
+import toast from "react-hot-toast";
 
-import {
-  FaSearch,
-  FaPlus,
-  FaEllipsisV,
-  FaPaperPlane,
-  FaPaperclip,
-  FaSmile,
-  FaImage,
-  FaFile,
-  FaVideo,
-  FaBook,
-  FaUsers,
-  FaUser,
-  FaChevronDown,
-  FaPhone,
-  FaVideo as FaVideoCall,
-} from "react-icons/fa";
-// import { useAuthStore } from "../../store/authStore";
+import { uploadFile } from "../../services/mediaService"; 
+import { useFriendStore } from "../../store/friendStore"; 
+import { MessageBubble } from "./MessageBubble";
+import { ShareMessageModal } from "./Modals/ShareMessageModal";
+import { ChatHeader } from "./ChatHeader"; 
+import { MessageInput } from "./MessageInput"; 
+import { useTheme } from '../../contexts/ThemeContext'; 
 import "./ChatPage.css";
 
-// Mock data
-const MOCK_ROOMS = [
-  {
-    id: "1",
-    type: "class",
-    name: "Lập trình Web - CS301",
-    lastMsg: "GV: Xem slide bài 5 trước nhé",
-    time: "9:30",
-    unread: 3,
-    color: "#1B6EF3",
-    initials: "LT",
-    subtitle: "GV. Nguyễn Văn A · 42 SV",
-  },
-  {
-    id: "2",
-    type: "class",
-    name: "Cơ sở dữ liệu - CS201",
-    lastMsg: "GV đã gửi: Lab3.pdf",
-    time: "8:15",
-    unread: 0,
-    color: "#9C27B0",
-    initials: "DB",
-    subtitle: "GV. Trần Thị B · 38 SV",
-  },
-  {
-    id: "3",
-    type: "group",
-    name: "Nhóm Đồ án - Nhóm 3",
-    lastMsg: "Trang: Mình push code lên rồi",
-    time: "Hôm qua",
-    unread: 2,
-    color: "#16A34A",
-    initials: "ĐA",
-    subtitle: "5 thành viên",
-  },
-  {
-    id: "4",
-    type: "dm",
-    name: "Nguyễn Văn Minh",
-    lastMsg: "Bạn: Nhớ nộp bài trước 10h!",
-    time: "Hôm qua",
-    unread: 0,
-    color: "#9333EA",
-    initials: "NV",
-    subtitle: "Sinh viên",
-  },
-  {
-    id: "5",
-    type: "class",
-    name: "Mạng máy tính - CS401",
-    lastMsg: "Thông báo lịch thi cuối kỳ",
-    time: "T2",
-    unread: 1,
-    color: "#E91E63",
-    initials: "MT",
-    subtitle: "GV. Lê Văn C · 35 SV",
-  },
-];
+const API_BASE_URL = "http://localhost:5000/api/v1";
+const socket = io("http://localhost:5000", { autoConnect: false, transports: ['websocket'] });
 
-const MOCK_MESSAGES = [
-  {
-    id: 1,
-    sender: "GV. Nguyễn Văn A",
-    senderId: "teacher1",
-    content: "Chào cả lớp! Hôm nay học React Hooks. Xem slide trước nhé.",
-    time: "9:05",
-    type: "text",
-    avatar: "GV",
-    color: "#1B6EF3",
-  },
-  {
-    id: 2,
-    sender: "GV. Nguyễn Văn A",
-    senderId: "teacher1",
-    content: null,
-    time: "9:06",
-    type: "file",
-    file: { name: "Bai5_ReactHooks.pdf", size: "2.4 MB", icon: "pdf" },
-    avatar: "GV",
-    color: "#1B6EF3",
-  },
-  {
-    id: 3,
-    sender: "Nguyễn Văn An",
-    senderId: "sv1",
-    content:
-      "Em xem rồi ạ! Câu hỏi về useEffect — khi nào dùng dependency array rỗng?",
-    time: "9:12",
-    type: "text",
-    avatar: "NA",
-    color: "#4CAF50",
-  },
-  {
-    id: 4,
-    sender: "GV. Nguyễn Văn A",
-    senderId: "teacher1",
-    content:
-      "Câu hỏi hay! Dependency [] thì effect chỉ chạy 1 lần sau mount — giống componentDidMount nhé.",
-    time: "9:15",
-    type: "text",
-    avatar: "GV",
-    color: "#1B6EF3",
-  },
-  {
-    id: 5,
-    sender: "me",
-    senderId: "me",
-    content: "Em hiểu rồi ạ! Cảm ơn thầy 🙏",
-    time: "9:18",
-    type: "text",
-    avatar: "T",
-    color: "#E91E63",
-  },
-];
+const IMAGE_EXTS = ["jpg","jpeg","png","gif","webp","svg"];
+const VIDEO_EXTS = ["mp4","mov","avi","mkv","webm"];
+const DOC_EXTS = ["pdf","doc","docx","xls","xlsx","ppt","pptx","txt"];
+const ARCHIVE_EXTS = ["zip","rar","7z","tar","gz"];
 
-const TYPE_BADGE = {
-  class: { label: "Lớp học", bg: "#EFF6FF", color: "#1B6EF3" },
-  group: { label: "Nhóm", bg: "#F0FDF4", color: "#16A34A" },
-  dm: { label: "1-1", bg: "#FDF4FF", color: "#9333EA" },
+export function getExt(s=""){return(s.split(".").pop()||"").toLowerCase();}
+export function getCategory(n=""){const e=getExt(n);if(IMAGE_EXTS.includes(e))return"image";if(VIDEO_EXTS.includes(e))return"video";if(DOC_EXTS.includes(e))return"doc";if(ARCHIVE_EXTS.includes(e))return"archive";return"other";}
+export function getFileColor(n=""){const e=getExt(n);if(IMAGE_EXTS.includes(e))return"#10B981";if(VIDEO_EXTS.includes(e))return"#8B5CF6";if(e==="pdf")return"#EF4444";if(["doc","docx"].includes(e))return"#2563EB";if(["xls","xlsx"].includes(e))return"#16A34A";if(["ppt","pptx"].includes(e))return"#EA580C";if(ARCHIVE_EXTS.includes(e))return"#D97706";return"#6B7280";}
+export function formatBytes(b){if(!b)return"0 B";const k=1024,s=["B","KB","MB","GB"];const i=Math.floor(Math.log(b)/Math.log(k));return parseFloat((b/Math.pow(k,i)).toFixed(1))+" "+s[i];}
+
+const formatChatTimestamp = (dateString) => {
+  const d = new Date(dateString);
+  const now = new Date();
+  const isToday = d.toDateString() === now.toDateString();
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  const isYesterday = d.toDateString() === yesterday.toDateString();
+
+  const timeStr = d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+  const dateStr = d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+
+  if (isToday) return timeStr;
+  if (isYesterday) return `Hôm qua ${timeStr}`;
+  return `${timeStr} ngày ${dateStr}`;
 };
 
-const TABS = ["Tất cả", "Lớp học", "Nhóm", "1-1"];
+const shouldShowDateDivider = (currentMsg, prevMsg) => {
+  if (!prevMsg) return true;
+  const currTime = new Date(currentMsg.createdAt).getTime();
+  const prevTime = new Date(prevMsg.createdAt).getTime();
+  const diffHours = (currTime - prevTime) / (1000 * 60 * 60);
+  if (diffHours >= 6) return true;
+  return new Date(currentMsg.createdAt).toDateString() !== new Date(prevMsg.createdAt).toDateString();
+};
 
-function RoomItem({ room, active, onClick }) {
-  const badge = TYPE_BADGE[room.type];
+function UploadBubble({ name, percent }) {
   return (
-    <div className={`room-item ${active ? "active" : ""}`} onClick={onClick}>
-      <div className="room-avatar" style={{ background: room.color }}>
-        {room.initials}
-      </div>
-      <div className="room-info">
-        <div className="room-name">{room.name}</div>
-        <div
-          className="room-badge"
-          style={{ background: badge.bg, color: badge.color }}
-        >
-          {room.type === "class" && <FaBook size={8} />}
-          {room.type === "group" && <FaUsers size={8} />}
-          {room.type === "dm" && <FaUser size={8} />}
-          {badge.label}
-        </div>
-        <div className="room-last">{room.lastMsg}</div>
-      </div>
-      <div className="room-meta">
-        <span className="room-time">{room.time}</span>
-        {room.unread > 0 && <span className="room-unread">{room.unread}</span>}
-      </div>
-    </div>
-  );
-}
-
-function Message({ msg, isMe }) {
-  return (
-    <div className={`msg-wrap ${isMe ? "me" : ""}`}>
-      {!isMe && (
-        <div className="msg-avatar" style={{ background: msg.color }}>
-          {msg.avatar}
-        </div>
-      )}
-      <div className="msg-body">
-        {!isMe && <div className="msg-sender">{msg.sender}</div>}
-        {msg.type === "text" && (
-          <div className={`msg-bubble ${isMe ? "me" : ""}`}>{msg.content}</div>
-        )}
-        {msg.type === "file" && (
-          <div className="msg-file">
-            <div className="msg-file-icon">
-              <FaFile size={14} color="#1B6EF3" />
+    <div className="msg-wrap me" style={{ marginBottom: 16 }}>
+      <div className="msg-body" style={{ alignItems: 'flex-end' }}>
+        <div className="mdc-uploading-bubble msg-bubble" style={{ background: '#0084FF', color: 'white', borderRadius: '18px 18px 4px 18px', padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 8 }}>
+          <FaSpinner className="spin" size={14}/>
+          <div className="mdc-upl-info" style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <span className="mdc-upl-name" style={{ fontSize: 13 }}>{name}</span>
+            <div className="mdc-upl-bar" style={{ background: 'rgba(255,255,255,0.3)', height: 4, borderRadius: 2, width: 100 }}>
+              <div className="mdc-upl-fill" style={{ width: `${percent}%`, background: 'white', height: '100%', borderRadius: 2 }} />
             </div>
-            <div>
-              <div className="msg-file-name">{msg.file.name}</div>
-              <div className="msg-file-size">{msg.file.size}</div>
-            </div>
+            <span className="mdc-upl-pct" style={{ fontSize: 10 }}>{percent}%</span>
           </div>
-        )}
-        <div className="msg-time">{msg.time}</div>
+        </div>
       </div>
     </div>
   );
 }
 
 export default function ChatPage() {
-  // const { user } = useAuthStore();
-  const [activeTab, setActiveTab] = useState(0);
-  const [activeRoom, setActiveRoom] = useState(MOCK_ROOMS[0]);
-  const [input, setInput] = useState("");
-  // const [rightTab, setRightTab] = useState("info");
+  const [conversations, setConversations] = useState([]);
+  const [activeConversation, setActiveConversation] = useState(null);
+  const [messages, setMessages] = useState([]);
+  const [searchQuery, setSearchQuery] = useState(""); 
+  
+  const { appliedTheme } = useTheme(); 
+  
+  const [uploads, setUploads] = useState([]);
+  const [isDragging, setIsDragging] = useState(false);
+  const [showRightPanel, setShowRightPanel] = useState(true); 
 
-  const filtered = MOCK_ROOMS.filter((r) => {
-    if (activeTab === 0) return true;
-    if (activeTab === 1) return r.type === "class";
-    if (activeTab === 2) return r.type === "group";
-    if (activeTab === 3) return r.type === "dm";
-    return true;
+  const [shareModalOpen, setShareModalOpen] = useState(false);
+  const [msgToShare, setMsgToShare] = useState(null);
+
+  const pageRef = useRef(null);
+  const messagesEndRef = useRef(null);
+  const activeConvIdRef = useRef(null);
+
+  const { friends, fetchFriends } = useFriendStore();
+
+  useEffect(() => { if (friends.length === 0) fetchFriends(); }, [friends.length, fetchFriends]);
+
+  const userId = useMemo(() => {
+    let id = localStorage.getItem("userId");
+    if (id) return String(id).trim();
+    try {
+      const userObj = JSON.parse(localStorage.getItem("user") || "{}");
+      if (userObj && (userObj._id || userObj.id)) return String(userObj._id || userObj.id).trim();
+    } catch (e) {}
+    return null;
+  }, []); 
+
+  const token = localStorage.getItem("token");
+
+  const scrollToBottom = () => { messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }); };
+
+  const getOtherParticipant = useCallback((conv) => {
+    if (!conv || !conv.participants) return null;
+    const others = conv.participants.filter(p => {
+      const pId = typeof p === 'string' ? p : (p._id || p.id);
+      return String(pId) !== String(userId);
+    });
+    return others.length > 0 ? others[0] : null;
+  }, [userId]);
+
+  const getConversationName = useCallback((conv) => {
+    if (!conv) return '';
+    if (conv.type === 'group' || conv.roomModel === 'Group') return conv.name || 'Nhóm chat';
+    const other = getOtherParticipant(conv);
+    if (other && typeof other === 'object') return other.username || other.fullName || other.name || 'Người dùng';
+    return 'Người dùng ẩn danh';
+  }, [getOtherParticipant]);
+
+  const getConversationAvatar = useCallback((conv) => {
+    if (!conv) return 'https://ui-avatars.com/api/?name=U&background=random';
+    if (conv.type === 'group' || conv.roomModel === 'Group') return conv.avatarUrl || conv.avatar || `https://ui-avatars.com/api/?name=${conv.name || 'G'}&background=random`;
+    const other = getOtherParticipant(conv);
+    let name = 'U';
+    let avatar = null;
+    if (other && typeof other === 'object') {
+      name = other.username || other.fullName || other.name || 'U';
+      avatar = other.avatarUrl || other.avatar;
+    }
+    return avatar || `https://ui-avatars.com/api/?name=${name}&background=random`;
+  }, [getOtherParticipant]);
+
+  const mergedConversations = useMemo(() => {
+    if (!friends || friends.length === 0) return conversations;
+    const validConvs = conversations.filter(c => {
+      if (c.type === 'group' || c.roomModel === 'Group') return true;
+      return getOtherParticipant(c) !== null; 
+    });
+
+    const convs = [...validConvs];
+    const directMap = new Set();
+    
+    convs.forEach(c => {
+      if (c.type === 'direct' && !c.isMock) {
+        const other = getOtherParticipant(c);
+        if (other) {
+          const oId = typeof other === 'string' ? other : (other._id || other.id);
+          directMap.add(String(oId));
+        }
+      }
+    });
+
+    friends.forEach(friend => {
+      const fId = String(friend._id || friend.id);
+      if (!directMap.has(fId)) {
+        convs.push({
+          _id: `mock_${fId}`,
+          isMock: true, 
+          type: 'direct',
+          participants: [{ _id: userId }, friend],
+          latestMessage: null,
+          unreadCount: 0
+        });
+      }
+    });
+
+    convs.sort((a, b) => {
+      const timeA = a.latestMessage ? new Date(a.latestMessage.createdAt).getTime() : 0;
+      const timeB = b.latestMessage ? new Date(b.latestMessage.createdAt).getTime() : 0;
+      return timeB - timeA;
+    });
+
+    if (!searchQuery.trim()) return convs;
+    return convs.filter(conv => getConversationName(conv).toLowerCase().includes(searchQuery.toLowerCase()));
+  }, [conversations, friends, searchQuery, userId, getConversationName, getOtherParticipant]);
+
+  useEffect(() => {
+    activeConvIdRef.current = activeConversation?._id;
+  }, [activeConversation]);
+
+  const fetchConversationsData = useCallback(async () => {
+    try {
+      const res = await axios.get(`${API_BASE_URL}/conversations`, { headers: { Authorization: `Bearer ${token}` } });
+      setConversations(res.data.data?.items || res.data.items || []);
+    } catch (err) { console.error("Lỗi lấy danh sách:", err); }
+  }, [token]);
+
+  // ==================== KHỞI TẠO SOCKET ====================
+  useEffect(() => {
+    if (!token) return;
+    socket.auth = { token };
+    socket.connect();
+
+    fetchConversationsData();
+
+    socket.on("conversation_updated", (payload) => {
+      const { conversationId, latestMessage } = payload;
+      const convIdStr = String(conversationId);
+      const activeIdStr = String(activeConvIdRef.current);
+      const isMyMessage = String(latestMessage?.senderId?._id || latestMessage?.senderId) === String(userId);
+
+      if (convIdStr === activeIdStr) {
+        setMessages(prev => {
+          if (prev.some(m => String(m._id) === String(latestMessage._id))) return prev;
+          return [...prev, latestMessage];
+        });
+        socket.emit("message_delivered", { messageId: latestMessage._id });
+        socket.emit("message_seen", { messageId: latestMessage._id });
+      } else if (!isMyMessage) {
+        const senderName = latestMessage?.senderId?.username || 'Ai đó';
+        const shortContent = latestMessage?.content || '[Hình ảnh/File đính kèm]';
+        toast.success(`💬 ${senderName}: ${shortContent}`, { position: "top-right", duration: 3000 });
+      }
+
+      setConversations(prevConvs => {
+        const index = prevConvs.findIndex(c => String(c._id) === convIdStr);
+        if (index === -1) { fetchConversationsData(); return prevConvs; }
+
+        const newConvs = [...prevConvs];
+        const target = { ...newConvs[index], latestMessage };
+
+        if (convIdStr !== activeIdStr && !isMyMessage) {
+           target.unreadCount = (target.unreadCount || 0) + 1;
+        } else if (convIdStr === activeIdStr) {
+           target.unreadCount = 0; 
+        }
+
+        newConvs.splice(index, 1);
+        return [target, ...newConvs]; 
+      });
+    });
+
+    socket.on("message_recalled", ({ messageId }) => {
+      // FIX: Đảm bảo cập nhật cả nội dung và attachments về rỗng
+      setMessages(prev => prev.map(m => String(m._id) === String(messageId) ? { ...m, isRecalled: true, content: "", attachments: [], mediaIds: [] } : m));
+      setConversations(prev => prev.map(c => {
+        if (c.latestMessage && String(c.latestMessage._id) === String(messageId)) {
+          return { ...c, latestMessage: { ...c.latestMessage, isRecalled: true, content: "" } };
+        }
+        return c;
+      }));
+    });
+
+    socket.on("message_reacted", ({ messageId, reactions }) => {
+      setMessages(prev => prev.map(m => String(m._id) === String(messageId) ? { ...m, reactions } : m));
+    });
+
+    return () => {
+      socket.off("conversation_updated");
+      socket.off("message_recalled");
+      socket.off("message_reacted");
+      socket.disconnect();
+    };
+  }, [token, userId, fetchConversationsData]);
+
+  // ==================== LOAD TIN NHẮN KHI VÀO PHÒNG ====================
+  useEffect(() => {
+    if (!activeConversation) return;
+    setMessages([]);
+
+    if (activeConversation.isMock) return; 
+
+    const fetchMessages = async () => {
+      try {
+        const res = await axios.get(`${API_BASE_URL}/messages/conversation/${activeConversation._id}?limit=50`, { headers: { Authorization: `Bearer ${token}` } });
+        const fetchedMessages = res.data.data?.items || res.data.items || [];
+        setMessages(fetchedMessages.reverse());
+        setConversations(prev => prev.map(c => String(c._id) === String(activeConversation._id) ? { ...c, unreadCount: 0 } : c));
+      } catch (err) { setMessages([]); }
+    };
+
+    fetchMessages();
+    socket.emit("join_conversation", { conversationId: activeConversation._id });
+
+  }, [activeConversation?._id, token]);
+
+  useEffect(() => { scrollToBottom(); }, [messages, uploads]);
+
+  useEffect(() => {
+    const zone = pageRef.current;
+    if (!zone || !activeConversation) return;
+    const onDragOver = (e) => { e.preventDefault(); setIsDragging(true); };
+    const onDragLeave = (e) => { if (!zone.contains(e.relatedTarget)) setIsDragging(false); };
+    const onDrop = (e) => {
+      e.preventDefault(); setIsDragging(false);
+      Array.from(e.dataTransfer.files).forEach(handleUploadFile);
+    };
+    zone.addEventListener("dragover", onDragOver);
+    zone.addEventListener("dragleave", onDragLeave);
+    zone.addEventListener("drop", onDrop);
+    return () => {
+      zone.removeEventListener("dragover", onDragOver);
+      zone.removeEventListener("dragleave", onDragLeave);
+      zone.removeEventListener("drop", onDrop);
+    };
+  }, [activeConversation]);
+
+  const getSenderIdStr = (msg) => {
+    if (!msg) return null;
+    const s = msg.senderId || msg.sender;
+    if (!s) return null;
+    if (typeof s === 'object') return String(s._id || s.id);
+    return String(s);
+  };
+
+  const ensureRealConversation = async () => {
+    if (!activeConversation.isMock) return activeConversation._id;
+    const otherParticipant = getOtherParticipant(activeConversation);
+    const targetId = otherParticipant._id || otherParticipant.id;
+    
+    const createRes = await axios.post(`${API_BASE_URL}/conversations`, {
+      type: "direct", participantIds: [targetId]
+    }, { headers: { Authorization: `Bearer ${token}` } });
+    
+    const realConv = createRes.data.data || createRes.data;
+    realConv.participants = activeConversation.participants; 
+    const currentConvId = realConv._id || realConv.id;
+    
+    setActiveConversation(realConv);
+    setConversations(prev => [realConv, ...prev.filter(c => c._id !== activeConversation._id)]);
+    socket.emit("join_conversation", { conversationId: currentConvId });
+    return currentConvId;
+  };
+
+  // ==================== TƯƠNG TÁC (Gửi, Thu hồi, Thả tim) ====================
+  const handleSendText = async (content) => {
+    if (!activeConversation) return;
+    try {
+      const currentConvId = await ensureRealConversation();
+      // FIX: Xóa setMessages thủ công vì socket "conversation_updated" sẽ lo việc này
+      await axios.post(`${API_BASE_URL}/messages/send`,
+        { content: content, conversationId: currentConvId },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+    } catch (err) { toast.error("Lỗi gửi tin nhắn"); }
+  };
+
+  const handleSendLike = async () => {
+    if (!activeConversation) return;
+    try {
+      const currentConvId = await ensureRealConversation();
+      // FIX: Xóa setMessages thủ công để tránh lặp
+      await axios.post(`${API_BASE_URL}/messages/send`,
+        { content: "👍", conversationId: currentConvId },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+    } catch (err) { console.error("Lỗi gửi Like", err); }
+  };
+
+  const handleUploadFile = async (file) => {
+    if (!activeConversation) return;
+    const uid = Date.now() + Math.random();
+    setUploads(prev => [...prev, { id: uid, name: file.name, percent: 0 }]);
+
+    try {
+      const currentConvId = await ensureRealConversation();
+      const media = await uploadFile(file, { 
+        folder: "zaloapp/chat",
+        onProgress: (pct) => setUploads(prev => prev.map(u => u.id === uid ? { ...u, percent: pct } : u))
+      });
+
+      // FIX: Xóa setMessages thủ công. Socket sẽ tự nhận message mới có đính kèm media.
+      await axios.post(`${API_BASE_URL}/messages/send`,
+        { content: "", mediaIds: [media._id || media.id], conversationId: currentConvId },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+    } catch (err) {
+      toast.error(`Lỗi tải lên: ${file.name}`);
+    } finally {
+      setUploads(prev => prev.filter(u => u.id !== uid));
+    }
+  };
+
+  const handleUploadFilesFromInput = (files) => {
+    files.forEach(handleUploadFile);
+  };
+
+  const handleReaction = async (messageId, emoji) => {
+    // Giữ nguyên logic cập nhật nhanh (optimistic update)
+    setMessages(prev => prev.map(m => {
+      if (String(m._id) === String(messageId)) {
+        const currentReactions = m.reactions || [];
+        const filtered = currentReactions.filter(r => String(r.userId) !== String(userId));
+        return { ...m, reactions: [...filtered, { emoji, userId: userId }] };
+      }
+      return m;
+    }));
+    try {
+      await axios.put(`${API_BASE_URL}/messages/${messageId}/react`, { emoji }, { headers: { Authorization: `Bearer ${token}` } });
+    } catch (err) { toast.error("Lỗi thả cảm xúc"); }
+  };
+
+  const handleRecall = async (msgId) => {
+    // Cập nhật state local ngay để UX mượt
+    setMessages(prev => prev.map(m => String(m._id) === String(msgId) ? { ...m, isRecalled: true, content: "", attachments: [], mediaIds: [] } : m));
+    try {
+      await axios.delete(`${API_BASE_URL}/messages/${msgId}/recall`, { headers: { Authorization: `Bearer ${token}` } });
+      toast.success("Đã thu hồi tin nhắn");
+    } catch (err) { toast.error("Lỗi thu hồi tin nhắn"); }
+  };
+
+  const handleDelete = async (msgId) => {
+    setMessages(prev => prev.filter(m => m._id !== msgId));
+    try {
+      await axios.delete(`${API_BASE_URL}/messages/${msgId}`, { headers: { Authorization: `Bearer ${token}` } });
+    } catch (err) { toast.error("Lỗi xóa tin nhắn"); }
+  };
+
+  const openShareModal = (msg) => {
+    setMsgToShare(msg);
+    setShareModalOpen(true);
+  };
+
+  const executeForward = async (friend) => {
+    try {
+      const targetId = friend._id || friend.id;
+      let targetConvId = null;
+
+      const existingConv = conversations.find(c => c.type === 'direct' && c.participants.some(p => (p._id || p.id) === targetId));
+
+      if (existingConv) {
+         targetConvId = existingConv._id;
+      } else {
+         const createRes = await axios.post(`${API_BASE_URL}/conversations`, { type: "direct", participantIds: [targetId] }, { headers: { Authorization: `Bearer ${token}` } });
+         targetConvId = createRes.data.data?._id || createRes.data?._id;
+      }
+
+      const content = msgToShare.content || "";
+      const mediaIds = (msgToShare.attachments || msgToShare.mediaIds || []).map(m => m._id || m.id || m);
+
+      await axios.post(`${API_BASE_URL}/messages/send`,
+        { content, mediaIds, conversationId: targetConvId },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      toast.success(`Đã chuyển tiếp tới ${friend.fullName || friend.username}`);
+      setShareModalOpen(false);
+    } catch (error) {
+      toast.error("Lỗi chuyển tiếp tin nhắn");
+    }
+  };
+
+  const allMedia = messages.flatMap(m => m.attachments || m.mediaIds || m.media || []).filter(m => typeof m !== 'string');
+  const imgFiles = allMedia.filter(m => ["image","video"].includes(getCategory(m.name || m.fileName)));
+  const docFiles = allMedia.filter(m => !["image","video"].includes(getCategory(m.name || m.fileName)));
+  const linkRegex = /(https?:\/\/[^\s]+)/g;
+  const linkItems = [];
+  messages.forEach(m => {
+    if (m.content) {
+      const urls = m.content.match(linkRegex);
+      if (urls) urls.forEach(u => linkItems.push(u));
+    }
   });
 
   return (
-    <div className="chat-page">
-      {/* ── DANH SÁCH ROOM ── */}
-      <div className="room-sidebar">
+    <div className={`chat-page ${appliedTheme === 'dark' ? 'dark-mode' : ''}`} ref={pageRef}> 
+      
+      <ShareMessageModal 
+        isOpen={shareModalOpen} 
+        onClose={() => setShareModalOpen(false)} 
+        friends={friends} 
+        onForward={executeForward} 
+      />
+
+      {isDragging && (
+        <div className="mdc-drag-overlay">
+          <div className="mdc-drag-inner">
+            <FaCloud size={52} />
+            <p>Thả file vào đây để gửi</p>
+          </div>
+        </div>
+      )}
+
+      {/* ── BÊN TRÁI: SIDEBAR ── */}
+      <aside className="room-sidebar">
         <div className="rs-header">
-          <span className="rs-title">Tin nhắn</span>
-          <button className="rs-add-btn">
-            <FaPlus size={12} />
-          </button>
+          <span style={{ fontWeight: 800, fontSize: 18 }}>Đoạn chat</span>
         </div>
-        <div className="rs-search">
-          <FaSearch size={12} color="#9CA3AF" />
-          <input placeholder="Tìm kiếm..." />
-        </div>
-        <div className="rs-tabs">
-          {TABS.map((t, i) => (
-            <button
-              key={t}
-              className={`rs-tab ${activeTab === i ? "active" : ""}`}
-              onClick={() => setActiveTab(i)}
-            >
-              {t}
-            </button>
-          ))}
+        <div className="rs-search-bar">
+          <FaSearch color="var(--z-text-secondary)" size={14} />
+          <input placeholder="Tìm kiếm bạn bè, nhóm..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
         </div>
         <div className="rs-list">
-          {filtered.map((r) => (
-            <RoomItem
-              key={r.id}
-              room={r}
-              active={activeRoom?.id === r.id}
-              onClick={() => setActiveRoom(r)}
-            />
-          ))}
+          {mergedConversations.map((conv) => {
+            const isActive = activeConversation?._id === conv._id;
+            const unread = conv.unreadCount || 0;
+            return (
+              <div key={conv._id} className={`chat-list-item ${isActive ? 'active' : ''}`} onClick={() => setActiveConversation(conv)}>
+                <img className="cli-avatar" src={getConversationAvatar(conv)} alt="avt" />
+                <div className="cli-info">
+                  <div className="cli-top">
+                    <span className="cli-name" style={{ fontWeight: unread > 0 ? 800 : 600, color: unread > 0 ? 'var(--z-text-primary)' : '' }}>{getConversationName(conv)}</span>
+                    <span className="cli-time" style={{ color: unread > 0 ? 'var(--z-primary)' : 'var(--z-text-muted)' }}>
+                        {conv.latestMessage ? formatChatTimestamp(conv.latestMessage.createdAt) : ''}
+                    </span>
+                  </div>
+                  <div className="cli-bottom">
+                    <span className="cli-msg" style={{ fontWeight: unread > 0 ? 700 : 400, color: unread > 0 ? 'var(--z-text-primary)' : 'var(--z-text-secondary)' }}>
+                        {conv.latestMessage?.isRecalled ? 'Tin nhắn đã thu hồi' : (conv.latestMessage?.content || (conv.latestMessage?.mediaIds?.length > 0 || conv.latestMessage?.attachments?.length > 0 ? '[Hình ảnh/File]' : 'Chưa có tin nhắn'))}
+                    </span>
+                    {unread > 0 && <div className="cli-unread">{unread > 99 ? '99+' : unread}</div>}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+          {mergedConversations.length === 0 && <div style={{ textAlign: 'center', padding: '20px', color: 'var(--z-text-muted)', fontSize: 13 }}>Không tìm thấy cuộc trò chuyện nào</div>}
         </div>
-      </div>
+      </aside>
 
-      {/* ── VÙNG CHAT ── */}
-      <div className="chat-main">
-        {/* Header */}
-        <div className="chat-header">
-          <div className="ch-left">
-            <div className="ch-avatar" style={{ background: activeRoom.color }}>
-              {activeRoom.initials}
-            </div>
-            <div>
-              <div className="ch-name">{activeRoom.name}</div>
-              <div className="ch-sub">{activeRoom.subtitle}</div>
-            </div>
-          </div>
-          <div className="ch-actions">
-            {activeRoom.type === "class" && (
+      {/* ── Ở GIỮA: CHAT KHU VỰC CHÍNH ── */}
+      {activeConversation ? (
+        <main className="chat-main">
+          <ChatHeader 
+            room={{
+              ...activeConversation,
+              name: getConversationName(activeConversation),
+              avatar: getConversationAvatar(activeConversation),
+              targetUserId: getOtherParticipant(activeConversation)?._id || getOtherParticipant(activeConversation)?.id,
+              isOnline: true 
+            }}
+            onInfo={() => setShowRightPanel(!showRightPanel)}
+          />
+
+          <div className="chat-messages">
+            {messages.length === 0 && uploads.length === 0 ? (
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+                <img src={getConversationAvatar(activeConversation)} alt="avatar" style={{ width: 100, height: 100, borderRadius: '50%', objectFit: 'cover', margin: '0 auto 16px' }} />
+                <h3 style={{ fontSize: 20, fontWeight: 700, color: 'var(--z-text-primary)', margin: '0 0 8px 0', textAlign: 'center' }}>{getConversationName(activeConversation)}</h3>
+              </div>
+            ) : (
               <>
-                <button className="ch-btn">
-                  <FaFile size={13} /> Tài liệu
-                </button>
-                <button className="ch-btn">
-                  <FaUsers size={13} /> Thành viên
-                </button>
+                {messages.map((msg, index) => {
+                  const showDate = shouldShowDateDivider(msg, messages[index - 1]);
+                  const isMe = getSenderIdStr(msg) === String(userId);
+                  return (
+                    <React.Fragment key={msg._id}>
+                      {showDate && <div className="msg-date">{formatChatTimestamp(msg.createdAt)}</div>}
+                      <MessageBubble 
+                        message={msg} 
+                        isMe={isMe} 
+                        onReaction={handleReaction} 
+                        onRecall={handleRecall}
+                        onDelete={handleDelete} 
+                        onForward={openShareModal} 
+                        onReply={(msg) => console.log('Trả lời:', msg)}
+                      />
+                    </React.Fragment>
+                  );
+                })}
+                {uploads.map(u => (
+                  <UploadBubble key={u.id} name={u.name} percent={u.percent} />
+                ))}
+                <div ref={messagesEndRef} />
               </>
             )}
-            <button className="ch-btn-icon">
-              <FaPhone size={14} />
-            </button>
-            <button className="ch-btn-icon">
-              <FaVideoCall size={14} />
-            </button>
-            <button className="ch-btn-icon">
-              <FaEllipsisV size={14} />
-            </button>
           </div>
-        </div>
 
-        {/* Class tabs nếu là lớp học */}
-        {activeRoom.type === "class" && (
-          <div className="class-tabs">
-            {["Stream", "Thành viên", "Tài liệu", "Phân tích"].map((t, i) => (
-              <button
-                key={t}
-                className={`class-tab ${i === 0 ? "active" : ""}`}
-              >
-                {i === 0 && <FaUsers size={11} />}
-                {i === 1 && <FaUsers size={11} />}
-                {i === 2 && <FaFile size={11} />}
-                {i === 3 && <FaVideo size={11} />}
-                {t}
-              </button>
-            ))}
-          </div>
-        )}
+          <MessageInput 
+            key={activeConversation._id} 
+            theme={appliedTheme} 
+            placeholder={`Nhập @, tin nhắn tới ${getConversationName(activeConversation)}`}
+            onSend={handleSendText}
+            onSendLike={handleSendLike}
+            onUploadFiles={handleUploadFilesFromInput}
+          />
+        </main>
+      ) : (
+        <main className="chat-main" style={{ alignItems: 'center', justifyItems: 'center', display: 'flex' }}>
+          <div style={{ color: 'var(--z-text-secondary)', fontSize: 16, margin: 'auto' }}>Chọn một cuộc trò chuyện để bắt đầu</div>
+        </main>
+      )}
 
-        {/* Messages */}
-        <div className="chat-messages">
-          <div className="msg-date-sep">Hôm nay, 9:00</div>
-          {MOCK_MESSAGES.map((msg) => (
-            <Message key={msg.id} msg={msg} isMe={msg.senderId === "me"} />
-          ))}
-        </div>
-
-        {/* Input */}
-        <div className="chat-input-bar">
-          <button className="cib-btn">
-            <FaPaperclip size={15} />
-          </button>
-          <button className="cib-btn">
-            <FaImage size={15} />
-          </button>
-          <button className="cib-btn">
-            <FaVideo size={15} />
-          </button>
-          <div className="cib-input">
-            <input
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              placeholder="Nhập tin nhắn..."
-              onKeyDown={(e) => e.key === "Enter" && setInput("")}
-            />
-          </div>
-          <button className="cib-btn">
-            <FaSmile size={15} />
-          </button>
-          <button className="cib-send" onClick={() => setInput("")}>
-            <FaPaperPlane size={14} />
-          </button>
-        </div>
-      </div>
-
-      {/* ── RIGHT PANEL ── */}
-      <div className="chat-right-panel">
-        <div className="crp-header">
-          <div className="crp-avatar" style={{ background: activeRoom.color }}>
-            {activeRoom.initials}
-          </div>
-          <div className="crp-name">{activeRoom.name}</div>
-          {activeRoom.type === "class" && (
-            <div className="crp-code">Mã: CS301</div>
-          )}
-        </div>
-
-        {/* Info sections */}
-        <div className="crp-section">
-          <div className="crp-section-title">Thông tin</div>
-          {activeRoom.type === "class" && (
-            <>
-              <div className="crp-row">
-                <FaUsers size={12} color="#9CA3AF" />
-                <span>42 sinh viên</span>
-              </div>
-              <div className="crp-row">
-                <FaFile size={12} color="#9CA3AF" />
-                <span>18 tài liệu</span>
-              </div>
-              <div className="crp-row">
-                <FaBook size={12} color="#9CA3AF" />
-                <span>Thứ 2, 7:30 · A101</span>
-              </div>
-            </>
-          )}
-        </div>
-
-        <div className="crp-section">
-          <div className="crp-section-title">Tài liệu mới nhất</div>
-          {[
-            "Bai5_ReactHooks.pdf",
-            "Lab4_Instructions.xlsx",
-            "Demo_useState.mp4",
-          ].map((f) => (
-            <div key={f} className="crp-file">
-              <div className="crp-file-icon">
-                <FaFile size={12} color="#1B6EF3" />
-              </div>
-              <span className="crp-file-name">{f}</span>
+      {/* ── BÊN PHẢI: RIGHT PANEL ── */}
+      {activeConversation && showRightPanel && (
+        <aside className="chat-right-panel">
+          <div className="crp-header">
+            <img className="crp-avatar" src={getConversationAvatar(activeConversation)} alt="avt" />
+            <div className="crp-name">{getConversationName(activeConversation)}</div>
+            <div className="crp-actions">
+              <div className="crp-action-btn"><div className="crp-action-icon"><FaBell size={16}/></div>Tắt thông báo</div>
+              <div className="crp-action-btn"><div className="crp-action-icon"><FaThumbtack size={16}/></div>Ghim</div>
+              <div className="crp-action-btn"><div className="crp-action-icon"><FaUsers size={16}/></div>Tạo nhóm</div>
             </div>
-          ))}
-        </div>
+          </div>
+          
+          <div className="crp-section">
+            <div className="crp-sec-title">Ảnh/Video</div>
+            {imgFiles.length > 0 ? (
+              <>
+                <div className="crp-grid">
+                  {imgFiles.slice(0, 6).map((m, i) => (
+                    <img key={i} src={m.url} alt="" className="crp-grid-img" />
+                  ))}
+                </div>
+                <button className="crp-view-all">Xem tất cả</button>
+              </>
+            ) : <div style={{fontSize: 12, color: 'var(--z-text-muted)'}}>Chưa có Ảnh/Video nào</div>}
+          </div>
 
-        <div className="crp-section">
-          <div className="crp-section-title">Thành viên</div>
-          {[
-            { name: "GV. Nguyễn Văn A", role: "GV", color: "#1B6EF3" },
-            { name: "Trần Thị B", role: "TG", color: "#9C27B0" },
-            { name: "Nguyễn Văn An", role: "SV", color: "#4CAF50" },
-          ].map((m) => (
-            <div key={m.name} className="crp-member">
-              <div className="crp-m-av" style={{ background: m.color }}>
-                {m.name.split(" ").pop()[0]}
-              </div>
-              <span className="crp-m-name">{m.name}</span>
-              <span
-                className="crp-m-role"
-                style={{
-                  background:
-                    m.role === "GV"
-                      ? "#EFF6FF"
-                      : m.role === "TG"
-                        ? "#F3E8FF"
-                        : "#F0FDF4",
-                  color:
-                    m.role === "GV"
-                      ? "#1B6EF3"
-                      : m.role === "TG"
-                        ? "#9333EA"
-                        : "#16A34A",
-                }}
-              >
-                {m.role}
-              </span>
-            </div>
-          ))}
-        </div>
-      </div>
+          <div className="crp-section">
+            <div className="crp-sec-title">File</div>
+            {docFiles.length > 0 ? (
+              <>
+                {docFiles.slice(0, 3).map((m, i) => {
+                  const fname = m.name || m.fileName;
+                  return (
+                    <div key={i} className="crp-file-row">
+                      <div className="crp-file-icon" style={{background: getFileColor(fname)}}>{getExt(fname).substring(0,3).toUpperCase()}</div>
+                      <div className="crp-file-info">
+                        <div className="crp-file-name">{fname}</div>
+                        <div className="crp-file-meta">{formatBytes(m.size)}</div>
+                      </div>
+                    </div>
+                  );
+                })}
+                <button className="crp-view-all">Xem tất cả</button>
+              </>
+            ) : <div style={{fontSize: 12, color: 'var(--z-text-muted)'}}>Chưa có File nào</div>}
+          </div>
+
+          <div className="crp-section">
+            <div className="crp-sec-title">Link</div>
+            {linkItems.length > 0 ? (
+              <>
+                {linkItems.slice(0, 3).map((link, i) => (
+                  <div key={i} className="crp-link-row">
+                    <div className="crp-link-icon"><FaLink size={14}/></div>
+                    <a href={link} target="_blank" rel="noreferrer" className="crp-link-url">{link}</a>
+                  </div>
+                ))}
+                <button className="crp-view-all">Xem tất cả</button>
+              </>
+            ) : <div style={{fontSize: 12, color: 'var(--z-text-muted)'}}>Chưa có Link nào</div>}
+          </div>
+        </aside>
+      )}
     </div>
   );
 }

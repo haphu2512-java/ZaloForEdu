@@ -1,9 +1,22 @@
 const FriendRequest = require('../models/FriendRequest');
 const User = require('../models/User');
+const Notification = require('../models/Notification');
 const asyncHandler = require('../utils/asyncHandler');
 const ApiError = require('../utils/apiError');
 const { successResponse } = require('../utils/apiResponse');
 const { encodeCursor, decodeCursor } = require('../utils/cursor');
+
+// Helper: tạo notification và emit socket nếu có
+const createNotification = async (io, { userId, type, title, body, data, actor }) => {
+  const notif = await Notification.create({ userId, type, title, body, data });
+  if (io) {
+    io.to(`user:${userId.toString()}`).emit('new_notification', {
+      ...notif.toObject(),
+      actor,
+    });
+  }
+  return notif;
+};
 
 const sendFriendRequest = asyncHandler(async (req, res) => {
   const fromUserId = req.user._id;
@@ -33,6 +46,22 @@ const sendFriendRequest = asyncHandler(async (req, res) => {
     { upsert: true, new: true, setDefaultsOnInsert: true },
   );
 
+  // Tạo notification cho người nhận
+  try {
+    const io = req.app.get('io');
+    await createNotification(io, {
+      userId: toUserId,
+      type: 'friend_request',
+      title: 'Lời mời kết bạn mới',
+      body: `${fromUser.username} đã gửi lời mời kết bạn cho bạn`,
+      data: { requestId: request._id, fromUserId: fromUserId },
+      actor: { _id: fromUser._id, username: fromUser.username, avatarUrl: fromUser.avatarUrl },
+    });
+  } catch (err) {
+    // Không fail request nếu notification lỗi
+    console.error('Failed to create friend request notification:', err.message);
+  }
+
   return successResponse(res, request, 'Friend request sent', 201);
 });
 
@@ -54,6 +83,22 @@ const acceptFriendRequest = asyncHandler(async (req, res) => {
     User.findByIdAndUpdate(request.fromUserId, { $addToSet: { friends: request.toUserId } }),
     User.findByIdAndUpdate(request.toUserId, { $addToSet: { friends: request.fromUserId } }),
   ]);
+
+  // Thông báo cho người gửi lời mời biết đã được chấp nhận
+  try {
+    const accepter = await User.findById(req.user._id).select('username avatarUrl');
+    const io = req.app.get('io');
+    await createNotification(io, {
+      userId: request.fromUserId,
+      type: 'friend_accepted',
+      title: 'Lời mời kết bạn được chấp nhận',
+      body: `${accepter.username} đã chấp nhận lời mời kết bạn của bạn`,
+      data: { userId: req.user._id },
+      actor: { _id: accepter._id, username: accepter.username, avatarUrl: accepter.avatarUrl },
+    });
+  } catch (err) {
+    console.error('Failed to create friend accepted notification:', err.message);
+  }
 
   return successResponse(res, request, 'Friend request accepted');
 });
@@ -191,6 +236,59 @@ const getIncomingFriendRequests = asyncHandler(async (req, res) => {
   );
 });
 
+const getOutgoingFriendRequests = asyncHandler(async (req, res) => {
+  const limit = Math.min(Number(req.query.limit) || 20, 100);
+  const { cursor } = req.query;
+
+  const filter = {
+    fromUserId: req.user._id,
+    status: 'pending',
+  };
+
+  // Apply cursor filter
+  const query = { ...filter };
+  if (cursor) {
+    const parsed = decodeCursor(cursor);
+    if (!parsed) {
+      throw new ApiError(400, 'INVALID_CURSOR', 'Cursor is invalid');
+    }
+    query.$or = [
+      { createdAt: { $lt: parsed.createdAt } },
+      {
+        createdAt: parsed.createdAt,
+        _id: { $lt: parsed.id },
+      },
+    ];
+  }
+
+  const items = await FriendRequest.find(query)
+    .sort({ createdAt: -1, _id: -1 })
+    .limit(limit + 1)
+    .populate('toUserId', 'username email phone avatarUrl isOnline lastSeen');
+
+  let nextCursor = null;
+  let finalItems = items;
+
+  if (items.length > limit) {
+    const nextItem = items[limit - 1];
+    nextCursor = encodeCursor({
+      createdAt: nextItem.createdAt,
+      id: nextItem._id.toString(),
+    });
+    finalItems = items.slice(0, limit);
+  }
+
+  return successResponse(
+    res,
+    {
+      items: finalItems,
+      nextCursor,
+      limit,
+    },
+    'Outgoing friend requests fetched',
+  );
+});
+
 module.exports = {
   sendFriendRequest,
   acceptFriendRequest,
@@ -198,4 +296,5 @@ module.exports = {
   removeFriend,
   getFriendList,
   getIncomingFriendRequests,
+  getOutgoingFriendRequests,
 };
