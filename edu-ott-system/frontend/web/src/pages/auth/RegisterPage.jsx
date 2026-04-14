@@ -3,15 +3,20 @@ import { Link, useNavigate } from "react-router-dom";
 import {
   FaEnvelope, FaLock, FaEye, FaEyeSlash,
   FaPhone, FaUser, FaArrowRight, FaSpinner, FaComments, FaStar, FaShieldAlt,
+  FaCheckCircle, FaRegCircle
 } from "react-icons/fa";
 import { useAuthStore } from "../../store/authStore";
 import "./RegisterPage.css";
 
 const getStrength = (pw) => {
   if (!pw) return null;
-  if (pw.length < 6) return "weak";
-  if (pw.length < 10 || !/[0-9]/.test(pw)) return "medium";
-  return "strong";
+  const hasLen = pw.length >= 6;
+  const hasNum = /[0-9]/.test(pw);
+  const hasUpper = /[A-Z]/.test(pw);
+  
+  if (!hasLen) return "weak";
+  if (hasLen && hasNum && hasUpper) return "strong";
+  return "medium";
 };
 
 export default function RegisterPage() {
@@ -92,12 +97,27 @@ export default function RegisterPage() {
 
     const result = await register(payload);
     if (result.success) {
-      // Redirect to OTP verify page, pass the contact method in query
       const query =
         result.registrationMethod === "email"
           ? `email=${encodeURIComponent(result.email)}`
           : `phone=${encodeURIComponent(result.phone)}`;
       navigate(`/verify-otp?${query}`);
+    } else {
+      // Map global error to specific fields
+      const errMsg = (result.error || "").toLowerCase();
+      const newErrs = {};
+      if (errMsg.includes("email") || errMsg.includes("điện thoại") || errMsg.includes("phone")) {
+        newErrs.identifier = result.error;
+      } else if (errMsg.includes("username") || errMsg.includes("người dùng") || errMsg.includes("tên")) {
+        newErrs.username = result.error;
+      } else if (errMsg.includes("password") || errMsg.includes("mật khẩu")) {
+        newErrs.password = result.error;
+      }
+      
+      if (Object.keys(newErrs).length > 0) {
+        setFieldErrors(newErrs);
+        clearError(); // Remove generic top-level error if it's placed in a field
+      }
     }
   };
 
@@ -200,21 +220,34 @@ export default function RegisterPage() {
               </button>
             </div>
             {form.password && (
-              <div className="auth-strength-bars">
-                {["weak", "medium", "strong"].map((lvl, i) => (
-                  <div
-                    key={lvl}
-                    className={`auth-strength-bar ${
-                      strength === "weak" && i === 0 ? "weak"
-                      : strength === "medium" && i <= 1 ? "medium"
-                      : strength === "strong" ? "strong"
-                      : ""
-                    }`}
-                  />
-                ))}
-                <span className={`auth-strength-label ${strength}`}>
-                  {strength === "weak" ? "Yếu" : strength === "medium" ? "Vừa" : "Mạnh"}
-                </span>
+              <div className="auth-strength-container">
+                <div className="auth-strength-bars">
+                  {["weak", "medium", "strong"].map((lvl, i) => (
+                    <div
+                      key={lvl}
+                      className={`auth-strength-bar ${
+                        strength === "weak" && i === 0 ? "weak"
+                        : strength === "medium" && i <= 1 ? "medium"
+                        : strength === "strong" ? "strong"
+                        : ""
+                      }`}
+                    />
+                  ))}
+                  <span className={`auth-strength-label ${strength}`}>
+                    {strength === "weak" ? "Yếu" : strength === "medium" ? "Vừa" : "Mạnh"}
+                  </span>
+                </div>
+                <ul className="auth-password-hints">
+                  <li className={form.password.length >= 6 ? "valid" : ""}>
+                    {form.password.length >= 6 ? <FaCheckCircle size={11} /> : <FaRegCircle size={11} />} Ít nhất 6 ký tự
+                  </li>
+                  <li className={/[0-9]/.test(form.password) ? "valid" : ""}>
+                    {/[0-9]/.test(form.password) ? <FaCheckCircle size={11} /> : <FaRegCircle size={11} />} Chứa ít nhất một số
+                  </li>
+                  <li className={/[A-Z]/.test(form.password) ? "valid" : ""}>
+                    {/[A-Z]/.test(form.password) ? <FaCheckCircle size={11} /> : <FaRegCircle size={11} />} Chứa chữ in hoa
+                  </li>
+                </ul>
               </div>
             )}
             {fieldErrors.password && <p className="auth-field-error">{fieldErrors.password}</p>}
