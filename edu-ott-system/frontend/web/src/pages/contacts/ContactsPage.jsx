@@ -204,7 +204,7 @@ export default function ContactsPage() {
         return;
       }
 
-      const roomId = `room_${myId}_${id}`;
+      const roomId = [myId, id].sort().join('_');
       const callType = action === "video" ? "video" : "audio";
 
       // Emit signal đến B qua socket

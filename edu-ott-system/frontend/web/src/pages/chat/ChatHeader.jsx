@@ -33,7 +33,8 @@ export const ChatHeader = ({ room, onCall, onVideo, onInfo }) => {
       return;
     }
 
-    const roomId = `room_${myId}_${targetUserId}`;
+    // Sort 2 userId để roomId luôn nhất quán dù ai gọi trước
+    const roomId = [myId, targetUserId].sort().join('_');
 
     // FIX: Đã xóa cái check isConnected() ảo ma ở đây.
     // Cứ gọi thẳng giống hệt cách bên ContactsPage đang làm.
