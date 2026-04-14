@@ -35,11 +35,8 @@ export const ChatHeader = ({ room, onCall, onVideo, onInfo }) => {
 
     const roomId = `room_${myId}_${targetUserId}`;
 
-    if (!socketService?.isConnected?.()) {
-      alert('Mất kết nối realtime, vui lòng thử lại.');
-      return;
-    }
-
+    // FIX: Đã xóa cái check isConnected() ảo ma ở đây.
+    // Cứ gọi thẳng giống hệt cách bên ContactsPage đang làm.
     const sent = socketService.callUser({
       targetUserId,
       roomId,
@@ -48,7 +45,7 @@ export const ChatHeader = ({ room, onCall, onVideo, onInfo }) => {
     });
 
     if (!sent) {
-      alert('Không thể gửi yêu cầu gọi.');
+      alert('Mất kết nối realtime, vui lòng thử lại.');
       return;
     }
 

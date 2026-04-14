@@ -36,9 +36,9 @@ export interface AuthData {
 /** Kết quả login/register trả về cho context */
 export interface AuthResponse {
   success: boolean;
-  user: User;
-  accessToken: string;
-  refreshToken: string;
+  user?: User;
+  accessToken?: string;
+  refreshToken?: string;
 }
 
 /** POST /auth/login body */

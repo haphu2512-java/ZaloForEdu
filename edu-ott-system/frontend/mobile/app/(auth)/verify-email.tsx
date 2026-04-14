@@ -47,9 +47,18 @@ export default function VerifyEmailScreen() {
       return;
     }
 
+    const targetEmail =
+      (typeof params.email === 'string' ? params.email : '').trim().toLowerCase()
+      || (user?.email || '').trim().toLowerCase();
+
+    if (!targetEmail) {
+      Alert.alert('Lỗi', 'Không tìm thấy email để xác thực');
+      return;
+    }
+
     setIsSubmitting(true);
     try {
-      await verifyEmail(token.trim());
+      await verifyEmail(token.trim(), targetEmail);
       Alert.alert('Thành công', 'Email đã được xác thực!');
       await refreshUser();
       router.replace('/(auth)/login' as any);

@@ -32,8 +32,9 @@ import {
   reactToMessage,
   getConversations,
 } from '../../utils/messageService';
+import { API_BASE_URL } from '../../utils/api';
 import { getPinnedMessages, pinMessage, unpinMessage } from '../../utils/groupFeatureService';
-import { uploadMediaBase64, getMediaById, uploadImageToCloudinary, toAbsoluteMediaUrl } from '../../utils/mediaService';
+import { uploadMediaBase64, getMediaById, uploadImageToCloudinary } from '../../utils/mediaService';
 import {
   connectSocket,
   joinConversation,
@@ -75,6 +76,54 @@ function getConversationTitle(conv: Conversation, currentUserId: string) {
 function isImageMimeType(mimeType?: string): boolean {
   if (!mimeType) return false;
   return mimeType.startsWith('image/');
+}
+
+const API_ORIGIN = API_BASE_URL.replace(/\/api\/v1$/, '');
+
+function toAbsoluteMediaUrl(url?: string): string {
+  if (!url) return '';
+  if (/^https?:\/\//i.test(url)) return url;
+  return `${API_ORIGIN}${url.startsWith('/') ? '' : '/'}${url}`;
+}
+
+function getMimeTypeFromFileName(fileName?: string): string {
+  const extension = fileName?.split('.').pop()?.toLowerCase();
+  switch (extension) {
+    case 'jpg':
+    case 'jpeg':
+      return 'image/jpeg';
+    case 'png':
+      return 'image/png';
+    case 'gif':
+      return 'image/gif';
+    case 'webp':
+      return 'image/webp';
+    case 'pdf':
+      return 'application/pdf';
+    case 'doc':
+      return 'application/msword';
+    case 'docx':
+      return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+    case 'xls':
+      return 'application/vnd.ms-excel';
+    case 'xlsx':
+      return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+    case 'ppt':
+      return 'application/vnd.ms-powerpoint';
+    case 'pptx':
+      return 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
+    case 'txt':
+      return 'text/plain';
+    default:
+      return 'application/octet-stream';
+  }
+}
+
+function isImageAttachment(media?: MediaItem | null): boolean {
+  if (!media) return false;
+  if (isImageMimeType(media.mimeType)) return true;
+  const inferredMimeType = getMimeTypeFromFileName(media.fileName);
+  return isImageMimeType(inferredMimeType);
 }
 
 export default function ChatScreen() {
@@ -168,14 +217,7 @@ export default function ChatScreen() {
     setIsLoading(true);
     try {
       const res = await getMessages({ conversationId, limit: 30 });
-      // Normalize URL cho mediaIds đã populate
-      const normalizedItems = (res.items || []).map((msg: any) => ({
-        ...msg,
-        mediaIds: (msg.mediaIds || []).map((m: any) =>
-          typeof m === 'object' && m.url ? { ...m, url: toAbsoluteMediaUrl(m.url) } : m
-        ),
-      }));
-      setMessages(normalizedItems);
+      setMessages(res.items);
       setNextCursor(res.nextCursor);
       const convRes = await getConversations(null, 100);
       const matched = (convRes.items || []).find((item) => (item._id || item.id) === conversationId) || null;
@@ -273,10 +315,12 @@ export default function ChatScreen() {
   useEffect(() => () => stopTypingWithEmit(), [stopTypingWithEmit]);
 
   useEffect(() => {
-    // mediaIds có thể là string[] hoặc object[] (khi đã populate)
-    const ids = messages.flatMap((m) => (m.mediaIds || []).map((mid: any) =>
-      typeof mid === 'string' ? mid : mid?._id || mid?.id
-    ).filter(Boolean));
+    const ids = messages
+      .flatMap((m) =>
+        (m.mediaIds || []).map((mid: any) =>
+          typeof mid === 'string' ? mid : (mid._id || mid.id || ''),
+        ))
+      .filter(Boolean);
     if (ids.length) {
       void ensureMediaLoaded(ids);
     }
@@ -302,12 +346,6 @@ export default function ChatScreen() {
         setMessages((prev) => {
           if (prev.some((m) => getMessageId(m) === getMessageId(message))) return prev;
           let enhancedMessage = { ...message };
-          // Normalize URL cho mediaIds được populate từ socket
-          if (enhancedMessage.mediaIds?.length) {
-            enhancedMessage.mediaIds = (enhancedMessage.mediaIds as any[]).map((m: any) =>
-              typeof m === 'object' && m.url ? { ...m, url: toAbsoluteMediaUrl(m.url) } : m
-            );
-          }
           if (enhancedMessage.replyTo && typeof enhancedMessage.replyTo === 'string') {
             const originalMsg = prev.find((m) => getMessageId(m) === enhancedMessage.replyTo);
             if (originalMsg) enhancedMessage.replyTo = originalMsg;
@@ -455,7 +493,7 @@ export default function ChatScreen() {
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
       quality: 0.85,
       allowsMultipleSelection: false,
     });
@@ -463,7 +501,7 @@ export default function ChatScreen() {
     setIsSending(true);
     try {
       const asset = result.assets[0];
-      // Resize về max 800px để giảm kích thước Base64
+      // Resize về max 800px để tránh đứng app khi đọc Base64
       const compressed = await ImageManipulator.manipulateAsync(
         asset.uri,
         [{ resize: { width: 800 } }],
@@ -471,7 +509,10 @@ export default function ChatScreen() {
       );
       const base64 = await FileSystem.readAsStringAsync(compressed.uri, { encoding: FileSystem.EncodingType.Base64 });
       const media = await uploadMediaBase64({ fileName: `photo-${Date.now()}.jpg`, mimeType: 'image/jpeg', contentBase64: base64 });
-      const newMsg = await sendMessage({ conversationId, mediaIds: [media._id], content: '' });
+      const mediaId = media._id || media.id;
+      if (!mediaId) throw new Error('Missing media ID');
+      setMediaById((prev) => ({ ...prev, [mediaId]: media }));
+      const newMsg = await sendMessage({ conversationId, mediaIds: [mediaId], content: '' });
       setMessages((prev) =>
         prev.some((m) => getMessageId(m) === getMessageId(newMsg)) ? prev : [newMsg, ...prev],
       );
@@ -488,14 +529,19 @@ export default function ChatScreen() {
       const result = await DocumentPicker.getDocumentAsync({ copyToCacheDirectory: true });
       if (result.canceled || !result.assets?.length) return;
       const asset = result.assets[0];
+      const fileName = asset.name || `file-${Date.now()}`;
       setIsSending(true);
       try {
-        const media = await uploadMediaForm({
-          uri: asset.uri,
-          fileName: asset.name,
-          mimeType: asset.mimeType || 'application/octet-stream',
+        const base64 = await FileSystem.readAsStringAsync(asset.uri, { encoding: FileSystem.EncodingType.Base64 });
+        const media = await uploadMediaBase64({
+          fileName,
+          mimeType: asset.mimeType || getMimeTypeFromFileName(fileName),
+          contentBase64: base64,
         });
-        const newMsg = await sendMessage({ conversationId, mediaIds: [media._id], content: `Đã gửi file: ${asset.name}` });
+        const mediaId = media._id || media.id;
+        if (!mediaId) throw new Error('Missing media ID');
+        setMediaById((prev) => ({ ...prev, [mediaId]: media }));
+        const newMsg = await sendMessage({ conversationId, mediaIds: [mediaId], content: `Đã gửi file: ${fileName}` });
         setMessages((prev) =>
           prev.some((m) => getMessageId(m) === getMessageId(newMsg)) ? prev : [newMsg, ...prev],
         );
@@ -508,6 +554,15 @@ export default function ChatScreen() {
       console.log('Document picker err', e);
     }
   };
+
+  const openAttachment = useCallback(async (media?: MediaItem | null) => {
+    if (!media?.url) return;
+    try {
+      await Linking.openURL(media.url);
+    } catch {
+      Alert.alert('Lỗi', 'Không thể mở tệp trên thiết bị này');
+    }
+  }, []);
 
   const openForwardModal = async (msg: Message) => {
     try {
@@ -718,10 +773,11 @@ export default function ChatScreen() {
             {/* Media attachments */}
             {!!item.mediaIds?.length && (
               <View style={{ marginTop: item.content ? 8 : 0, gap: 6 }}>
-                {item.mediaIds.map((mediaId: any, idx: number) => {
-                  // mediaId có thể là string ID hoặc object đã populate
-                  const media = typeof mediaId === 'object' ? mediaId : mediaById[mediaId];
-                  const isImage = isImageMimeType(media?.mimeType);
+                {item.mediaIds.map((mediaItem: any, idx) => {
+                  const mediaId = typeof mediaItem === 'string' ? mediaItem : (mediaItem._id || mediaItem.id || '');
+                  const rawMedia = typeof mediaItem === 'string' ? mediaById[mediaId] : mediaItem;
+                  const media = rawMedia ? { ...rawMedia, url: toAbsoluteMediaUrl(rawMedia.url) } : null;
+                  const isImage = isImageAttachment(media);
                   const fileName = media?.fileName || `Tệp đính kèm ${idx + 1}`;
                   const canOpen = !!media?.url;
 
@@ -741,12 +797,7 @@ export default function ChatScreen() {
                     <TouchableOpacity
                       key={`${mediaId}-${idx}`}
                       disabled={!canOpen}
-                      onPress={async () => {
-                        if (!media?.url) return;
-                        const supported = await Linking.canOpenURL(media.url);
-                        if (supported) await Linking.openURL(media.url);
-                        else Alert.alert('Lỗi', 'Không thể mở tập');
-                      }}
+                      onPress={() => openAttachment(media)}
                       style={[styles.fileAttachment, { backgroundColor: isMine ? '#1D4ED8' : colors.border }]}
                     >
                       <Ionicons name="document-attach-outline" size={18} color={isMine ? '#DBEAFE' : colors.text} />

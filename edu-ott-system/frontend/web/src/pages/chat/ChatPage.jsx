@@ -6,6 +6,7 @@ import toast from "react-hot-toast";
 
 import { uploadFile } from "../../services/mediaService"; 
 import { useFriendStore } from "../../store/friendStore"; 
+import { socketService } from "../../services/socketService"; // Đã import dịch vụ socket dùng chung
 import { MessageBubble } from "./MessageBubble";
 import { ShareMessageModal } from "./Modals/ShareMessageModal";
 import { ChatHeader } from "./ChatHeader"; 
@@ -15,7 +16,9 @@ import "./ChatPage.css";
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api/v1";
 const API_ORIGIN = API_BASE_URL.replace(/\/api\/v1\/?$/, "");
-const socket = io(API_ORIGIN, { autoConnect: false, transports: ['websocket'] });
+
+// FIX TẠI ĐÂY: Dùng socket chung của app, tránh việc khởi tạo 2 socket cắn nhau rớt mạng.
+const socket = socketService?.socket || io(API_ORIGIN, { autoConnect: false, transports: ['websocket'] });
 
 const IMAGE_EXTS = ["jpg","jpeg","png","gif","webp","svg"];
 const VIDEO_EXTS = ["mp4","mov","avi","mkv","webm"];
@@ -196,8 +199,12 @@ export default function ChatPage() {
   // ==================== KHỞI TẠO SOCKET ====================
   useEffect(() => {
     if (!token) return;
-    socket.auth = { token };
-    socket.connect();
+    
+    // FIX TẠI ĐÂY: Chỉ connect khi socket thực sự chưa được bật để tránh đá mất socketService
+    if (!socket.connected) {
+      socket.auth = { token };
+      socket.connect();
+    }
 
     fetchConversationsData();
 
@@ -218,7 +225,6 @@ export default function ChatPage() {
                 : media
             )
           };
-          console.log('[DEBUG] normalizedMsg mediaIds:', normalizedMsg.mediaIds);
           return [...prev, normalizedMsg];
         });
         socket.emit("message_delivered", { messageId: latestMessage._id });
@@ -248,7 +254,6 @@ export default function ChatPage() {
     });
 
     socket.on("message_recalled", ({ messageId }) => {
-      // FIX: Đảm bảo cập nhật cả nội dung và attachments về rỗng
       setMessages(prev => prev.map(m => String(m._id) === String(messageId) ? { ...m, isRecalled: true, content: "", attachments: [], mediaIds: [] } : m));
       setConversations(prev => prev.map(c => {
         if (c.latestMessage && String(c.latestMessage._id) === String(messageId)) {
@@ -262,11 +267,16 @@ export default function ChatPage() {
       setMessages(prev => prev.map(m => String(m._id) === String(messageId) ? { ...m, reactions } : m));
     });
 
+    // Bỏ tắt cái toast.error ở connect_error đi để khỏi spam UI 
+    socket.on("connect_error", (err) => {
+      console.error("Socket lỗi kết nối:", err.message);
+    });
+
     return () => {
       socket.off("conversation_updated");
       socket.off("message_recalled");
       socket.off("message_reacted");
-      socket.disconnect();
+      socket.off("connect_error");
     };
   }, [token, userId, fetchConversationsData]);
 
@@ -347,12 +357,11 @@ export default function ChatPage() {
     return currentConvId;
   };
 
-  // ==================== TƯƠNG TÁC (Gửi, Thu hồi, Thả tim) ====================
+  // ==================== TƯƠNG TÁC ====================
   const handleSendText = async (content) => {
     if (!activeConversation) return;
     try {
       const currentConvId = await ensureRealConversation();
-      // FIX: Xóa setMessages thủ công vì socket "conversation_updated" sẽ lo việc này
       await axios.post(`${API_BASE_URL}/messages/send`,
         { content: content, conversationId: currentConvId },
         { headers: { Authorization: `Bearer ${token}` } }
@@ -364,7 +373,6 @@ export default function ChatPage() {
     if (!activeConversation) return;
     try {
       const currentConvId = await ensureRealConversation();
-      // FIX: Xóa setMessages thủ công để tránh lặp
       await axios.post(`${API_BASE_URL}/messages/send`,
         { content: "👍", conversationId: currentConvId },
         { headers: { Authorization: `Bearer ${token}` } }
@@ -384,7 +392,6 @@ export default function ChatPage() {
         onProgress: (pct) => setUploads(prev => prev.map(u => u.id === uid ? { ...u, percent: pct } : u))
       });
 
-      // FIX: Xóa setMessages thủ công. Socket sẽ tự nhận message mới có đính kèm media.
       await axios.post(`${API_BASE_URL}/messages/send`,
         { content: "", mediaIds: [media._id || media.id], conversationId: currentConvId },
         { headers: { Authorization: `Bearer ${token}` } }
@@ -396,12 +403,49 @@ export default function ChatPage() {
     }
   };
 
-  const handleUploadFilesFromInput = (files) => {
-    files.forEach(handleUploadFile);
+  const handleUploadFilesFromInput = async (files) => {
+    if (!files || files.length === 0) return;
+    if (!activeConversation) return;
+
+    if (files.length === 1) {
+      handleUploadFile(files[0]);
+      return;
+    }
+
+    const uid = Date.now() + Math.random();
+    const label = `${files.length} file`;
+    setUploads(prev => [...prev, { id: uid, name: label, percent: 0 }]);
+
+    try {
+      const currentConvId = await ensureRealConversation();
+      let doneCount = 0;
+      const mediaList = await Promise.all(
+        Array.from(files).map(file =>
+          uploadFile(file, {
+            folder: "zaloapp/chat",
+            onProgress: () => {
+              doneCount++;
+              const pct = Math.round((doneCount / files.length) * 100);
+              setUploads(prev => prev.map(u => u.id === uid ? { ...u, percent: pct } : u));
+            }
+          })
+        )
+      );
+
+      const mediaIds = mediaList.map(m => m._id || m.id);
+
+      await axios.post(`${API_BASE_URL}/messages/send`,
+        { content: "", mediaIds, conversationId: currentConvId },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+    } catch (err) {
+      toast.error("Lỗi tải lên file");
+    } finally {
+      setUploads(prev => prev.filter(u => u.id !== uid));
+    }
   };
 
   const handleReaction = async (messageId, emoji) => {
-    // Giữ nguyên logic cập nhật nhanh (optimistic update)
     setMessages(prev => prev.map(m => {
       if (String(m._id) === String(messageId)) {
         const currentReactions = m.reactions || [];
@@ -416,10 +460,9 @@ export default function ChatPage() {
   };
 
   const handleRecall = async (msgId) => {
-    // Cập nhật state local ngay để UX mượt
     setMessages(prev => prev.map(m => String(m._id) === String(msgId) ? { ...m, isRecalled: true, content: "", attachments: [], mediaIds: [] } : m));
     try {
-      await axios.put(`${API_BASE_URL}/messages/${msgId}/recall`, {}, { headers: { Authorization: `Bearer ${token}` } });
+      await axios.put(`${API_BASE_URL}/messages/${msgId}/recall`, { headers: { Authorization: `Bearer ${token}` } });
       toast.success("Đã thu hồi tin nhắn");
     } catch (err) { toast.error("Lỗi thu hồi tin nhắn"); }
   };
