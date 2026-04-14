@@ -46,4 +46,9 @@ module.exports = {
   smtpUseEthereal:
     process.env.SMTP_USE_ETHEREAL === 'true'
     || (process.env.SMTP_USE_ETHEREAL !== 'false' && (process.env.NODE_ENV || 'development') !== 'production'),
+  geminiApiKey: process.env.GEMINI_API_KEY || '',
+  chatbotModel: process.env.CHATBOT_MODEL || 'gemini-2.5-flash',
+  chatbotSystemPrompt: process.env.CHATBOT_SYSTEM_PROMPT || 'You are a helpful AI assistant for a messaging app used in education.',
+  chatbotTemperature: Number(process.env.CHATBOT_TEMPERATURE || 0.7),
+  chatbotMaxOutputTokens: Number(process.env.CHATBOT_MAX_OUTPUT_TOKENS || 1024),
 };
