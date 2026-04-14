@@ -71,7 +71,7 @@ export default function ForgotPasswordPage() {
       }
     } else {
       const phoneVal = idVal.replace(/\s/g, "");
-      if (!/^\+?\d{9,15}$/.test(phoneVal)) {
+      if (!/^(0|\+84)(3|5|7|8|9)\d{8}$/.test(phoneVal)) {
         setIdentifierError("Số điện thoại không hợp lệ");
         return;
       }
