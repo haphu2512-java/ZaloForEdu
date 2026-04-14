@@ -10,6 +10,7 @@ const searchRoutes = require('./search.routes');
 const settingsRoutes = require('./settings.routes');
 const userRoutes = require('./user.routes');
 const chatbotRoutes = require('./chatbot.routes');
+const pollRoutes = require('./poll.routes');
 
 const router = express.Router();
 
@@ -23,5 +24,6 @@ router.use('/notifications', notificationRoutes);
 router.use('/search', searchRoutes);
 router.use('/settings', settingsRoutes);
 router.use('/chatbot', chatbotRoutes);
+router.use('/polls', pollRoutes);
 
 module.exports = router;

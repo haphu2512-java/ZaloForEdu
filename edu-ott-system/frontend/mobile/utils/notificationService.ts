@@ -1,15 +1,8 @@
 import { fetchAPI } from './api';
 import type { NotificationItem, PaginatedResponse } from '../types/chat';
+import { normalizeNotification } from './normalizers';
 
 const NOTIFICATIONS_ENDPOINT = '/notifications';
-
-function normalizeNotification(item: NotificationItem): NotificationItem {
-  return {
-    ...item,
-    _id: item._id || item.id || '',
-    id: item.id || item._id || '',
-  };
-}
 
 export async function getNotifications(
   page: number = 1,

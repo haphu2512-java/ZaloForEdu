@@ -122,8 +122,29 @@ export default function MessagesScreen() {
         });
       };
 
+      const onMessageSeen = (payload: any) => {
+        const msgId = payload?.messageId;
+        const uid = payload?.userId;
+        if (!msgId || !uid) return;
+        setConversations(prev => prev.map(conv => {
+          if (conv.latestMessage && (conv.latestMessage._id === msgId || conv.latestMessage.id === msgId)) {
+            const currentSeen = conv.latestMessage.seenBy || [];
+            const mappedSeen = currentSeen.map((u: any) => typeof u === 'string' ? u : u._id || u.id);
+            if (!mappedSeen.includes(uid)) {
+              return { ...conv, latestMessage: { ...conv.latestMessage, seenBy: [...currentSeen, uid] } };
+            }
+          }
+          return conv;
+        }));
+      };
+
       socket.on('conversation_updated', onConversationUpdated);
-      off = () => socket.off('conversation_updated', onConversationUpdated);
+      socket.on('message_seen', onMessageSeen);
+      
+      off = () => {
+        socket.off('conversation_updated', onConversationUpdated);
+        socket.off('message_seen', onMessageSeen);
+      };
     };
 
     void setupSocketForList();
@@ -204,6 +225,18 @@ export default function MessagesScreen() {
     const otherUser = !isGroup ? item.participants?.find((p) => (p._id || p.id || '') !== (user?.id || '')) : null;
     const isOnline = otherUser?.isOnline;
 
+    // Check if the latest message is unread by the current user
+    let isUnread = false;
+    if (latestMsg) {
+      const msgSenderId = typeof latestMsg.senderId === 'string' ? latestMsg.senderId : latestMsg.senderId?._id || latestMsg.senderId?.id;
+      if (msgSenderId && msgSenderId !== currentUserId) {
+        const seenByList = (latestMsg.seenBy || []).map((u: any) => typeof u === 'string' ? u : u._id || u.id);
+        if (!seenByList.includes(currentUserId)) {
+          isUnread = true;
+        }
+      }
+    }
+
     // Category badge color
     const catColor = item.preference?.category === 'work' ? '#F59E0B' : item.preference?.category === 'family' ? '#10B981' : null;
 
@@ -214,6 +247,7 @@ export default function MessagesScreen() {
         avatar={displayAvatar}
         lastMessage={senderName && latestMsg ? `${senderName}: ${lastMessageText}` : lastMessageText}
         time={formatTime(lastMessageTime)}
+        unreadCount={isUnread ? 1 : 0}
         roomModel={isGroup ? 'Group' : 'Conversation'}
         isOnline={!!isOnline}
         colors={colors}

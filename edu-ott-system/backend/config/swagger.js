@@ -44,6 +44,8 @@ const options = {
       { name: 'Search' },
       { name: 'Settings' },
       { name: 'ChatBot' },
+      { name: 'Polls', description: 'Tính năng bình chọn trong nhóm lớp học' },
+      { name: 'GroupFeatures', description: 'Bảng tin ghim, Duyệt thành viên, Invite Links' },
     ],
     components: {
       securitySchemes: {
@@ -291,9 +293,94 @@ const options = {
             resourceType: { type: 'string', enum: ['image', 'video', 'raw', 'auto'], default: 'auto' },
           },
         },
+        // ===================== NEW EDU SCHEMAS =====================
+        PollOption: {
+          type: 'object',
+          properties: {
+            _id: { type: 'string' },
+            text: { type: 'string', example: 'Thứ 2' },
+            votes: {
+              type: 'array',
+              items: { type: 'string' },
+              description: 'Danh sách userId đã vote (trống nếu ẩn danh)',
+            },
+          },
+        },
+        CreatePollInput: {
+          type: 'object',
+          required: ['conversationId', 'question', 'options'],
+          properties: {
+            conversationId: { type: 'string' },
+            question: { type: 'string', maxLength: 500, example: 'Họp phụ huynh vào ngày nào?' },
+            options: {
+              type: 'array',
+              minItems: 2,
+              maxItems: 10,
+              items: { type: 'string' },
+              example: ['Thứ 2', 'Thứ 3', 'Thứ 6'],
+            },
+            isMultipleChoice: { type: 'boolean', default: false },
+            isAnonymous: { type: 'boolean', default: false },
+            allowAddOptions: { type: 'boolean', default: false },
+            expiredAt: { type: 'string', format: 'date-time', nullable: true },
+          },
+        },
+        VotePollInput: {
+          type: 'object',
+          required: ['optionIndexes'],
+          properties: {
+            optionIndexes: {
+              type: 'array',
+              items: { type: 'integer', minimum: 0 },
+              minItems: 1,
+              example: [0],
+            },
+          },
+        },
+        PinnedItem: {
+          type: 'object',
+          properties: {
+            messageId: { type: 'string' },
+            pinnedBy: { type: 'string' },
+            pinnedAt: { type: 'string', format: 'date-time' },
+          },
+        },
+        PinMessageInput: {
+          type: 'object',
+          required: ['messageId'],
+          properties: {
+            messageId: { type: 'string', example: '661d7e5d00f1e0a67ea9b999' },
+          },
+        },
+        GroupSettingsInput: {
+          type: 'object',
+          properties: {
+            isApprovalRequired: { type: 'boolean', example: true },
+          },
+        },
+        JoinRequestInput: {
+          type: 'object',
+          properties: {
+            reason: { type: 'string', maxLength: 300, example: 'Tôi là phụ huynh học sinh lớp 12A1' },
+          },
+        },
+        ProcessJoinRequestInput: {
+          type: 'object',
+          required: ['action'],
+          properties: {
+            action: { type: 'string', enum: ['approve', 'reject'], example: 'approve' },
+          },
+        },
+        InviteLinkResponse: {
+          type: 'object',
+          properties: {
+            inviteCode: { type: 'string', example: 'a1b2c3d4e5f6g7h8' },
+            inviteLink: { type: 'string', example: 'zaloedu://join/a1b2c3d4e5f6g7h8' },
+          },
+        },
       },
       responses: {
-        UnauthorizedError: {
+        Unauthorized: {
           description: 'Access token is missing or invalid',
           content: {
             'application/json': {

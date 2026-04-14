@@ -1,5 +1,6 @@
 import { fetchAPI } from './api';
 import type { MediaItem } from '../types/chat';
+import { API_BASE_URL } from './api';
 
 type CloudinarySignature = {
   cloudName: string;
@@ -12,6 +13,23 @@ type CloudinarySignature = {
   uploadUrl: string;
 };
 
+const API_ORIGIN = API_BASE_URL.replace(/\/api\/v1$/, '');
+
+function toAbsoluteMediaUrl(url?: string): string {
+  if (!url) return '';
+  if (/^https?:\/\//i.test(url)) return url;
+  return `${API_ORIGIN}${url.startsWith('/') ? '' : '/'}${url}`;
+}
+
+function normalizeMedia(item: MediaItem): MediaItem {
+  return {
+    ...item,
+    _id: item._id || item.id || '',
+    id: item.id || item._id || '',
+    url: toAbsoluteMediaUrl(item.url),
+  };
+}
+
 export async function uploadMediaBase64(payload: {
   fileName: string;
   mimeType: string;
@@ -21,7 +39,7 @@ export async function uploadMediaBase64(payload: {
     method: 'POST',
     body: JSON.stringify(payload),
   });
-  return res.data;
+  return normalizeMedia(res.data);
 }
 
 export async function uploadImageToCloudinary(localUri: string): Promise<string> {
@@ -74,7 +92,7 @@ export async function uploadImageToCloudinary(localUri: string): Promise<string>
 
 export async function getMediaById(mediaId: string): Promise<MediaItem> {
   const res = await fetchAPI(`/media/${mediaId}`);
-  return res.data;
+  return normalizeMedia(res.data);
 }
 
 export async function deleteMediaById(mediaId: string): Promise<void> {

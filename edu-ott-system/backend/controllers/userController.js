@@ -139,10 +139,38 @@ const getBlockedUsers = asyncHandler(async (req, res) => {
   return successResponse(res, { blockedUsers: currentUser.blockedUsers }, 'Blocked users fetched');
 });
 
+/**
+ * [ADMIN] Update user status (isActive, banReason)
+ */
+const updateUserStatus = asyncHandler(async (req, res) => {
+  // Check if current user is admin
+  if (req.user.role !== 'admin') {
+    throw new ApiError(403, 'FORBIDDEN', 'Only admins can perform this action');
+  }
+
+  const { targetUserId, isActive, banReason } = req.body;
+  if (!targetUserId) throw new ApiError(400, 'MISSING_USER_ID', 'Target user ID is required');
+
+  const user = await User.findById(targetUserId);
+  if (!user) throw new ApiError(404, 'USER_NOT_FOUND', 'User not found');
+
+  if (typeof isActive !== 'undefined') user.isActive = !!isActive;
+  if (typeof banReason !== 'undefined') user.banReason = banReason || null;
+
+  await user.save();
+
+  return successResponse(res, {
+    userId: user._id,
+    isActive: user.isActive,
+    banReason: user.banReason
+  }, 'User status updated');
+});
+
 module.exports = {
   getUserById,
   updateUserById,
   deleteUserById,
   blockOrUnblockUser,
   getBlockedUsers,
+  updateUserStatus,
 };

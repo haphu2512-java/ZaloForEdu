@@ -36,6 +36,13 @@ import {
 import { uploadImageToCloudinary } from '@/utils/mediaService';
 import type { Conversation, UserInfo } from '@/types/chat';
 import { getFriendList } from '@/utils/friendService';
+import { Share, Clipboard } from 'react-native';
+import {
+  getInviteLink,
+  resetInviteLink,
+  updateGroupSettings,
+  type InviteLinkResponse,
+} from '@/utils/groupFeatureService';
 
 export default function ConversationDetailsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -59,6 +66,10 @@ export default function ConversationDetailsScreen() {
   const [editorValue, setEditorValue] = useState('');
   const [editorSubmit, setEditorSubmit] = useState<null | ((val: string) => void)>(null);
   const [transferLeaveVisible, setTransferLeaveVisible] = useState(false);
+  // Feature 4 & 5
+  const [approvalEnabled, setApprovalEnabled] = useState(false);
+  const [inviteLink, setInviteLink] = useState<string | null>(null);
+  const [inviteLoading, setInviteLoading] = useState(false);
 
   const currentUserId = user?.id || '';
 
@@ -72,6 +83,10 @@ export default function ConversationDetailsScreen() {
       const matched = (convRes?.items || []).find((c) => c._id === id || c.id === id);
       setConversation(matched || null);
       setFriends(friendsRes?.items || []);
+      // Sync approval setting
+      if (matched?.settings?.isApprovalRequired !== undefined) {
+        setApprovalEnabled(matched.settings.isApprovalRequired);
+      }
     } catch (error: any) {
       console.log('Failed to load conversation details', error.message);
     }
@@ -293,16 +308,52 @@ export default function ConversationDetailsScreen() {
         </View>
 
         {!isGroup && (
-          <View style={styles.actionGrid}>
-            <TouchableOpacity
-              style={[styles.gridBtn, { backgroundColor: colors.surface }]}
-              onPress={() => openEditor('Đổi biệt danh', conversation.preference?.nickname || otherParticipant?.username || '', (val) => handleAction(() => updateConversationPreference(conversation._id, { nickname: val }), 'Đã đổi biệt danh'))}
-            >
-              <View style={[styles.iconCircle, { backgroundColor: '#FEF3C7' }]}>
-                <Ionicons name="pencil" size={24} color="#D97706" />
-              </View>
-              <Text style={[styles.gridBtnText, { color: colors.text }]}>Đổi biệt danh</Text>
-            </TouchableOpacity>
+          <View style={{ marginTop: 20 }}>
+            <View style={[styles.section, { backgroundColor: colors.surface }]}>
+              <Text style={[styles.sectionTitle, { color: colors.muted, fontSize: 13, textTransform: 'uppercase' }]}>Hành động khác</Text>
+              
+              <TouchableOpacity style={styles.optionItem} onPress={() => router.push({ pathname: '/create-group', params: { preselectedUserId: getUserId(otherParticipant) } } as any)}>
+                <Ionicons name="people" size={24} color={colors.text} style={{ width: 30, marginRight: 15 }} />
+                <Text style={{ flex: 1, color: colors.text, fontSize: 16 }}>Tạo nhóm chat với {otherParticipant?.username}</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.optionItem} onPress={() => openEditor('Đổi biệt danh', conversation.preference?.nickname || otherParticipant?.username || '', (val) => handleAction(() => updateConversationPreference(conversation._id, { nickname: val }), 'Đã đổi biệt danh'))}>
+                <Ionicons name="pencil" size={24} color={colors.text} style={{ width: 30, marginRight: 15 }} />
+                <Text style={{ flex: 1, color: colors.text, fontSize: 16 }}>Đổi biệt danh</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.optionItem} onPress={() => Alert.alert('Thông báo', 'Tính năng đang cập nhật')}>
+                <Ionicons name="images" size={24} color={colors.text} style={{ width: 30, marginRight: 15 }} />
+                <Text style={{ flex: 1, color: colors.text, fontSize: 16 }}>Xem file phương tiện, file và liên kết</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.optionItem} onPress={() => Alert.alert('Thông báo', 'Tính năng đang cập nhật')}>
+                <Ionicons name="pin" size={24} color={colors.text} style={{ width: 30, marginRight: 15 }} />
+                <Text style={{ flex: 1, color: colors.text, fontSize: 16 }}>Tin nhắn đã ghim</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity style={styles.optionItem} onPress={() => Alert.alert('Thông báo', 'Tính năng đang cập nhật')}>
+                <Ionicons name="search" size={24} color={colors.text} style={{ width: 30, marginRight: 15 }} />
+                <Text style={{ flex: 1, color: colors.text, fontSize: 16 }}>Tìm kiếm trong cuộc trò chuyện</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={[styles.section, { backgroundColor: colors.surface, marginTop: 15 }]}>
+              <Text style={[styles.sectionTitle, { color: colors.muted, fontSize: 13, textTransform: 'uppercase' }]}>Quyền riêng tư và hỗ trợ</Text>
+
+              <TouchableOpacity style={styles.optionItem} onPress={() => Alert.alert('Thông báo', 'Tính năng đang cập nhật')}>
+                <Ionicons name="shield-checkmark" size={24} color={colors.text} style={{ width: 30, marginRight: 15 }} />
+                <Text style={{ flex: 1, color: colors.text, fontSize: 16 }}>Quyền với tin nhắn</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.optionItem} onPress={() => Alert.alert('Thông báo', 'Tính năng đang cập nhật')}>
+                <Ionicons name="timer" size={24} color={colors.text} style={{ width: 30, marginRight: 15 }} />
+                <View style={{ flex: 1 }}>
+                  <Text style={{ color: colors.text, fontSize: 16 }}>Tin nhắn tự hủy</Text>
+                  <Text style={{ color: colors.muted, fontSize: 12, marginTop: 2 }}>Tắt</Text>
+                </View>
+              </TouchableOpacity>
+            </View>
           </View>
         )}
 
@@ -339,6 +390,59 @@ export default function ConversationDetailsScreen() {
                 <Ionicons name="person-add" size={24} color="#10B981" />
               </View>
               <Text style={[styles.gridBtnText, { color: colors.text }]}>Thêm TV</Text>
+            </TouchableOpacity>
+
+            {/* Feature 5: Invite link */}
+            <TouchableOpacity
+              style={[styles.gridBtn, { backgroundColor: colors.surface }]}
+              disabled={inviteLoading}
+              onPress={async () => {
+                try {
+                  setInviteLoading(true);
+                  const res = await getInviteLink(conversation._id);
+                  setInviteLink(res.inviteLink);
+                  Alert.alert(
+                    '🔗 Link mời',
+                    res.inviteLink,
+                    [
+                      { text: 'Sao chép', onPress: () => { Clipboard.setString(res.inviteLink); Alert.alert('Đã sao chép!'); } },
+                      { text: 'Chia sẻ', onPress: () => Share.share({ message: res.inviteLink }) },
+                      { text: 'Đóng', style: 'cancel' },
+                    ]
+                  );
+                } catch (err: any) {
+                  Alert.alert('Lỗi', err.message);
+                } finally {
+                  setInviteLoading(false);
+                }
+              }}
+            >
+              <View style={[styles.iconCircle, { backgroundColor: '#FEF3C7' }]}>
+                {inviteLoading ? <ActivityIndicator color="#92400E" size="small" /> : <Ionicons name="link" size={22} color="#92400E" />}
+              </View>
+              <Text style={[styles.gridBtnText, { color: colors.text }]}>Link mời</Text>
+            </TouchableOpacity>
+
+            {/* Feature 4: Join approval */}
+            <TouchableOpacity
+              style={[styles.gridBtn, { backgroundColor: colors.surface }]}
+              onPress={() => router.push({ pathname: '/join-requests', params: { id: conversation._id } } as any)}
+            >
+              <View style={[styles.iconCircle, { backgroundColor: '#FEE2E2' }]}>
+                <Ionicons name="people-circle" size={24} color="#EF4444" />
+              </View>
+              <Text style={[styles.gridBtnText, { color: colors.text }]}>Duyệt TV</Text>
+            </TouchableOpacity>
+
+            {/* Feature 2: Pinned messages board */}
+            <TouchableOpacity
+              style={[styles.gridBtn, { backgroundColor: colors.surface }]}
+              onPress={() => router.push({ pathname: '/pinned-messages', params: { id: conversation._id } } as any)}
+            >
+              <View style={[styles.iconCircle, { backgroundColor: '#ECFDF5' }]}>
+                <Ionicons name="pin" size={22} color="#059669" />
+              </View>
+              <Text style={[styles.gridBtnText, { color: colors.text }]}>Bảng tin</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -503,10 +607,10 @@ const styles = StyleSheet.create({
   headerProfile: { alignItems: 'center', paddingVertical: 24 },
   mainAvatar: { width: 100, height: 100, borderRadius: 50, marginBottom: 16 },
   mainTitle: { fontSize: 24, fontWeight: 'bold' },
-  actionGrid: { flexDirection: 'row', justifyContent: 'space-around', paddingHorizontal: 16, marginBottom: 20 },
-  gridBtn: { flex: 1, alignItems: 'center', padding: 16, marginHorizontal: 4, borderRadius: 16, elevation: 1, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 5 },
+  actionGrid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 12, marginBottom: 20, gap: 8 },
+  gridBtn: { width: '30%', alignItems: 'center', padding: 12, borderRadius: 16, elevation: 1, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 5 },
   iconCircle: { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center', marginBottom: 8 },
-  gridBtnText: { fontSize: 13, fontWeight: '600' },
+  gridBtnText: { fontSize: 12, fontWeight: '600', textAlign: 'center' },
   section: { paddingVertical: 8, paddingHorizontal: 16, borderTopWidth: 1, borderBottomWidth: 1, borderColor: 'transparent' },
   sectionTitle: { fontSize: 14, fontWeight: 'bold', marginBottom: 8, textTransform: 'uppercase' },
   memberRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth },
@@ -520,4 +624,9 @@ const styles = StyleSheet.create({
   editorOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: 20 },
   editorCard: { borderRadius: 16, padding: 20, elevation: 5, shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 10 },
   editorInput: { borderWidth: 1, borderRadius: 8, padding: 12, fontSize: 16 },
+  optionItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+  },
 });

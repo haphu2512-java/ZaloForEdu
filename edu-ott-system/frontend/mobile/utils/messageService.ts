@@ -9,6 +9,7 @@ import type {
   PaginatedResponse,
   TransferGroupOwnerPayload,
 } from '../types/chat';
+import { normalizeConversation, normalizeMessage } from './normalizers';
 
 // ============================================================
 // Message & Conversation Service
@@ -17,22 +18,6 @@ import type {
 
 const MESSAGES_ENDPOINT = '/messages';
 const CONVERSATIONS_ENDPOINT = '/conversations';
-
-function normalizeConversation(conversation: Conversation): Conversation {
-  return {
-    ...conversation,
-    _id: conversation._id || conversation.id || '',
-    id: conversation.id || conversation._id || '',
-  };
-}
-
-function normalizeMessage(message: Message): Message {
-  return {
-    ...message,
-    _id: message._id || message.id || '',
-    id: message.id || message._id || '',
-  };
-}
 
 // ==================== CONVERSATIONS ====================
 

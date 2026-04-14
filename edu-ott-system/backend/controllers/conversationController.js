@@ -334,7 +334,7 @@ const pinGroupMessage = asyncHandler(async (req, res) => {
   const { messageId } = req.body;
   const conversation = await Conversation.findById(id);
   ensureGroupConversation(conversation);
-  ensureAdminOrOwner(conversation, req.user._id);
+  ensureGroupMember(conversation, req.user._id);
   const message = await Message.findById(messageId);
   if (!message || toStr(message.conversationId) !== toStr(id)) {
     throw new ApiError(404, 'MESSAGE_NOT_FOUND', 'Message does not belong to this group');
@@ -348,7 +348,7 @@ const unpinGroupMessage = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const conversation = await Conversation.findById(id);
   ensureGroupConversation(conversation);
-  ensureAdminOrOwner(conversation, req.user._id);
+  ensureGroupMember(conversation, req.user._id);
   conversation.pinnedMessageId = null;
   await conversation.save();
   return successResponse(res, conversation, 'Group pinned message cleared');

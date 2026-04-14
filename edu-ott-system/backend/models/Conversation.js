@@ -41,11 +41,20 @@ const conversationSchema = new mongoose.Schema(
         ref: 'User',
       },
     ],
+    // Legacy single pin - kept for backward compat
     pinnedMessageId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Message',
       default: null,
     },
+    // Feature 2: Multiple pinned items (Bảng tin)
+    pinnedItems: [
+      {
+        messageId: { type: mongoose.Schema.Types.ObjectId, ref: 'Message', required: true },
+        pinnedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+        pinnedAt: { type: Date, default: Date.now },
+      },
+    ],
     nicknames: {
       type: Map,
       of: String,
@@ -55,6 +64,17 @@ const conversationSchema = new mongoose.Schema(
       type: Date,
       default: null,
       index: true,
+    },
+    // Feature 4: Join approval (Duyệt thành viên)
+    settings: {
+      isApprovalRequired: { type: Boolean, default: false },
+    },
+    // Feature 5: Invite link
+    inviteCode: {
+      type: String,
+      default: null,
+      index: true,
+      sparse: true,
     },
   },
   { timestamps: true },
