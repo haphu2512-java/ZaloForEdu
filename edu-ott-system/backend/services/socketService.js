@@ -6,7 +6,7 @@ const User = require('../models/User');
 const env = require('../config/env');
 const { createMessage } = require('./messageService');
 const presenceService = require('./presenceService');
-const { verifyAccessToken } = require('./tokenService');
+const { verifyAccessToken, getDeviceTokenVersion } = require('./tokenService');
 const { isTokenBlacklisted } = require('./tokenStore');
 const logger = require('../utils/logger');
 
@@ -78,7 +78,14 @@ const initSocket = (server) => {
       }
 
       const user = await User.findById(payload.sub);
-      if (!user || user.deletedAt || user.tokenVersion !== payload.tokenVersion) {
+      if (!user || user.deletedAt) {
+        return next(new Error('Unauthorized'));
+      }
+
+      // Dùng device-specific tokenVersion (giống HTTP auth middleware)
+      const device = payload.device || 'web';
+      const expectedVersion = getDeviceTokenVersion(user, device);
+      if (expectedVersion !== payload.tokenVersion) {
         return next(new Error('Unauthorized'));
       }
 

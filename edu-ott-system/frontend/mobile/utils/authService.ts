@@ -101,7 +101,8 @@ export const getAuthHeaders = async (): Promise<Record<string, string>> => {
 export async function login(payload: LoginPayload): Promise<AuthResponse> {
   const res = await fetchAPI(`${AUTH_ENDPOINT}/login`, {
     method: 'POST',
-    body: JSON.stringify(payload),
+    // Gửi device:'mobile' để backend tạo token với mobileTokenVersion đúng
+    body: JSON.stringify({ ...payload, device: 'mobile' }),
   });
 
   const authData = res.data || {};
@@ -149,7 +150,8 @@ export async function refreshAccessToken(): Promise<AuthResponse | null> {
   try {
     const res = await fetchAPI(`${AUTH_ENDPOINT}/refresh-token`, {
       method: 'POST',
-      body: JSON.stringify({ refreshToken: currentRefreshToken }),
+      // Gửi device:'mobile' để backend tạo token với mobileTokenVersion đúng
+      body: JSON.stringify({ refreshToken: currentRefreshToken, device: 'mobile' }),
     });
 
     const authData = res.data || {};
