@@ -79,7 +79,8 @@ export default function ChatPage() {
   const [conversations, setConversations] = useState([]);
   const [activeConversation, setActiveConversation] = useState(null);
   const [messages, setMessages] = useState([]);
-  const [searchQuery, setSearchQuery] = useState(""); 
+  const [searchQuery, setSearchQuery] = useState("");
+  const [activeTab, setActiveTab] = useState('friends'); // 'friends' | 'strangers'
   
   const { appliedTheme } = useTheme();
   const { t } = useLanguage();
@@ -187,6 +188,30 @@ export default function ChatPage() {
     return convs.filter(conv => getConversationName(conv).toLowerCase().includes(searchQuery.toLowerCase()));
   }, [conversations, friends, searchQuery, userId, getConversationName, getOtherParticipant]);
 
+  // Phân loại: bạn bè vs người lạ
+  const friendIds = useMemo(() => new Set(friends.map(f => String(f._id || f.id))), [friends]);
+
+  const { friendConvs, strangerConvs } = useMemo(() => {
+    const friendConvs = [];
+    const strangerConvs = [];
+    mergedConversations.forEach(conv => {
+      if (conv.type === 'group' || conv.roomModel === 'Group' || conv.isMock) {
+        friendConvs.push(conv);
+        return;
+      }
+      const other = getOtherParticipant(conv);
+      const otherId = other && typeof other === 'object' ? String(other._id || other.id) : null;
+      if (otherId && friendIds.has(otherId)) {
+        friendConvs.push(conv);
+      } else {
+        strangerConvs.push(conv);
+      }
+    });
+    return { friendConvs, strangerConvs };
+  }, [mergedConversations, friendIds, getOtherParticipant]);
+
+  const displayedConvs = activeTab === 'strangers' ? strangerConvs : friendConvs;
+
   useEffect(() => {
     activeConvIdRef.current = activeConversation?._id;
   }, [activeConversation]);
@@ -194,7 +219,10 @@ export default function ChatPage() {
   const fetchConversationsData = useCallback(async () => {
     try {
       const res = await axios.get(`${API_BASE_URL}/conversations`, { headers: { Authorization: `Bearer ${token}` } });
-      setConversations(res.data.data?.items || res.data.items || []);
+      const allConvs = res.data.data?.items || res.data.items || [];
+      // Lọc bỏ self-conversation (My Documents) khỏi danh sách chat
+      const filtered = allConvs.filter(c => !(c.type === 'direct' && c.participants?.length === 1));
+      setConversations(filtered);
     } catch (err) { console.error("Lỗi lấy danh sách:", err); }
   }, [token]);
 
@@ -550,8 +578,24 @@ export default function ChatPage() {
           <FaSearch color="var(--z-text-secondary)" size={14} />
           <input placeholder={t('searchPlaceholder')} value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
         </div>
+        {/* Tabs: Bạn bè / Người lạ */}
+        <div style={{ display:'flex', borderBottom:'1px solid var(--z-border)', padding:'0 12px' }}>
+          <button
+            onClick={() => setActiveTab('friends')}
+            style={{ flex:1, padding:'8px 0', fontSize:13, fontWeight:600, border:'none', background:'none', cursor:'pointer', color: activeTab==='friends' ? 'var(--z-primary)' : 'var(--z-text-muted)', borderBottom: activeTab==='friends' ? '2px solid var(--z-primary)' : '2px solid transparent' }}
+          >
+            {t('allTab')}
+          </button>
+          <button
+            onClick={() => setActiveTab('strangers')}
+            style={{ flex:1, padding:'8px 0', fontSize:13, fontWeight:600, border:'none', background:'none', cursor:'pointer', color: activeTab==='strangers' ? 'var(--z-primary)' : 'var(--z-text-muted)', borderBottom: activeTab==='strangers' ? '2px solid var(--z-primary)' : '2px solid transparent', position:'relative' }}
+          >
+            Người lạ
+            {strangerConvs.length > 0 && <span style={{ marginLeft:4, background:'var(--z-primary)', color:'#fff', borderRadius:10, padding:'1px 6px', fontSize:11 }}>{strangerConvs.length}</span>}
+          </button>
+        </div>
         <div className="rs-list">
-          {mergedConversations.map((conv) => {
+          {displayedConvs.map((conv) => {
             const isActive = activeConversation?._id === conv._id;
             const unread = conv.unreadCount || 0;
             return (
@@ -574,7 +618,7 @@ export default function ChatPage() {
               </div>
             );
           })}
-          {mergedConversations.length === 0 && <div style={{ textAlign: 'center', padding: '20px', color: 'var(--z-text-muted)', fontSize: 13 }}>Không tìm thấy cuộc trò chuyện nào</div>}
+          {displayedConvs.length === 0 && <div style={{ textAlign: 'center', padding: '20px', color: 'var(--z-text-muted)', fontSize: 13 }}>Không tìm thấy cuộc trò chuyện nào</div>}
         </div>
       </aside>
 
