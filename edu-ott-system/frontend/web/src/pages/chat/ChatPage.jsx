@@ -1,607 +1,733 @@
-import { useState, useEffect, useRef, useCallback } from "react";
-import { format } from "date-fns";
-import {
-  FaSearch, FaPlus, FaEllipsisV, FaPaperPlane, FaPaperclip,
-  FaSmile, FaImage, FaVideo, FaUsers, FaUser, FaPhone,
-  FaSpinner, FaVideo as FaVideoCall, FaThumbtack, FaCloud,
-  FaDownload, FaEllipsisH, FaUserPlus, FaRegSmile,
-  FaRegImage, FaFolder, FaFilm, FaRegFileAlt, FaThumbsUp,
-  FaTimes, FaChevronRight, FaChevronLeft,
+import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import { useLocation } from "react-router-dom";
+import axios from "axios";
+import io from "socket.io-client";
+import { 
+  FaSearch, FaPaperPlane, FaPhoneAlt, FaVideo, FaInfoCircle, FaBell, 
+  FaThumbtack, FaUsers, FaSun, FaMoon, FaCloud, FaSpinner, FaLink, 
+  FaSmile, FaThumbsUp, FaImage, FaPaperclip, FaTimes 
 } from "react-icons/fa";
-import EmojiPicker from "emoji-picker-react";
-import { useAuthStore } from "../../store/authStore";
-import { useChatStore } from "../../store/chatStore";
-import { socketService } from "../../services/socketService";
-import { uploadFile } from "../../services/mediaService";
-import AddFriendModal from "../../components/Modals/AddFriendModal";
+import toast from "react-hot-toast";
+
+import { uploadFile } from "../../services/mediaService"; 
+import { useFriendStore } from "../../store/friendStore"; 
+import { MessageBubble } from "./MessageBubble";
 import "./ChatPage.css";
 
-const TYPE_BADGE = {
-  group: { label: "Nhóm", bg: "#F0FDF4", color: "#16A34A" },
-  dm:    { label: "1-1",  bg: "#FDF4FF", color: "#9333EA" },
+const API_BASE_URL = "http://localhost:5000/api/v1";
+const socket = io("http://localhost:5000", { autoConnect: false, transports: ['websocket'] });
+
+const IMAGE_EXTS = ["jpg","jpeg","png","gif","webp","svg"];
+const VIDEO_EXTS = ["mp4","mov","avi","mkv","webm"];
+const DOC_EXTS = ["pdf","doc","docx","xls","xlsx","ppt","pptx","txt"];
+const ARCHIVE_EXTS = ["zip","rar","7z","tar","gz"];
+
+export function getExt(s=""){return(s.split(".").pop()||"").toLowerCase();}
+export function getCategory(n=""){const e=getExt(n);if(IMAGE_EXTS.includes(e))return"image";if(VIDEO_EXTS.includes(e))return"video";if(DOC_EXTS.includes(e))return"doc";if(ARCHIVE_EXTS.includes(e))return"archive";return"other";}
+export function getFileColor(n=""){const e=getExt(n);if(IMAGE_EXTS.includes(e))return"#10B981";if(VIDEO_EXTS.includes(e))return"#8B5CF6";if(e==="pdf")return"#EF4444";if(["doc","docx"].includes(e))return"#2563EB";if(["xls","xlsx"].includes(e))return"#16A34A";if(["ppt","pptx"].includes(e))return"#EA580C";if(ARCHIVE_EXTS.includes(e))return"#D97706";return"#6B7280";}
+export function formatBytes(b){if(!b)return"0 B";const k=1024,s=["B","KB","MB","GB"];const i=Math.floor(Math.log(b)/Math.log(k));return parseFloat((b/Math.pow(k,i)).toFixed(1))+" "+s[i];}
+
+const formatChatTimestamp = (dateString) => {
+  const d = new Date(dateString);
+  const now = new Date();
+  const isToday = d.toDateString() === now.toDateString();
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  const isYesterday = d.toDateString() === yesterday.toDateString();
+
+  const timeStr = d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+  const dateStr = d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+
+  if (isToday) return timeStr;
+  if (isYesterday) return `Hôm qua ${timeStr}`;
+  return `${timeStr} ngày ${dateStr}`;
 };
-const TABS = ["Tất cả", "Nhóm", "1-1"];
 
-// ── Sticker data (Zalo-style) ────────────────────────────────
-const STICKER_PACKS = [
-  {
-    id: "bear", name: "Gấu dễ thương",
-    stickers: [
-      "https://stickershop.line-scdn.net/stickershop/v1/sticker/52002734/iPhone/sticker@2x.png",
-      "https://stickershop.line-scdn.net/stickershop/v1/sticker/52002735/iPhone/sticker@2x.png",
-      "https://stickershop.line-scdn.net/stickershop/v1/sticker/52002736/iPhone/sticker@2x.png",
-      "https://stickershop.line-scdn.net/stickershop/v1/sticker/52002737/iPhone/sticker@2x.png",
-      "https://stickershop.line-scdn.net/stickershop/v1/sticker/52002738/iPhone/sticker@2x.png",
-      "https://stickershop.line-scdn.net/stickershop/v1/sticker/52002739/iPhone/sticker@2x.png",
-      "https://stickershop.line-scdn.net/stickershop/v1/sticker/52002740/iPhone/sticker@2x.png",
-      "https://stickershop.line-scdn.net/stickershop/v1/sticker/52002741/iPhone/sticker@2x.png",
-    ]
-  },
-  {
-    id: "cat", name: "Mèo vui vẻ",
-    stickers: [
-      "https://stickershop.line-scdn.net/stickershop/v1/sticker/51626494/iPhone/sticker@2x.png",
-      "https://stickershop.line-scdn.net/stickershop/v1/sticker/51626495/iPhone/sticker@2x.png",
-      "https://stickershop.line-scdn.net/stickershop/v1/sticker/51626496/iPhone/sticker@2x.png",
-      "https://stickershop.line-scdn.net/stickershop/v1/sticker/51626497/iPhone/sticker@2x.png",
-      "https://stickershop.line-scdn.net/stickershop/v1/sticker/51626498/iPhone/sticker@2x.png",
-      "https://stickershop.line-scdn.net/stickershop/v1/sticker/51626499/iPhone/sticker@2x.png",
-      "https://stickershop.line-scdn.net/stickershop/v1/sticker/51626500/iPhone/sticker@2x.png",
-      "https://stickershop.line-scdn.net/stickershop/v1/sticker/51626501/iPhone/sticker@2x.png",
-    ]
-  },
-];
+const shouldShowDateDivider = (currentMsg, prevMsg) => {
+  if (!prevMsg) return true;
+  const currTime = new Date(currentMsg.createdAt).getTime();
+  const prevTime = new Date(prevMsg.createdAt).getTime();
+  const diffHours = (currTime - prevTime) / (1000 * 60 * 60);
+  if (diffHours >= 6) return true;
+  return new Date(currentMsg.createdAt).toDateString() !== new Date(prevMsg.createdAt).toDateString();
+};
 
-// ── Sticker/Emoji Picker ─────────────────────────────────────
-function StickerEmojiPicker({ onSelectEmoji, onSelectSticker, onClose }) {
-  const [tab, setTab] = useState("sticker"); // sticker | emoji | gif
-  const [packIdx, setPackIdx] = useState(0);
-  const ref = useRef(null);
-
-  useEffect(() => {
-    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) onClose(); };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [onClose]);
-
-  const pack = STICKER_PACKS[packIdx];
-
+function UploadBubble({ name, percent }) {
   return (
-    <div className="sep-panel" ref={ref}>
-      {/* Tabs */}
-      <div className="sep-tabs">
-        <button className={`sep-tab ${tab === "sticker" ? "active" : ""}`} onClick={() => setTab("sticker")}>STICKER</button>
-        <button className={`sep-tab ${tab === "emoji" ? "active" : ""}`} onClick={() => setTab("emoji")}>EMOJI</button>
-        <button className={`sep-tab ${tab === "gif" ? "active" : ""}`} onClick={() => setTab("gif")}>GIF</button>
+    <div className="msg-wrap me" style={{ marginBottom: 16 }}>
+      <div className="msg-body" style={{ alignItems: 'flex-end' }}>
+        <div className="mdc-uploading-bubble msg-bubble" style={{ background: '#0084FF', color: 'white', borderRadius: '18px 18px 4px 18px', padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 8 }}>
+          <FaSpinner className="spin" size={14}/>
+          <div className="mdc-upl-info" style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <span className="mdc-upl-name" style={{ fontSize: 13 }}>{name}</span>
+            <div className="mdc-upl-bar" style={{ background: 'rgba(255,255,255,0.3)', height: 4, borderRadius: 2, width: 100 }}>
+              <div className="mdc-upl-fill" style={{ width: `${percent}%`, background: 'white', height: '100%', borderRadius: 2 }} />
+            </div>
+            <span className="mdc-upl-pct" style={{ fontSize: 10 }}>{percent}%</span>
+          </div>
+        </div>
       </div>
-
-      {tab === "sticker" && (
-        <div className="sep-sticker-body">
-          <div className="sep-sticker-search">
-            <FaSearch size={12} color="var(--text-tertiary)" />
-            <input placeholder="Tìm kiếm sticker..." />
-          </div>
-          <div className="sep-sticker-label">Gần đây</div>
-          <div className="sep-sticker-grid">
-            {pack.stickers.map((url, i) => (
-              <button key={i} className="sep-sticker-item" onClick={() => { onSelectSticker(url); onClose(); }}>
-                <img src={url} alt="" loading="lazy" />
-              </button>
-            ))}
-          </div>
-          {/* Pack selector */}
-          <div className="sep-pack-bar">
-            <button className="sep-pack-nav" onClick={() => setPackIdx(Math.max(0, packIdx - 1))}><FaChevronLeft size={10} /></button>
-            {STICKER_PACKS.map((p, i) => (
-              <button key={p.id} className={`sep-pack-btn ${packIdx === i ? "active" : ""}`} onClick={() => setPackIdx(i)}>
-                <img src={p.stickers[0]} alt={p.name} />
-              </button>
-            ))}
-            <button className="sep-pack-nav" onClick={() => setPackIdx(Math.min(STICKER_PACKS.length - 1, packIdx + 1))}><FaChevronRight size={10} /></button>
-            <button className="sep-pack-nav" title="Thêm sticker"><FaPlus size={10} /></button>
-          </div>
-        </div>
-      )}
-
-      {tab === "emoji" && (
-        <div className="sep-emoji-body">
-          <EmojiPicker
-            onEmojiClick={(e) => { onSelectEmoji(e.emoji); onClose(); }}
-            width="100%"
-            height={360}
-            searchPlaceholder="Tìm emoji..."
-            previewConfig={{ showPreview: false }}
-          />
-        </div>
-      )}
-
-      {tab === "gif" && (
-        <div className="sep-gif-body">
-          <div className="sep-gif-placeholder">
-            <FaRegSmile size={32} />
-            <p>GIF đang được phát triển</p>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
-function RoomItem({ room, active, onClick, isPinned, onTogglePin }) {
-  const badge = TYPE_BADGE[room.type] || TYPE_BADGE["group"];
-  const [showMenu, setShowMenu] = useState(false);
+
+export default function ChatPage() {
+  const [conversations, setConversations] = useState([]);
+  const [activeConversation, setActiveConversation] = useState(null);
+  const [messages, setMessages] = useState([]);
+  const [textInput, setTextInput] = useState("");
+  const [searchQuery, setSearchQuery] = useState(""); 
+  const [theme, setTheme] = useState("light");
+  
+  const [showInputEmoji, setShowInputEmoji] = useState(false);
+  const [uploads, setUploads] = useState([]);
+  const [isDragging, setIsDragging] = useState(false);
+
+  // === STATE CHO MODAL CHUYỂN TIẾP (SHARE) ===
+  const [shareModalOpen, setShareModalOpen] = useState(false);
+  const [msgToShare, setMsgToShare] = useState(null);
+
+  const imageInputRef = useRef(null);
+  const videoInputRef = useRef(null);
+  const fileInputRef = useRef(null);
+  const folderInputRef = useRef(null);
+  const pageRef = useRef(null);
+  
+  const location = useLocation();
+  const messagesEndRef = useRef(null);
+  
+  const { friends, fetchFriends } = useFriendStore();
+
+  useEffect(() => { if (friends.length === 0) fetchFriends(); }, [friends.length, fetchFriends]);
+
+  const userId = useMemo(() => {
+    let id = localStorage.getItem("userId");
+    if (id) return String(id).trim();
+    try {
+      const userObj = JSON.parse(localStorage.getItem("user") || "{}");
+      if (userObj && (userObj._id || userObj.id)) return String(userObj._id || userObj.id).trim();
+    } catch (e) {}
+    return null;
+  }, []); 
+
+  const token = localStorage.getItem("token");
+
+  const scrollToBottom = () => { messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }); };
+
+  const getOtherParticipant = useCallback((conv) => {
+    if (!conv || !conv.participants) return null;
+    const others = conv.participants.filter(p => {
+      const pId = typeof p === 'string' ? p : (p._id || p.id);
+      return String(pId) !== String(userId);
+    });
+    return others.length > 0 ? others[0] : null;
+  }, [userId]);
+
+  const getConversationName = useCallback((conv) => {
+    if (!conv) return '';
+    if (conv.type === 'group' || conv.roomModel === 'Group') return conv.name || 'Nhóm chat';
+    const other = getOtherParticipant(conv);
+    if (other && typeof other === 'object') return other.username || other.fullName || other.name || 'Người dùng';
+    return 'Người dùng ẩn danh';
+  }, [getOtherParticipant]);
+
+  const getConversationAvatar = useCallback((conv) => {
+    if (!conv) return 'https://ui-avatars.com/api/?name=U&background=random';
+    if (conv.type === 'group' || conv.roomModel === 'Group') return conv.avatarUrl || conv.avatar || `https://ui-avatars.com/api/?name=${conv.name || 'G'}&background=random`;
+    const other = getOtherParticipant(conv);
+    let name = 'U';
+    let avatar = null;
+    if (other && typeof other === 'object') {
+      name = other.username || other.fullName || other.name || 'U';
+      avatar = other.avatarUrl || other.avatar;
+    }
+    return avatar || `https://ui-avatars.com/api/?name=${name}&background=random`;
+  }, [getOtherParticipant]);
+
+  const mergedConversations = useMemo(() => {
+    if (!friends || friends.length === 0) return conversations;
+    const validConvs = conversations.filter(c => {
+      if (c.type === 'group' || c.roomModel === 'Group') return true;
+      return getOtherParticipant(c) !== null; 
+    });
+
+    const convs = [...validConvs];
+    const directMap = new Set();
+    
+    convs.forEach(c => {
+      if (c.type === 'direct' && !c.isMock) {
+        const other = getOtherParticipant(c);
+        if (other) {
+          const oId = typeof other === 'string' ? other : (other._id || other.id);
+          directMap.add(String(oId));
+        }
+      }
+    });
+
+    friends.forEach(friend => {
+      const fId = String(friend._id || friend.id);
+      if (!directMap.has(fId)) {
+        convs.push({
+          _id: `mock_${fId}`,
+          isMock: true, 
+          type: 'direct',
+          participants: [{ _id: userId }, friend],
+          latestMessage: null,
+          unreadCount: 0
+        });
+      }
+    });
+
+    convs.sort((a, b) => {
+      const timeA = a.latestMessage ? new Date(a.latestMessage.createdAt).getTime() : 0;
+      const timeB = b.latestMessage ? new Date(b.latestMessage.createdAt).getTime() : 0;
+      return timeB - timeA;
+    });
+
+    if (!searchQuery.trim()) return convs;
+    return convs.filter(conv => getConversationName(conv).toLowerCase().includes(searchQuery.toLowerCase()));
+  }, [conversations, friends, searchQuery, userId, getConversationName, getOtherParticipant]);
+
+  useEffect(() => {
+    if (!token) return;
+    socket.auth = { token };
+    socket.connect();
+
+    const fetchAllData = async () => {
+      try {
+        const res = await axios.get(`${API_BASE_URL}/conversations`, { headers: { Authorization: `Bearer ${token}` } });
+        setConversations(res.data.data?.items || res.data.items || []);
+      } catch (err) { console.error("Lỗi lấy danh sách:", err); }
+    };
+    fetchAllData();
+
+    socket.on("message:new", (msg) => {
+      setMessages((prev) => {
+        if (prev.find((m) => m._id === msg._id)) return prev;
+        return [...prev, msg];
+      });
+      setConversations(prevConvs => {
+        const index = prevConvs.findIndex(c => String(c._id) === String(msg.conversationId));
+        if (index === -1) return prevConvs;
+        const newConvs = [...prevConvs];
+        const [target] = newConvs.splice(index, 1);
+        target.latestMessage = msg;
+        if (activeConversation?._id !== target._id) {
+            target.unreadCount = (target.unreadCount || 0) + 1;
+        }
+        return [target, ...newConvs];
+      });
+    });
+
+    return () => socket.disconnect();
+  }, [token, activeConversation?._id]);
+
+  useEffect(() => {
+    if (!activeConversation) return;
+    setMessages([]);
+    setTextInput("");
+    setShowInputEmoji(false);
+
+    if (activeConversation.isMock) return; 
+
+    const fetchMessages = async () => {
+      try {
+        const res = await axios.get(`${API_BASE_URL}/messages/conversation/${activeConversation._id}?limit=50`, { headers: { Authorization: `Bearer ${token}` } });
+        const fetchedMessages = res.data.data?.items || res.data.items || [];
+        setMessages(fetchedMessages.reverse());
+        setConversations(prev => prev.map(c => String(c._id) === String(activeConversation._id) ? { ...c, unreadCount: 0 } : c));
+      } catch (err) { setMessages([]); }
+    };
+
+    fetchMessages();
+    socket.emit("join:room", activeConversation._id);
+    return () => socket.emit("leave:room", activeConversation._id);
+  }, [activeConversation?._id, token]);
+
+  useEffect(() => { scrollToBottom(); }, [messages, uploads]);
+
+  useEffect(() => {
+    const zone = pageRef.current;
+    if (!zone || !activeConversation) return;
+    const onDragOver = (e) => { e.preventDefault(); setIsDragging(true); };
+    const onDragLeave = (e) => { if (!zone.contains(e.relatedTarget)) setIsDragging(false); };
+    const onDrop = (e) => {
+      e.preventDefault(); setIsDragging(false);
+      Array.from(e.dataTransfer.files).forEach(handleUploadFile);
+    };
+    zone.addEventListener("dragover", onDragOver);
+    zone.addEventListener("dragleave", onDragLeave);
+    zone.addEventListener("drop", onDrop);
+    return () => {
+      zone.removeEventListener("dragover", onDragOver);
+      zone.removeEventListener("dragleave", onDragLeave);
+      zone.removeEventListener("drop", onDrop);
+    };
+  }, [activeConversation]);
+
+  const getSenderIdStr = (msg) => {
+    if (!msg) return null;
+    const s = msg.senderId || msg.sender;
+    if (!s) return null;
+    if (typeof s === 'object') return String(s._id || s.id);
+    return String(s);
+  };
+
+  const ensureRealConversation = async () => {
+    if (!activeConversation.isMock) return activeConversation._id;
+    const otherParticipant = getOtherParticipant(activeConversation);
+    const targetId = otherParticipant._id || otherParticipant.id;
+    
+    const createRes = await axios.post(`${API_BASE_URL}/conversations`, {
+      type: "direct", participantIds: [targetId]
+    }, { headers: { Authorization: `Bearer ${token}` } });
+    
+    const realConv = createRes.data.data || createRes.data;
+    realConv.participants = activeConversation.participants; 
+    const currentConvId = realConv._id || realConv.id;
+    
+    setActiveConversation(realConv);
+    setConversations(prev => [realConv, ...prev.filter(c => c._id !== activeConversation._id)]);
+    socket.emit("join:room", currentConvId);
+    return currentConvId;
+  };
+
+  const handleSend = async (e) => {
+    if (e) e.preventDefault();
+    const content = textInput.trim();
+    if (!content || !activeConversation) return;
+    setTextInput("");
+    setShowInputEmoji(false);
+
+    try {
+      const currentConvId = await ensureRealConversation();
+      const res = await axios.post(`${API_BASE_URL}/messages/send`,
+        { content: content, conversationId: currentConvId },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      const newMsg = res.data.data || res.data; 
+      if (newMsg) {
+        setMessages(prev => {
+          if (prev.find(m => String(m._id) === String(newMsg._id))) return prev;
+          return [...prev, newMsg];
+        });
+      }
+    } catch (err) { setTextInput(content); }
+  };
+
+  const handleSendLike = async (e) => {
+    if (e) e.preventDefault();
+    if (!activeConversation) return;
+    try {
+      const currentConvId = await ensureRealConversation();
+      const res = await axios.post(`${API_BASE_URL}/messages/send`,
+        { content: "👍", conversationId: currentConvId },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      const newMsg = res.data.data || res.data; 
+      if (newMsg) {
+        setMessages(prev => {
+          if (prev.find(m => String(m._id) === String(newMsg._id))) return prev;
+          return [...prev, newMsg];
+        });
+      }
+    } catch (err) { console.error("Lỗi gửi Like", err); }
+  };
+
+  const handleUploadFile = async (file) => {
+    if (!activeConversation) return;
+    const uid = Date.now() + Math.random();
+    setUploads(prev => [...prev, { id: uid, name: file.name, percent: 0 }]);
+
+    try {
+      const currentConvId = await ensureRealConversation();
+      const media = await uploadFile(file, { 
+        folder: "zaloapp/chat",
+        onProgress: (pct) => setUploads(prev => prev.map(u => u.id === uid ? { ...u, percent: pct } : u))
+      });
+
+      const res = await axios.post(`${API_BASE_URL}/messages/send`,
+        { content: "", mediaIds: [media._id || media.id], conversationId: currentConvId },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      const newMsg = res.data.data || res.data;
+      if (newMsg) {
+          newMsg.attachments = [media]; 
+          setMessages(prev => [...prev, newMsg]);
+      }
+    } catch (err) {
+      toast.error(`Lỗi tải lên: ${file.name}`);
+    } finally {
+      setUploads(prev => prev.filter(u => u.id !== uid));
+    }
+  };
+
+  const handleFileInput = (e) => {
+    Array.from(e.target.files).forEach(handleUploadFile);
+    e.target.value = "";
+  };
+
+  // ================= TÍNH NĂNG UPDATE KHÔNG CẦN F5 =================
+
+  // 1. Emoji Reaction
+  const handleReaction = async (messageId, emoji) => {
+    setMessages(prev => prev.map(m => {
+      if (m._id === messageId) {
+        const currentReactions = m.reactions || [];
+        return { ...m, reactions: [...currentReactions, { emoji, user: userId }] };
+      }
+      return m;
+    }));
+    try {
+      await axios.put(`${API_BASE_URL}/messages/${messageId}/react`, { emoji }, { headers: { Authorization: `Bearer ${token}` } });
+    } catch (err) { toast.error("Lỗi thả cảm xúc"); }
+  };
+
+  // 2. Thu Hồi
+  const handleRecall = async (msgId) => {
+    // Ép State isDeleted = true ngay lập tức
+    setMessages(prev => prev.map(m => m._id === msgId ? { ...m, isDeleted: true, content: "" } : m));
+    try {
+      await axios.delete(`${API_BASE_URL}/messages/${msgId}/recall`, { headers: { Authorization: `Bearer ${token}` } });
+      toast.success("Thu hồi thành công");
+    } catch (err) { toast.error("Lỗi thu hồi tin nhắn"); }
+  };
+
+  // 3. Xóa
+  const handleDelete = async (msgId) => {
+    // Xóa thẳng khỏi mảng State ngay lập tức
+    setMessages(prev => prev.filter(m => m._id !== msgId));
+    try {
+      await axios.delete(`${API_BASE_URL}/messages/${msgId}`, { headers: { Authorization: `Bearer ${token}` } });
+    } catch (err) { toast.error("Lỗi xóa tin nhắn"); }
+  };
+
+  // 4. Mở Modal Chuyển Tiếp
+  const openShareModal = (msg) => {
+    setMsgToShare(msg);
+    setShareModalOpen(true);
+  };
+
+  // 5. Thực thi Chuyển Tiếp
+  const executeForward = async (friend) => {
+    try {
+      const targetId = friend._id || friend.id;
+      let targetConvId = null;
+
+      // Tìm xem đã có box chat với bạn này chưa
+      const existingConv = conversations.find(c => c.type === 'direct' && c.participants.some(p => (p._id || p.id) === targetId));
+
+      if (existingConv) {
+         targetConvId = existingConv._id;
+      } else {
+         const createRes = await axios.post(`${API_BASE_URL}/conversations`, { type: "direct", participantIds: [targetId] }, { headers: { Authorization: `Bearer ${token}` } });
+         targetConvId = createRes.data.data?._id || createRes.data?._id;
+      }
+
+      const content = msgToShare.content || "";
+      const mediaIds = (msgToShare.attachments || msgToShare.mediaIds || []).map(m => m._id || m.id || m);
+
+      const res = await axios.post(`${API_BASE_URL}/messages/send`,
+        { content, mediaIds, conversationId: targetConvId },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      // NẾU BẠN CHUYỂN TIẾP CHO CHÍNH NGƯỜI ĐANG CHAT -> HIỆN LÊN MÀN HÌNH LUÔN KHÔNG CẦN F5
+      if (activeConversation && targetConvId === activeConversation._id) {
+         const newMsg = res.data.data || res.data;
+         setMessages(prev => [...prev, newMsg]);
+      }
+
+      toast.success(`Đã chuyển tiếp tới ${friend.fullName || friend.username}`);
+      setShareModalOpen(false);
+    } catch (error) {
+      toast.error("Lỗi chuyển tiếp tin nhắn");
+    }
+  };
+
+
+  const toggleTheme = () => { setTheme(prev => prev === "light" ? "dark" : "light"); };
+
+  const allMedia = messages.flatMap(m => m.attachments || m.mediaIds || m.media || []).filter(m => typeof m !== 'string');
+  const imgFiles = allMedia.filter(m => ["image","video"].includes(getCategory(m.name || m.fileName)));
+  const docFiles = allMedia.filter(m => !["image","video"].includes(getCategory(m.name || m.fileName)));
+  const linkRegex = /(https?:\/\/[^\s]+)/g;
+  const linkItems = [];
+  messages.forEach(m => {
+    if (m.content) {
+      const urls = m.content.match(linkRegex);
+      if (urls) urls.forEach(u => linkItems.push(u));
+    }
+  });
 
   return (
-    <div
-      className={`room-item ${active ? "active" : ""} ${isPinned ? "pinned" : ""}`}
-      onClick={onClick}
-      onMouseLeave={() => setShowMenu(false)}
-    >
-      <div className="room-avatar" style={{ background: room.color }}>
-        {room.initials}
-      </div>
-      <div className="room-info">
-        <div className="room-name">{room.name}</div>
-        <div className="room-badge" style={{ background: badge.bg, color: badge.color }}>
-          {room.type === "group" ? <FaUsers size={8} /> : <FaUser size={8} />}
-          {badge.label}
+    <div className="chat-page" data-theme={theme} ref={pageRef}>
+      
+      {/* ── MODAL CHIA SẺ BẠN BÈ ── */}
+      {shareModalOpen && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ backgroundColor: '#fff', width: '400px', borderRadius: '8px', padding: '16px', display: 'flex', flexDirection: 'column', maxHeight: '80vh' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 'bold' }}>Chuyển tiếp tin nhắn</h3>
+              <FaTimes style={{ cursor: 'pointer', color: '#65676B' }} onClick={() => setShareModalOpen(false)} />
+            </div>
+            
+            <div style={{ flex: 1, overflowY: 'auto' }}>
+              {friends.length === 0 ? <p style={{ textAlign: 'center', color: '#8A8D91' }}>Bạn chưa có bạn bè nào.</p> : (
+                friends.map((friend, index) => (
+                  <div key={index} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid #E5E7EB' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <img src={friend.avatarUrl || friend.avatar || 'https://i.pravatar.cc/150'} alt="avt" style={{ width: 40, height: 40, borderRadius: '50%' }} />
+                      <span style={{ fontSize: '15px', fontWeight: '500' }}>{friend.fullName || friend.username}</span>
+                    </div>
+                    <button 
+                      onClick={() => executeForward(friend)}
+                      style={{ padding: '6px 16px', borderRadius: '4px', border: 'none', backgroundColor: '#0084FF', color: '#fff', cursor: 'pointer', fontWeight: 'bold' }}
+                    >Gửi</button>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
         </div>
-        <div className="room-last">{room.lastMsg}</div>
-      </div>
-      <div className="room-meta">
-        <div className="rm-top">
-          {isPinned && <FaThumbtack className="pin-icon" />}
-          <span className="room-time">{room.time}</span>
+      )}
+
+      {/* DRAG AND DROP OVERLAY */}
+      {isDragging && (
+        <div className="mdc-drag-overlay">
+          <div className="mdc-drag-inner">
+            <FaCloud size={52} />
+            <p>Thả file vào đây để gửi</p>
+          </div>
         </div>
-        <div className="rm-bottom">
-          {room.unread > 0 ? (
-            <span className="room-unread">{room.unread}</span>
-          ) : (
-            <div className="room-options" onClick={(e) => { e.stopPropagation(); setShowMenu(!showMenu); }}>
-              <FaEllipsisH />
-              {showMenu && (
-                <div className="room-menu">
-                  <div className="rm-item" onClick={(e) => { e.stopPropagation(); onTogglePin(); setShowMenu(false); }}>
-                    {isPinned ? "Bỏ ghim" : "Ghim hội thoại"}
+      )}
+
+      {/* ── TRÁI ── */}
+      <aside className="room-sidebar">
+        <div className="rs-header">
+          <span style={{ fontWeight: 800, fontSize: 18 }}>Đoạn chat</span>
+          <button onClick={toggleTheme} style={{ background: 'none', border: 'none', color: 'var(--z-text-primary)', cursor: 'pointer' }}>
+            {theme === "light" ? <FaMoon size={18} /> : <FaSun size={18} color="#FBBF24" />}
+          </button>
+        </div>
+        <div className="rs-search-bar">
+          <FaSearch color="var(--z-text-secondary)" size={14} />
+          <input placeholder="Tìm kiếm bạn bè, nhóm..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+        </div>
+        <div className="rs-list">
+          {mergedConversations.map((conv) => {
+            const isActive = activeConversation?._id === conv._id;
+            const unread = conv.unreadCount || 0;
+            return (
+              <div key={conv._id} className={`chat-list-item ${isActive ? 'active' : ''}`} onClick={() => setActiveConversation(conv)}>
+                <img className="cli-avatar" src={getConversationAvatar(conv)} alt="avt" />
+                <div className="cli-info">
+                  <div className="cli-top">
+                    <span className="cli-name" style={{ fontWeight: unread > 0 ? 800 : 600, color: unread > 0 ? 'var(--z-text-primary)' : '' }}>{getConversationName(conv)}</span>
+                    <span className="cli-time" style={{ color: unread > 0 ? 'var(--z-primary)' : 'var(--z-text-muted)' }}>
+                        {conv.latestMessage ? formatChatTimestamp(conv.latestMessage.createdAt) : ''}
+                    </span>
+                  </div>
+                  <div className="cli-bottom">
+                    <span className="cli-msg" style={{ fontWeight: unread > 0 ? 700 : 400, color: unread > 0 ? 'var(--z-text-primary)' : 'var(--z-text-secondary)' }}>
+                        {conv.latestMessage?.isDeleted ? 'Tin nhắn đã thu hồi' : (conv.latestMessage?.content || (conv.latestMessage?.mediaIds?.length > 0 || conv.latestMessage?.attachments?.length > 0 ? '[Hình ảnh/File]' : 'Chưa có tin nhắn'))}
+                    </span>
+                    {unread > 0 && <div className="cli-unread">{unread > 99 ? '99+' : unread}</div>}
                   </div>
                 </div>
-              )}
-            </div>
-          )}
+              </div>
+            );
+          })}
+          {mergedConversations.length === 0 && <div style={{ textAlign: 'center', padding: '20px', color: 'var(--z-text-muted)', fontSize: 13 }}>Không tìm thấy cuộc trò chuyện nào</div>}
         </div>
-      </div>
-    </div>
-  );
-}
+      </aside>
 
-// ── Message bubble ───────────────────────────────────────────
-function Message({ msg, isMe }) {
-  const isFile = msg.type === "file";
-  const ext = (msg.fileName || "").split(".").pop().toLowerCase();
-  const isPdf = ext === "pdf";
-  const isDoc = ["doc","docx"].includes(ext);
-  const isImg = ["jpg","jpeg","png","gif","webp"].includes(ext);
-  const isSticker = msg.type === "text" && (msg.content?.startsWith("https://stickershop.line-scdn.net") || msg.content?.startsWith("https://sticker"));
-  const fileColor = isPdf ? "#EF4444" : isDoc ? "#3B82F6" : "#10B981";
-
-  return (
-    <div className={`msg-wrap ${isMe ? "me" : ""}`}>
-      {!isMe && (
-        <div className="msg-avatar" style={{ background: msg.color }}>{msg.avatar}</div>
-      )}
-      <div className="msg-body">
-        {!isMe && <div className="msg-sender">{msg.sender}</div>}
-
-        {isSticker && (
-          <img src={msg.content} alt="sticker" className="msg-sticker" />
-        )}
-
-        {!isSticker && msg.type === "text" && (
-          <div className={`msg-bubble ${isMe ? "me" : ""}`}>{msg.content}</div>
-        )}
-
-        {isFile && isImg && msg.fileUrl && (
-          <div className="msg-img-wrap">
-            <img src={msg.fileUrl} alt={msg.fileName} className="msg-img" />
-          </div>
-        )}
-
-        {isFile && !isImg && (
-          <div className="msg-file-card">
-            <div className="mfc-icon" style={{ background: fileColor }}>
-              {isPdf ? "PDF" : isDoc ? "DOC" : ext.toUpperCase().slice(0,4)}
-            </div>
-            <div className="mfc-info">
-              <div className="mfc-name">{msg.fileName || msg.content}</div>
-              <div className="mfc-meta">
-                <span>{msg.fileSize || ""}</span>
-                <span className="mfc-cloud-tag"><FaCloud size={9} /> Cloud</span>
+      {/* ── GIỮA ── */}
+      {activeConversation ? (
+        <main className="chat-main">
+          <header className="chat-header">
+            <div className="ch-info">
+              <img className="cli-avatar" style={{width: 40, height: 40}} src={getConversationAvatar(activeConversation)} alt="avt" />
+              <div>
+                <div className="ch-name">{getConversationName(activeConversation)}</div>
+                <div className="ch-status">Vừa mới truy cập</div>
               </div>
             </div>
-            {msg.fileUrl && (
-              <a className="mfc-download" href={msg.fileUrl} target="_blank" rel="noreferrer">
-                <FaDownload size={14} />
-              </a>
+            <div className="ch-actions">
+              <FaPhoneAlt className="ch-icon" size={18} />
+              <FaVideo className="ch-icon" size={19} />
+              <FaInfoCircle className="ch-icon" size={19} />
+            </div>
+          </header>
+
+          <div className="chat-messages">
+            {messages.length === 0 && uploads.length === 0 ? (
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+                <img src={getConversationAvatar(activeConversation)} alt="avatar" style={{ width: 100, height: 100, borderRadius: '50%', objectFit: 'cover', marginBottom: 16 }} />
+                <h3 style={{ fontSize: 20, fontWeight: 700, color: 'var(--z-text-primary)', margin: '0 0 8px 0' }}>{getConversationName(activeConversation)}</h3>
+              </div>
+            ) : (
+              <>
+                {messages.map((msg, index) => {
+                  const showDate = shouldShowDateDivider(msg, messages[index - 1]);
+                  const isMe = getSenderIdStr(msg) === String(userId);
+                  return (
+                    <React.Fragment key={msg._id}>
+                      {showDate && <div className="msg-date" style={{ textAlign: 'center', margin: '20px 0', fontSize: '12px', background: 'var(--z-bg-secondary)', padding: '4px 12px', borderRadius: '16px', alignSelf: 'center', color: 'var(--z-text-muted)' }}>{formatChatTimestamp(msg.createdAt)}</div>}
+                      <MessageBubble 
+                        message={msg} 
+                        isMe={isMe} 
+                        onReaction={handleReaction} 
+                        onRecall={handleRecall}
+                        onDelete={handleDelete}
+                        onForward={openShareModal} // BẬT MODAL SHARE
+                        onReply={(msg) => console.log('Trả lời:', msg)}
+                      />
+                    </React.Fragment>
+                  );
+                })}
+                {uploads.map(u => (
+                  <UploadBubble key={u.id} name={u.name} percent={u.percent} />
+                ))}
+                <div ref={messagesEndRef} />
+              </>
             )}
           </div>
-        )}
 
-        {!isSticker && <div className="msg-time">{msg.time}</div>}
-      </div>
-    </div>
-  );
-}
-
-// ── Adapters ─────────────────────────────────────────────────
-const adaptConversation = (c, myUserId) => {
-  if (!c) return null;
-  let name, initials, subtitle, color;
-  const type = c.type === "direct" ? "dm" : "group";
-
-  if (c.type === "direct") {
-    const other = c.participants?.find((p) => p._id !== myUserId);
-    name = other?.username || "Người dùng";
-    initials = name.substring(0, 2).toUpperCase();
-    color = "#9333EA";
-    subtitle = other?.isOnline ? "🟢 Đang hoạt động" : "Ngoại tuyến";
-  } else {
-    name = c.name || "Nhóm";
-    initials = name.substring(0, 2).toUpperCase();
-    color = "#16A34A";
-    subtitle = `${c.participants?.length || 0} thành viên`;
-  }
-
-  let lastMsg = "Chưa có tin nhắn";
-  if (c.latestMessage) {
-    lastMsg = c.latestMessage.type === "text"
-      ? c.latestMessage.content
-      : "📎 Đã gửi file";
-  }
-
-  let time = "";
-  try { if (c.lastMessageAt) time = format(new Date(c.lastMessageAt), "HH:mm"); } catch {}
-
-  return { id: c._id, type, name, lastMsg, time, unread: c.preference?.unreadCount || 0, color, initials, subtitle, raw: c };
-};
-
-const adaptMessage = (m, myUserId) => {
-  const isMe = m.senderId?._id === myUserId;
-  let timeStr = "";
-  try { timeStr = format(new Date(m.createdAt), "HH:mm"); } catch {}
-
-  // Xác định loại message
-  const hasMedia = m.mediaIds?.length > 0 || m.media?.length > 0;
-  const mediaItem = m.media?.[0] || null;
-  const isFile = hasMedia || m.type === "file";
-
-  return {
-    id: m._id,
-    senderId: m.senderId?._id,
-    sender: m.senderId?.username || "Unknown",
-    content: m.content || "",
-    time: timeStr,
-    type: isFile ? "file" : "text",
-    fileName: mediaItem?.fileName || m.content,
-    fileUrl: mediaItem?.url || null,
-    fileSize: mediaItem?.size ? `${(mediaItem.size / 1024).toFixed(0)} KB` : null,
-    color: isMe ? "#E91E63" : "#4CAF50",
-    avatar: m.senderId?.username?.substring(0, 1).toUpperCase() || "U",
-    isMe,
-    raw: m,
-  };
-};
-
-// ── Main Component ────────────────────────────────────────────
-export default function ChatPage() {
-  const { user } = useAuthStore();
-  const {
-    conversations, fetchConversations, isFetchingConversations, hasMoreConversations,
-    activeRoom, setActiveRoom, fetchMessages, messages, isFetchingMessages,
-    hasMoreMessages, sendMessage, handleSocketNewMessage,
-  } = useChatStore();
-
-  const [activeTab, setActiveTab] = useState(0);
-  const [input, setInput] = useState("");
-  const [showAddFriend, setShowAddFriend] = useState(false);
-  const [isUploadingMedia, setIsUploadingMedia] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [showStickerPicker, setShowStickerPicker] = useState(false);
-  const [pinnedIds, setPinnedIds] = useState(() => {
-    try { return JSON.parse(localStorage.getItem("pinned-rooms")) || []; } catch { return []; }
-  });
-  const messagesEndRef = useRef(null);
-  const imageInputRef = useRef(null);
-  const fileInputRef = useRef(null);
-  const videoInputRef = useRef(null);
-
-  const togglePin = (roomId) => {
-    setPinnedIds((prev) => {
-      const next = prev.includes(roomId) ? prev.filter((id) => id !== roomId) : [...prev, roomId];
-      localStorage.setItem("pinned-rooms", JSON.stringify(next));
-      return next;
-    });
-  };
-
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, activeRoom]);
-
-  useEffect(() => {
-    fetchConversations(true);
-    socketService.connect();
-    socketService.on("new_message", handleSocketNewMessage);
-    return () => socketService.disconnect();
-  }, []);
-
-  // Send file in chat
-  const handleUpload = useCallback(async (file) => {
-    if (!file || !activeRoom) return;
-    try {
-      setIsUploadingMedia(true);
-      const media = await uploadFile(file, { folder: `zaloapp/chats/${activeRoom._id}` });
-      await sendMessage(activeRoom._id, file.name, [media._id || media.id]);
-    } catch (err) {
-      alert("Gửi file thất bại: " + (err.message || "Lỗi không xác định"));
-    } finally {
-      setIsUploadingMedia(false);
-    }
-  }, [activeRoom, sendMessage]);
-
-  const handleFileInput = useCallback((e) => {
-    const file = e.target.files?.[0];
-    if (file) handleUpload(file);
-    e.target.value = "";
-  }, [handleUpload]);
-
-  const handleSend = async () => {
-    if (!input.trim() || !activeRoom) return;
-    const ok = await sendMessage(activeRoom._id, input);
-    if (ok) setInput("");
-  };
-
-  const handleStickerSend = async (url) => {
-    if (!activeRoom) return;
-    await sendMessage(activeRoom._id, url);
-  };
-
-  const handleEmojiSelect = (emoji) => {
-    setInput((prev) => prev + emoji);
-  };
-
-  // Build room list
-  let roomList = conversations.map((c) => adaptConversation(c, user?.id)).filter(Boolean);
-
-  // Filter by tab + search
-  let filtered = roomList.filter((r) => {
-    if (activeTab === 1 && r.type !== "group") return false;
-    if (activeTab === 2 && r.type !== "dm") return false;
-    if (searchQuery && !r.name.toLowerCase().includes(searchQuery.toLowerCase())) return false;
-    return true;
-  });
-
-  // Sort: pinned first
-  filtered.sort((a, b) => {
-    const aPin = pinnedIds.includes(a.id);
-    const bPin = pinnedIds.includes(b.id);
-    if (aPin === bPin) return 0;
-    return aPin ? -1 : 1;
-  });
-
-  const activeUiRoom = activeRoom ? adaptConversation(activeRoom, user?.id) : null;
-  const activeMessagesRaw = activeRoom && messages[activeRoom._id] ? messages[activeRoom._id] : [];
-  const activeMessages = [...activeMessagesRaw].reverse().map((m) => adaptMessage(m, user?.id));
-
-  return (
-    <div className="chat-page">
-      {/* ── ROOM SIDEBAR ── */}
-      <div className="room-sidebar">
-        <div className="rs-header">
-          <span className="rs-title">Tin nhắn</span>
-          <div className="rs-header-actions">
-            <button className="rs-add-btn" onClick={() => setShowAddFriend(true)} title="Thêm bạn">
-              <FaUserPlus size={16} />
-            </button>
-            <button className="rs-add-btn" title="Tạo nhóm">
-              <FaPlus size={12} />
-            </button>
-          </div>
-        </div>
-
-        <div className="rs-search">
-          <FaSearch size={12} color="#9CA3AF" />
-          <input
-            placeholder="Tìm kiếm..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
-        </div>
-
-        <div className="rs-tabs">
-          {TABS.map((t, i) => (
-            <button key={t} className={`rs-tab ${activeTab === i ? "active" : ""}`} onClick={() => setActiveTab(i)}>
-              {t}
-            </button>
-          ))}
-        </div>
-
-        <div className="rs-list">
-          {isFetchingConversations && conversations.length === 0 ? (
-            <div className="rs-loading"><FaSpinner className="spin" /> Đang tải...</div>
-          ) : filtered.length === 0 ? (
-            <div className="rs-empty">Không có hội thoại nào</div>
-          ) : (
-            filtered.map((r) => (
-              <RoomItem
-                key={r.id}
-                room={r}
-                active={activeRoom?._id === r.raw._id}
-                onClick={() => setActiveRoom(r.raw)}
-                isPinned={pinnedIds.includes(r.id)}
-                onTogglePin={() => togglePin(r.id)}
-              />
-            ))
-          )}
-          {hasMoreConversations && (
-            <button className="load-more-btn" onClick={() => fetchConversations()} disabled={isFetchingConversations}>
-              Tải thêm
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* ── CHAT MAIN ── */}
-      <div className="chat-main">
-        {!activeUiRoom ? (
-          <div className="chat-empty-state">
-            <FaCommentDots size={48} />
-            <h3>Chọn một cuộc trò chuyện</h3>
-            <p>Chọn từ danh sách bên trái để bắt đầu nhắn tin</p>
-          </div>
-        ) : (
-          <>
-            {/* Header */}
-            <div className="chat-header">
-              <div className="ch-left">
-                <div className="ch-avatar" style={{ background: activeUiRoom.color }}>
-                  {activeUiRoom.initials}
-                </div>
-                <div>
-                  <div className="ch-name">{activeUiRoom.name}</div>
-                  <div className="ch-sub">{activeUiRoom.subtitle}</div>
-                </div>
-              </div>
-              <div className="ch-actions">
-                <button className="ch-btn-icon" title="Gọi thoại"><FaPhone size={14} /></button>
-                <button className="ch-btn-icon" title="Video call"><FaVideoCall size={14} /></button>
-                <button className="ch-btn-icon" title="Tùy chọn"><FaEllipsisV size={14} /></button>
-              </div>
+          <div style={{ padding: '10px 16px', borderTop: '1px solid var(--z-border)', backgroundColor: 'var(--z-bg-primary)' }}>
+            <div className="chat-toolbar" style={{ display: 'flex', gap: '16px', marginBottom: '8px', color: '#65676B' }}>
+              <input ref={imageInputRef} type="file" accept="image/*" multiple style={{display:"none"}} onChange={handleFileInput}/>
+              <input ref={videoInputRef} type="file" accept="video/*" multiple style={{display:"none"}} onChange={handleFileInput}/>
+              <input ref={fileInputRef} type="file" multiple style={{display:"none"}} onChange={handleFileInput} accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip,.rar,.7z"/>
+              <input ref={folderInputRef} type="file" webkitdirectory="true" multiple style={{display:"none"}} onChange={handleFileInput} />
+              
+              <FaSmile size={20} style={{ cursor: 'pointer' }} title="Sticker" onClick={() => setShowInputEmoji(!showInputEmoji)} />
+              <FaImage size={20} style={{ cursor: 'pointer' }} title="Gửi ảnh" onClick={()=>imageInputRef.current?.click()} />
+              <FaPaperclip size={20} style={{ cursor: 'pointer' }} title="Đính kèm file" onClick={()=>fileInputRef.current?.click()} />
+              <FaVideo size={20} style={{ cursor: 'pointer' }} title="Gửi video" onClick={()=>videoInputRef.current?.click()} />
+              <FaCloud size={20} style={{ cursor: 'pointer' }} title="Gửi thư mục" onClick={()=>folderInputRef.current?.click()} />
             </div>
 
-            {/* Messages */}
-            <div className="chat-messages">
-              {hasMoreMessages[activeRoom._id] && (
-                <div style={{ textAlign: "center", padding: 10 }}>
-                  <button className="load-more-btn" onClick={() => fetchMessages(activeRoom._id)} disabled={isFetchingMessages}>
-                    {isFetchingMessages ? "Đang tải..." : "Tải thêm tin nhắn cũ"}
-                  </button>
-                </div>
-              )}
-              {activeMessages.map((msg) => (
-                <Message key={msg.id} msg={msg} isMe={msg.isMe} />
-              ))}
-              <div ref={messagesEndRef} />
-            </div>
-
-            {/* Input bar - Zalo style */}
-            <div className="chat-input-area">
-              {/* Toolbar top */}
-              <div className="cia-toolbar">
-                {/* Hidden file inputs */}
-                <input ref={imageInputRef} type="file" accept="image/*" style={{ display:"none" }} onChange={handleFileInput} />
-                <input ref={videoInputRef} type="file" accept="video/*" style={{ display:"none" }} onChange={handleFileInput} />
-                <input ref={fileInputRef} type="file" accept="*/*" style={{ display:"none" }} onChange={handleFileInput} />
-
-                <button className="cia-tool-btn" title="Sticker / Emoji" onClick={() => setShowStickerPicker(!showStickerPicker)}>
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><path d="M8 13s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>
-                </button>
-                <button className="cia-tool-btn" title="Gửi ảnh" onClick={() => imageInputRef.current?.click()}>
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
-                </button>
-                <button className="cia-tool-btn" title="Đính kèm file" onClick={() => fileInputRef.current?.click()}>
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
-                </button>
-                <button className="cia-tool-btn" title="Gửi video" onClick={() => videoInputRef.current?.click()}>
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>
-                </button>
-                <button className="cia-tool-btn" title="Gửi thư mục" onClick={() => { if(fileInputRef.current){ fileInputRef.current.setAttribute("webkitdirectory",""); fileInputRef.current.click(); } }}>
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
-                </button>
-                <div className="cia-tool-divider" />
-                <button className="cia-tool-btn" title="Tạo bình chọn">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
-                </button>
-                <button className="cia-tool-btn" title="Nhắc hẹn">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                </button>
-                <button className="cia-tool-btn" title="Thêm">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>
-                </button>
-              </div>
-
-              {/* Text input row */}
-              <div className="cia-input-row">
-                <div className="cia-input-wrap">
-                  <input
-                    className="cia-input"
-                    value={input}
-                    onChange={(e) => setInput(e.target.value)}
-                    placeholder="Nhập @, tin nhắn tới đây"
-                    onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSend()}
-                  />
-                  <button className="cia-emoji-inline" onClick={() => setShowStickerPicker(!showStickerPicker)}>
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><path d="M8 13s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>
-                  </button>
-                </div>
-                {input.trim() ? (
-                  <button className="cia-send-btn" onClick={handleSend}>
-                    <FaPaperPlane size={16} />
-                  </button>
-                ) : (
-                  <button className="cia-like-btn" onClick={() => activeRoom && sendMessage(activeRoom._id, "👍")}>
-                    <FaThumbsUp size={18} />
-                  </button>
-                )}
-              </div>
-
-              {/* Sticker/Emoji picker */}
-              {showStickerPicker && (
-                <StickerEmojiPicker
-                  onSelectEmoji={handleEmojiSelect}
-                  onSelectSticker={handleStickerSend}
-                  onClose={() => setShowStickerPicker(false)}
+            <form style={{ display: 'flex', alignItems: 'flex-end', gap: '12px', position: 'relative' }} onSubmit={handleSend}>
+              <div style={{ flex: 1, display: 'flex', alignItems: 'center', backgroundColor: theme === 'dark' ? '#3A3B3C' : '#F0F2F5', borderRadius: '20px', padding: '0 12px', minHeight: '40px' }}>
+                <input 
+                  style={{ flex: 1, border: 'none', backgroundColor: 'transparent', padding: '10px 0', outline: 'none', fontSize: '15px', color: 'var(--z-text-primary)' }}
+                  placeholder={`Nhập @, tin nhắn tới ${getConversationName(activeConversation)}`} 
+                  value={textInput}
+                  onChange={(e) => setTextInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      if (textInput.trim()) handleSend(e);
+                    }
+                  }}
                 />
-              )}
-
-              {/* Upload indicator */}
-              {isUploadingMedia && (
-                <div className="cia-uploading">
-                  <FaSpinner className="spin" size={12} /> Đang gửi file...
+                <div 
+                  style={{ cursor: 'pointer', padding: '4px', display: 'flex', alignItems: 'center', marginLeft: '8px' }}
+                  onClick={() => setShowInputEmoji(!showInputEmoji)}
+                >
+                  <FaSmile size={20} color="#65676B" />
                 </div>
-              )}
-            </div>
-          </>
-        )}
-      </div>
-
-      {/* ── RIGHT PANEL ── */}
-      {activeUiRoom && (
-        <div className="chat-right-panel">
-          <div className="crp-header">
-            <div className="crp-avatar" style={{ background: activeUiRoom.color }}>
-              {activeUiRoom.initials}
-            </div>
-            <div className="crp-name">{activeUiRoom.name}</div>
-            <div className="crp-sub">{activeUiRoom.subtitle}</div>
-          </div>
-          <div className="crp-section">
-            <div className="crp-section-title">Thành viên</div>
-            {activeUiRoom.raw.participants?.map((m) => (
-              <div key={m._id} className="crp-member">
-                <div className="crp-m-av" style={{ background: "#f3f4f6", color: "#1f2937" }}>
-                  {m.username?.substring(0, 1).toUpperCase() || "U"}
-                </div>
-                <span className="crp-m-name">{m.username}</span>
               </div>
-            ))}
+
+              <button 
+                type={textInput.trim() ? "submit" : "button"} 
+                onClick={!textInput.trim() ? handleSendLike : undefined}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '8px 4px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              >
+                {textInput.trim() ? <FaPaperPlane size={22} color="#0084FF" /> : <FaThumbsUp size={24} color="#0084FF" />}
+              </button>
+
+              {showInputEmoji && (
+                <div style={{ position: 'absolute', bottom: '100%', right: '40px', marginBottom: '10px', zIndex: 50, background: theme === 'dark' ? '#242526' : '#fff', border: '1px solid var(--z-border)', padding: '8px 12px', borderRadius: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', display: 'flex', gap: '12px' }}>
+                  {['😀', '😂', '❤️', '👍', '😢', '🙏'].map(e => (
+                    <span 
+                      key={e} 
+                      style={{ fontSize: '24px', cursor: 'pointer', transition: 'transform 0.1s' }} 
+                      className="hover:scale-125"
+                      onClick={() => {
+                        setTextInput(prev => prev + e);
+                        setShowInputEmoji(false);
+                      }}
+                    >
+                      {e}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </form>
           </div>
-        </div>
+        </main>
+      ) : (
+        <main className="chat-main" style={{ alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ color: 'var(--z-text-secondary)', fontSize: 16 }}>Chọn một cuộc trò chuyện để bắt đầu</div>
+        </main>
       )}
 
-      <AddFriendModal isOpen={showAddFriend} onClose={() => setShowAddFriend(false)} />
+      {/* ── RIGHT PANEL (GIỮ NGUYÊN) ── */}
+      {activeConversation && (
+        <aside className="chat-right-panel">
+          <div className="crp-header">
+            <img className="crp-avatar" src={getConversationAvatar(activeConversation)} alt="avt" />
+            <div className="crp-name">{getConversationName(activeConversation)}</div>
+            <div className="crp-actions">
+              <div className="crp-action-btn"><div className="crp-action-icon"><FaBell size={16}/></div>Tắt thông báo</div>
+              <div className="crp-action-btn"><div className="crp-action-icon"><FaThumbtack size={16}/></div>Ghim</div>
+              <div className="crp-action-btn"><div className="crp-action-icon"><FaUsers size={16}/></div>Tạo nhóm</div>
+            </div>
+          </div>
+          
+          <div className="crp-section">
+            <div className="crp-sec-title">Ảnh/Video</div>
+            {imgFiles.length > 0 ? (
+              <>
+                <div className="crp-grid">
+                  {imgFiles.slice(0, 6).map((m, i) => (
+                    <img key={i} src={m.url} alt="" className="crp-grid-img" />
+                  ))}
+                </div>
+                <button className="crp-view-all">Xem tất cả</button>
+              </>
+            ) : <div style={{fontSize: 12, color: 'var(--z-text-muted)'}}>Chưa có Ảnh/Video nào</div>}
+          </div>
+
+          <div className="crp-section">
+            <div className="crp-sec-title">File</div>
+            {docFiles.length > 0 ? (
+              <>
+                {docFiles.slice(0, 3).map((m, i) => {
+                  const fname = m.name || m.fileName;
+                  return (
+                    <div key={i} className="crp-file-row">
+                      <div className="crp-file-icon" style={{background: getFileColor(fname)}}>{getExt(fname).substring(0,3).toUpperCase()}</div>
+                      <div className="crp-file-info">
+                        <div className="crp-file-name">{fname}</div>
+                        <div className="crp-file-meta">{formatBytes(m.size)}</div>
+                      </div>
+                    </div>
+                  );
+                })}
+                <button className="crp-view-all">Xem tất cả</button>
+              </>
+            ) : <div style={{fontSize: 12, color: 'var(--z-text-muted)'}}>Chưa có File nào</div>}
+          </div>
+
+          <div className="crp-section">
+            <div className="crp-sec-title">Link</div>
+            {linkItems.length > 0 ? (
+              <>
+                {linkItems.slice(0, 3).map((link, i) => (
+                  <div key={i} className="crp-link-row">
+                    <div className="crp-link-icon"><FaLink size={14}/></div>
+                    <a href={link} target="_blank" rel="noreferrer" className="crp-link-url">{link}</a>
+                  </div>
+                ))}
+                <button className="crp-view-all">Xem tất cả</button>
+              </>
+            ) : <div style={{fontSize: 12, color: 'var(--z-text-muted)'}}>Chưa có Link nào</div>}
+          </div>
+        </aside>
+      )}
     </div>
   );
-}
-
-// Missing import fix
-function FaCommentDots(props) {
-  return <svg viewBox="0 0 512 512" width={props.size || 16} height={props.size || 16} fill="currentColor" {...props}><path d="M256 32C114.6 32 0 125.1 0 240c0 49.6 21.4 95 57 130.7C44.5 421.1 2.7 466 2.2 466.5c-2.2 2.3-2.8 5.7-1.5 8.7S4.8 480 8 480c66.3 0 116-31.8 140.6-51.4C169.1 433.1 212.1 448 256 448c141.4 0 256-93.1 256-208S397.4 32 256 32z"/></svg>;
 }
