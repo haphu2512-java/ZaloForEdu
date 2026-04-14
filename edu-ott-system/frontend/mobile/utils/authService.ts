@@ -229,12 +229,12 @@ export async function logoutAll(): Promise<void> {
 
 /**
  * Xác thực email
- * POST /auth/verify-email { token }
+ * POST /auth/verify-email { token, email }
  */
-export async function verifyEmail(token: string): Promise<void> {
+export async function verifyEmail(token: string, email: string): Promise<void> {
   await fetchAPI(`${AUTH_ENDPOINT}/verify-email`, {
     method: 'POST',
-    body: JSON.stringify({ token }),
+    body: JSON.stringify({ token, email: email.toLowerCase() }),
   });
 }
 
