@@ -24,10 +24,10 @@ export default function AddFriendModal({ isOpen, onClose }) {
 
   useEffect(() => {
     if (isOpen && currentUser) {
-      fetchFriends();
-      fetchIncomingRequests();
-      fetchOutgoingRequests();
-      setQuery(""); setResult(null); setError(""); setRequestSent(false);
+      // Fetch đồng thời, sau đó reset state
+      Promise.all([fetchFriends(), fetchIncomingRequests(), fetchOutgoingRequests()]).then(() => {
+        setQuery(""); setResult(null); setError(""); setRequestSent(false);
+      });
     }
   }, [isOpen, currentUser]);
 

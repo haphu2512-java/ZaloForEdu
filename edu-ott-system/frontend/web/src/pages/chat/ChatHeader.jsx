@@ -1,31 +1,61 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FaPhone, FaVideo, FaEllipsisV, FaUsers, FaFileAlt, FaUserPlus, FaCheck } from 'react-icons/fa';
+import { FaPhone, FaVideo, FaEllipsisV, FaUsers, FaFileAlt, FaUserPlus, FaCheck, FaSpinner, FaTimes } from 'react-icons/fa';
 import { useAuthStore } from '../../store/authStore';
 import { socketService } from '../../services/socketService';
 import { useTheme } from '../../contexts/ThemeContext';
 import { friendService } from '../../services/friendService';
+import { useFriendStore } from '../../store/friendStore';
 
 export const ChatHeader = ({ room, onCall, onVideo, onInfo }) => {
   const navigate = useNavigate();
   const currentUser = useAuthStore((state) => state.user);
   const { appliedTheme } = useTheme();
   const isDark = appliedTheme === 'dark';
+  const { outgoingRequests, fetchOutgoingRequests } = useFriendStore();
   const [friendRequestSent, setFriendRequestSent] = useState(false);
+  const [cancelLoading, setCancelLoading] = useState(false);
+
+  // Check xem đã gửi lời mời chưa từ store (persist qua reload)
+  const hasOutgoingRequest = outgoingRequests.some(r =>
+    String(r.toUserId?._id || r.toUserId || '') === String(room?.strangerId || '')
+  );
+  const outgoingRequest = outgoingRequests.find(r =>
+    String(r.toUserId?._id || r.toUserId || '') === String(room?.strangerId || '')
+  );
+
+  useEffect(() => {
+    if (room?.isStranger) fetchOutgoingRequests();
+  }, [room?.strangerId]);
 
   if (!room) return null;
 
   const isOnline = room.isOnline;
   const isClass = room.type?.toLowerCase() === 'class' || room.roomModel === 'Class';
   const isStranger = room.isStranger && room.type === 'direct';
+  const alreadySentRequest = isStranger && (hasOutgoingRequest || friendRequestSent);
 
   const handleSendFriendRequest = async () => {
     try {
       await friendService.sendFriendRequest(room.strangerId);
       setFriendRequestSent(true);
+      fetchOutgoingRequests();
     } catch (err) {
       alert(err.response?.data?.message || 'Không thể gửi lời mời kết bạn');
     }
+  };
+
+  const handleCancelFriendRequest = async () => {
+    const requestId = outgoingRequest?._id;
+    if (!requestId) return;
+    setCancelLoading(true);
+    try {
+      await friendService.cancelFriendRequest(requestId);
+      setFriendRequestSent(false);
+      fetchOutgoingRequests();
+    } catch (err) {
+      alert(err.response?.data?.message || 'Không thể hủy lời mời');
+    } finally { setCancelLoading(false); }
   };
 
   const handleCallClick = (type) => {
@@ -130,12 +160,14 @@ export const ChatHeader = ({ room, onCall, onVideo, onInfo }) => {
       <div className="flex items-center gap-3">
         {/* Nút Gửi kết bạn khi chat với người lạ */}
         {isStranger && (
-          friendRequestSent || room.friendRequestSent ? (
+          alreadySentRequest ? (
             <button
-              disabled
-              style={{ display:'flex', alignItems:'center', gap:6, padding:'7px 14px', borderRadius:8, border:'1px solid var(--border-color)', background:'var(--bg-secondary)', color:'var(--text-secondary)', cursor:'not-allowed', fontWeight:600, fontSize:13 }}
+              onClick={handleCancelFriendRequest}
+              disabled={cancelLoading}
+              style={{ display:'flex', alignItems:'center', gap:6, padding:'7px 14px', borderRadius:8, border:'1px solid #ef4444', background:'transparent', color:'#ef4444', cursor:'pointer', fontWeight:600, fontSize:13 }}
             >
-              <FaCheck size={13} /> Đã gửi lời mời
+              {cancelLoading ? <FaSpinner size={13} className="spin" /> : <FaTimes size={13} />}
+              Hủy lời mời
             </button>
           ) : (
             <button

@@ -12,6 +12,7 @@ import { useNavigate } from "react-router-dom";
 import AddFriendModal from "../../components/Modals/AddFriendModal";
 import { socketService } from "../../services/socketService";
 import { useAuthStore } from "../../store/authStore";
+import { friendService } from "../../services/friendService";
 import "./ContactsPage.css";
 
 // ── Avatar helper ────────────────────────────────────────────
@@ -500,6 +501,18 @@ function RequestsTab({ requests, onAccept, onReject, onRefresh }) {
 
 // ── Sent Requests Tab ────────────────────────────────────────
 function SentRequestsTab({ requests, onRefresh }) {
+  const [cancellingId, setCancellingId] = useState(null);
+
+  const handleCancel = async (requestId) => {
+    setCancellingId(requestId);
+    try {
+      await friendService.cancelFriendRequest(requestId);
+      onRefresh();
+    } catch (err) {
+      alert(err.response?.data?.message || "Không thể hủy lời mời.");
+    } finally { setCancellingId(null); }
+  };
+
   if (requests.length === 0) {
     return (
       <div className="cp-empty">
@@ -515,6 +528,7 @@ function SentRequestsTab({ requests, onRefresh }) {
       {requests.map((req) => {
         const id = req._id || req.id;
         const receiver = req.toUserId || req.to || {};
+        const isCancelling = cancellingId === id;
         return (
           <div key={id} className="request-card">
             <Avatar user={receiver} size={52} />
@@ -523,9 +537,15 @@ function SentRequestsTab({ requests, onRefresh }) {
               <span className="rc-msg">Đang chờ xác nhận...</span>
               <span className="rc-time">{req.createdAt ? new Date(req.createdAt).toLocaleDateString("vi") : ""}</span>
             </div>
-            <div className="rc-status pending">
-              <FaUserClock size={13} /> Đang chờ
-            </div>
+            <button
+              onClick={() => handleCancel(id)}
+              disabled={isCancelling}
+              className="rc-action-btn"
+              style={{ background:'transparent', border:'1px solid #ef4444', color:'#ef4444', borderRadius:8, padding:'6px 14px', fontWeight:600, fontSize:13, cursor:'pointer', display:'flex', alignItems:'center', gap:6 }}
+            >
+              {isCancelling ? <FaSpinner size={12} className="spin" /> : <FaTimes size={12} />}
+              Hủy lời mời
+            </button>
           </div>
         );
       })}
