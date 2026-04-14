@@ -1,19 +1,16 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
-import { useLocation, useNavigate } from "react-router-dom"; // THÊM useNavigate
 import axios from "axios";
 import io from "socket.io-client";
-import { 
-  FaSearch, FaPaperPlane, FaPhoneAlt, FaVideo, FaInfoCircle, FaBell, 
-  FaThumbtack, FaUsers, FaSun, FaMoon, FaCloud, FaSpinner, FaLink, 
-  FaSmile, FaThumbsUp, FaImage, FaPaperclip, FaTimes 
-} from "react-icons/fa";
+import { FaSearch, FaBell, FaThumbtack, FaUsers, FaCloud, FaSpinner, FaLink } from "react-icons/fa";
 import toast from "react-hot-toast";
 
 import { uploadFile } from "../../services/mediaService"; 
 import { useFriendStore } from "../../store/friendStore"; 
 import { MessageBubble } from "./MessageBubble";
-import { useAuthStore } from "../../store/authStore"; // THÊM import này
-import { socketService } from "../../services/socketService"; // THÊM import này
+import { ShareMessageModal } from "./Modals/ShareMessageModal";
+import { ChatHeader } from "./ChatHeader"; 
+import { MessageInput } from "./MessageInput"; 
+import { useTheme } from '../../contexts/ThemeContext'; 
 import "./ChatPage.css";
 
 const API_BASE_URL = "http://localhost:5000/api/v1";
@@ -77,28 +74,21 @@ export default function ChatPage() {
   const [conversations, setConversations] = useState([]);
   const [activeConversation, setActiveConversation] = useState(null);
   const [messages, setMessages] = useState([]);
-  const [textInput, setTextInput] = useState("");
   const [searchQuery, setSearchQuery] = useState(""); 
-  const [theme, setTheme] = useState("light");
   
-  const [showInputEmoji, setShowInputEmoji] = useState(false);
+  const { appliedTheme } = useTheme(); 
+  
   const [uploads, setUploads] = useState([]);
   const [isDragging, setIsDragging] = useState(false);
+  const [showRightPanel, setShowRightPanel] = useState(true); 
 
-  // === STATE CHO MODAL CHUYỂN TIẾP (SHARE) ===
   const [shareModalOpen, setShareModalOpen] = useState(false);
   const [msgToShare, setMsgToShare] = useState(null);
 
-  const imageInputRef = useRef(null);
-  const videoInputRef = useRef(null);
-  const fileInputRef = useRef(null);
-  const folderInputRef = useRef(null);
   const pageRef = useRef(null);
-  
-  const location = useLocation();
-  const navigate = useNavigate(); // THÊM KHAI BÁO navigate
   const messagesEndRef = useRef(null);
-  
+  const activeConvIdRef = useRef(null);
+
   const { friends, fetchFriends } = useFriendStore();
 
   useEffect(() => { if (friends.length === 0) fetchFriends(); }, [friends.length, fetchFriends]);
@@ -192,44 +182,88 @@ export default function ChatPage() {
   }, [conversations, friends, searchQuery, userId, getConversationName, getOtherParticipant]);
 
   useEffect(() => {
+    activeConvIdRef.current = activeConversation?._id;
+  }, [activeConversation]);
+
+  const fetchConversationsData = useCallback(async () => {
+    try {
+      const res = await axios.get(`${API_BASE_URL}/conversations`, { headers: { Authorization: `Bearer ${token}` } });
+      setConversations(res.data.data?.items || res.data.items || []);
+    } catch (err) { console.error("Lỗi lấy danh sách:", err); }
+  }, [token]);
+
+  // ==================== KHỞI TẠO SOCKET ====================
+  useEffect(() => {
     if (!token) return;
     socket.auth = { token };
     socket.connect();
 
-    const fetchAllData = async () => {
-      try {
-        const res = await axios.get(`${API_BASE_URL}/conversations`, { headers: { Authorization: `Bearer ${token}` } });
-        setConversations(res.data.data?.items || res.data.items || []);
-      } catch (err) { console.error("Lỗi lấy danh sách:", err); }
-    };
-    fetchAllData();
+    fetchConversationsData();
 
-    socket.on("message:new", (msg) => {
-      setMessages((prev) => {
-        if (prev.find((m) => m._id === msg._id)) return prev;
-        return [...prev, msg];
-      });
+    socket.on("conversation_updated", (payload) => {
+      const { conversationId, latestMessage } = payload;
+      const convIdStr = String(conversationId);
+      const activeIdStr = String(activeConvIdRef.current);
+      const isMyMessage = String(latestMessage?.senderId?._id || latestMessage?.senderId) === String(userId);
+
+      if (convIdStr === activeIdStr) {
+        setMessages(prev => {
+          if (prev.some(m => String(m._id) === String(latestMessage._id))) return prev;
+          return [...prev, latestMessage];
+        });
+        socket.emit("message_delivered", { messageId: latestMessage._id });
+        socket.emit("message_seen", { messageId: latestMessage._id });
+      } else if (!isMyMessage) {
+        const senderName = latestMessage?.senderId?.username || 'Ai đó';
+        const shortContent = latestMessage?.content || '[Hình ảnh/File đính kèm]';
+        toast.success(`💬 ${senderName}: ${shortContent}`, { position: "top-right", duration: 3000 });
+      }
+
       setConversations(prevConvs => {
-        const index = prevConvs.findIndex(c => String(c._id) === String(msg.conversationId));
-        if (index === -1) return prevConvs;
+        const index = prevConvs.findIndex(c => String(c._id) === convIdStr);
+        if (index === -1) { fetchConversationsData(); return prevConvs; }
+
         const newConvs = [...prevConvs];
-        const [target] = newConvs.splice(index, 1);
-        target.latestMessage = msg;
-        if (activeConversation?._id !== target._id) {
-            target.unreadCount = (target.unreadCount || 0) + 1;
+        const target = { ...newConvs[index], latestMessage };
+
+        if (convIdStr !== activeIdStr && !isMyMessage) {
+           target.unreadCount = (target.unreadCount || 0) + 1;
+        } else if (convIdStr === activeIdStr) {
+           target.unreadCount = 0; 
         }
-        return [target, ...newConvs];
+
+        newConvs.splice(index, 1);
+        return [target, ...newConvs]; 
       });
     });
 
-    return () => socket.disconnect();
-  }, [token, activeConversation?._id]);
+    socket.on("message_recalled", ({ messageId }) => {
+      // FIX: Đảm bảo cập nhật cả nội dung và attachments về rỗng
+      setMessages(prev => prev.map(m => String(m._id) === String(messageId) ? { ...m, isRecalled: true, content: "", attachments: [], mediaIds: [] } : m));
+      setConversations(prev => prev.map(c => {
+        if (c.latestMessage && String(c.latestMessage._id) === String(messageId)) {
+          return { ...c, latestMessage: { ...c.latestMessage, isRecalled: true, content: "" } };
+        }
+        return c;
+      }));
+    });
 
+    socket.on("message_reacted", ({ messageId, reactions }) => {
+      setMessages(prev => prev.map(m => String(m._id) === String(messageId) ? { ...m, reactions } : m));
+    });
+
+    return () => {
+      socket.off("conversation_updated");
+      socket.off("message_recalled");
+      socket.off("message_reacted");
+      socket.disconnect();
+    };
+  }, [token, userId, fetchConversationsData]);
+
+  // ==================== LOAD TIN NHẮN KHI VÀO PHÒNG ====================
   useEffect(() => {
     if (!activeConversation) return;
     setMessages([]);
-    setTextInput("");
-    setShowInputEmoji(false);
 
     if (activeConversation.isMock) return; 
 
@@ -243,8 +277,8 @@ export default function ChatPage() {
     };
 
     fetchMessages();
-    socket.emit("join:room", activeConversation._id);
-    return () => socket.emit("leave:room", activeConversation._id);
+    socket.emit("join_conversation", { conversationId: activeConversation._id });
+
   }, [activeConversation?._id, token]);
 
   useEffect(() => { scrollToBottom(); }, [messages, uploads]);
@@ -291,49 +325,32 @@ export default function ChatPage() {
     
     setActiveConversation(realConv);
     setConversations(prev => [realConv, ...prev.filter(c => c._id !== activeConversation._id)]);
-    socket.emit("join:room", currentConvId);
+    socket.emit("join_conversation", { conversationId: currentConvId });
     return currentConvId;
   };
 
-  const handleSend = async (e) => {
-    if (e) e.preventDefault();
-    const content = textInput.trim();
-    if (!content || !activeConversation) return;
-    setTextInput("");
-    setShowInputEmoji(false);
-
-    try {
-      const currentConvId = await ensureRealConversation();
-      const res = await axios.post(`${API_BASE_URL}/messages/send`,
-        { content: content, conversationId: currentConvId },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      const newMsg = res.data.data || res.data; 
-      if (newMsg) {
-        setMessages(prev => {
-          if (prev.find(m => String(m._id) === String(newMsg._id))) return prev;
-          return [...prev, newMsg];
-        });
-      }
-    } catch (err) { setTextInput(content); }
-  };
-
-  const handleSendLike = async (e) => {
-    if (e) e.preventDefault();
+  // ==================== TƯƠNG TÁC (Gửi, Thu hồi, Thả tim) ====================
+  const handleSendText = async (content) => {
     if (!activeConversation) return;
     try {
       const currentConvId = await ensureRealConversation();
-      const res = await axios.post(`${API_BASE_URL}/messages/send`,
+      // FIX: Xóa setMessages thủ công vì socket "conversation_updated" sẽ lo việc này
+      await axios.post(`${API_BASE_URL}/messages/send`,
+        { content: content, conversationId: currentConvId },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+    } catch (err) { toast.error("Lỗi gửi tin nhắn"); }
+  };
+
+  const handleSendLike = async () => {
+    if (!activeConversation) return;
+    try {
+      const currentConvId = await ensureRealConversation();
+      // FIX: Xóa setMessages thủ công để tránh lặp
+      await axios.post(`${API_BASE_URL}/messages/send`,
         { content: "👍", conversationId: currentConvId },
         { headers: { Authorization: `Bearer ${token}` } }
       );
-      const newMsg = res.data.data || res.data; 
-      if (newMsg) {
-        setMessages(prev => {
-          if (prev.find(m => String(m._id) === String(newMsg._id))) return prev;
-          return [...prev, newMsg];
-        });
-      }
     } catch (err) { console.error("Lỗi gửi Like", err); }
   };
 
@@ -349,15 +366,11 @@ export default function ChatPage() {
         onProgress: (pct) => setUploads(prev => prev.map(u => u.id === uid ? { ...u, percent: pct } : u))
       });
 
-      const res = await axios.post(`${API_BASE_URL}/messages/send`,
+      // FIX: Xóa setMessages thủ công. Socket sẽ tự nhận message mới có đính kèm media.
+      await axios.post(`${API_BASE_URL}/messages/send`,
         { content: "", mediaIds: [media._id || media.id], conversationId: currentConvId },
         { headers: { Authorization: `Bearer ${token}` } }
       );
-      const newMsg = res.data.data || res.data;
-      if (newMsg) {
-          newMsg.attachments = [media]; 
-          setMessages(prev => [...prev, newMsg]);
-      }
     } catch (err) {
       toast.error(`Lỗi tải lên: ${file.name}`);
     } finally {
@@ -365,19 +378,17 @@ export default function ChatPage() {
     }
   };
 
-  const handleFileInput = (e) => {
-    Array.from(e.target.files).forEach(handleUploadFile);
-    e.target.value = "";
+  const handleUploadFilesFromInput = (files) => {
+    files.forEach(handleUploadFile);
   };
 
-  // ================= TÍNH NĂNG UPDATE KHÔNG CẦN F5 =================
-
-  // 1. Emoji Reaction
   const handleReaction = async (messageId, emoji) => {
+    // Giữ nguyên logic cập nhật nhanh (optimistic update)
     setMessages(prev => prev.map(m => {
-      if (m._id === messageId) {
+      if (String(m._id) === String(messageId)) {
         const currentReactions = m.reactions || [];
-        return { ...m, reactions: [...currentReactions, { emoji, user: userId }] };
+        const filtered = currentReactions.filter(r => String(r.userId) !== String(userId));
+        return { ...m, reactions: [...filtered, { emoji, userId: userId }] };
       }
       return m;
     }));
@@ -386,38 +397,32 @@ export default function ChatPage() {
     } catch (err) { toast.error("Lỗi thả cảm xúc"); }
   };
 
-  // 2. Thu Hồi
   const handleRecall = async (msgId) => {
-    // Ép State isDeleted = true ngay lập tức
-    setMessages(prev => prev.map(m => m._id === msgId ? { ...m, isDeleted: true, content: "" } : m));
+    // Cập nhật state local ngay để UX mượt
+    setMessages(prev => prev.map(m => String(m._id) === String(msgId) ? { ...m, isRecalled: true, content: "", attachments: [], mediaIds: [] } : m));
     try {
       await axios.delete(`${API_BASE_URL}/messages/${msgId}/recall`, { headers: { Authorization: `Bearer ${token}` } });
-      toast.success("Thu hồi thành công");
+      toast.success("Đã thu hồi tin nhắn");
     } catch (err) { toast.error("Lỗi thu hồi tin nhắn"); }
   };
 
-  // 3. Xóa
   const handleDelete = async (msgId) => {
-    // Xóa thẳng khỏi mảng State ngay lập tức
     setMessages(prev => prev.filter(m => m._id !== msgId));
     try {
       await axios.delete(`${API_BASE_URL}/messages/${msgId}`, { headers: { Authorization: `Bearer ${token}` } });
     } catch (err) { toast.error("Lỗi xóa tin nhắn"); }
   };
 
-  // 4. Mở Modal Chuyển Tiếp
   const openShareModal = (msg) => {
     setMsgToShare(msg);
     setShareModalOpen(true);
   };
 
-  // 5. Thực thi Chuyển Tiếp
   const executeForward = async (friend) => {
     try {
       const targetId = friend._id || friend.id;
       let targetConvId = null;
 
-      // Tìm xem đã có box chat với bạn này chưa
       const existingConv = conversations.find(c => c.type === 'direct' && c.participants.some(p => (p._id || p.id) === targetId));
 
       if (existingConv) {
@@ -430,16 +435,10 @@ export default function ChatPage() {
       const content = msgToShare.content || "";
       const mediaIds = (msgToShare.attachments || msgToShare.mediaIds || []).map(m => m._id || m.id || m);
 
-      const res = await axios.post(`${API_BASE_URL}/messages/send`,
+      await axios.post(`${API_BASE_URL}/messages/send`,
         { content, mediaIds, conversationId: targetConvId },
         { headers: { Authorization: `Bearer ${token}` } }
       );
-
-      // NẾU BẠN CHUYỂN TIẾP CHO CHÍNH NGƯỜI ĐANG CHAT -> HIỆN LÊN MÀN HÌNH LUÔN KHÔNG CẦN F5
-      if (activeConversation && targetConvId === activeConversation._id) {
-         const newMsg = res.data.data || res.data;
-         setMessages(prev => [...prev, newMsg]);
-      }
 
       toast.success(`Đã chuyển tiếp tới ${friend.fullName || friend.username}`);
       setShareModalOpen(false);
@@ -447,47 +446,6 @@ export default function ChatPage() {
       toast.error("Lỗi chuyển tiếp tin nhắn");
     }
   };
-
-  // THÊM: HÀM XỬ LÝ GỌI ĐIỆN VÀO ĐÂY
-  const handleCall = (type) => {
-    if (!activeConversation) return;
-
-    const currentUser = useAuthStore.getState().user;
-    const myId = currentUser?._id || currentUser?.id;
-
-    if (!myId) {
-      toast.error("Vui lòng đăng nhập lại.");
-      return;
-    }
-
-    const otherParticipant = getOtherParticipant(activeConversation);
-    const targetId = otherParticipant?._id || otherParticipant?.id;
-
-    if (!targetId) {
-      toast.error("Không tìm thấy thông tin người nhận.");
-      return;
-    }
-
-    const roomId = `room_${myId}_${targetId}`;
-
-    const sent = socketService.callUser({
-      targetUserId: targetId,
-      roomId,
-      callerName: currentUser?.username || "Bạn",
-      type: type, 
-    });
-
-    if (!sent) {
-      toast.error("Mất kết nối server, vui lòng thử lại.");
-      return;
-    }
-
-    const url = type === "audio" ? `/call/${roomId}?type=voice` : `/call/${roomId}`;
-    navigate(url);
-  };
-
-
-  const toggleTheme = () => { setTheme(prev => prev === "light" ? "dark" : "light"); };
 
   const allMedia = messages.flatMap(m => m.attachments || m.mediaIds || m.media || []).filter(m => typeof m !== 'string');
   const imgFiles = allMedia.filter(m => ["image","video"].includes(getCategory(m.name || m.fileName)));
@@ -502,38 +460,15 @@ export default function ChatPage() {
   });
 
   return (
-    <div className="chat-page" data-theme={theme} ref={pageRef}>
+    <div className={`chat-page ${appliedTheme === 'dark' ? 'dark-mode' : ''}`} ref={pageRef}> 
       
-      {/* ── MODAL CHIA SẺ BẠN BÈ ── */}
-      {shareModalOpen && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{ backgroundColor: '#fff', width: '400px', borderRadius: '8px', padding: '16px', display: 'flex', flexDirection: 'column', maxHeight: '80vh' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-              <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 'bold' }}>Chuyển tiếp tin nhắn</h3>
-              <FaTimes style={{ cursor: 'pointer', color: '#65676B' }} onClick={() => setShareModalOpen(false)} />
-            </div>
-            
-            <div style={{ flex: 1, overflowY: 'auto' }}>
-              {friends.length === 0 ? <p style={{ textAlign: 'center', color: '#8A8D91' }}>Bạn chưa có bạn bè nào.</p> : (
-                friends.map((friend, index) => (
-                  <div key={index} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid #E5E7EB' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                      <img src={friend.avatarUrl || friend.avatar || 'https://i.pravatar.cc/150'} alt="avt" style={{ width: 40, height: 40, borderRadius: '50%' }} />
-                      <span style={{ fontSize: '15px', fontWeight: '500' }}>{friend.fullName || friend.username}</span>
-                    </div>
-                    <button 
-                      onClick={() => executeForward(friend)}
-                      style={{ padding: '6px 16px', borderRadius: '4px', border: 'none', backgroundColor: '#0084FF', color: '#fff', cursor: 'pointer', fontWeight: 'bold' }}
-                    >Gửi</button>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+      <ShareMessageModal 
+        isOpen={shareModalOpen} 
+        onClose={() => setShareModalOpen(false)} 
+        friends={friends} 
+        onForward={executeForward} 
+      />
 
-      {/* DRAG AND DROP OVERLAY */}
       {isDragging && (
         <div className="mdc-drag-overlay">
           <div className="mdc-drag-inner">
@@ -543,13 +478,10 @@ export default function ChatPage() {
         </div>
       )}
 
-      {/* ── TRÁI ── */}
+      {/* ── BÊN TRÁI: SIDEBAR ── */}
       <aside className="room-sidebar">
         <div className="rs-header">
           <span style={{ fontWeight: 800, fontSize: 18 }}>Đoạn chat</span>
-          <button onClick={toggleTheme} style={{ background: 'none', border: 'none', color: 'var(--z-text-primary)', cursor: 'pointer' }}>
-            {theme === "light" ? <FaMoon size={18} /> : <FaSun size={18} color="#FBBF24" />}
-          </button>
         </div>
         <div className="rs-search-bar">
           <FaSearch color="var(--z-text-secondary)" size={14} />
@@ -571,7 +503,7 @@ export default function ChatPage() {
                   </div>
                   <div className="cli-bottom">
                     <span className="cli-msg" style={{ fontWeight: unread > 0 ? 700 : 400, color: unread > 0 ? 'var(--z-text-primary)' : 'var(--z-text-secondary)' }}>
-                        {conv.latestMessage?.isDeleted ? 'Tin nhắn đã thu hồi' : (conv.latestMessage?.content || (conv.latestMessage?.mediaIds?.length > 0 || conv.latestMessage?.attachments?.length > 0 ? '[Hình ảnh/File]' : 'Chưa có tin nhắn'))}
+                        {conv.latestMessage?.isRecalled ? 'Tin nhắn đã thu hồi' : (conv.latestMessage?.content || (conv.latestMessage?.mediaIds?.length > 0 || conv.latestMessage?.attachments?.length > 0 ? '[Hình ảnh/File]' : 'Chưa có tin nhắn'))}
                     </span>
                     {unread > 0 && <div className="cli-unread">{unread > 99 ? '99+' : unread}</div>}
                   </div>
@@ -583,30 +515,25 @@ export default function ChatPage() {
         </div>
       </aside>
 
-      {/* ── GIỮA ── */}
+      {/* ── Ở GIỮA: CHAT KHU VỰC CHÍNH ── */}
       {activeConversation ? (
         <main className="chat-main">
-          <header className="chat-header">
-            <div className="ch-info">
-              <img className="cli-avatar" style={{width: 40, height: 40}} src={getConversationAvatar(activeConversation)} alt="avt" />
-              <div>
-                <div className="ch-name">{getConversationName(activeConversation)}</div>
-                <div className="ch-status">Vừa mới truy cập</div>
-              </div>
-            </div>
-            <div className="ch-actions">
-              {/* THÊM SỰ KIỆN GỌI ĐIỆN VÀO ĐÂY */}
-              <FaPhoneAlt className="ch-icon" size={18} style={{ cursor: 'pointer' }} onClick={() => handleCall('audio')} title="Gọi thoại" />
-              <FaVideo className="ch-icon" size={19} style={{ cursor: 'pointer' }} onClick={() => handleCall('video')} title="Gọi video" />
-              <FaInfoCircle className="ch-icon" size={19} />
-            </div>
-          </header>
+          <ChatHeader 
+            room={{
+              ...activeConversation,
+              name: getConversationName(activeConversation),
+              avatar: getConversationAvatar(activeConversation),
+              targetUserId: getOtherParticipant(activeConversation)?._id || getOtherParticipant(activeConversation)?.id,
+              isOnline: true 
+            }}
+            onInfo={() => setShowRightPanel(!showRightPanel)}
+          />
 
           <div className="chat-messages">
             {messages.length === 0 && uploads.length === 0 ? (
               <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-                <img src={getConversationAvatar(activeConversation)} alt="avatar" style={{ width: 100, height: 100, borderRadius: '50%', objectFit: 'cover', marginBottom: 16 }} />
-                <h3 style={{ fontSize: 20, fontWeight: 700, color: 'var(--z-text-primary)', margin: '0 0 8px 0' }}>{getConversationName(activeConversation)}</h3>
+                <img src={getConversationAvatar(activeConversation)} alt="avatar" style={{ width: 100, height: 100, borderRadius: '50%', objectFit: 'cover', margin: '0 auto 16px' }} />
+                <h3 style={{ fontSize: 20, fontWeight: 700, color: 'var(--z-text-primary)', margin: '0 0 8px 0', textAlign: 'center' }}>{getConversationName(activeConversation)}</h3>
               </div>
             ) : (
               <>
@@ -615,14 +542,14 @@ export default function ChatPage() {
                   const isMe = getSenderIdStr(msg) === String(userId);
                   return (
                     <React.Fragment key={msg._id}>
-                      {showDate && <div className="msg-date" style={{ textAlign: 'center', margin: '20px 0', fontSize: '12px', background: 'var(--z-bg-secondary)', padding: '4px 12px', borderRadius: '16px', alignSelf: 'center', color: 'var(--z-text-muted)' }}>{formatChatTimestamp(msg.createdAt)}</div>}
+                      {showDate && <div className="msg-date">{formatChatTimestamp(msg.createdAt)}</div>}
                       <MessageBubble 
                         message={msg} 
                         isMe={isMe} 
                         onReaction={handleReaction} 
                         onRecall={handleRecall}
-                        onDelete={handleDelete}
-                        onForward={openShareModal} // BẬT MODAL SHARE
+                        onDelete={handleDelete} 
+                        onForward={openShareModal} 
                         onReply={(msg) => console.log('Trả lời:', msg)}
                       />
                     </React.Fragment>
@@ -636,78 +563,23 @@ export default function ChatPage() {
             )}
           </div>
 
-          <div style={{ padding: '10px 16px', borderTop: '1px solid var(--z-border)', backgroundColor: 'var(--z-bg-primary)' }}>
-            <div className="chat-toolbar" style={{ display: 'flex', gap: '16px', marginBottom: '8px', color: '#65676B' }}>
-              <input ref={imageInputRef} type="file" accept="image/*" multiple style={{display:"none"}} onChange={handleFileInput}/>
-              <input ref={videoInputRef} type="file" accept="video/*" multiple style={{display:"none"}} onChange={handleFileInput}/>
-              <input ref={fileInputRef} type="file" multiple style={{display:"none"}} onChange={handleFileInput} accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip,.rar,.7z"/>
-              <input ref={folderInputRef} type="file" webkitdirectory="true" multiple style={{display:"none"}} onChange={handleFileInput} />
-              
-              <FaSmile size={20} style={{ cursor: 'pointer' }} title="Sticker" onClick={() => setShowInputEmoji(!showInputEmoji)} />
-              <FaImage size={20} style={{ cursor: 'pointer' }} title="Gửi ảnh" onClick={()=>imageInputRef.current?.click()} />
-              <FaPaperclip size={20} style={{ cursor: 'pointer' }} title="Đính kèm file" onClick={()=>fileInputRef.current?.click()} />
-              <FaVideo size={20} style={{ cursor: 'pointer' }} title="Gửi video" onClick={()=>videoInputRef.current?.click()} />
-              <FaCloud size={20} style={{ cursor: 'pointer' }} title="Gửi thư mục" onClick={()=>folderInputRef.current?.click()} />
-            </div>
-
-            <form style={{ display: 'flex', alignItems: 'flex-end', gap: '12px', position: 'relative' }} onSubmit={handleSend}>
-              <div style={{ flex: 1, display: 'flex', alignItems: 'center', backgroundColor: theme === 'dark' ? '#3A3B3C' : '#F0F2F5', borderRadius: '20px', padding: '0 12px', minHeight: '40px' }}>
-                <input 
-                  style={{ flex: 1, border: 'none', backgroundColor: 'transparent', padding: '10px 0', outline: 'none', fontSize: '15px', color: 'var(--z-text-primary)' }}
-                  placeholder={`Nhập @, tin nhắn tới ${getConversationName(activeConversation)}`} 
-                  value={textInput}
-                  onChange={(e) => setTextInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                      e.preventDefault();
-                      if (textInput.trim()) handleSend(e);
-                    }
-                  }}
-                />
-                <div 
-                  style={{ cursor: 'pointer', padding: '4px', display: 'flex', alignItems: 'center', marginLeft: '8px' }}
-                  onClick={() => setShowInputEmoji(!showInputEmoji)}
-                >
-                  <FaSmile size={20} color="#65676B" />
-                </div>
-              </div>
-
-              <button 
-                type={textInput.trim() ? "submit" : "button"} 
-                onClick={!textInput.trim() ? handleSendLike : undefined}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '8px 4px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-              >
-                {textInput.trim() ? <FaPaperPlane size={22} color="#0084FF" /> : <FaThumbsUp size={24} color="#0084FF" />}
-              </button>
-
-              {showInputEmoji && (
-                <div style={{ position: 'absolute', bottom: '100%', right: '40px', marginBottom: '10px', zIndex: 50, background: theme === 'dark' ? '#242526' : '#fff', border: '1px solid var(--z-border)', padding: '8px 12px', borderRadius: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', display: 'flex', gap: '12px' }}>
-                  {['😀', '😂', '❤️', '👍', '😢', '🙏'].map(e => (
-                    <span 
-                      key={e} 
-                      style={{ fontSize: '24px', cursor: 'pointer', transition: 'transform 0.1s' }} 
-                      className="hover:scale-125"
-                      onClick={() => {
-                        setTextInput(prev => prev + e);
-                        setShowInputEmoji(false);
-                      }}
-                    >
-                      {e}
-                    </span>
-                  ))}
-                </div>
-              )}
-            </form>
-          </div>
+          <MessageInput 
+            key={activeConversation._id} 
+            theme={appliedTheme} 
+            placeholder={`Nhập @, tin nhắn tới ${getConversationName(activeConversation)}`}
+            onSend={handleSendText}
+            onSendLike={handleSendLike}
+            onUploadFiles={handleUploadFilesFromInput}
+          />
         </main>
       ) : (
-        <main className="chat-main" style={{ alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{ color: 'var(--z-text-secondary)', fontSize: 16 }}>Chọn một cuộc trò chuyện để bắt đầu</div>
+        <main className="chat-main" style={{ alignItems: 'center', justifyItems: 'center', display: 'flex' }}>
+          <div style={{ color: 'var(--z-text-secondary)', fontSize: 16, margin: 'auto' }}>Chọn một cuộc trò chuyện để bắt đầu</div>
         </main>
       )}
 
-      {/* ── RIGHT PANEL (GIỮ NGUYÊN) ── */}
-      {activeConversation && (
+      {/* ── BÊN PHẢI: RIGHT PANEL ── */}
+      {activeConversation && showRightPanel && (
         <aside className="chat-right-panel">
           <div className="crp-header">
             <img className="crp-avatar" src={getConversationAvatar(activeConversation)} alt="avt" />

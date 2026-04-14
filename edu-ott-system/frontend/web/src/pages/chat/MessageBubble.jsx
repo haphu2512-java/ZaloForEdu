@@ -16,15 +16,18 @@ export const MessageBubble = ({
   onForward, 
   onReply 
 }) => {
-  const sender = message.actualSender || message.sender;
-  const { _id, content, type, status, isEdited, isDeleted, replyTo, createdAt, reactions } = message;
+const sender = message.senderId || message.sender || message.actualSender;
+
+  const { _id, content, type, status, isEdited, isRecalled, replyTo, createdAt, reactions } = message;
   
   const [isHovered, setIsHovered] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const menuRef = useRef(null);
 
-  const mediaList = message.attachments || message.mediaIds || message.media || [];
+  // FIX: Nếu tin nhắn đã thu hồi thì không lấy danh sách media nữa
+  const mediaList = isRecalled ? [] : (message.attachments || message.mediaIds || message.media || []);
+  
   const timeString = new Date(createdAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
   const avatar = sender?.avatarUrl || sender?.avatar || 'https://i.pravatar.cc/150';
   const name = sender?.fullName || sender?.username || 'Người dùng';
@@ -44,8 +47,6 @@ export const MessageBubble = ({
   if (type === 'system') {
     return <div style={{ textAlign: 'center', margin: '16px 0', fontSize: '12px', color: '#8A8D91' }}><span>{content}</span></div>;
   }
-
-  // Ép màu: Mình nền Xanh chữ Trắng, Bạn nền Trắng chữ Đen
   const bubbleStyle = isMe 
     ? { backgroundColor: '#0084FF', color: '#FFFFFF', borderRadius: '18px 18px 4px 18px', padding: '10px 14px', position: 'relative' } 
     : { backgroundColor: '#FFFFFF', color: '#050505', borderRadius: '18px 18px 18px 4px', padding: '10px 14px', position: 'relative', border: '1px solid #E5E7EB' };
@@ -71,7 +72,7 @@ export const MessageBubble = ({
           
           <div style={bubbleStyle}>
             {/* THU HỒI TIN NHẮN */}
-            {isDeleted ? (
+            {isRecalled ? (
               <span style={{ fontStyle: 'italic', color: isMe ? '#E4E6EB' : '#8A8D91', fontSize: '14px' }}>Tin nhắn đã thu hồi</span>
             ) : (
               <>
@@ -117,7 +118,7 @@ export const MessageBubble = ({
             )}
 
             {/* HIỂN THỊ REACTIONS */}
-            {!isDeleted && reactions?.length > 0 && (
+            {!isRecalled && reactions?.length > 0 && (
               <div style={{ position: 'absolute', bottom: '-14px', right: isMe ? '12px' : 'auto', left: isMe ? 'auto' : '12px', display: 'flex', background: '#FFFFFF', padding: '2px 6px', borderRadius: '12px', boxShadow: '0 2px 4px rgba(0,0,0,0.15)', gap: '2px', zIndex: 2, border: '1px solid #E5E7EB' }}>
                 {reactions.slice(0, 3).map((r, i) => (
                   <div key={i} style={{ fontSize: '13px', display: 'flex', alignItems: 'center' }}>
@@ -130,7 +131,7 @@ export const MessageBubble = ({
           </div>
 
           {/* DẢI MENU NÚT TRÒN (REPLY, SHARE, MORE) */}
-          {!isDeleted && (isHovered || showMoreMenu || showEmojiPicker) && (
+          {!isRecalled && (isHovered || showMoreMenu || showEmojiPicker) && (
             <div style={{ display: 'flex', gap: '6px', color: '#65676B', position: 'relative', paddingBottom: '4px' }}>
               
               {/* Nút Emoji */}
