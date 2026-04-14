@@ -184,6 +184,26 @@ const initSocket = (server) => {
       const lastSeen = await presenceService.setOffline(userId);
       socket.broadcast.emit('user_offline', { userId, lastSeen: lastSeen.toISOString() });
     });
+
+    // --- XỬ LÝ GỌI ĐIỆN (VIDEO/AUDIO) ---
+    socket.on('call_user', ({ targetUserId, roomId, callerName, type }) => {
+      if (!targetUserId) return;
+      socket.to(`user:${targetUserId}`).emit('incoming_call', {
+        roomId,
+        callerName,
+        type,
+        fromUserId: socket.user._id.toString(),
+      });
+    });
+
+    socket.on('decline_call', ({ callerId, roomId }) => {
+      if (!callerId) return;
+      socket.to(`user:${callerId}`).emit('call_declined', {
+        message: 'Người dùng đang bận',
+        roomId,
+      });
+    });
+    // --------------------------------------
   });
 
   logger.info('Socket.IO initialized');

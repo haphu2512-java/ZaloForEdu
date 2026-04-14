@@ -14,6 +14,7 @@ import BlockedUsersPage from "./pages/blocked/BlockedUsersPage";
 import ArchivedConversationsPage from "./pages/archived/ArchivedConversationsPage";
 import CompleteProfilePage from "./pages/auth/CompleteProfilePage";
 import AdminDashboard from "./pages/admin/AdminDashboard";
+import VideoCallPage from './pages/chat/VideoCallPage';
 
 function PrivateRoute({ children }) {
   const { isAuthenticated } = useAuthStore();
@@ -80,6 +81,7 @@ export default function App() {
           <Route path="chat" element={<ChatPage />} />
           <Route path="chat/:roomId" element={<ChatPage />} />
           <Route path="contacts" element={<ContactsPage />} />
+          <Route path="/call/:roomId" element={<VideoCallPage />} />
           <Route path="chatbot" element={<ChatbotPage />} />
           <Route path="cloud" element={<MyDocumentsPage />} />
           <Route path="profile" element={<ProfilePage />} />

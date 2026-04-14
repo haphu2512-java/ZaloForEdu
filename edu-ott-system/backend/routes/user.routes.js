@@ -6,9 +6,7 @@ const validate = require('../middlewares/validate');
 const { blockUserBodySchema, updateUserSchema, userIdParamSchema } = require('../validators/userSchemas');
 
 const router = express.Router();
-
-router.get('/', auth, userController.getAllUsers);
-
+router.get('/', userController.getAllUsers);
 /**
  * @openapi
  * /users/me/blocked:
@@ -22,6 +20,7 @@ router.get('/', auth, userController.getAllUsers);
  *         description: Blocked users fetched
  */
 router.get('/me/blocked', auth, userController.getBlockedUsers);
+
 
 /**
  * @openapi
@@ -144,4 +143,6 @@ router.post(
 router.post('/admin/status', auth, userController.updateUserStatus);
 router.post('/report/:id', auth, userController.reportUser);
 
+// Cho phép người dùng report tài khoản khác
+router.post('/report/:id', auth, userController.reportUser);
 module.exports = router;

@@ -69,6 +69,24 @@ class SocketService {
       this.socket.off(event, callback);
     }
   }
+
+  // Gọi điện cho người khác - emit call_user lên server
+  callUser({ targetUserId, roomId, callerName, type }) {
+    if (!this.socket?.connected) {
+      console.error("❌ Socket chưa connected, không thể gọi điện!");
+      return false;
+    }
+    this.socket.emit("call_user", { targetUserId, roomId, callerName, type });
+    console.log("✅ call_user emitted:", { targetUserId, roomId, type });
+    return true;
+  }
+
+  // Từ chối cuộc gọi - báo cho người gọi biết
+  declineCall({ callerId, roomId }) {
+    if (this.socket?.connected) {
+      this.socket.emit("decline_call", { callerId, roomId });
+    }
+  }
 }
 
 export const socketService = new SocketService();
