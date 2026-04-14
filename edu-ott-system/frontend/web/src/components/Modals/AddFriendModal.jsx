@@ -122,35 +122,26 @@ export default function AddFriendModal({ isOpen, onClose }) {
 
   const status = getFriendStatus();
 
- const handleAction = async () => {
-    if (status === "friend") {
+ const handleAction = async (forceChat = false) => {
+    if (status === "friend" || forceChat) {
       try {
         setLoading(true);
         const targetId = result._id || result.id;
-        const token = localStorage.getItem("token"); // Lấy token xác thực
-
-        // Gọi API để lấy hoặc tạo mới cuộc trò chuyện 1-1
+        const token = localStorage.getItem("token");
+        const apiBase = import.meta.env.VITE_API_URL || "http://localhost:5000/api/v1";
         const res = await axios.post(
-          "http://localhost:5000/api/v1/conversations", 
-          { 
-            type: "direct", 
-            participantIds: [targetId] 
-          },
+          `${apiBase}/conversations`,
+          { type: "direct", participantIds: [targetId] },
           { headers: { Authorization: `Bearer ${token}` } }
         );
-
-        onClose(); // Đóng modal
-
-        // Chuyển hướng sang trang Chat và truyền ID của hội thoại qua state
+        onClose();
         const conversationId = res.data.data._id;
         navigate("/chat", { state: { activeConversationId: conversationId } });
-
       } catch (err) {
         setError("Không thể mở cuộc trò chuyện lúc này.");
       } finally {
         setLoading(false);
       }
-
     } else if (status === "none") {
       handleAddFriend();
     }
@@ -247,13 +238,23 @@ export default function AddFriendModal({ isOpen, onClose }) {
                 )}
                 
                 {status === "none" && !success && (
-                  <button 
-                    className="action-btn-premium btn-primary-premium" 
-                    onClick={handleAction}
-                    disabled={loading}
-                  >
-                    {loading ? <FaSpinner className="spin" /> : <><FaUserPlus /> Kết bạn</>}
-                  </button>
+                  <div style={{ display:'flex', gap:8 }}>
+                    <button 
+                      className="action-btn-premium btn-primary-premium" 
+                      onClick={handleAction}
+                      disabled={loading}
+                    >
+                      {loading ? <FaSpinner className="spin" /> : <><FaUserPlus /> Kết bạn</>}
+                    </button>
+                    <button
+                      className="action-btn-premium"
+                      style={{ background:'#f0f2f5', color:'#050505', border:'none' }}
+                      onClick={() => handleAction(true)}
+                      disabled={loading}
+                    >
+                      <FaCommentDots /> Nhắn tin
+                    </button>
+                  </div>
                 )}
 
                 {status === "outgoing" && (
