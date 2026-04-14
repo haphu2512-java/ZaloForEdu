@@ -365,4 +365,4 @@ Backend hiện đã bổ sung các điểm để dùng chung cho web và mobile:
   * `x-device-id`
   * `x-request-id` (server tự sinh nếu thiếu và trả lại trong response)
 * CORS hỗ trợ nhiều web origin qua biến `CORS_ORIGIN` (danh sách phân tách bằng dấu phẩy).
->>>>>>> Refactor_Project
+

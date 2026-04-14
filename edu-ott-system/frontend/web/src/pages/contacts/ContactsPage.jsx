@@ -10,6 +10,8 @@ import { useFriendStore } from "../../store/friendStore";
 import { useChatStore } from "../../store/chatStore";
 import { useNavigate } from "react-router-dom";
 import AddFriendModal from "../../components/Modals/AddFriendModal";
+import { socketService } from "../../services/socketService";
+import { useAuthStore } from "../../store/authStore";
 import "./ContactsPage.css";
 
 // ── Avatar helper ────────────────────────────────────────────
@@ -43,6 +45,12 @@ function FriendMenu({ friend, onAction, onClose }) {
       <div className="cm-item" onClick={() => onAction("chat", friend)}>
         <FaCommentDots size={13} /> Nhắn tin
       </div>
+      <div className="cm-item" onClick={() => onAction("audio", friend)}>
+        <FaPhoneAlt size={13} /> Gọi thoại
+      </div>
+      <div className="cm-item" onClick={() => onAction("video", friend)}>
+        <FaVideo size={13} /> Gọi video
+      </div>
       <div className="cm-item" onClick={() => onAction("info", friend)}>
         <FaInfoCircle size={13} /> Xem thông tin
       </div>
@@ -64,7 +72,8 @@ function FriendMenu({ friend, onAction, onClose }) {
 }
 
 // ── Friend detail panel ──────────────────────────────────────
-function FriendDetailPanel({ friend, onClose, onChat, onBlock, onUnfriend }) {
+// Đã thêm sự kiện onAudioCall vào props
+function FriendDetailPanel({ friend, onClose, onChat, onBlock, onUnfriend, onVideoCall, onAudioCall }) {
   if (!friend) return null;
   return (
     <div className="friend-detail-panel">
@@ -84,10 +93,12 @@ function FriendDetailPanel({ friend, onClose, onChat, onBlock, onUnfriend }) {
           <button className="fdp-btn primary" onClick={() => onChat(friend)}>
             <FaCommentDots size={14} /> Nhắn tin
           </button>
-          <button className="fdp-btn secondary">
+          {/* Đã thêm sự kiện onClick cho gọi thoại */}
+          <button className="fdp-btn secondary" onClick={() => onAudioCall(friend)}>
             <FaPhoneAlt size={14} /> Gọi thoại
           </button>
-          <button className="fdp-btn secondary">
+          {/* Sự kiện onClick cho gọi video */}
+          <button className="fdp-btn secondary" onClick={() => onVideoCall(friend)}>
             <FaVideo size={14} /> Video
           </button>
         </div>
@@ -128,6 +139,7 @@ function FriendDetailPanel({ friend, onClose, onChat, onBlock, onUnfriend }) {
 export default function ContactsPage() {
   const { t } = useLanguage();
   const navigate = useNavigate();
+  const { user } = useAuthStore();
   const [activeTab, setActiveTab] = useState("friends");
   const [searchQuery, setSearchQuery] = useState("");
   const [showAddFriend, setShowAddFriend] = useState(false);
@@ -183,6 +195,34 @@ export default function ContactsPage() {
       navigate("/chat");
     } else if (action === "info") {
       setSelectedFriend(friend);
+    } else if (action === "video" || action === "audio") {
+      // Lấy user mới nhất từ store tại thời điểm gọi
+      const currentUser = useAuthStore.getState().user;
+      const myId = currentUser?._id || currentUser?.id;
+      if (!myId) {
+        alert("Không tìm thấy thông tin người dùng, vui lòng đăng nhập lại.");
+        return;
+      }
+
+      const roomId = `room_${myId}_${id}`;
+      const callType = action === "video" ? "video" : "audio";
+
+      // Emit signal đến B qua socket
+      const sent = socketService.callUser({
+        targetUserId: id,
+        roomId,
+        callerName: currentUser?.username || "Bạn",
+        type: callType,
+      });
+
+      if (!sent) {
+        alert("Mất kết nối socket, vui lòng thử lại.");
+        return;
+      }
+
+      // A vào room sau khi đã emit signal
+      const url = callType === "audio" ? `/call/${roomId}?type=voice` : `/call/${roomId}`;
+      navigate(url);
     } else if (action === "unfriend") {
       if (window.confirm(`Xóa ${friend.username} khỏi danh sách bạn bè?`)) {
         await unfriend(id);
@@ -194,7 +234,7 @@ export default function ContactsPage() {
         if (selectedFriend?._id === id) setSelectedFriend(null);
       }
     }
-  }, [navigate, unfriend, blockFriend, selectedFriend]);
+  }, [navigate, unfriend, blockFriend, selectedFriend, user]);
 
   const TABS = [
     { key: "friends", label: "Bạn bè", icon: FaUserFriends, count: friends.length },
@@ -312,6 +352,8 @@ export default function ContactsPage() {
           onChat={(f) => { navigate("/chat"); setSelectedFriend(null); }}
           onBlock={(f) => handleAction("block", f)}
           onUnfriend={(f) => handleAction("unfriend", f)}
+          onVideoCall={(f) => handleAction("video", f)}
+          onAudioCall={(f) => handleAction("audio", f)} /* Truyền sự kiện từ main component xuống panel */
         />
       )}
 
@@ -360,6 +402,14 @@ function FriendsTab({ groupedFriends, openMenuId, setOpenMenuId, onAction, onSel
                     title="Nhắn tin"
                   >
                     <FaCommentDots size={14} />
+                  </button>
+                  <button
+                    className="fr-chat-btn"
+                    style={{ marginLeft: '6px' }}
+                    onClick={() => onAction("video", friend)}
+                    title="Gọi video"
+                  >
+                    <FaVideo size={14} />
                   </button>
                   <div className="fr-menu-wrap">
                     <button

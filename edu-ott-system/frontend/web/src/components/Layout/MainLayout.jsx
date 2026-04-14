@@ -24,6 +24,8 @@ import { useTheme } from "../../contexts/ThemeContext";
 import { useLanguage } from "../../contexts/LanguageContext";
 import { useNotificationStore } from "../../store/notificationStore";
 import NotificationsPanel from "../../pages/notifications/NotificationsPanel";
+import { socketService } from "../../services/socketService"; // Thêm import socketService
+import IncomingCallModal from '../../pages/chat/Modals/IncomingCallModal';
 import "./MainLayout.css";
 
 function getInitials(name = "") {
@@ -267,10 +269,13 @@ export default function MainLayout() {
   const [showBanner, setShowBanner] = useState(true);
 
   useEffect(() => {
+    socketService.connect(); // Đảm bảo socket connected khi vào app
     fetchUnreadCount();
     const interval = setInterval(fetchUnreadCount, 30000);
     return () => clearInterval(interval);
   }, []);
+
+  // incoming_call được xử lý bởi <IncomingCallModal />
 
   // Nav items dùng t() để đa ngôn ngữ
   const NAV_ITEMS = [
@@ -436,7 +441,9 @@ export default function MainLayout() {
 
       {/* ── SETTINGS MODAL ── */}
       {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}
+        <IncomingCallModal /> {/* <--- Thêm dòng này vào */}
       </div>{/* end main-layout-body */}
+
     </div>
   );
 }
