@@ -11,7 +11,20 @@ const detectDevice = () => {
 const getErrorMessage = (err, fallback) => {
   if (err.code === "ECONNABORTED") return "Kết nối quá thời gian. Vui lòng kiểm tra server backend.";
   if (err.code === "ERR_NETWORK") return "Không thể kết nối đến server. Vui lòng kiểm tra backend đang chạy.";
-  return err.response?.data?.error?.message || err.response?.data?.message || fallback;
+  
+  const backendErr = err.response?.data?.error;
+  if (backendErr) {
+    if (backendErr.message === "Invalid payload" && backendErr.details?.fieldErrors) {
+      const fieldErrs = backendErr.details.fieldErrors;
+      const firstField = Object.keys(fieldErrs)[0];
+      if (firstField && fieldErrs[firstField].length > 0) {
+        return fieldErrs[firstField][0];
+      }
+    }
+    return backendErr.message;
+  }
+
+  return err.response?.data?.message || fallback;
 };
 
 export const useAuthStore = create((set, get) => ({

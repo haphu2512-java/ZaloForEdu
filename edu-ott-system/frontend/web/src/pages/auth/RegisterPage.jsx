@@ -57,8 +57,8 @@ export default function RegisterPage() {
     } else {
       const isEmail = idVal.includes("@") || /[a-zA-Z]/.test(idVal);
       if (isEmail) {
-        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(idVal)) {
-          errs.identifier = "Email không hợp lệ";
+        if (!/^[^\s@]+@gmail\.com$/.test(idVal)) {
+          errs.identifier = "Chỉ hỗ trợ tài khoản @gmail.com";
         }
       } else {
         const phoneVal = idVal.replace(/\s/g, "");

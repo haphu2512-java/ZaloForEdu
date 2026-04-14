@@ -65,8 +65,8 @@ export default function ForgotPasswordPage() {
     
     const isEmail = idVal.includes("@") || /[a-zA-Z]/.test(idVal);
     if (isEmail) {
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(idVal)) {
-        setIdentifierError("Email không hợp lệ");
+      if (!/^[^\s@]+@gmail\.com$/.test(idVal)) {
+        setIdentifierError("Chỉ hỗ trợ tài khoản @gmail.com");
         return;
       }
     } else {
