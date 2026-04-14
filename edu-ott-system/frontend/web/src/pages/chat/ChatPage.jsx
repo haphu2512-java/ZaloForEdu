@@ -97,9 +97,13 @@ export default function ChatPage() {
   const messagesEndRef = useRef(null);
   const activeConvIdRef = useRef(null);
 
-  const { friends, fetchFriends } = useFriendStore();
+  const { friends, fetchFriends, fetchOutgoingRequests, fetchIncomingRequests } = useFriendStore();
 
-  useEffect(() => { if (friends.length === 0) fetchFriends(); }, [friends.length, fetchFriends]);
+  useEffect(() => {
+    if (friends.length === 0) fetchFriends();
+    fetchOutgoingRequests();
+    fetchIncomingRequests();
+  }, []);
 
   const userId = useMemo(() => {
     let id = localStorage.getItem("userId");
@@ -192,6 +196,16 @@ export default function ChatPage() {
   // Phân loại: bạn bè vs người lạ
   const friendIds = useMemo(() => new Set(friends.map(f => String(f._id || f.id))), [friends]);
 
+  const { outgoingRequests, incomingRequests } = useFriendStore();
+  const outgoingRequestIds = useMemo(() =>
+    new Set(outgoingRequests.map(r => String(r.toUserId?._id || r.toUserId || ''))),
+    [outgoingRequests]
+  );
+  const incomingRequestIds = useMemo(() =>
+    new Set(incomingRequests.map(r => String(r.fromUserId?._id || r.fromUserId || ''))),
+    [incomingRequests]
+  );
+
   const { friendConvs, strangerConvs } = useMemo(() => {
     const friendConvs = [];
     const strangerConvs = [];
@@ -207,15 +221,15 @@ export default function ChatPage() {
       if (isOtherFriend) {
         friendConvs.push(conv);
       } else {
-        // Chỉ vào "Người lạ" nếu người kia là người gửi tin nhắn đầu tiên
-        // (tức là họ nhắn cho mình, không phải mình chủ động nhắn)
-        const latestSenderId = conv.latestMessage?.senderId?._id || conv.latestMessage?.senderId;
-        const iInitiated = !latestSenderId || String(latestSenderId) === String(userId);
-        if (iInitiated) {
-          // Mình chủ động nhắn → hiện bình thường trong danh sách
+        // Vào "Người lạ" nếu người kia là người TẠO conversation (nhắn trước)
+        // Dùng createdBy thay vì latestMessage để tránh bị đổi khi mình reply
+        const createdBy = String(conv.createdBy?._id || conv.createdBy || '');
+        const iCreated = !createdBy || createdBy === String(userId);
+        if (iCreated) {
+          // Mình tạo conversation (mình nhắn trước) → hiện bình thường
           friendConvs.push(conv);
         } else {
-          // Người lạ nhắn cho mình → vào "Tin nhắn từ người lạ"
+          // Người lạ tạo conversation (họ nhắn trước) → vào "Tin nhắn từ người lạ"
           strangerConvs.push(conv);
         }
       }
@@ -662,6 +676,28 @@ export default function ChatPage() {
           />
 
           <div className="chat-messages">
+            {/* Banner thông báo trạng thái kết bạn */}
+            {(() => {
+              const other = getOtherParticipant(activeConversation);
+              const otherId = other && typeof other === 'object' ? String(other._id || other.id) : null;
+              const isStranger = otherId && !friendIds.has(otherId);
+              if (!isStranger) return null;
+              const hasOutgoing = outgoingRequestIds.has(otherId);
+              const hasIncoming = incomingRequestIds.has(otherId);
+              if (hasOutgoing) return (
+                <div style={{ padding:'10px 20px', background:'rgba(0,104,255,0.06)', borderBottom:'1px solid var(--z-border)', display:'flex', alignItems:'center', gap:8, fontSize:13, color:'var(--z-text-secondary)' }}>
+                  <FaUserPlus size={13} color="var(--z-primary)" />
+                  Đang chờ được đồng ý kết bạn
+                </div>
+              );
+              if (hasIncoming) return (
+                <div style={{ padding:'10px 20px', background:'rgba(0,104,255,0.06)', borderBottom:'1px solid var(--z-border)', display:'flex', alignItems:'center', gap:8, fontSize:13, color:'var(--z-text-secondary)' }}>
+                  <FaUserPlus size={13} color="var(--z-primary)" />
+                  Người này đã gửi lời mời kết bạn cho bạn
+                </div>
+              );
+              return null;
+            })()}
             {messages.length === 0 && uploads.length === 0 ? (
               <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
                 <img src={getConversationAvatar(activeConversation)} alt="avatar" style={{ width: 100, height: 100, borderRadius: '50%', objectFit: 'cover', margin: '0 auto 16px' }} />
