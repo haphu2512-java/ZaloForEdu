@@ -150,8 +150,8 @@ export function CloudMsgBubble({msg, onDelete, onPreview, onReaction, pinnedIds,
               </div>
             </div>
             <div style={{display:'flex',gap:6,alignItems:'center'}}>
-              {/* Preview PDF/docx qua Google Docs Viewer */}
-              {media.url && /^https?:\/\//i.test(media.url) && (
+              {/* Preview PDF/docx qua Google Docs Viewer — chỉ với Cloudinary URL */}
+              {media.url && media.url.includes('cloudinary.com') && (
                 <a
                   className="mdc-fb-btn"
                   href={`https://docs.google.com/viewer?url=${encodeURIComponent(media.url)}&embedded=true`}

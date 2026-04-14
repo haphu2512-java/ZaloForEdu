@@ -325,10 +325,6 @@ export default function MyDocumentsPage(){
           </div>
         )}
 
-        <div className="mdc-filter-tabs">
-          {[{k:"all",l:"Tất cả"},{k:"image",l:"Ảnh/Video"},{k:"file",l:"File"},{k:"text",l:"Ghi chú"}].map(t=>(<button key={t.k} className={`mdc-ftab ${filterTab===t.k?"active":""}`} onClick={()=>setFilterTab(t.k)}>{t.l}</button>))}
-        </div>
-
         <div className="mdc-messages" style={{ flex: 1, overflowY: 'auto' }}>
           {loading?(<div className="mdc-loading"><FaSpinner className="spin" size={28}/></div>):filtered.length===0&&uploads.length===0?(
             <div className="mdc-empty"><div className="mdc-empty-icon"><FaCloud size={52}/></div><h3>{searchQuery?"Không tìm thấy kết quả":"Chưa có nội dung nào"}</h3><p>{searchQuery?`Không có file nào chứa từ khóa "${searchQuery}"`:"Gửi ảnh, video, tài liệu hoặc ghi chú để lưu trữ cá nhân"}</p></div>
