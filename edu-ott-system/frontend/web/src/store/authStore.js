@@ -46,6 +46,10 @@ export const useAuthStore = create((set, get) => ({
       // user.role = "admin";
       localStorage.setItem("token", accessToken);
       localStorage.setItem("user", JSON.stringify(user));
+      const currentUserId = user._id || user.id; 
+      if (currentUserId) {
+        localStorage.setItem("userId", currentUserId);
+      }
       if (refreshToken) localStorage.setItem("refreshToken", refreshToken);
       set({ user, token: accessToken, isAuthenticated: true, isLoading: false });
       return { success: true, role: user.role };
