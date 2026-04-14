@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom"; // THÊM useNavigate
 import axios from "axios";
 import io from "socket.io-client";
 import { 
@@ -12,6 +12,8 @@ import toast from "react-hot-toast";
 import { uploadFile } from "../../services/mediaService"; 
 import { useFriendStore } from "../../store/friendStore"; 
 import { MessageBubble } from "./MessageBubble";
+import { useAuthStore } from "../../store/authStore"; // THÊM import này
+import { socketService } from "../../services/socketService"; // THÊM import này
 import "./ChatPage.css";
 
 const API_BASE_URL = "http://localhost:5000/api/v1";
@@ -94,6 +96,7 @@ export default function ChatPage() {
   const pageRef = useRef(null);
   
   const location = useLocation();
+  const navigate = useNavigate(); // THÊM KHAI BÁO navigate
   const messagesEndRef = useRef(null);
   
   const { friends, fetchFriends } = useFriendStore();
@@ -445,6 +448,44 @@ export default function ChatPage() {
     }
   };
 
+  // THÊM: HÀM XỬ LÝ GỌI ĐIỆN VÀO ĐÂY
+  const handleCall = (type) => {
+    if (!activeConversation) return;
+
+    const currentUser = useAuthStore.getState().user;
+    const myId = currentUser?._id || currentUser?.id;
+
+    if (!myId) {
+      toast.error("Vui lòng đăng nhập lại.");
+      return;
+    }
+
+    const otherParticipant = getOtherParticipant(activeConversation);
+    const targetId = otherParticipant?._id || otherParticipant?.id;
+
+    if (!targetId) {
+      toast.error("Không tìm thấy thông tin người nhận.");
+      return;
+    }
+
+    const roomId = `room_${myId}_${targetId}`;
+
+    const sent = socketService.callUser({
+      targetUserId: targetId,
+      roomId,
+      callerName: currentUser?.username || "Bạn",
+      type: type, 
+    });
+
+    if (!sent) {
+      toast.error("Mất kết nối server, vui lòng thử lại.");
+      return;
+    }
+
+    const url = type === "audio" ? `/call/${roomId}?type=voice` : `/call/${roomId}`;
+    navigate(url);
+  };
+
 
   const toggleTheme = () => { setTheme(prev => prev === "light" ? "dark" : "light"); };
 
@@ -554,8 +595,9 @@ export default function ChatPage() {
               </div>
             </div>
             <div className="ch-actions">
-              <FaPhoneAlt className="ch-icon" size={18} />
-              <FaVideo className="ch-icon" size={19} />
+              {/* THÊM SỰ KIỆN GỌI ĐIỆN VÀO ĐÂY */}
+              <FaPhoneAlt className="ch-icon" size={18} style={{ cursor: 'pointer' }} onClick={() => handleCall('audio')} title="Gọi thoại" />
+              <FaVideo className="ch-icon" size={19} style={{ cursor: 'pointer' }} onClick={() => handleCall('video')} title="Gọi video" />
               <FaInfoCircle className="ch-icon" size={19} />
             </div>
           </header>
