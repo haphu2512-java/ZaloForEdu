@@ -22,7 +22,7 @@ const createApp = () => {
   const app = express();
   const corsAllowAll = env.corsOrigins.includes('*');
 
-  app.use(helmet());
+  app.use(helmet({ crossOriginResourcePolicy: false }));
   app.use(
     cors({
       origin: (origin, callback) => {

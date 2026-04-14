@@ -103,6 +103,25 @@ const deleteMediaById = asyncHandler(async (req, res) => {
   return successResponse(res, {}, 'Media deleted');
 });
 
+const downloadMediaById = asyncHandler(async (req, res) => {
+  const media = await Media.findById(req.params.id);
+  if (!media) {
+    throw new ApiError(404, 'MEDIA_NOT_FOUND', 'Media not found');
+  }
+
+  // File local: serve với đúng tên gốc
+  if (media.storage === 'local') {
+    const relativePath = media.url.replace(/^[\\/]/, '');
+    const absolutePath = path.join(__dirname, '..', relativePath);
+    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(media.fileName)}"`);
+    if (media.mimeType) res.setHeader('Content-Type', media.mimeType);
+    return res.sendFile(absolutePath);
+  }
+
+  // Cloudinary hoặc storage khác: redirect tới URL gốc
+  return res.redirect(media.url);
+});
+
 const getMyMedia = asyncHandler(async (req, res) => {
   const page = Math.max(1, parseInt(req.query.page) || 1);
   const limit = Math.min(50, parseInt(req.query.limit) || 20);
@@ -128,5 +147,6 @@ module.exports = {
   registerCloudinaryMedia,
   getMyMedia,
   getMediaById,
+  downloadMediaById,
   deleteMediaById,
 };

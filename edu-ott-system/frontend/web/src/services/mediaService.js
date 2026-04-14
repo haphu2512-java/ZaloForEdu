@@ -23,7 +23,7 @@ export const FILE_COLORS = {
   png: "#EC4899",
   jpg: "#EC4899",
   jpeg: "#EC4899",
-  default: "#64748B"
+  default: "#64748B",
 };
 
 // Lấy resource_type phù hợp cho Cloudinary
@@ -36,7 +36,7 @@ export const getResourceType = (extension) => {
 
 // Lấy loại icon phù hợp để hiển thị
 export const getFileCategory = (extension) => {
-  const ext = extension.toLowerCase().replace(".", "");
+  const ext = (extension || "").toLowerCase().replace(".", "");
   if (ALLOWED_EXTENSIONS.image.includes(ext)) return "image";
   if (ALLOWED_EXTENSIONS.video.includes(ext)) return "video";
   if (ALLOWED_EXTENSIONS.doc.includes(ext)) return "doc";
@@ -47,6 +47,8 @@ export const getFileCategory = (extension) => {
 export const getExtension = (filename) => {
   return "." + filename.split(".").pop();
 };
+
+// ========== CLOUDINARY (dùng cho Profile avatar) ==========
 
 /**
  * Bước 1: Lấy chữ ký Cloudinary từ backend (không expose secret key lên client)
@@ -112,38 +114,39 @@ export const registerMedia = async ({ fileName, mimeType, size, url, publicId, r
   return response.data.data;
 };
 
-/**
- * Upload hoàn chỉnh: lấy signature → upload cloudinary → đăng ký backend
- */
-export const uploadFile = async (file, { onProgress, folder } = {}) => {
-  const ext = getExtension(file.name);
-  const extNoDot = ext.replace(".", "").toLowerCase();
+// ========== LOCAL UPLOAD (dùng cho Chat — giống mobile) ==========
 
+/**
+ * Upload file vào /uploads (giống mobile uploadMediaBase64)
+ * Đọc file → base64 → POST /media/upload
+ */
+export const uploadFile = async (file, { onProgress } = {}) => {
+  const extNoDot = getExtension(file.name).replace(".", "").toLowerCase();
   if (!ALL_ALLOWED_EXTENSIONS.includes(extNoDot)) {
-    throw new Error(
-      `Định dạng ${ext} không được hỗ trợ. Chỉ hỗ trợ: ảnh, video, PDF, Word, ZIP, RAR,...`
-    );
+    throw new Error(`Định dạng .${extNoDot} không được hỗ trợ.`);
   }
 
-  const resourceType = getResourceType(ext);
+  onProgress?.(10);
 
-  // 1. Lấy signature
-  const signatureData = await getUploadSignature({ resourceType, folder });
-
-  // 2. Upload lên Cloudinary
-  const { secureUrl, publicId } = await uploadToCloudinary(file, signatureData, onProgress);
-
-  // 3. Đăng ký với backend
-  const media = await registerMedia({
-    fileName: file.name,
-    mimeType: file.type || "application/octet-stream",
-    size: file.size,
-    url: secureUrl,
-    publicId,
-    resourceType,
+  // Đọc file thành base64
+  const contentBase64 = await new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result.split(",")[1]);
+    reader.onerror = () => reject(new Error("Không đọc được file"));
+    reader.readAsDataURL(file);
   });
 
-  return media;
+  onProgress?.(50);
+
+  const response = await api.post("/media/upload", {
+    fileName: file.name,
+    mimeType: file.type || "application/octet-stream",
+    contentBase64,
+  });
+
+  onProgress?.(100);
+
+  return response.data.data;
 };
 
 export const deleteMedia = async (mediaId) => {
@@ -153,5 +156,5 @@ export const deleteMedia = async (mediaId) => {
 
 export const getMyMedia = async (page = 1, limit = 20) => {
   const response = await api.get("/media/my", { params: { page, limit } });
-  return response.data.data; // { media: [...], pagination: {...} }
+  return response.data.data;
 };

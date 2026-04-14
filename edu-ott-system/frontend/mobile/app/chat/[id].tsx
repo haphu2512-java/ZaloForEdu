@@ -494,26 +494,47 @@ export default function ChatScreen() {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       quality: 0.85,
-      allowsMultipleSelection: false,
+      allowsMultipleSelection: true,
     });
     if (result.canceled || !result.assets?.length) return;
     setIsSending(true);
     try {
-      const asset = result.assets[0];
-      await uploadImageToCloudinary(asset.uri);
-      const base64 = await FileSystem.readAsStringAsync(asset.uri, { encoding: FileSystem.EncodingType.Base64 });
-      const ext = asset.uri.split('.').pop()?.toLowerCase() || 'jpg';
-      const mimeType = ext === 'png' ? 'image/png' : 'image/jpeg';
-      const media = await uploadMediaBase64({ fileName: `photo-${Date.now()}.${ext}`, mimeType, contentBase64: base64 });
-      const mediaId = media._id || media.id;
-      if (!mediaId) throw new Error('Missing media ID');
-      setMediaById((prev) => ({ ...prev, [mediaId]: media }));
-      const newMsg = await sendMessage({ conversationId, mediaIds: [mediaId], content: '' });
+      const uploadPromises = result.assets.map(async (asset) => {
+        try {
+          await uploadImageToCloudinary(asset.uri);
+          const base64 = await FileSystem.readAsStringAsync(asset.uri, { encoding: FileSystem.EncodingType.Base64 });
+          const ext = asset.uri.split('.').pop()?.toLowerCase() || 'jpg';
+          const mimeType = ext === 'png' ? 'image/png' : 'image/jpeg';
+          const fileName = `photo-${Date.now()}-${Math.random().toString(36).slice(2, 9)}.${ext}`;
+          const media = await uploadMediaBase64({ fileName, mimeType, contentBase64: base64 });
+          return media;
+        } catch (error) {
+          console.error('Failed to upload image:', error);
+          return null;
+        }
+      });
+      const uploads = await Promise.all(uploadPromises);
+      const mediaIds = uploads
+        .filter((m): m is MediaItem => m !== null)
+        .map((m) => m._id || m.id)
+        .filter(Boolean) as string[];
+      if (!mediaIds.length) throw new Error('No images uploaded successfully');
+      setMediaById((prev) => {
+        const updated = { ...prev };
+        uploads.forEach((m) => {
+          if (m) {
+            const id = m._id || m.id;
+            if (id) updated[id] = m;
+          }
+        });
+        return updated;
+      });
+      const newMsg = await sendMessage({ conversationId, mediaIds, content: '' });
       setMessages((prev) =>
         prev.some((m) => getMessageId(m) === getMessageId(newMsg)) ? prev : [newMsg, ...prev],
       );
-    } catch (err) {
-      Alert.alert('Lỗi', 'Không thể gửi ảnh');
+    } catch (err: any) {
+      Alert.alert('Lỗi', err.message || 'Không thể gửi ảnh');
     } finally {
       setIsSending(false);
     }
@@ -522,32 +543,58 @@ export default function ChatScreen() {
   const handleDocumentPick = async () => {
     setShowMediaMenu(false);
     try {
-      const result = await DocumentPicker.getDocumentAsync({ copyToCacheDirectory: true });
+      const result = await DocumentPicker.getDocumentAsync({ copyToCacheDirectory: true, multiple: true });
       if (result.canceled || !result.assets?.length) return;
-      const asset = result.assets[0];
-      const fileName = asset.name || `file-${Date.now()}`;
       setIsSending(true);
       try {
-        const base64 = await FileSystem.readAsStringAsync(asset.uri, { encoding: FileSystem.EncodingType.Base64 });
-        const media = await uploadMediaBase64({
-          fileName,
-          mimeType: asset.mimeType || getMimeTypeFromFileName(fileName),
-          contentBase64: base64,
+        const uploadPromises = result.assets.map(async (asset) => {
+          try {
+            const fileName = asset.name || `file-${Date.now()}`;
+            const base64 = await FileSystem.readAsStringAsync(asset.uri, { encoding: FileSystem.EncodingType.Base64 });
+            const media = await uploadMediaBase64({
+              fileName,
+              mimeType: asset.mimeType || getMimeTypeFromFileName(fileName),
+              contentBase64: base64,
+            });
+            return media;
+          } catch (error) {
+            console.error('Failed to upload file:', error);
+            return null;
+          }
         });
-        const mediaId = media._id || media.id;
-        if (!mediaId) throw new Error('Missing media ID');
-        setMediaById((prev) => ({ ...prev, [mediaId]: media }));
-        const newMsg = await sendMessage({ conversationId, mediaIds: [mediaId], content: `Đã gửi file: ${fileName}` });
+        const uploads = await Promise.all(uploadPromises);
+        const mediaIds = uploads
+          .filter((m): m is MediaItem => m !== null)
+          .map((m) => m._id || m.id)
+          .filter(Boolean) as string[];
+        if (!mediaIds.length) throw new Error('No files uploaded successfully');
+        setMediaById((prev) => {
+          const updated = { ...prev };
+          uploads.forEach((m) => {
+            if (m) {
+              const id = m._id || m.id;
+              if (id) updated[id] = m;
+            }
+          });
+          return updated;
+        });
+        const fileCount = result.assets.length;
+        const newMsg = await sendMessage({
+          conversationId,
+          mediaIds,
+          content: `Đã gửi ${fileCount} file${fileCount > 1 ? '' : ''}`,
+        });
         setMessages((prev) =>
           prev.some((m) => getMessageId(m) === getMessageId(newMsg)) ? prev : [newMsg, ...prev],
         );
-      } catch (uploadErr) {
-        Alert.alert('Lỗi', 'Không thể tải lên file');
+      } catch (uploadErr: any) {
+        Alert.alert('Lỗi', uploadErr.message || 'Không thể tải lên file');
       } finally {
         setIsSending(false);
       }
-    } catch (e) {
-      console.log('Document picker err', e);
+    } catch (e: any) {
+      console.error('Document picker error:', e);
+      Alert.alert('Lỗi', 'Không thể chọn file');
     }
   };
 
@@ -616,6 +663,14 @@ export default function ChatScreen() {
   const handleOpenConversationOptions = () => {
     if (!conversation) return;
     router.push({ pathname: '/conversation-details', params: { id: conversationId } });
+  };
+
+  const handleVoiceCall = () => {
+    Alert.alert('Thông báo', 'Tính năng gọi thoại sẽ sớm được cập nhật');
+  };
+
+  const handleVideoCall = () => {
+    Alert.alert('Thông báo', 'Tính năng gọi video sẽ sớm được cập nhật');
   };
 
   const handleMessageLongPress = (msg: Message) => {
@@ -851,9 +906,17 @@ export default function ChatScreen() {
             </TouchableOpacity>
           ),
           headerRight: () => (
-            <TouchableOpacity onPress={handleOpenConversationOptions} style={{ padding: 8, marginRight: 6 }}>
-              <Ionicons name="ellipsis-vertical" size={20} color={colors.text} />
-            </TouchableOpacity>
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginRight: 2 }}>
+              <TouchableOpacity onPress={handleVoiceCall} style={{ padding: 8 }}>
+                <Ionicons name="call-outline" size={20} color={colors.text} />
+              </TouchableOpacity>
+              <TouchableOpacity onPress={handleVideoCall} style={{ padding: 8 }}>
+                <Ionicons name="videocam-outline" size={22} color={colors.text} />
+              </TouchableOpacity>
+              <TouchableOpacity onPress={handleOpenConversationOptions} style={{ padding: 8, marginRight: 4 }}>
+                <Ionicons name="ellipsis-vertical" size={20} color={colors.text} />
+              </TouchableOpacity>
+            </View>
           ),
         }}
       />
