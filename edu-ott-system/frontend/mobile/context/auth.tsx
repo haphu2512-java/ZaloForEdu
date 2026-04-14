@@ -127,8 +127,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const register = useCallback(async (payload: RegisterPayload) => {
     const res = await authService.register(payload);
-    if (!res.user) throw new Error('Đăng ký thất bại');
-    // Do not auto-login after register. User verifies email first, then logs in.
+    // Registration does not auto-login. User must verify email/OTP first.
+    // res.user and tokens are optional during registration flow.
+    if (!res.success) throw new Error('Đăng ký thất bại');
     setUser(null);
   }, []);
 
