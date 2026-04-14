@@ -52,6 +52,13 @@ import { TypingIndicator } from '@/components/chat/TypingIndicator';
 
 const QUICK_EMOJIS = ['😀', '😂', '😍', '🥰', '👍', '❤️', '🔥', '😭', '🙏', '🎉'];
 
+type ActionMenuOption = {
+  text: string;
+  onPress: () => void;
+  isDestructive?: boolean;
+  style?: 'default' | 'cancel' | 'destructive';
+};
+
 function getMessageSenderId(msg: Message): string {
   if (typeof msg.senderId === 'string') return msg.senderId;
   return msg.senderId?._id || (msg.senderId as any)?.id || '';
@@ -159,7 +166,7 @@ export default function ChatScreen() {
   const [mediaById, setMediaById] = useState<Record<string, MediaItem>>({});
 
   // Action Menu
-  const [actionMenu, setActionMenu] = useState<{ visible: boolean; options: { text: string, onPress: () => void, isDestructive?: boolean }[] }>({ visible: false, options: [] });
+  const [actionMenu, setActionMenu] = useState<{ visible: boolean; options: ActionMenuOption[] }>({ visible: false, options: [] });
 
   // Image viewer
   const [viewImageUrl, setViewImageUrl] = useState<string | null>(null);
@@ -285,7 +292,7 @@ export default function ChatScreen() {
         const mid = getMessageIdStr(m);
         if (markedMessageIds.current.has(mid)) return false;
 
-        const senderId = typeof m.senderId === 'string' ? m.senderId : m.senderId?._id || m.senderId?.id;
+        const senderId = getMessageSenderId(m);
         // Don't mark our own messages as read
         if (senderId === currentUserId) return false;
 
@@ -678,7 +685,7 @@ export default function ChatScreen() {
     const isGroup = conversation?.type === 'group';
     const messageId = getMessageId(msg);
     const isPinned = pinnedItems.some((item) => getPinnedMessageId(item) === messageId);
-    const buttons: any[] = [{ text: 'Hủy', style: 'cancel', onPress: () => {} }];
+    const buttons: ActionMenuOption[] = [{ text: 'Hủy', style: 'cancel', onPress: () => {} }];
 
     if (!msg.isRecalled) {
       buttons.push({ text: '↩ Trả lời', onPress: () => setReplyTo(msg) });
@@ -749,6 +756,13 @@ export default function ChatScreen() {
     const isMine = getMessageSenderId(item) === currentUserId;
     const senderName = typeof item.senderId === 'string' ? '' : item.senderId?.username || '';
     const senderAvatarUrl = typeof item.senderId === 'string' ? null : item.senderId?.avatarUrl;
+    const groupedReactions = (item.reactions || []).reduce((acc, reaction: any) => {
+      const emoji = reaction?.emoji;
+      if (!emoji) return acc;
+      acc[emoji] = (acc[emoji] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+    const reactionEntries = Object.entries(groupedReactions);
 
     if (item.isRecalled) {
       return (
@@ -793,7 +807,8 @@ export default function ChatScreen() {
             <Text style={{ fontSize: 11, color: colors.tint, fontWeight: '600', marginBottom: 2, marginLeft: 4 }}>{senderName}</Text>
           ) : null}
 
-          <View style={[styles.bubble, isMine ? { backgroundColor: '#0068FF' } : { backgroundColor: colorScheme === 'dark' ? '#374151' : '#F1F5F9' }]}>
+          <View style={[styles.bubbleContainer, reactionEntries.length > 0 && styles.bubbleContainerWithReaction]}>
+            <View style={[styles.bubble, isMine ? { backgroundColor: '#0068FF' } : { backgroundColor: colorScheme === 'dark' ? '#374151' : '#F1F5F9' }]}>
             {/* Reply quote */}
             {replyMsg && (
               <View style={[styles.replyQuote, { borderLeftColor: isMine ? 'rgba(255,255,255,0.5)' : colors.tint }]}>
@@ -815,11 +830,6 @@ export default function ChatScreen() {
             {item.content ? (
               <Text style={{ color: isMine ? '#fff' : colors.text, fontSize: 16, lineHeight: 22 }}>{item.content}</Text>
             ) : null}
-
-            {/* Reactions */}
-            {!!item.reactions?.length && (
-              <Text style={{ marginTop: 4, fontSize: 14 }}>{item.reactions.map((r) => r.emoji).join(' ')}</Text>
-            )}
 
             {/* Media attachments */}
             {!!item.mediaIds?.length && (
@@ -869,6 +879,24 @@ export default function ChatScreen() {
               </Text>
               {isMine && <View style={{ marginLeft: 4 }}>{renderMessageStatus(item)}</View>}
             </View>
+            </View>
+
+            {!!reactionEntries.length && (
+              <View
+                style={[
+                  styles.reactionOverlay,
+                  isMine ? styles.reactionOverlayMine : styles.reactionOverlayTheir,
+                  { backgroundColor: colorScheme === 'dark' ? '#111827' : '#FFFFFF', borderColor: colorScheme === 'dark' ? '#374151' : '#E2E8F0' },
+                ]}
+              >
+                {reactionEntries.map(([emoji, count]) => (
+                  <View key={emoji} style={styles.reactionItem}>
+                    <Text style={styles.reactionEmoji}>{emoji}</Text>
+                    {count > 1 ? <Text style={[styles.reactionCount, { color: colors.muted }]}>{count}</Text> : null}
+                  </View>
+                ))}
+              </View>
+            )}
           </View>
         </View>
       </Pressable>
@@ -1113,7 +1141,29 @@ const styles = StyleSheet.create({
   myWrapper: { justifyContent: 'flex-end' },
   theirWrapper: { justifyContent: 'flex-start' },
   senderAvatar: { width: 28, height: 28, borderRadius: 14, marginRight: 6, marginBottom: 2 },
+  bubbleContainer: { position: 'relative' },
+  bubbleContainerWithReaction: { marginBottom: 14 },
   bubble: { borderRadius: 18, padding: 10, maxWidth: '100%' },
+  reactionOverlay: {
+    position: 'absolute',
+    bottom: -12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.18,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  reactionOverlayMine: { right: 8 },
+  reactionOverlayTheir: { left: 8 },
+  reactionItem: { flexDirection: 'row', alignItems: 'center', marginHorizontal: 1 },
+  reactionEmoji: { fontSize: 13, lineHeight: 16 },
+  reactionCount: { fontSize: 10, fontWeight: '700', marginLeft: 1 },
   replyQuote: { borderLeftWidth: 3, paddingLeft: 8, marginBottom: 6, opacity: 0.85 },
   msgMeta: { flexDirection: 'row', alignItems: 'center', marginTop: 4, gap: 2 },
   inlineImage: { width: 200, height: 160, borderRadius: 12 },
