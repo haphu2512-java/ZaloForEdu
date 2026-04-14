@@ -18,7 +18,6 @@ export default function RegisterPage() {
   const navigate = useNavigate();
   const { register, isLoading, error, clearError } = useAuthStore();
 
-  const [tab, setTab] = useState("email"); // "email" | "phone"
   const [form, setForm] = useState({
     username: "",
     identifier: "",  // holds email OR phone
@@ -36,13 +35,6 @@ export default function RegisterPage() {
     return () => clearTimeout(t);
   }, []);
 
-  const handleTabChange = (t) => {
-    setTab(t);
-    setForm((prev) => ({ ...prev, identifier: "" }));
-    setFieldErrors({});
-    clearError();
-  };
-
   const handleChange = (field, value) => {
     setForm((prev) => ({ ...prev, [field]: value }));
     setFieldErrors((prev) => ({ ...prev, [field]: "" }));
@@ -54,12 +46,21 @@ export default function RegisterPage() {
     if (form.username.trim() && form.username.trim().length < 3)
       errs.username = "Tên người dùng tối thiểu 3 ký tự";
 
-    if (!form.identifier.trim()) {
-      errs.identifier = tab === "email" ? "Vui lòng nhập email" : "Vui lòng nhập số điện thoại";
-    } else if (tab === "email" && !/^[^\s@]+@gmail\.com$/.test(form.identifier)) {
-      errs.identifier = "Chỉ hỗ trợ đăng ký bằng tài khoản @gmail.com";
-    } else if (tab === "phone" && !/^\+?\d{9,15}$/.test(form.identifier.replace(/\s/g, ""))) {
-      errs.identifier = "Số điện thoại không hợp lệ (VD: 0912345678)";
+    const idVal = form.identifier.trim();
+    if (!idVal) {
+      errs.identifier = "Vui lòng nhập Email hoặc Số điện thoại";
+    } else {
+      const isEmail = idVal.includes("@") || /[a-zA-Z]/.test(idVal);
+      if (isEmail) {
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(idVal)) {
+          errs.identifier = "Email không hợp lệ";
+        }
+      } else {
+        const phoneVal = idVal.replace(/\s/g, "");
+        if (!/^\+?\d{9,15}$/.test(phoneVal)) {
+          errs.identifier = "Số điện thoại không hợp lệ (VD: 0912345678)";
+        }
+      }
     }
 
     if (!form.password) errs.password = "Vui lòng nhập mật khẩu";
@@ -78,12 +79,15 @@ export default function RegisterPage() {
     e.preventDefault();
     if (!validate()) return;
 
+    const idVal = form.identifier.trim();
+    const isEmail = idVal.includes("@") || /[a-zA-Z]/.test(idVal);
+
     const payload = {
       password: form.password,
       ...(form.username.trim() ? { username: form.username.trim() } : {}),
-      ...(tab === "email"
-        ? { email: form.identifier.toLowerCase() }
-        : { phone: form.identifier.replace(/\s/g, "") }),
+      ...(isEmail
+        ? { email: idVal.toLowerCase() }
+        : { phone: idVal.replace(/\s/g, "") }),
     };
 
     const result = await register(payload);
@@ -139,24 +143,6 @@ export default function RegisterPage() {
         </div>
         <p className="auth-tagline">Tạo tài khoản mới ✨</p>
 
-        {/* Tabs */}
-        <div className="auth-tabs">
-          <button
-            className={`auth-tab ${tab === "email" ? "active" : ""}`}
-            onClick={() => handleTabChange("email")}
-            type="button"
-          >
-            <FaEnvelope size={13} /> Email
-          </button>
-          <button
-            className={`auth-tab ${tab === "phone" ? "active" : ""}`}
-            onClick={() => handleTabChange("phone")}
-            type="button"
-          >
-            <FaPhone size={13} /> Số điện thoại
-          </button>
-        </div>
-
         {error && <div className="auth-error">{error}</div>}
 
         <form onSubmit={handleSubmit} className="auth-form">
@@ -179,18 +165,18 @@ export default function RegisterPage() {
 
           {/* Email or Phone */}
           <div className="auth-field">
-            <label>{tab === "email" ? "Email" : "Số điện thoại"}</label>
+            <label>Email hoặc Số điện thoại</label>
             <div className="auth-input-wrap">
               <span className="auth-input-icon">
-                {tab === "email" ? <FaEnvelope size={14} /> : <FaPhone size={14} />}
+                <FaUser size={14} />
               </span>
               <input
-                type={tab === "email" ? "email" : "tel"}
-                placeholder={tab === "email" ? "you@example.com" : "0912 345 678"}
+                type="text"
+                placeholder="you@gmail.com hoặc 0912 345 678"
                 value={form.identifier}
                 onChange={(e) => handleChange("identifier", e.target.value)}
                 className={fieldErrors.identifier ? "has-error" : ""}
-                autoComplete={tab === "email" ? "email" : "tel"}
+                autoComplete="email"
               />
             </div>
             {fieldErrors.identifier && <p className="auth-field-error">{fieldErrors.identifier}</p>}
