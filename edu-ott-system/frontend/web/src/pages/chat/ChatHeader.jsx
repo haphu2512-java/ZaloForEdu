@@ -12,11 +12,13 @@ export const ChatHeader = ({ room, onCall, onVideo, onInfo }) => {
   const currentUser = useAuthStore((state) => state.user);
   const { appliedTheme } = useTheme();
   const isDark = appliedTheme === 'dark';
-  const { outgoingRequests, fetchOutgoingRequests } = useFriendStore();
+  const { outgoingRequests, incomingRequests, fetchOutgoingRequests, fetchIncomingRequests, acceptRequest, rejectRequest } = useFriendStore();
   const [friendRequestSent, setFriendRequestSent] = useState(false);
   const [cancelLoading, setCancelLoading] = useState(false);
+  const [acceptLoading, setAcceptLoading] = useState(false);
+  const [rejectLoading, setRejectLoading] = useState(false);
 
-  // Check xem đã gửi lời mời chưa từ store (persist qua reload)
+  // Check xem đã gửi lời mời chưa (A → B)
   const hasOutgoingRequest = outgoingRequests.some(r =>
     String(r.toUserId?._id || r.toUserId || '') === String(room?.strangerId || '')
   );
@@ -24,8 +26,16 @@ export const ChatHeader = ({ room, onCall, onVideo, onInfo }) => {
     String(r.toUserId?._id || r.toUserId || '') === String(room?.strangerId || '')
   );
 
+  // Check xem có lời mời đến không (B nhận từ A)
+  const incomingRequest = incomingRequests.find(r =>
+    String(r.fromUserId?._id || r.fromUserId || '') === String(room?.strangerId || '')
+  );
+
   useEffect(() => {
-    if (room?.isStranger) fetchOutgoingRequests();
+    if (room?.isStranger) {
+      fetchOutgoingRequests();
+      fetchIncomingRequests();
+    }
   }, [room?.strangerId]);
 
   if (!room) return null;
@@ -58,7 +68,27 @@ export const ChatHeader = ({ room, onCall, onVideo, onInfo }) => {
     } finally { setCancelLoading(false); }
   };
 
-  const handleCallClick = (type) => {
+  const handleAcceptRequest = async () => {
+    if (!incomingRequest?._id) return;
+    setAcceptLoading(true);
+    try {
+      await acceptRequest(incomingRequest._id);
+      fetchIncomingRequests();
+    } catch (err) {
+      alert(err.response?.data?.message || 'Không thể chấp nhận');
+    } finally { setAcceptLoading(false); }
+  };
+
+  const handleRejectRequest = async () => {
+    if (!incomingRequest?._id) return;
+    setRejectLoading(true);
+    try {
+      await rejectRequest(incomingRequest._id);
+      fetchIncomingRequests();
+    } catch (err) {
+      alert(err.response?.data?.message || 'Không thể từ chối');
+    } finally { setRejectLoading(false); }
+  };  const handleCallClick = (type) => {
     const myId = currentUser?._id || currentUser?.id;
 
     const targetUserId =
@@ -158,9 +188,30 @@ export const ChatHeader = ({ room, onCall, onVideo, onInfo }) => {
 
       {/* RIGHT */}
       <div className="flex items-center gap-3">
-        {/* Nút Gửi kết bạn khi chat với người lạ */}
+        {/* Nút kết bạn khi chat với người lạ */}
         {isStranger && (
-          alreadySentRequest ? (
+          incomingRequest ? (
+            // B nhận lời mời từ A → hiện Chấp nhận / Từ chối
+            <div style={{ display:'flex', gap:8 }}>
+              <button
+                onClick={handleAcceptRequest}
+                disabled={acceptLoading}
+                style={{ display:'flex', alignItems:'center', gap:6, padding:'7px 14px', borderRadius:8, border:'none', background:'var(--primary-color)', color:'#fff', cursor:'pointer', fontWeight:600, fontSize:13 }}
+              >
+                {acceptLoading ? <FaSpinner size={13} className="spin" /> : <FaCheck size={13} />}
+                Chấp nhận
+              </button>
+              <button
+                onClick={handleRejectRequest}
+                disabled={rejectLoading}
+                style={{ display:'flex', alignItems:'center', gap:6, padding:'7px 14px', borderRadius:8, border:'1px solid var(--border-color)', background:'transparent', color:'var(--text-secondary)', cursor:'pointer', fontWeight:600, fontSize:13 }}
+              >
+                {rejectLoading ? <FaSpinner size={13} className="spin" /> : <FaTimes size={13} />}
+                Từ chối
+              </button>
+            </div>
+          ) : alreadySentRequest ? (
+            // A đã gửi lời mời → hiện Hủy lời mời
             <button
               onClick={handleCancelFriendRequest}
               disabled={cancelLoading}
@@ -170,6 +221,7 @@ export const ChatHeader = ({ room, onCall, onVideo, onInfo }) => {
               Hủy lời mời
             </button>
           ) : (
+            // Chưa có gì → hiện Gửi kết bạn
             <button
               onClick={handleSendFriendRequest}
               style={{ display:'flex', alignItems:'center', gap:6, padding:'7px 14px', borderRadius:8, border:'1px solid var(--primary-color)', background:'transparent', color:'var(--primary-color)', cursor:'pointer', fontWeight:600, fontSize:13 }}
