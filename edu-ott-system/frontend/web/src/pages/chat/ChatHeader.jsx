@@ -1,16 +1,14 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FaPhone, FaVideo, FaEllipsisV, FaUsers, FaFileAlt } from 'react-icons/fa';
+import { FaPhone, FaVideo, FaEllipsisV, FaUsers, FaFileAlt, FaUserPlus } from 'react-icons/fa';
 import { useAuthStore } from '../../store/authStore';
 import { socketService } from '../../services/socketService';
-// THÊM: Import hook useTheme của bạn
 import { useTheme } from '../../contexts/ThemeContext';
+import { friendService } from '../../services/friendService';
 
 export const ChatHeader = ({ room, onCall, onVideo, onInfo }) => {
   const navigate = useNavigate();
   const currentUser = useAuthStore((state) => state.user);
-  
-  // Lấy theme hiện tại từ Context
   const { appliedTheme } = useTheme();
   const isDark = appliedTheme === 'dark';
 
@@ -18,6 +16,16 @@ export const ChatHeader = ({ room, onCall, onVideo, onInfo }) => {
 
   const isOnline = room.isOnline;
   const isClass = room.type?.toLowerCase() === 'class' || room.roomModel === 'Class';
+  const isStranger = room.isStranger && room.type === 'direct';
+
+  const handleSendFriendRequest = async () => {
+    try {
+      await friendService.sendFriendRequest(room.strangerId);
+      alert('Đã gửi lời mời kết bạn!');
+    } catch (err) {
+      alert(err.response?.data?.message || 'Không thể gửi lời mời kết bạn');
+    }
+  };
 
   const handleCallClick = (type) => {
     const myId = currentUser?._id || currentUser?.id;
@@ -93,23 +101,23 @@ export const ChatHeader = ({ room, onCall, onVideo, onInfo }) => {
         </div>
 
         <div>
-          {/* Tăng kích thước Text Tên */}
-          <div className={`text-lg font-bold ${textColor}`}>
+          <div className={`text-lg font-bold ${textColor}`} style={{ display:'flex', alignItems:'center', gap:8 }}>
             {room.name}
+            {isStranger && (
+              <span style={{ fontSize:10, fontWeight:700, background:'#ef4444', color:'#fff', padding:'2px 6px', borderRadius:4, letterSpacing:1 }}>
+                NGƯỜI LẠ
+              </span>
+            )}
           </div>
 
           <div className={`text-sm ${subTextColor}`}>
             {isClass ? (
               <span className="flex items-center gap-1.5 mt-0.5">
                 <FaUsers size={12} />
-                {room.memberCount
-                  ? `${room.memberCount} thành viên`
-                  : 'Đang hoạt động'}
+                {room.memberCount ? `${room.memberCount} thành viên` : 'Đang hoạt động'}
               </span>
             ) : isOnline ? (
-              <span className="text-green-500 font-medium mt-0.5 inline-block">
-                Đang trực tuyến
-              </span>
+              <span className="text-green-500 font-medium mt-0.5 inline-block">Đang trực tuyến</span>
             ) : (
               <span className="mt-0.5 inline-block">Ngoại tuyến</span>
             )}
@@ -119,6 +127,15 @@ export const ChatHeader = ({ room, onCall, onVideo, onInfo }) => {
 
       {/* RIGHT */}
       <div className="flex items-center gap-3">
+        {/* Nút Gửi kết bạn khi chat với người lạ */}
+        {isStranger && (
+          <button
+            onClick={handleSendFriendRequest}
+            style={{ display:'flex', alignItems:'center', gap:6, padding:'7px 14px', borderRadius:8, border:'1px solid var(--z-primary)', background:'transparent', color:'var(--z-primary)', cursor:'pointer', fontWeight:600, fontSize:13 }}
+          >
+            <FaUserPlus size={13} /> Gửi kết bạn
+          </button>
+        )}
         {isClass && (
           <div className={`flex gap-3 mr-4 border-r ${isDark ? 'border-gray-700' : 'border-gray-200'} pr-5`}>
             <button className={`text-sm font-semibold ${subTextColor} hover:text-blue-500 flex items-center gap-1.5 px-3 py-1.5 rounded ${iconBgHover} transition`}>

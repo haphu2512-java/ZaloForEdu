@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import axios from "axios";
 import io from "socket.io-client";
-import { FaSearch, FaBell, FaThumbtack, FaUsers, FaCloud, FaSpinner, FaLink } from "react-icons/fa";
+import { FaSearch, FaBell, FaThumbtack, FaUsers, FaCloud, FaSpinner, FaLink, FaUserSecret } from "react-icons/fa";
 import toast from "react-hot-toast";
 
 import { uploadFile } from "../../services/mediaService"; 
@@ -81,6 +81,7 @@ export default function ChatPage() {
   const [messages, setMessages] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState('friends'); // 'friends' | 'strangers'
+  const [showStrangerPanel, setShowStrangerPanel] = useState(false);
   
   const { appliedTheme } = useTheme();
   const { t } = useLanguage();
@@ -578,24 +579,30 @@ export default function ChatPage() {
           <FaSearch color="var(--z-text-secondary)" size={14} />
           <input placeholder={t('searchPlaceholder')} value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
         </div>
-        {/* Tabs: Bạn bè / Người lạ */}
-        <div style={{ display:'flex', borderBottom:'1px solid var(--z-border)', padding:'0 12px' }}>
-          <button
-            onClick={() => setActiveTab('friends')}
-            style={{ flex:1, padding:'8px 0', fontSize:13, fontWeight:600, border:'none', background:'none', cursor:'pointer', color: activeTab==='friends' ? 'var(--z-primary)' : 'var(--z-text-muted)', borderBottom: activeTab==='friends' ? '2px solid var(--z-primary)' : '2px solid transparent' }}
-          >
-            {t('allTab')}
-          </button>
-          <button
-            onClick={() => setActiveTab('strangers')}
-            style={{ flex:1, padding:'8px 0', fontSize:13, fontWeight:600, border:'none', background:'none', cursor:'pointer', color: activeTab==='strangers' ? 'var(--z-primary)' : 'var(--z-text-muted)', borderBottom: activeTab==='strangers' ? '2px solid var(--z-primary)' : '2px solid transparent', position:'relative' }}
-          >
-            Người lạ
-            {strangerConvs.length > 0 && <span style={{ marginLeft:4, background:'var(--z-primary)', color:'#fff', borderRadius:10, padding:'1px 6px', fontSize:11 }}>{strangerConvs.length}</span>}
-          </button>
-        </div>
         <div className="rs-list">
-          {displayedConvs.map((conv) => {
+          {/* Item đặc biệt: Tin nhắn từ người lạ */}
+          {strangerConvs.length > 0 && (
+            <div
+              className="chat-list-item"
+              onClick={() => setShowStrangerPanel(true)}
+              style={{ cursor:'pointer' }}
+            >
+              <div style={{ width:44, height:44, borderRadius:'50%', background:'#0068FF', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+                <FaUserSecret size={20} color="#fff" />
+              </div>
+              <div className="cli-info">
+                <div className="cli-top">
+                  <span className="cli-name" style={{ fontWeight:700 }}>Tin nhắn từ người lạ</span>
+                  <span className="cli-time" style={{ color:'var(--z-primary)' }}></span>
+                </div>
+                <div className="cli-bottom">
+                  <span className="cli-msg">Gửi từ người chưa có trong danh bạ...</span>
+                  <div className="cli-unread" style={{ background:'#ef4444' }}>●</div>
+                </div>
+              </div>
+            </div>
+          )}
+          {friendConvs.map((conv) => {
             const isActive = activeConversation?._id === conv._id;
             const unread = conv.unreadCount || 0;
             return (
@@ -618,7 +625,7 @@ export default function ChatPage() {
               </div>
             );
           })}
-          {displayedConvs.length === 0 && <div style={{ textAlign: 'center', padding: '20px', color: 'var(--z-text-muted)', fontSize: 13 }}>Không tìm thấy cuộc trò chuyện nào</div>}
+          {friendConvs.length === 0 && <div style={{ textAlign: 'center', padding: '20px', color: 'var(--z-text-muted)', fontSize: 13 }}>Không tìm thấy cuộc trò chuyện nào</div>}
         </div>
       </aside>
 
@@ -631,7 +638,13 @@ export default function ChatPage() {
               name: getConversationName(activeConversation),
               avatar: getConversationAvatar(activeConversation),
               targetUserId: getOtherParticipant(activeConversation)?._id || getOtherParticipant(activeConversation)?.id,
-              isOnline: true 
+              isOnline: true,
+              isStranger: (() => {
+                const other = getOtherParticipant(activeConversation);
+                const otherId = other && typeof other === 'object' ? String(other._id || other.id) : null;
+                return otherId ? !friendIds.has(otherId) : false;
+              })(),
+              strangerId: getOtherParticipant(activeConversation)?._id || getOtherParticipant(activeConversation)?.id,
             }}
             onInfo={() => setShowRightPanel(!showRightPanel)}
           />
@@ -748,6 +761,63 @@ export default function ChatPage() {
             ) : <div style={{fontSize: 12, color: 'var(--z-text-muted)'}}>Chưa có Link nào</div>}
           </div>
         </aside>
+      )}
+
+      {/* ── PANEL: Tin nhắn từ người lạ ── */}
+      {showStrangerPanel && (
+        <div style={{ position:'fixed', inset:0, zIndex:1000, display:'flex' }}>
+          {/* Overlay */}
+          <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.3)' }} onClick={() => setShowStrangerPanel(false)} />
+          {/* Panel */}
+          <div style={{ position:'relative', width:360, height:'100%', background:'var(--z-bg-sidebar)', display:'flex', flexDirection:'column', boxShadow:'4px 0 20px rgba(0,0,0,0.2)' }}>
+            {/* Header */}
+            <div style={{ padding:'16px 20px', borderBottom:'1px solid var(--z-border)', display:'flex', alignItems:'center', gap:12 }}>
+              <button onClick={() => setShowStrangerPanel(false)} style={{ background:'none', border:'none', cursor:'pointer', color:'var(--z-text-primary)', padding:4 }}>
+                ←
+              </button>
+              <span style={{ fontWeight:700, fontSize:16, color:'var(--z-text-primary)' }}>Tin nhắn từ người lạ</span>
+            </div>
+            {/* Notice */}
+            <div style={{ padding:'10px 16px', fontSize:12, color:'var(--z-text-secondary)', borderBottom:'1px solid var(--z-border)' }}>
+              Người lạ có thể nhắn tin cho bạn.{' '}
+              <span style={{ color:'var(--z-primary)', cursor:'pointer' }}>Cài đặt quyền riêng tư</span>
+            </div>
+            {/* List */}
+            <div style={{ flex:1, overflowY:'auto' }}>
+              {strangerConvs.map(conv => {
+                const unread = conv.unreadCount || 0;
+                return (
+                  <div
+                    key={conv._id}
+                    style={{ display:'flex', alignItems:'center', gap:12, padding:'12px 16px', cursor:'pointer', borderBottom:'1px solid var(--z-border)' }}
+                    onClick={() => { setActiveConversation(conv); setShowStrangerPanel(false); }}
+                    onMouseEnter={e => e.currentTarget.style.background = 'var(--z-bg-hover)'}
+                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                  >
+                    <img src={getConversationAvatar(conv)} alt="" style={{ width:44, height:44, borderRadius:'50%', objectFit:'cover', flexShrink:0 }} />
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                        <span style={{ fontWeight:700, fontSize:14, color:'var(--z-text-primary)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{getConversationName(conv)}</span>
+                        <span style={{ fontSize:11, color:'var(--z-text-muted)', flexShrink:0, marginLeft:8 }}>
+                          {conv.latestMessage ? formatChatTimestamp(conv.latestMessage.createdAt) : ''}
+                        </span>
+                      </div>
+                      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginTop:2 }}>
+                        <span style={{ fontSize:12, color:'var(--z-text-secondary)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                          {conv.latestMessage?.content || '[Hình ảnh/File]'}
+                        </span>
+                        {unread > 0 && <div style={{ background:'#ef4444', color:'#fff', borderRadius:10, padding:'1px 6px', fontSize:11, flexShrink:0 }}>{unread}</div>}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+              {strangerConvs.length === 0 && (
+                <div style={{ textAlign:'center', padding:40, color:'var(--z-text-muted)', fontSize:13 }}>Không có tin nhắn từ người lạ</div>
+              )}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
