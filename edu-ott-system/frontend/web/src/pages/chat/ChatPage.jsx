@@ -92,6 +92,7 @@ export default function ChatPage() {
 
   const [shareModalOpen, setShareModalOpen] = useState(false);
   const [msgToShare, setMsgToShare] = useState(null);
+  const [justSentRequestTo, setJustSentRequestTo] = useState(null); // track optimistic state
 
   const pageRef = useRef(null);
   const messagesEndRef = useRef(null);
@@ -355,6 +356,7 @@ export default function ChatPage() {
   useEffect(() => {
     if (!activeConversation) return;
     setMessages([]);
+    setJustSentRequestTo(null);
 
     if (activeConversation.isMock) return; 
 
@@ -708,7 +710,7 @@ export default function ChatPage() {
               const isStranger = otherId && !friendIds.has(otherId);
               if (!isStranger) return null;
 
-              const hasOutgoing = outgoingRequestIds.has(otherId);
+              const hasOutgoing = outgoingRequestIds.has(otherId) || justSentRequestTo === otherId;
               const incomingReq = incomingRequests.find(r => {
                 const fromId = r.fromUserId?._id
                   ? String(r.fromUserId._id)
@@ -773,6 +775,7 @@ export default function ChatPage() {
                       try {
                         const { friendService } = await import('../../services/friendService');
                         await friendService.sendFriendRequest(otherId);
+                        setJustSentRequestTo(otherId); // optimistic update ngay lập tức
                         fetchOutgoingRequests();
                       } catch (e) {
                         const code = e.response?.data?.error?.code;
