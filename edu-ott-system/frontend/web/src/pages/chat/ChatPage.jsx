@@ -196,7 +196,7 @@ export default function ChatPage() {
   // Phân loại: bạn bè vs người lạ
   const friendIds = useMemo(() => new Set(friends.map(f => String(f._id || f.id))), [friends]);
 
-  const { outgoingRequests, incomingRequests } = useFriendStore();
+  const { outgoingRequests, incomingRequests, acceptRequest, rejectRequest } = useFriendStore();
   const outgoingRequestIds = useMemo(() =>
     new Set(outgoingRequests.map(r => String(r.toUserId?._id || r.toUserId || ''))),
     [outgoingRequests]
@@ -280,7 +280,9 @@ export default function ChatPage() {
                 : media
             )
           };
-          return [...prev, normalizedMsg];
+          // Dedup toàn bộ trước khi thêm
+          const deduped = [...prev.filter(m => String(m._id) !== String(normalizedMsg._id)), normalizedMsg];
+          return deduped;
         });
         socket.emit("message_delivered", { messageId: latestMessage._id });
         socket.emit("message_seen", { messageId: latestMessage._id });
@@ -704,9 +706,8 @@ export default function ChatPage() {
                     <button
                       onClick={async () => {
                         try {
-                          const { acceptRequest, fetchIncomingRequests: fetchInc, fetchFriends: fetchF } = useFriendStore.getState();
                           await acceptRequest(incomingReq._id);
-                          await Promise.all([fetchInc(), fetchF()]);
+                          await Promise.all([fetchIncomingRequests(), fetchFriends()]);
                         } catch (e) { alert('Không thể chấp nhận'); }
                       }}
                       style={{ padding:'6px 14px', borderRadius:8, border:'none', background:'var(--z-primary)', color:'#fff', cursor:'pointer', fontWeight:600, fontSize:13 }}
@@ -716,9 +717,8 @@ export default function ChatPage() {
                     <button
                       onClick={async () => {
                         try {
-                          const { rejectRequest, fetchIncomingRequests: fetchInc } = useFriendStore.getState();
                           await rejectRequest(incomingReq._id);
-                          await fetchInc();
+                          await fetchIncomingRequests();
                         } catch (e) { alert('Không thể từ chối'); }
                       }}
                       style={{ padding:'6px 14px', borderRadius:8, border:'1px solid var(--z-border)', background:'transparent', color:'var(--z-text-secondary)', cursor:'pointer', fontWeight:600, fontSize:13 }}
