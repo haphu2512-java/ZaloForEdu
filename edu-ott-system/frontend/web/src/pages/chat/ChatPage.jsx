@@ -547,7 +547,7 @@ export default function ChatPage() {
   const handleRecall = async (msgId) => {
     setMessages(prev => prev.map(m => String(m._id) === String(msgId) ? { ...m, isRecalled: true, content: "", attachments: [], mediaIds: [] } : m));
     try {
-      await axios.put(`${API_BASE_URL}/messages/${msgId}/recall`, { headers: { Authorization: `Bearer ${token}` } });
+      await axios.put(`${API_BASE_URL}/messages/${msgId}/recall`, {}, { headers: { Authorization: `Bearer ${token}` } });
       toast.success("Đã thu hồi tin nhắn");
     } catch (err) { toast.error("Lỗi thu hồi tin nhắn"); }
   };
