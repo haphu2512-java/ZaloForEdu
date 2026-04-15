@@ -93,7 +93,12 @@ export default function AddFriendModal({ isOpen, onClose }) {
       setRequestSent(true);
       fetchOutgoingRequests();
     } catch (err) {
-      setError(err.response?.data?.message || "Không thể gửi lời mời.");
+      const code = err.response?.data?.error?.code;
+      if (code === 'REVERSE_REQUEST_EXISTS') {
+        setError("Người này đã gửi lời mời kết bạn cho bạn. Vào Danh bạ → Lời mời để xác nhận.");
+      } else {
+        setError(err.response?.data?.message || err.response?.data?.error?.message || "Không thể gửi lời mời.");
+      }
     } finally { setLoading(false); }
   };
 

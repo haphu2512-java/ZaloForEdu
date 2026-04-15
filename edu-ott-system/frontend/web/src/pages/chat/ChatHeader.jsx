@@ -36,7 +36,7 @@ export const ChatHeader = ({ room, onCall, onVideo, onInfo }) => {
       fetchOutgoingRequests();
       fetchIncomingRequests();
     }
-  }, [room?.strangerId]);
+  }, [room?.strangerId, room?.isStranger]);
 
   if (!room) return null;
 
@@ -51,7 +51,13 @@ export const ChatHeader = ({ room, onCall, onVideo, onInfo }) => {
       setFriendRequestSent(true);
       fetchOutgoingRequests();
     } catch (err) {
-      alert(err.response?.data?.message || 'Không thể gửi lời mời kết bạn');
+      const code = err.response?.data?.error?.code;
+      if (code === 'REVERSE_REQUEST_EXISTS') {
+        // Người kia đã gửi lời mời → refresh để hiện nút Chấp nhận/Từ chối
+        fetchIncomingRequests();
+      } else {
+        alert(err.response?.data?.error?.message || err.response?.data?.message || 'Không thể gửi lời mời kết bạn');
+      }
     }
   };
 

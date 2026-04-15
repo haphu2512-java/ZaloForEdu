@@ -40,6 +40,16 @@ const sendFriendRequest = asyncHandler(async (req, res) => {
     throw new ApiError(403, 'FORBIDDEN', 'You cannot send request to this user');
   }
 
+  // Block nếu đã có pending request từ phía kia (tránh 2 người gửi cho nhau)
+  const reverseRequest = await FriendRequest.findOne({
+    fromUserId: toUserId,
+    toUserId: fromUserId,
+    status: 'pending',
+  });
+  if (reverseRequest) {
+    throw new ApiError(400, 'REVERSE_REQUEST_EXISTS', 'This user already sent you a friend request. Please accept or reject it first.');
+  }
+
   const request = await FriendRequest.findOneAndUpdate(
     { fromUserId, toUserId },
     { status: 'pending', respondedAt: null },

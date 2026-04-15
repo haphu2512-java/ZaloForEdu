@@ -100,7 +100,7 @@ export default function ChatPage() {
   const { friends, fetchFriends, fetchOutgoingRequests, fetchIncomingRequests } = useFriendStore();
 
   useEffect(() => {
-    if (friends.length === 0) fetchFriends();
+    fetchFriends();
     fetchOutgoingRequests();
     fetchIncomingRequests();
   }, []);
