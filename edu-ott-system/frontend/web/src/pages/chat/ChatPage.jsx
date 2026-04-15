@@ -364,7 +364,17 @@ export default function ChatPage() {
               : media
           )
         }));
-        setMessages(normalized.reverse());
+        // Dedup và merge với messages đã có từ socket trong lúc fetch
+        setMessages(prev => {
+          const merged = [...normalized.reverse(), ...prev];
+          const seen = new Set();
+          return merged.filter(m => {
+            const id = String(m._id);
+            if (seen.has(id)) return false;
+            seen.add(id);
+            return true;
+          });
+        });
         setConversations(prev => prev.map(c => String(c._id) === String(activeConversation._id) ? { ...c, unreadCount: 0 } : c));
       } catch (err) { setMessages([]); }
     };
