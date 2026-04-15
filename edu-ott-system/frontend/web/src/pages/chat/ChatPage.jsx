@@ -205,7 +205,11 @@ export default function ChatPage() {
   );
   const incomingRequestIds = useMemo(() =>
     new Set(incomingRequests.map(r =>
-      r.fromUserId?._id ? String(r.fromUserId._id) : String(r.fromUserId || '')
+      r.fromUserId?._id
+        ? String(r.fromUserId._id)
+        : r.fromUserId?.id
+        ? String(r.fromUserId.id)
+        : String(r.fromUserId || '')
     )),
     [incomingRequests]
   );
@@ -708,6 +712,8 @@ export default function ChatPage() {
               const incomingReq = incomingRequests.find(r => {
                 const fromId = r.fromUserId?._id
                   ? String(r.fromUserId._id)
+                  : r.fromUserId?.id
+                  ? String(r.fromUserId.id)
                   : String(r.fromUserId || '');
                 return fromId === otherId;
               });
