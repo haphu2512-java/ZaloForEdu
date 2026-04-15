@@ -359,16 +359,17 @@ export default function ChatPage() {
               : media
           )
         }));
-        // Dedup và merge với messages đã có từ socket trong lúc fetch
+        // Dedup và merge với messages đã có từ socket trong lúc fetch, sort theo thời gian
         setMessages(prev => {
-          const merged = [...normalized.reverse(), ...prev];
+          const merged = [...normalized, ...prev];
           const seen = new Set();
-          return merged.filter(m => {
+          const deduped = merged.filter(m => {
             const id = String(m._id);
             if (seen.has(id)) return false;
             seen.add(id);
             return true;
           });
+          return deduped.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
         });
         setConversations(prev => prev.map(c => String(c._id) === String(activeConversation._id) ? { ...c, unreadCount: 0 } : c));
       } catch (err) { setMessages([]); }
