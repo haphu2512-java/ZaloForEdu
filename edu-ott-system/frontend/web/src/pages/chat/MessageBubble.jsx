@@ -5,6 +5,15 @@ import {
 } from 'react-icons/fa';
 import { getExt, getCategory, getFileColor, formatBytes } from './ChatPage';
 
+const API_ORIGIN = (import.meta.env.VITE_API_URL || 'http://localhost:5000/api/v1').replace(/\/api\/v1$/, '');
+
+/** Convert URL tương đối /uploads/... → URL tuyệt đối (giống mobile toAbsoluteMediaUrl) */
+function toAbsoluteUrl(url) {
+  if (!url) return '';
+  if (/^https?:\/\//i.test(url)) return url;
+  return `${API_ORIGIN}${url.startsWith('/') ? '' : '/'}${url}`;
+}
+
 const EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '😡'];
 
 export const MessageBubble = ({ 
@@ -25,10 +34,14 @@ export const MessageBubble = ({
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const menuRef = useRef(null);
 
-  const mediaList = isRecalled ? [] : (message.attachments || message.mediaIds || message.media || []);
+  // Lấy mediaList và convert URL tương đối → tuyệt đối
+  const rawMediaList = isRecalled ? [] : (message.attachments || message.mediaIds || message.media || []);
+  const mediaList = rawMediaList
+    .filter(att => att && typeof att !== 'string')
+    .map(att => ({ ...att, url: toAbsoluteUrl(att.url) }));
   
   const timeString = new Date(createdAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
-  const avatar = sender?.avatarUrl || sender?.avatar || 'https://i.pravatar.cc/150';
+  const avatar = toAbsoluteUrl(sender?.avatarUrl || sender?.avatar) || 'https://i.pravatar.cc/150';
   const name = sender?.fullName || sender?.username || 'Người dùng';
 
   useEffect(() => {
@@ -51,15 +64,13 @@ export const MessageBubble = ({
     : { backgroundColor: '#FFFFFF', color: '#050505', borderRadius: '18px 18px 18px 4px', padding: '10px 14px', position: 'relative', border: '1px solid #E5E7EB' };
 
   // Tách riêng Ảnh/Video và File Document
-  const images = mediaList.filter(att => {
-    if (typeof att === 'string') return false;
-    return ["image", "video"].includes(getCategory(att.name || att.fileName));
-  });
+  const isImageOrVideo = (att) => {
+    if (att.mimeType?.startsWith('image/') || att.mimeType?.startsWith('video/')) return true;
+    return ["image", "video"].includes(getCategory(att.name || att.fileName || ''));
+  };
 
-  const docs = mediaList.filter(att => {
-    if (typeof att === 'string') return false;
-    return !["image", "video"].includes(getCategory(att.name || att.fileName));
-  });
+  const images = mediaList.filter(isImageOrVideo);
+  const docs   = mediaList.filter(att => !isImageOrVideo(att));
 
   return (
     <div 
@@ -112,7 +123,7 @@ export const MessageBubble = ({
                         {images.slice(0, 4).map((att, i) => {
                           const isLast = i === 3;
                           const remain = images.length - 4;
-                          const isVideo = getCategory(att.name || att.fileName) === 'video';
+                          const isVideo = (att.mimeType?.startsWith('video/')) || getCategory(att.name || att.fileName) === 'video';
 
                           return (
                             <div key={i} style={{
@@ -146,6 +157,10 @@ export const MessageBubble = ({
                     {/* Render Danh sách File Tài liệu */}
                     {docs.length > 0 && docs.map((att, i) => {
                       const fileName = att.name || att.fileName || `Tệp ${i+1}`;
+                      const mediaId = att._id || att.id;
+                      const downloadUrl = mediaId
+                        ? `${API_ORIGIN}/api/v1/media/${mediaId}/download?token=${localStorage.getItem('token')}`
+                        : att.url;
                       return (
                         <div key={`doc-${i}`} style={{ display: 'flex', alignItems: 'center', gap: '8px', background: isMe ? 'rgba(255,255,255,0.2)' : '#F0F2F5', padding: '8px', borderRadius: '8px' }}>
                           <div style={{ background: getFileColor(fileName), color: '#fff', fontSize: '10px', fontWeight: 'bold', padding: '4px 6px', borderRadius: '4px' }}>
@@ -155,7 +170,7 @@ export const MessageBubble = ({
                             <div style={{ color: isMe ? '#FFFFFF' : '#050505', fontSize: '14px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{fileName}</div>
                             <div style={{ color: isMe ? 'rgba(255,255,255,0.7)' : '#65676B', fontSize: '12px' }}>{formatBytes(att.size)}</div>
                           </div>
-                          <a href={att.url} target="_blank" rel="noreferrer" style={{ color: isMe ? '#FFFFFF' : '#0084FF' }}><FaDownload size={16}/></a>
+                          <a href={downloadUrl} download={fileName} style={{ color: isMe ? '#FFFFFF' : '#0084FF' }}><FaDownload size={16}/></a>
                         </div>
                       );
                     })}

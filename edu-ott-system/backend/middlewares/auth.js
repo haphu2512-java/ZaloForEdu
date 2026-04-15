@@ -6,11 +6,16 @@ const asyncHandler = require('../utils/asyncHandler');
 
 const auth = asyncHandler(async (req, _res, next) => {
   const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+  let token;
+
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    token = authHeader.slice(7);
+  } else if (req.query.token) {
+    // Hỗ trợ token qua query string cho download file (browser mở URL trực tiếp)
+    token = req.query.token;
+  } else {
     throw new ApiError(401, 'UNAUTHORIZED', 'Missing Bearer token');
   }
-
-  const token = authHeader.slice(7);
   let payload;
 
   try {

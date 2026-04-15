@@ -131,6 +131,7 @@ router.post(
  *         description: My media list fetched
  */
 router.get('/my', auth, mediaController.getMyMedia);
+router.get('/:id/download', auth, validate({ params: mediaIdParamSchema }), mediaController.downloadMediaById);
 router.get('/:id', auth, validate({ params: mediaIdParamSchema }), mediaController.getMediaById);
 /**
  * @openapi
