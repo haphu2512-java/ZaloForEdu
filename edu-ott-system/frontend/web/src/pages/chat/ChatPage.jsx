@@ -198,7 +198,9 @@ export default function ChatPage() {
 
   const { outgoingRequests, incomingRequests, acceptRequest, rejectRequest } = useFriendStore();
   const outgoingRequestIds = useMemo(() =>
-    new Set(outgoingRequests.map(r => String(r.toUserId?._id || r.toUserId || ''))),
+    new Set(outgoingRequests.map(r =>
+      r.toUserId?._id ? String(r.toUserId._id) : String(r.toUserId || '')
+    )),
     [outgoingRequests]
   );
   const incomingRequestIds = useMemo(() =>
