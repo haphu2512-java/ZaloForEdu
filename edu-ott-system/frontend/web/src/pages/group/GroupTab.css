@@ -1,0 +1,200 @@
+/* ── GroupsTab.css ── */
+.groups-tab {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.groups-tab-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 0 16px;
+}
+
+.groups-create-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: 8px;
+  background: var(--z-primary, #0068FF);
+  color: #fff;
+  border: none;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s, transform 0.1s;
+}
+.groups-create-btn:hover { opacity: 0.88; transform: translateY(-1px); }
+
+.groups-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  overflow-y: auto;
+}
+.groups-list::-webkit-scrollbar { width: 4px; }
+.groups-list::-webkit-scrollbar-thumb { background: var(--z-border, #ddd); border-radius: 4px; }
+
+.group-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+.group-row:hover { background: var(--z-hover, #f5f5f5); }
+.group-row.selected { background: var(--z-primary-light, #e8f0fe); }
+
+.group-row-avatar {
+  position: relative;
+  flex-shrink: 0;
+  width: 46px;
+  height: 46px;
+  border-radius: 14px;
+  overflow: hidden;
+  background: linear-gradient(135deg, #0068FF, #4f8cff);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 18px;
+  color: #fff;
+}
+.group-row-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.group-row-avatar-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px;
+  width: 100%;
+  height: 100%;
+}
+.group-row-avatar-grid img,
+.group-row-avatar-grid .grid-placeholder {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.grid-placeholder {
+  background: #4f8cff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.group-row-info {
+  flex: 1;
+  min-width: 0;
+}
+.group-row-name {
+  display: block;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--z-text-primary, #111);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.group-row-meta {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11.5px;
+  color: var(--z-text-muted, #aaa);
+  margin-top: 2px;
+}
+
+.group-row-actions {
+  display: flex;
+  gap: 6px;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.group-row:hover .group-row-actions { opacity: 1; }
+.group-action-btn {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: none;
+  background: var(--z-hover, #f0f0f0);
+  color: var(--z-text-secondary, #555);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.group-action-btn:hover {
+  background: var(--z-primary-light, #e8f0fe);
+  color: var(--z-primary, #0068FF);
+}
+
+.groups-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  gap: 12px;
+  color: var(--z-text-muted, #aaa);
+  text-align: center;
+}
+.groups-empty h3 {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--z-text-primary, #333);
+  margin: 0;
+}
+.groups-empty p {
+  font-size: 13px;
+  margin: 0;
+  line-height: 1.5;
+}
+.groups-empty-icon {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: var(--z-hover, #f0f0f0);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--z-text-muted, #ccc);
+  margin-bottom: 4px;
+}
+
+.groups-empty-create-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 20px;
+  border-radius: 10px;
+  background: var(--z-primary, #0068FF);
+  color: #fff;
+  border: none;
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s;
+  margin-top: 4px;
+}
+.groups-empty-create-btn:hover { opacity: 0.88; }
+
+.groups-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+}
+
+.spin { animation: spin 1s linear infinite; }
+@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }

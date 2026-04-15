@@ -12,20 +12,26 @@ import { useNavigate } from "react-router-dom";
 import AddFriendModal from "../../components/Modals/AddFriendModal";
 import { socketService } from "../../services/socketService";
 import { useAuthStore } from "../../store/authStore";
+import axios from "axios";
 import "./ContactsPage.css";
 
-// ── Avatar helper ────────────────────────────────────────────
+
+// ── Avatar helper (Đã sửa để dùng được cho cả Group) ────────
 function Avatar({ user, size = 48 }) {
-  const name = user?.username || user?.email || "?";
+  // Thêm user?.name để lấy được tên của Group
+  const name = user?.name || user?.username || user?.email || "?";
+  
   if (user?.avatarUrl) {
-    return <img src={user.avatarUrl} className="cp-avatar" style={{ width: size, height: size }} alt="" />;
+    return <img src={user.avatarUrl} className="cp-avatar" style={{ width: size, height: size, objectFit: 'cover' }} alt="" />;
   }
+  
   const colors = ["#0068FF","#9333ea","#16a34a","#f59e0b","#ef4444","#06b6d4"];
   let hash = 0;
   for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
   const bg = colors[Math.abs(hash) % colors.length];
+  
   return (
-    <div className="cp-avatar cp-avatar-placeholder" style={{ width: size, height: size, background: bg }}>
+    <div className="cp-avatar cp-avatar-placeholder" style={{ width: size, height: size, background: bg, fontSize: size * 0.4 }}>
       {name[0].toUpperCase()}
     </div>
   );
@@ -72,7 +78,6 @@ function FriendMenu({ friend, onAction, onClose }) {
 }
 
 // ── Friend detail panel ──────────────────────────────────────
-// Đã thêm sự kiện onAudioCall vào props
 function FriendDetailPanel({ friend, onClose, onChat, onBlock, onUnfriend, onVideoCall, onAudioCall }) {
   if (!friend) return null;
   return (
@@ -93,11 +98,9 @@ function FriendDetailPanel({ friend, onClose, onChat, onBlock, onUnfriend, onVid
           <button className="fdp-btn primary" onClick={() => onChat(friend)}>
             <FaCommentDots size={14} /> Nhắn tin
           </button>
-          {/* Đã thêm sự kiện onClick cho gọi thoại */}
           <button className="fdp-btn secondary" onClick={() => onAudioCall(friend)}>
             <FaPhoneAlt size={14} /> Gọi thoại
           </button>
-          {/* Sự kiện onClick cho gọi video */}
           <button className="fdp-btn secondary" onClick={() => onVideoCall(friend)}>
             <FaVideo size={14} /> Video
           </button>
@@ -146,6 +149,7 @@ export default function ContactsPage() {
   const [openMenuId, setOpenMenuId] = useState(null);
   const [selectedFriend, setSelectedFriend] = useState(null);
   const [sortBy, setSortBy] = useState("name");
+  const [groups, setGroups] = useState([]);
 
   const {
     friends, incomingRequests, outgoingRequests, isLoading,
@@ -159,6 +163,21 @@ export default function ContactsPage() {
     fetchFriends();
     fetchIncomingRequests();
     fetchOutgoingRequests();
+    
+    // FETCH NHÓM
+    const fetchGroups = async () => {
+      try {
+        const token = localStorage.getItem("token");
+        const res = await axios.get("http://localhost:5000/api/v1/conversations", {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        const allConvs = res.data.data?.items || res.data.items || [];
+        setGroups(allConvs.filter(c => c.type === 'group'));
+      } catch (err) {
+        console.error("Lỗi lấy danh sách nhóm", err);
+      }
+    };
+    fetchGroups();
   }, []);
 
   // Alphabetical grouping
@@ -171,20 +190,20 @@ export default function ContactsPage() {
       if (sortBy === "name") return (a.username || "").localeCompare(b.username || "", "vi");
       return 0;
     });
-    const groups = {};
+    const groupsAlpha = {};
     sorted.forEach((f) => {
       const name = f.username || f.email || "?";
       const key = /^[A-Z]$/i.test(name[0]) ? name[0].toUpperCase() : "#";
-      if (!groups[key]) groups[key] = [];
-      groups[key].push(f);
+      if (!groupsAlpha[key]) groupsAlpha[key] = [];
+      groupsAlpha[key].push(f);
     });
-    const sortedKeys = Object.keys(groups).sort((a, b) => {
+    const sortedKeys = Object.keys(groupsAlpha).sort((a, b) => {
       if (a === "#") return 1;
       if (b === "#") return -1;
       return a.localeCompare(b);
     });
     const result = {};
-    sortedKeys.forEach((k) => (result[k] = groups[k]));
+    sortedKeys.forEach((k) => (result[k] = groupsAlpha[k]));
     return result;
   }, [friends, searchQuery, activeTab, sortBy]);
 
@@ -196,7 +215,6 @@ export default function ContactsPage() {
     } else if (action === "info") {
       setSelectedFriend(friend);
     } else if (action === "video" || action === "audio") {
-      // Lấy user mới nhất từ store tại thời điểm gọi
       const currentUser = useAuthStore.getState().user;
       const myId = currentUser?._id || currentUser?.id;
       if (!myId) {
@@ -207,7 +225,6 @@ export default function ContactsPage() {
       const roomId = `room_${myId}_${id}`;
       const callType = action === "video" ? "video" : "audio";
 
-      // Emit signal đến B qua socket
       const sent = socketService.callUser({
         targetUserId: id,
         roomId,
@@ -220,7 +237,6 @@ export default function ContactsPage() {
         return;
       }
 
-      // A vào room sau khi đã emit signal
       const url = callType === "audio" ? `/call/${roomId}?type=voice` : `/call/${roomId}`;
       navigate(url);
     } else if (action === "unfriend") {
@@ -238,7 +254,7 @@ export default function ContactsPage() {
 
   const TABS = [
     { key: "friends", label: "Bạn bè", icon: FaUserFriends, count: friends.length },
-    { key: "groups", label: "Nhóm", icon: FaUsers, count: 0 },
+    { key: "groups", label: "Nhóm", icon: FaUsers, count: groups.length },
     { key: "requests", label: "Lời mời", icon: FaUserCheck, count: incomingRequests.length },
     { key: "sent", label: "Đã gửi", icon: FaUserClock, count: outgoingRequests.length },
   ];
@@ -286,7 +302,7 @@ export default function ContactsPage() {
           <div className="ch-info">
             <h2 className="ch-title">
               {activeTab === "friends" && `Bạn bè (${friends.length})`}
-              {activeTab === "groups" && "Nhóm và cộng đồng"}
+              {activeTab === "groups" && `Nhóm và cộng đồng (${groups.length})`}
               {activeTab === "requests" && `Lời mời kết bạn (${incomingRequests.length})`}
               {activeTab === "sent" && `Lời mời đã gửi (${outgoingRequests.length})`}
             </h2>
@@ -325,6 +341,11 @@ export default function ContactsPage() {
               onSelect={setSelectedFriend}
               selectedId={selectedFriend?._id}
             />
+          ) : activeTab === "groups" ? ( 
+            <GroupsTab 
+              groups={groups} 
+              onSelectGroup={(groupId) => navigate(`/chat/${groupId}`)} 
+            />
           ) : activeTab === "requests" ? (
             <RequestsTab
               requests={incomingRequests}
@@ -334,13 +355,7 @@ export default function ContactsPage() {
             />
           ) : activeTab === "sent" ? (
             <SentRequestsTab requests={outgoingRequests} onRefresh={fetchOutgoingRequests} />
-          ) : (
-            <div className="cp-empty">
-              <FaUsers size={48} />
-              <h3>Tính năng đang phát triển</h3>
-              <p>Nhóm và cộng đồng sẽ sớm ra mắt.</p>
-            </div>
-          )}
+          ) : null}
         </div>
       </div>
 
@@ -353,7 +368,7 @@ export default function ContactsPage() {
           onBlock={(f) => handleAction("block", f)}
           onUnfriend={(f) => handleAction("unfriend", f)}
           onVideoCall={(f) => handleAction("video", f)}
-          onAudioCall={(f) => handleAction("audio", f)} /* Truyền sự kiện từ main component xuống panel */
+          onAudioCall={(f) => handleAction("audio", f)}
         />
       )}
 
@@ -432,6 +447,52 @@ function FriendsTab({ groupedFriends, openMenuId, setOpenMenuId, onAction, onSel
           })}
         </div>
       ))}
+    </div>
+  );
+}
+
+// ── Groups Tab ───────────────────────────────────────────────
+function GroupsTab({ groups, onSelectGroup }) {
+  if (groups.length === 0) {
+    return (
+      <div className="cp-empty">
+        <FaUsers size={48} />
+        <h3>Chưa tham gia nhóm nào</h3>
+        <p>Các nhóm bạn đã tham gia sẽ hiển thị tại đây.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="friends-list">
+      <div className="alpha-group">
+        <div className="alpha-letter">Danh sách nhóm ({groups.length})</div>
+        {groups.map((group) => (
+          <div
+            key={group._id}
+            className="friend-row"
+            onClick={() => onSelectGroup(group._id)}
+          >
+            <div className="fr-avatar-wrap">
+              {/* Đã sửa thẻ <img> thành thẻ <Avatar> để vẽ chữ in hoa */}
+              <Avatar user={group} size={44} />
+            </div>
+            <div className="fr-info">
+              <span className="fr-name">{group.name || "Nhóm chat"}</span>
+              <span className="fr-sub">{group.participants?.length || 0} thành viên</span>
+            </div>
+            <div className="fr-actions" onClick={(e) => e.stopPropagation()}>
+              <button
+                className="fr-chat-btn"
+                onClick={() => onSelectGroup(group._id)}
+                title="Vào nhóm"
+              >
+                <FaCommentDots size={14} />
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
