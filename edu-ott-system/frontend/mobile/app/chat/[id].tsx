@@ -53,6 +53,13 @@ import { TypingIndicator } from '@/components/chat/TypingIndicator';
 
 const QUICK_EMOJIS = ['😀', '😂', '😍', '🥰', '👍', '❤️', '🔥', '😭', '🙏', '🎉'];
 
+type ActionMenuOption = {
+  text: string;
+  onPress: () => void;
+  isDestructive?: boolean;
+  style?: 'default' | 'cancel' | 'destructive';
+};
+
 function getMessageSenderId(msg: Message): string {
   if (typeof msg.senderId === 'string') return msg.senderId;
   return msg.senderId?._id || (msg.senderId as any)?.id || '';
@@ -160,7 +167,7 @@ export default function ChatScreen() {
   const [mediaById, setMediaById] = useState<Record<string, MediaItem>>({});
 
   // Action Menu
-  const [actionMenu, setActionMenu] = useState<{ visible: boolean; options: { text: string, onPress: () => void, isDestructive?: boolean }[] }>({ visible: false, options: [] });
+  const [actionMenu, setActionMenu] = useState<{ visible: boolean; options: ActionMenuOption[] }>({ visible: false, options: [] });
 
   // Image viewer
   const [viewImageUrl, setViewImageUrl] = useState<string | null>(null);
@@ -286,7 +293,7 @@ export default function ChatScreen() {
         const mid = getMessageIdStr(m);
         if (markedMessageIds.current.has(mid)) return false;
 
-        const senderId = typeof m.senderId === 'string' ? m.senderId : m.senderId?._id || m.senderId?.id;
+        const senderId = getMessageSenderId(m);
         // Don't mark our own messages as read
         if (senderId === currentUserId) return false;
 
@@ -495,29 +502,49 @@ export default function ChatScreen() {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       quality: 0.85,
-      allowsMultipleSelection: false,
+      allowsMultipleSelection: true,
     });
     if (result.canceled || !result.assets?.length) return;
     setIsSending(true);
     try {
-      const asset = result.assets[0];
-      // Resize về max 800px để tránh đứng app khi đọc Base64
-      const compressed = await ImageManipulator.manipulateAsync(
-        asset.uri,
-        [{ resize: { width: 800 } }],
-        { compress: 0.6, format: ImageManipulator.SaveFormat.JPEG }
-      );
-      const base64 = await FileSystem.readAsStringAsync(compressed.uri, { encoding: FileSystem.EncodingType.Base64 });
-      const media = await uploadMediaBase64({ fileName: `photo-${Date.now()}.jpg`, mimeType: 'image/jpeg', contentBase64: base64 });
-      const mediaId = media._id || media.id;
-      if (!mediaId) throw new Error('Missing media ID');
-      setMediaById((prev) => ({ ...prev, [mediaId]: media }));
-      const newMsg = await sendMessage({ conversationId, mediaIds: [mediaId], content: '' });
+      const uploadPromises = result.assets.map(async (asset) => {
+        try {
+          // Resize về max 800px để tránh đứng app khi đọc Base64
+          const compressed = await ImageManipulator.manipulateAsync(
+            asset.uri,
+            [{ resize: { width: 800 } }],
+            { compress: 0.6, format: ImageManipulator.SaveFormat.JPEG }
+          );
+          const base64 = await FileSystem.readAsStringAsync(compressed.uri, { encoding: FileSystem.EncodingType.Base64 });
+          const media = await uploadMediaBase64({ fileName: `photo-${Date.now()}-${Math.random().toString(36).slice(2, 9)}.jpg`, mimeType: 'image/jpeg', contentBase64: base64 });
+          return media;
+        } catch (error) {
+          console.error('Failed to upload image:', error);
+          return null;
+        }
+      });
+      const uploads = await Promise.all(uploadPromises);
+      const mediaIds = uploads
+        .filter((m): m is MediaItem => m !== null)
+        .map((m) => m._id || m.id)
+        .filter(Boolean) as string[];
+      if (!mediaIds.length) throw new Error('No images uploaded successfully');
+      setMediaById((prev) => {
+        const updated = { ...prev };
+        uploads.forEach((m) => {
+          if (m) {
+            const id = m._id || m.id;
+            if (id) updated[id] = m;
+          }
+        });
+        return updated;
+      });
+      const newMsg = await sendMessage({ conversationId, mediaIds, content: '' });
       setMessages((prev) =>
         prev.some((m) => getMessageId(m) === getMessageId(newMsg)) ? prev : [newMsg, ...prev],
       );
-    } catch (err) {
-      Alert.alert('Lỗi', 'Không thể gửi ảnh');
+    } catch (err: any) {
+      Alert.alert('Lỗi', err.message || 'Không thể gửi ảnh');
     } finally {
       setIsSending(false);
     }
@@ -526,32 +553,58 @@ export default function ChatScreen() {
   const handleDocumentPick = async () => {
     setShowMediaMenu(false);
     try {
-      const result = await DocumentPicker.getDocumentAsync({ copyToCacheDirectory: true });
+      const result = await DocumentPicker.getDocumentAsync({ copyToCacheDirectory: true, multiple: true });
       if (result.canceled || !result.assets?.length) return;
-      const asset = result.assets[0];
-      const fileName = asset.name || `file-${Date.now()}`;
       setIsSending(true);
       try {
-        const base64 = await FileSystem.readAsStringAsync(asset.uri, { encoding: FileSystem.EncodingType.Base64 });
-        const media = await uploadMediaBase64({
-          fileName,
-          mimeType: asset.mimeType || getMimeTypeFromFileName(fileName),
-          contentBase64: base64,
+        const uploadPromises = result.assets.map(async (asset) => {
+          try {
+            const fileName = asset.name || `file-${Date.now()}`;
+            const base64 = await FileSystem.readAsStringAsync(asset.uri, { encoding: FileSystem.EncodingType.Base64 });
+            const media = await uploadMediaBase64({
+              fileName,
+              mimeType: asset.mimeType || getMimeTypeFromFileName(fileName),
+              contentBase64: base64,
+            });
+            return media;
+          } catch (error) {
+            console.error('Failed to upload file:', error);
+            return null;
+          }
         });
-        const mediaId = media._id || media.id;
-        if (!mediaId) throw new Error('Missing media ID');
-        setMediaById((prev) => ({ ...prev, [mediaId]: media }));
-        const newMsg = await sendMessage({ conversationId, mediaIds: [mediaId], content: `Đã gửi file: ${fileName}` });
+        const uploads = await Promise.all(uploadPromises);
+        const mediaIds = uploads
+          .filter((m): m is MediaItem => m !== null)
+          .map((m) => m._id || m.id)
+          .filter(Boolean) as string[];
+        if (!mediaIds.length) throw new Error('No files uploaded successfully');
+        setMediaById((prev) => {
+          const updated = { ...prev };
+          uploads.forEach((m) => {
+            if (m) {
+              const id = m._id || m.id;
+              if (id) updated[id] = m;
+            }
+          });
+          return updated;
+        });
+        const fileCount = result.assets.length;
+        const newMsg = await sendMessage({
+          conversationId,
+          mediaIds,
+          content: `Đã gửi ${fileCount} file${fileCount > 1 ? '' : ''}`,
+        });
         setMessages((prev) =>
           prev.some((m) => getMessageId(m) === getMessageId(newMsg)) ? prev : [newMsg, ...prev],
         );
-      } catch (uploadErr) {
-        Alert.alert('Lỗi', 'Không thể tải lên file');
+      } catch (uploadErr: any) {
+        Alert.alert('Lỗi', uploadErr.message || 'Không thể tải lên file');
       } finally {
         setIsSending(false);
       }
-    } catch (e) {
-      console.log('Document picker err', e);
+    } catch (e: any) {
+      console.error('Document picker error:', e);
+      Alert.alert('Lỗi', 'Không thể chọn file');
     }
   };
 
@@ -622,12 +675,20 @@ export default function ChatScreen() {
     router.push({ pathname: '/conversation-details', params: { id: conversationId } });
   };
 
+  const handleVoiceCall = () => {
+    Alert.alert('Thông báo', 'Tính năng gọi thoại sẽ sớm được cập nhật');
+  };
+
+  const handleVideoCall = () => {
+    Alert.alert('Thông báo', 'Tính năng gọi video sẽ sớm được cập nhật');
+  };
+
   const handleMessageLongPress = (msg: Message) => {
     const isMine = getMessageSenderId(msg) === currentUserId;
     const isGroup = conversation?.type === 'group';
     const messageId = getMessageId(msg);
     const isPinned = pinnedItems.some((item) => getPinnedMessageId(item) === messageId);
-    const buttons: any[] = [{ text: 'Hủy', style: 'cancel', onPress: () => {} }];
+    const buttons: ActionMenuOption[] = [{ text: 'Hủy', style: 'cancel', onPress: () => {} }];
 
     if (!msg.isRecalled) {
       buttons.push({ text: '↩ Trả lời', onPress: () => setReplyTo(msg) });
@@ -698,6 +759,13 @@ export default function ChatScreen() {
     const isMine = getMessageSenderId(item) === currentUserId;
     const senderName = typeof item.senderId === 'string' ? '' : item.senderId?.username || '';
     const senderAvatarUrl = typeof item.senderId === 'string' ? null : item.senderId?.avatarUrl;
+    const groupedReactions = (item.reactions || []).reduce((acc, reaction: any) => {
+      const emoji = reaction?.emoji;
+      if (!emoji) return acc;
+      acc[emoji] = (acc[emoji] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+    const reactionEntries = Object.entries(groupedReactions);
 
     if (item.isRecalled) {
       return (
@@ -742,7 +810,8 @@ export default function ChatScreen() {
             <Text style={{ fontSize: 11, color: colors.tint, fontWeight: '600', marginBottom: 2, marginLeft: 4 }}>{senderName}</Text>
           ) : null}
 
-          <View style={[styles.bubble, isMine ? { backgroundColor: '#0068FF' } : { backgroundColor: colorScheme === 'dark' ? '#374151' : '#F1F5F9' }]}>
+          <View style={[styles.bubbleContainer, reactionEntries.length > 0 && styles.bubbleContainerWithReaction]}>
+            <View style={[styles.bubble, isMine ? { backgroundColor: '#0068FF' } : { backgroundColor: colorScheme === 'dark' ? '#374151' : '#F1F5F9' }]}>
             {/* Reply quote */}
             {replyMsg && (
               <View style={[styles.replyQuote, { borderLeftColor: isMine ? 'rgba(255,255,255,0.5)' : colors.tint }]}>
@@ -764,11 +833,6 @@ export default function ChatScreen() {
             {item.content ? (
               <Text style={{ color: isMine ? '#fff' : colors.text, fontSize: 16, lineHeight: 22 }}>{item.content}</Text>
             ) : null}
-
-            {/* Reactions */}
-            {!!item.reactions?.length && (
-              <Text style={{ marginTop: 4, fontSize: 14 }}>{item.reactions.map((r) => r.emoji).join(' ')}</Text>
-            )}
 
             {/* Media attachments */}
             {!!item.mediaIds?.length && (
@@ -818,6 +882,24 @@ export default function ChatScreen() {
               </Text>
               {isMine && <View style={{ marginLeft: 4 }}>{renderMessageStatus(item)}</View>}
             </View>
+            </View>
+
+            {!!reactionEntries.length && (
+              <View
+                style={[
+                  styles.reactionOverlay,
+                  isMine ? styles.reactionOverlayMine : styles.reactionOverlayTheir,
+                  { backgroundColor: colorScheme === 'dark' ? '#111827' : '#FFFFFF', borderColor: colorScheme === 'dark' ? '#374151' : '#E2E8F0' },
+                ]}
+              >
+                {reactionEntries.map(([emoji, count]) => (
+                  <View key={emoji} style={styles.reactionItem}>
+                    <Text style={styles.reactionEmoji}>{emoji}</Text>
+                    {count > 1 ? <Text style={[styles.reactionCount, { color: colors.muted }]}>{count}</Text> : null}
+                  </View>
+                ))}
+              </View>
+            )}
           </View>
         </View>
       </Pressable>
@@ -855,9 +937,17 @@ export default function ChatScreen() {
             </TouchableOpacity>
           ),
           headerRight: () => (
-            <TouchableOpacity onPress={handleOpenConversationOptions} style={{ padding: 8, marginRight: 6 }}>
-              <Ionicons name="ellipsis-vertical" size={20} color={colors.text} />
-            </TouchableOpacity>
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginRight: 2 }}>
+              <TouchableOpacity onPress={handleVoiceCall} style={{ padding: 8 }}>
+                <Ionicons name="call-outline" size={20} color={colors.text} />
+              </TouchableOpacity>
+              <TouchableOpacity onPress={handleVideoCall} style={{ padding: 8 }}>
+                <Ionicons name="videocam-outline" size={22} color={colors.text} />
+              </TouchableOpacity>
+              <TouchableOpacity onPress={handleOpenConversationOptions} style={{ padding: 8, marginRight: 4 }}>
+                <Ionicons name="ellipsis-vertical" size={20} color={colors.text} />
+              </TouchableOpacity>
+            </View>
           ),
         }}
       />
@@ -1054,7 +1144,29 @@ const styles = StyleSheet.create({
   myWrapper: { justifyContent: 'flex-end' },
   theirWrapper: { justifyContent: 'flex-start' },
   senderAvatar: { width: 28, height: 28, borderRadius: 14, marginRight: 6, marginBottom: 2 },
+  bubbleContainer: { position: 'relative' },
+  bubbleContainerWithReaction: { marginBottom: 14 },
   bubble: { borderRadius: 18, padding: 10, maxWidth: '100%' },
+  reactionOverlay: {
+    position: 'absolute',
+    bottom: -12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.18,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  reactionOverlayMine: { right: 8 },
+  reactionOverlayTheir: { left: 8 },
+  reactionItem: { flexDirection: 'row', alignItems: 'center', marginHorizontal: 1 },
+  reactionEmoji: { fontSize: 13, lineHeight: 16 },
+  reactionCount: { fontSize: 10, fontWeight: '700', marginLeft: 1 },
   replyQuote: { borderLeftWidth: 3, paddingLeft: 8, marginBottom: 6, opacity: 0.85 },
   msgMeta: { flexDirection: 'row', alignItems: 'center', marginTop: 4, gap: 2 },
   inlineImage: { width: 200, height: 160, borderRadius: 12 },
