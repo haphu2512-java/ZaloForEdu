@@ -709,7 +709,7 @@ export default function ChatPage() {
               });
 
               if (hasOutgoing) return (
-                <div style={{ padding:'12px 20px', background:'rgba(0,104,255,0.06)', borderBottom:'1px solid var(--z-border)', display:'flex', alignItems:'center', gap:10, fontSize:13 }}>
+                <div style={{ position:'sticky', top:0, zIndex:10, padding:'12px 20px', background:'rgba(0,104,255,0.06)', borderBottom:'1px solid var(--z-border)', display:'flex', alignItems:'center', gap:10, fontSize:13, backdropFilter:'blur(8px)' }}>
                   <FaUserPlus size={14} color="var(--z-primary)" style={{ flexShrink:0 }} />
                   <span style={{ color:'var(--z-text-secondary)' }}>
                     Đang chờ <strong style={{ color:'var(--z-text-primary)' }}>{otherName}</strong> đồng ý kết bạn
@@ -718,7 +718,7 @@ export default function ChatPage() {
               );
 
               if (incomingReq) return (
-                <div style={{ padding:'12px 20px', background:'rgba(0,104,255,0.06)', borderBottom:'1px solid var(--z-border)', display:'flex', alignItems:'center', gap:12 }}>
+                <div style={{ position:'sticky', top:0, zIndex:10, padding:'12px 20px', background:'rgba(0,104,255,0.06)', borderBottom:'1px solid var(--z-border)', display:'flex', alignItems:'center', gap:12, backdropFilter:'blur(8px)' }}>
                   <FaUserPlus size={14} color="var(--z-primary)" style={{ flexShrink:0 }} />
                   <span style={{ flex:1, fontSize:13, color:'var(--z-text-secondary)' }}>
                     <strong style={{ color:'var(--z-text-primary)' }}>{otherName}</strong> đã gửi lời mời kết bạn
@@ -753,7 +753,7 @@ export default function ChatPage() {
               );
 
               return (
-                <div style={{ padding:'12px 20px', background:'rgba(0,104,255,0.06)', borderBottom:'1px solid var(--z-border)', display:'flex', alignItems:'center', gap:12 }}>
+                <div style={{ position:'sticky', top:0, zIndex:10, padding:'12px 20px', background:'rgba(0,104,255,0.06)', borderBottom:'1px solid var(--z-border)', display:'flex', alignItems:'center', gap:12, backdropFilter:'blur(8px)' }}>
                   <FaUserPlus size={14} color="var(--z-primary)" style={{ flexShrink:0 }} />
                   <span style={{ flex:1, fontSize:13, color:'var(--z-text-secondary)' }}>
                     Bạn và <strong style={{ color:'var(--z-text-primary)' }}>{otherName}</strong> chưa kết bạn
