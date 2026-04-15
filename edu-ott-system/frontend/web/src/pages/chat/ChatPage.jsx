@@ -18,8 +18,8 @@ import "./ChatPage.css";
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api/v1";
 const API_ORIGIN = API_BASE_URL.replace(/\/api\/v1\/?$/, "");
 
-// FIX TẠI ĐÂY: Dùng socket chung của app, tránh việc khởi tạo 2 socket cắn nhau rớt mạng.
-const socket = socketService?.socket || io(API_ORIGIN, { autoConnect: false, transports: ['websocket'] });
+// Socket được tạo riêng cho ChatPage với auth token
+const socket = io(API_ORIGIN, { autoConnect: false, transports: ['websocket'] });
 
 const IMAGE_EXTS = ["jpg","jpeg","png","gif","webp","svg"];
 const VIDEO_EXTS = ["mp4","mov","avi","mkv","webm"];
@@ -250,8 +250,7 @@ export default function ChatPage() {
   // ==================== KHỞI TẠO SOCKET ====================
   useEffect(() => {
     if (!token) return;
-    
-    // FIX TẠI ĐÂY: Chỉ connect khi socket thực sự chưa được bật để tránh đá mất socketService
+
     if (!socket.connected) {
       socket.auth = { token };
       socket.connect();
@@ -307,6 +306,7 @@ export default function ChatPage() {
     });
 
     socket.on("message_recalled", ({ messageId }) => {
+      console.log('[recall received]', messageId);
       setMessages(prev => prev.map(m => String(m._id) === String(messageId) ? { ...m, isRecalled: true, content: "", attachments: [], mediaIds: [] } : m));
       setConversations(prev => prev.map(c => {
         if (c.latestMessage && String(c.latestMessage._id) === String(messageId)) {
@@ -330,12 +330,26 @@ export default function ChatPage() {
       console.error("Socket lỗi kết nối:", err.message);
     });
 
+    // Lắng nghe message_recalled từ socketService (user room) để đảm bảo nhận được
+    const handleRecalledFromService = ({ messageId }) => {
+      console.log('[recall received via socketService]', messageId);
+      setMessages(prev => prev.map(m => String(m._id) === String(messageId) ? { ...m, isRecalled: true, content: "", attachments: [], mediaIds: [] } : m));
+      setConversations(prev => prev.map(c => {
+        if (c.latestMessage && String(c.latestMessage._id) === String(messageId)) {
+          return { ...c, latestMessage: { ...c.latestMessage, isRecalled: true, content: "" } };
+        }
+        return c;
+      }));
+    };
+    socketService.on('message_recalled', handleRecalledFromService);
+
     return () => {
       socket.off("conversation_updated");
       socket.off("message_recalled");
       socket.off("message_reacted");
       socket.off("new_notification");
       socket.off("connect_error");
+      socketService.off('message_recalled', handleRecalledFromService);
     };
   }, [token, userId, fetchConversationsData]);
 
