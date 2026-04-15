@@ -80,7 +80,6 @@ export default function ChatPage() {
   const [activeConversation, setActiveConversation] = useState(null);
   const [messages, setMessages] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
-  const [activeTab, setActiveTab] = useState('friends'); // 'friends' | 'strangers'
   const [showStrangerPanel, setShowStrangerPanel] = useState(false);
   
   const { appliedTheme } = useTheme();
@@ -204,16 +203,6 @@ export default function ChatPage() {
     )),
     [outgoingRequests]
   );
-  const incomingRequestIds = useMemo(() =>
-    new Set(incomingRequests.map(r =>
-      r.fromUserId?._id
-        ? String(r.fromUserId._id)
-        : r.fromUserId?.id
-        ? String(r.fromUserId.id)
-        : String(r.fromUserId || '')
-    )),
-    [incomingRequests]
-  );
 
   const { friendConvs, strangerConvs } = useMemo(() => {
     const friendConvs = [];
@@ -243,8 +232,6 @@ export default function ChatPage() {
     });
     return { friendConvs, strangerConvs };
   }, [mergedConversations, friendIds, getOtherParticipant, userId]);
-
-  const displayedConvs = activeTab === 'strangers' ? strangerConvs : friendConvs;
 
   useEffect(() => {
     activeConvIdRef.current = activeConversation?._id;
