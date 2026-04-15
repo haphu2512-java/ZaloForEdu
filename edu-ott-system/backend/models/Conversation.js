@@ -65,6 +65,12 @@ const conversationSchema = new mongoose.Schema(
       default: null,
       index: true,
     },
+    // ID người gửi tin nhắn đầu tiên — dùng để phân loại "Tin nhắn từ người lạ"
+    firstSenderId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      default: null,
+    },
     // Feature 4: Join approval (Duyệt thành viên)
     settings: {
       isApprovalRequired: { type: Boolean, default: false },

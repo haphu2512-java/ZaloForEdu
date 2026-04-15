@@ -23,6 +23,13 @@ const sendMessage = asyncHandler(async (req, res) => {
     forwardFrom,
   });
 
+  // Set firstSenderId nếu chưa có (tin nhắn đầu tiên)
+  const Conversation = require('../models/Conversation');
+  await Conversation.findOneAndUpdate(
+    { _id: conversationId, firstSenderId: null },
+    { $set: { firstSenderId: req.user._id } }
+  );
+
   // Populate media để frontend hiển thị ngay
   await message.populate('mediaIds', 'fileName url size mimeType providerResourceType');
   await message.populate('senderId', 'username avatarUrl');

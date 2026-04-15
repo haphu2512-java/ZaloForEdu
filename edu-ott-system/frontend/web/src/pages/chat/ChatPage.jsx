@@ -221,10 +221,11 @@ export default function ChatPage() {
       if (isOtherFriend) {
         friendConvs.push(conv);
       } else {
-        // Phân loại dựa vào người tạo conversation
-        const createdBy = String(conv.createdBy?._id || conv.createdBy || '');
-        const iCreated = !createdBy || createdBy === String(userId);
-        if (iCreated) {
+        // Phân loại dựa vào người gửi tin nhắn đầu tiên
+        const firstSenderId = String(conv.firstSenderId?._id || conv.firstSenderId || conv.createdBy?._id || conv.createdBy || '');
+        const myId = String(userId || '');
+        const iSentFirst = !firstSenderId || firstSenderId === myId;
+        if (iSentFirst) {
           friendConvs.push(conv);
         } else {
           strangerConvs.push(conv);
