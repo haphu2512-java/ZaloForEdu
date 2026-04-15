@@ -719,18 +719,20 @@ export default function ChatPage() {
               });
 
               if (hasOutgoing) return (
-                <div style={{ padding:'12px 20px', background:'rgba(0,104,255,0.06)', borderBottom:'1px solid var(--z-border)', display:'flex', alignItems:'center', gap:8, fontSize:13, color:'var(--z-text-secondary)' }}>
-                  <FaUserPlus size={13} color="var(--z-primary)" />
-                  Đang chờ <strong style={{ color:'var(--z-text-primary)' }}>{otherName}</strong> đồng ý kết bạn
+                <div style={{ padding:'12px 20px', background:'rgba(0,104,255,0.06)', borderBottom:'1px solid var(--z-border)', display:'flex', alignItems:'center', gap:10, fontSize:13 }}>
+                  <FaUserPlus size={14} color="var(--z-primary)" style={{ flexShrink:0 }} />
+                  <span style={{ color:'var(--z-text-secondary)' }}>
+                    Đang chờ <strong style={{ color:'var(--z-text-primary)' }}>{otherName}</strong> đồng ý kết bạn
+                  </span>
                 </div>
               );
 
               if (incomingReq) return (
-                <div style={{ padding:'12px 20px', background:'rgba(0,104,255,0.06)', borderBottom:'1px solid var(--z-border)', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
-                  <div style={{ display:'flex', alignItems:'center', gap:8, fontSize:13, color:'var(--z-text-secondary)' }}>
-                    <FaUserPlus size={13} color="var(--z-primary)" />
-                    <strong style={{ color:'var(--z-text-primary)' }}>{otherName}</strong> đã gửi lời mời kết bạn cho bạn
-                  </div>
+                <div style={{ padding:'12px 20px', background:'rgba(0,104,255,0.06)', borderBottom:'1px solid var(--z-border)', display:'flex', alignItems:'center', gap:12 }}>
+                  <FaUserPlus size={14} color="var(--z-primary)" style={{ flexShrink:0 }} />
+                  <span style={{ flex:1, fontSize:13, color:'var(--z-text-secondary)' }}>
+                    <strong style={{ color:'var(--z-text-primary)' }}>{otherName}</strong> đã gửi lời mời kết bạn
+                  </span>
                   <div style={{ display:'flex', gap:8, flexShrink:0 }}>
                     <button
                       onClick={async () => {
@@ -740,9 +742,9 @@ export default function ChatPage() {
                           await Promise.all([fetchIncomingRequests(), fetchFriends()]);
                         } catch (e) { alert('Không thể chấp nhận'); }
                       }}
-                      style={{ padding:'6px 14px', borderRadius:8, border:'none', background:'var(--z-primary)', color:'#fff', cursor:'pointer', fontWeight:600, fontSize:13 }}
+                      style={{ display:'flex', alignItems:'center', gap:5, padding:'6px 14px', borderRadius:8, border:'none', background:'var(--z-primary)', color:'#fff', cursor:'pointer', fontWeight:600, fontSize:13 }}
                     >
-                      <FaCheck size={11} style={{ marginRight:4 }} />Đồng ý
+                      <FaCheck size={11} />Đồng ý
                     </button>
                     <button
                       onClick={async () => {
@@ -752,9 +754,9 @@ export default function ChatPage() {
                           await fetchIncomingRequests();
                         } catch (e) { alert('Không thể từ chối'); }
                       }}
-                      style={{ padding:'6px 14px', borderRadius:8, border:'1px solid var(--z-border)', background:'transparent', color:'var(--z-text-secondary)', cursor:'pointer', fontWeight:600, fontSize:13 }}
+                      style={{ display:'flex', alignItems:'center', gap:5, padding:'6px 14px', borderRadius:8, border:'1px solid var(--z-border)', background:'transparent', color:'var(--z-text-secondary)', cursor:'pointer', fontWeight:600, fontSize:13 }}
                     >
-                      <FaTimes size={11} style={{ marginRight:4 }} />Từ chối
+                      <FaTimes size={11} />Từ chối
                     </button>
                   </div>
                 </div>
