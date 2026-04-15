@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { askChatbot } from '@/utils/chatbotService';
+import type { ChatbotTurn } from '@/utils/chatbotService';
 import Colors from '@/constants/Colors';
 import { useColorScheme } from '@/components/useColorScheme';
 
@@ -37,12 +38,20 @@ export default function ChatBotTabScreen() {
   const handleSend = async () => {
     const text = input.trim();
     if (!text || loading) return;
+    const history: ChatbotTurn[] = [...messages]
+      .reverse()
+      .filter((msg) => msg.id !== 'welcome')
+      .slice(-12)
+      .map((msg) => ({
+        role: msg.role,
+        content: msg.text,
+      }));
     const userMessage: BotMessage = { id: `${Date.now()}-u`, role: 'user', text };
     setMessages((prev) => [userMessage, ...prev]);
     setInput('');
     setLoading(true);
     try {
-      const res = await askChatbot(text);
+      const res = await askChatbot(text, history);
       const botMessage: BotMessage = {
         id: `${Date.now()}-b`,
         role: 'assistant',
