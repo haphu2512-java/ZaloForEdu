@@ -202,7 +202,9 @@ export default function ChatPage() {
     [outgoingRequests]
   );
   const incomingRequestIds = useMemo(() =>
-    new Set(incomingRequests.map(r => String(r.fromUserId?._id || r.fromUserId || ''))),
+    new Set(incomingRequests.map(r =>
+      r.fromUserId?._id ? String(r.fromUserId._id) : String(r.fromUserId || '')
+    )),
     [incomingRequests]
   );
 
@@ -691,9 +693,12 @@ export default function ChatPage() {
               if (!isStranger) return null;
 
               const hasOutgoing = outgoingRequestIds.has(otherId);
-              const incomingReq = incomingRequests.find(r =>
-                String(r.fromUserId?._id || r.fromUserId || '') === otherId
-              );
+              const incomingReq = incomingRequests.find(r => {
+                const fromId = r.fromUserId?._id
+                  ? String(r.fromUserId._id)
+                  : String(r.fromUserId || '');
+                return fromId === otherId;
+              });
 
               if (hasOutgoing) return (
                 <div style={{ padding:'12px 20px', background:'rgba(0,104,255,0.06)', borderBottom:'1px solid var(--z-border)', display:'flex', alignItems:'center', gap:8, fontSize:13, color:'var(--z-text-secondary)' }}>
