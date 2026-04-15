@@ -762,7 +762,29 @@ export default function ChatPage() {
                 </div>
               );
 
-              return null;
+              return (
+                <div style={{ padding:'12px 20px', background:'rgba(0,104,255,0.06)', borderBottom:'1px solid var(--z-border)', display:'flex', alignItems:'center', gap:12 }}>
+                  <FaUserPlus size={14} color="var(--z-primary)" style={{ flexShrink:0 }} />
+                  <span style={{ flex:1, fontSize:13, color:'var(--z-text-secondary)' }}>
+                    Bạn và <strong style={{ color:'var(--z-text-primary)' }}>{otherName}</strong> chưa kết bạn
+                  </span>
+                  <button
+                    onClick={async () => {
+                      try {
+                        const { friendService } = await import('../../services/friendService');
+                        await friendService.sendFriendRequest(otherId);
+                        fetchOutgoingRequests();
+                      } catch (e) {
+                        const code = e.response?.data?.error?.code;
+                        if (code === 'REVERSE_REQUEST_EXISTS') fetchIncomingRequests();
+                      }
+                    }}
+                    style={{ display:'flex', alignItems:'center', gap:5, padding:'6px 14px', borderRadius:8, border:'1px solid var(--z-primary)', background:'transparent', color:'var(--z-primary)', cursor:'pointer', fontWeight:600, fontSize:13, flexShrink:0 }}
+                  >
+                    <FaUserPlus size={11} />Gửi kết bạn
+                  </button>
+                </div>
+              );
             })()}
             {messages.length === 0 && uploads.length === 0 ? (
               <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>

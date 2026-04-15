@@ -194,48 +194,6 @@ export const ChatHeader = ({ room, onCall, onVideo, onInfo }) => {
 
       {/* RIGHT */}
       <div className="flex items-center gap-3">
-        {/* Nút kết bạn khi chat với người lạ */}
-        {isStranger && (
-          incomingRequest ? (
-            // B nhận lời mời từ A → hiện Chấp nhận / Từ chối
-            <div style={{ display:'flex', gap:8 }}>
-              <button
-                onClick={handleAcceptRequest}
-                disabled={acceptLoading}
-                style={{ display:'flex', alignItems:'center', gap:6, padding:'7px 14px', borderRadius:8, border:'none', background:'var(--primary-color)', color:'#fff', cursor:'pointer', fontWeight:600, fontSize:13 }}
-              >
-                {acceptLoading ? <FaSpinner size={13} className="spin" /> : <FaCheck size={13} />}
-                Chấp nhận
-              </button>
-              <button
-                onClick={handleRejectRequest}
-                disabled={rejectLoading}
-                style={{ display:'flex', alignItems:'center', gap:6, padding:'7px 14px', borderRadius:8, border:'1px solid var(--border-color)', background:'transparent', color:'var(--text-secondary)', cursor:'pointer', fontWeight:600, fontSize:13 }}
-              >
-                {rejectLoading ? <FaSpinner size={13} className="spin" /> : <FaTimes size={13} />}
-                Từ chối
-              </button>
-            </div>
-          ) : alreadySentRequest ? (
-            // A đã gửi lời mời → hiện Hủy lời mời
-            <button
-              onClick={handleCancelFriendRequest}
-              disabled={cancelLoading}
-              style={{ display:'flex', alignItems:'center', gap:6, padding:'7px 14px', borderRadius:8, border:'1px solid #ef4444', background:'transparent', color:'#ef4444', cursor:'pointer', fontWeight:600, fontSize:13 }}
-            >
-              {cancelLoading ? <FaSpinner size={13} className="spin" /> : <FaTimes size={13} />}
-              Hủy lời mời
-            </button>
-          ) : (
-            // Chưa có gì → hiện Gửi kết bạn
-            <button
-              onClick={handleSendFriendRequest}
-              style={{ display:'flex', alignItems:'center', gap:6, padding:'7px 14px', borderRadius:8, border:'1px solid var(--primary-color)', background:'transparent', color:'var(--primary-color)', cursor:'pointer', fontWeight:600, fontSize:13 }}
-            >
-              <FaUserPlus size={13} /> Gửi kết bạn
-            </button>
-          )
-        )}
         {isClass && (
           <div className={`flex gap-3 mr-4 border-r ${isDark ? 'border-gray-700' : 'border-gray-200'} pr-5`}>
             <button className={`text-sm font-semibold ${subTextColor} hover:text-blue-500 flex items-center gap-1.5 px-3 py-1.5 rounded ${iconBgHover} transition`}>
