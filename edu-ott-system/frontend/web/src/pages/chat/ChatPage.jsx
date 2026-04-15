@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import axios from "axios";
 import io from "socket.io-client";
-import { FaSearch, FaBell, FaThumbtack, FaUsers, FaCloud, FaSpinner, FaLink, FaUserSecret, FaArrowLeft } from "react-icons/fa";
+import { FaSearch, FaBell, FaThumbtack, FaUsers, FaCloud, FaSpinner, FaLink, FaUserSecret, FaArrowLeft, FaUserPlus, FaCheck, FaTimes } from "react-icons/fa";
 import toast from "react-hot-toast";
 
 import { uploadFile } from "../../services/mediaService"; 
@@ -678,22 +678,57 @@ export default function ChatPage() {
             {(() => {
               const other = getOtherParticipant(activeConversation);
               const otherId = other && typeof other === 'object' ? String(other._id || other.id) : null;
+              const otherName = other && typeof other === 'object' ? (other.username || other.fullName || 'Người dùng') : 'Người dùng';
               const isStranger = otherId && !friendIds.has(otherId);
               if (!isStranger) return null;
+
               const hasOutgoing = outgoingRequestIds.has(otherId);
-              const hasIncoming = incomingRequestIds.has(otherId);
+              const incomingReq = incomingRequests.find(r =>
+                String(r.fromUserId?._id || r.fromUserId || '') === otherId
+              );
+
               if (hasOutgoing) return (
-                <div style={{ padding:'10px 20px', background:'rgba(0,104,255,0.06)', borderBottom:'1px solid var(--z-border)', display:'flex', alignItems:'center', gap:8, fontSize:13, color:'var(--z-text-secondary)' }}>
+                <div style={{ padding:'12px 20px', background:'rgba(0,104,255,0.06)', borderBottom:'1px solid var(--z-border)', display:'flex', alignItems:'center', gap:8, fontSize:13, color:'var(--z-text-secondary)' }}>
                   <FaUserPlus size={13} color="var(--z-primary)" />
-                  Đang chờ được đồng ý kết bạn
+                  Đang chờ <strong style={{ color:'var(--z-text-primary)' }}>{otherName}</strong> đồng ý kết bạn
                 </div>
               );
-              if (hasIncoming) return (
-                <div style={{ padding:'10px 20px', background:'rgba(0,104,255,0.06)', borderBottom:'1px solid var(--z-border)', display:'flex', alignItems:'center', gap:8, fontSize:13, color:'var(--z-text-secondary)' }}>
-                  <FaUserPlus size={13} color="var(--z-primary)" />
-                  Người này đã gửi lời mời kết bạn cho bạn
+
+              if (incomingReq) return (
+                <div style={{ padding:'12px 20px', background:'rgba(0,104,255,0.06)', borderBottom:'1px solid var(--z-border)', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+                  <div style={{ display:'flex', alignItems:'center', gap:8, fontSize:13, color:'var(--z-text-secondary)' }}>
+                    <FaUserPlus size={13} color="var(--z-primary)" />
+                    <strong style={{ color:'var(--z-text-primary)' }}>{otherName}</strong> đã gửi lời mời kết bạn cho bạn
+                  </div>
+                  <div style={{ display:'flex', gap:8, flexShrink:0 }}>
+                    <button
+                      onClick={async () => {
+                        try {
+                          const { acceptRequest, fetchIncomingRequests: fetchInc, fetchFriends: fetchF } = useFriendStore.getState();
+                          await acceptRequest(incomingReq._id);
+                          await Promise.all([fetchInc(), fetchF()]);
+                        } catch (e) { alert('Không thể chấp nhận'); }
+                      }}
+                      style={{ padding:'6px 14px', borderRadius:8, border:'none', background:'var(--z-primary)', color:'#fff', cursor:'pointer', fontWeight:600, fontSize:13 }}
+                    >
+                      <FaCheck size={11} style={{ marginRight:4 }} />Đồng ý
+                    </button>
+                    <button
+                      onClick={async () => {
+                        try {
+                          const { rejectRequest, fetchIncomingRequests: fetchInc } = useFriendStore.getState();
+                          await rejectRequest(incomingReq._id);
+                          await fetchInc();
+                        } catch (e) { alert('Không thể từ chối'); }
+                      }}
+                      style={{ padding:'6px 14px', borderRadius:8, border:'1px solid var(--z-border)', background:'transparent', color:'var(--z-text-secondary)', cursor:'pointer', fontWeight:600, fontSize:13 }}
+                    >
+                      <FaTimes size={11} style={{ marginRight:4 }} />Từ chối
+                    </button>
+                  </div>
                 </div>
               );
+
               return null;
             })()}
             {messages.length === 0 && uploads.length === 0 ? (
