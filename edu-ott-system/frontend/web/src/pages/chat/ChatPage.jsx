@@ -324,7 +324,12 @@ export default function ChatPage() {
       setMessages(prev => prev.map(m => String(m._id) === String(messageId) ? { ...m, reactions } : m));
     });
 
-    // Bỏ tắt cái toast.error ở connect_error đi để khỏi spam UI 
+    // Refresh lời mời kết bạn khi nhận notification mới
+    socket.on("new_notification", (notif) => {
+      if (notif?.type === 'friend_request') fetchIncomingRequests();
+      if (notif?.type === 'friend_accepted') { fetchFriends(); fetchOutgoingRequests(); }
+    });
+
     socket.on("connect_error", (err) => {
       console.error("Socket lỗi kết nối:", err.message);
     });
@@ -333,6 +338,7 @@ export default function ChatPage() {
       socket.off("conversation_updated");
       socket.off("message_recalled");
       socket.off("message_reacted");
+      socket.off("new_notification");
       socket.off("connect_error");
     };
   }, [token, userId, fetchConversationsData]);
