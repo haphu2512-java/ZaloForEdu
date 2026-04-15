@@ -717,7 +717,8 @@ export default function ChatPage() {
                     <button
                       onClick={async () => {
                         try {
-                          await acceptRequest(incomingReq._id);
+                          const reqId = String(incomingReq._id || incomingReq.id);
+                          await acceptRequest(reqId);
                           await Promise.all([fetchIncomingRequests(), fetchFriends()]);
                         } catch (e) { alert('Không thể chấp nhận'); }
                       }}
@@ -728,7 +729,8 @@ export default function ChatPage() {
                     <button
                       onClick={async () => {
                         try {
-                          await rejectRequest(incomingReq._id);
+                          const reqId = String(incomingReq._id || incomingReq.id);
+                          await rejectRequest(reqId);
                           await fetchIncomingRequests();
                         } catch (e) { alert('Không thể từ chối'); }
                       }}
