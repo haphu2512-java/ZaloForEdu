@@ -136,9 +136,6 @@ export const VoiceRecorder = ({ onCancel, onSend }) => {
       
       drawVisualizer(dataArray, bufferLength);
 
-      // Ưu tiên các format tương thích với iOS
-      let options = {};
-      
       // UNIVERSAL COMPATIBILITY STRATEGY - cascade fallback for maximum compatibility
       let options = {};
       
