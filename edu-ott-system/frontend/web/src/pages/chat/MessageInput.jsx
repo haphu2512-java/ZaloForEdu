@@ -99,16 +99,27 @@ export const MessageInput = ({ theme, placeholder, onSend, onSendLike, onUploadF
           <VoiceRecorder 
             onCancel={() => setShowRecorder(false)} 
             onSend={(blob) => {
-              // Xác định extension dựa trên mimeType thực tế
+              // Universal extension mapping dựa trên mimeType
               let extension = '.webm'; // fallback
-              if (blob.type.includes('mp4')) extension = '.mp4';
-              else if (blob.type.includes('mpeg')) extension = '.mp3';
-              else if (blob.type.includes('wav')) extension = '.wav';
+              if (blob.type.includes('mpeg') || blob.type.includes('mp3')) {
+                extension = '.mp3';
+              } else if (blob.type.includes('wav')) {
+                extension = '.wav';
+              } else if (blob.type.includes('mp4') || blob.type.includes('m4a')) {
+                extension = '.m4a'; // Use .m4a for better mobile compatibility
+              } else if (blob.type.includes('webm')) {
+                extension = '.webm';
+              }
               
-              console.log('📤 Sending audio:', { type: blob.type, extension });
+              console.log('📤 Sending universal audio:', { 
+                type: blob.type, 
+                extension, 
+                size: `${Math.round(blob.size/1024)}KB`,
+                universalCompatible: extension === '.mp3' || extension === '.wav' || extension === '.m4a'
+              });
               onUploadFiles([new File([blob], `voice_${Date.now()}${extension}`, { type: blob.type })]);
               setShowRecorder(false);
-            }} 
+            }}} 
           />
         </div>
       ) : (

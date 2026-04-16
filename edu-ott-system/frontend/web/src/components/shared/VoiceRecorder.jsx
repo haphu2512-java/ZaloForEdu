@@ -139,41 +139,41 @@ export const VoiceRecorder = ({ onCancel, onSend }) => {
       // Ưu tiên các format tương thích với iOS
       let options = {};
       
-      // Thử các format theo thứ tự ưu tiên - QUAN TRỌNG: phải chỉ định codec AAC cho iOS
+      // UNIVERSAL COMPATIBILITY STRATEGY - cascade fallback for maximum compatibility
+      let options = {};
+      
+      // Strategy: MP3 > WAV > M4A > WebM (in order of universal compatibility)
       if (MediaRecorder.isTypeSupported('audio/mpeg')) {
-        // MP3 - tương thích TỐT NHẤT với iOS (fallback từ AAC)
-        console.log('✅ Using MP3 format for maximum iOS compatibility');
+        // MP3 - BEST universal compatibility (iOS, Android, Web, Desktop)
+        console.log('🌍 Using MP3 - Universal compatibility across all platforms');
         options = { mimeType: 'audio/mpeg', audioBitsPerSecond: 128000 };
-      } else if (MediaRecorder.isTypeSupported('audio/mp4;codecs=mp4a.40.5')) {
-        // MP4 với AAC-HE codec (mp4a.40.5) - thử profile khác
-        console.log('✅ Using MP4+AAC-HE for iOS compatibility');
-        options = { mimeType: 'audio/mp4;codecs=mp4a.40.5', audioBitsPerSecond: 128000 };
-      } else if (MediaRecorder.isTypeSupported('audio/mp4;codecs=mp4a.40.2')) {
-        // MP4 với AAC-LC codec (mp4a.40.2) - tương thích với iOS
-        console.log('✅ Using MP4+AAC-LC for iOS compatibility');
-        options = { mimeType: 'audio/mp4;codecs=mp4a.40.2', audioBitsPerSecond: 128000 };
       } else if (MediaRecorder.isTypeSupported('audio/wav')) {
-        // WAV - tương thích tốt nhưng file lớn
-        console.log('✅ Using WAV format for iOS compatibility');
+        // WAV - Excellent compatibility but larger files
+        console.log('🌍 Using WAV - Universal compatibility (larger files)');
         options = { mimeType: 'audio/wav' };
-      } else if (MediaRecorder.isTypeSupported('audio/mp4')) {
-        // MP4 fallback - có thể vẫn dùng Opus (không tốt cho iOS)
-        console.warn('⚠️ Using MP4 without specific codec - may not work on iOS');
-        options = { mimeType: 'audio/mp4', audioBitsPerSecond: 128000 };
+      } else if (MediaRecorder.isTypeSupported('audio/mp4;codecs=mp4a.40.2')) {
+        // M4A/AAC - Good mobile compatibility
+        console.log('📱 Using M4A/AAC - Good mobile compatibility');
+        options = { mimeType: 'audio/mp4;codecs=mp4a.40.2', audioBitsPerSecond: 128000 };
       } else if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) {
-        // WebM - chỉ dùng khi không có lựa chọn khác (không tương thích iOS)
-        console.warn('⚠️ Using WebM format - will NOT work on iOS');
+        // WebM - Web only, not compatible with iOS
+        console.warn('⚠️ Using WebM - Web only, NOT compatible with iOS/mobile');
         options = { mimeType: 'audio/webm;codecs=opus', audioBitsPerSecond: 128000 };
+      } else {
+        // Last resort - let browser decide
+        console.error('❌ No compatible audio format found - using browser default');
+        options = {};
       }
 
       console.log('🎤 Recording with format:', options.mimeType || 'default');
-      console.log('🔍 Codec support check:', {
-        'MP3': MediaRecorder.isTypeSupported('audio/mpeg'),
-        'MP4+AAC-HE': MediaRecorder.isTypeSupported('audio/mp4;codecs=mp4a.40.5'),
-        'MP4+AAC-LC': MediaRecorder.isTypeSupported('audio/mp4;codecs=mp4a.40.2'),
-        'WAV': MediaRecorder.isTypeSupported('audio/wav'),
-        'MP4': MediaRecorder.isTypeSupported('audio/mp4'),
-        'WebM+Opus': MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+      console.log('🔍 Universal Audio Format Support Check:', {
+        '🥇 MP3 (Best Universal)': MediaRecorder.isTypeSupported('audio/mpeg'),
+        '🥈 WAV (Universal + Large)': MediaRecorder.isTypeSupported('audio/wav'), 
+        '🥉 M4A/AAC (Mobile Good)': MediaRecorder.isTypeSupported('audio/mp4;codecs=mp4a.40.2'),
+        '⚠️ WebM (Web Only)': MediaRecorder.isTypeSupported('audio/webm;codecs=opus'),
+        '📊 Browser': navigator.userAgent.includes('Chrome') ? 'Chrome' : 
+                     navigator.userAgent.includes('Safari') ? 'Safari' : 
+                     navigator.userAgent.includes('Firefox') ? 'Firefox' : 'Other'
       });
 
       const mediaRecorder = new MediaRecorder(stream, options);
