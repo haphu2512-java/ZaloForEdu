@@ -5,14 +5,14 @@ import { useParams, useNavigate } from "react-router-dom";
 import { FaSearch, FaBell, FaThumbtack, FaUsers, FaCloud, FaSpinner, FaLink, FaTrashAlt, FaSignOutAlt, FaUserSecret, FaArrowLeft, FaUserPlus, FaCheck, FaTimes } from "react-icons/fa";
 import toast from "react-hot-toast";
 
-import { uploadFile } from "../../services/mediaService"; 
-import { useFriendStore } from "../../store/friendStore"; 
+import { uploadFile } from "../../services/mediaService";
+import { useFriendStore } from "../../store/friendStore";
 import { socketService } from "../../services/socketService"; // Đã import dịch vụ socket dùng chung
 import { MessageBubble } from "./MessageBubble";
 import { ShareMessageModal } from "./Modals/ShareMessageModal";
-import { ChatHeader } from "./ChatHeader"; 
-import { MessageInput } from "./MessageInput"; 
-import { useTheme } from '../../contexts/ThemeContext'; 
+import { ChatHeader } from "./ChatHeader";
+import { MessageInput } from "./MessageInput";
+import { useTheme } from '../../contexts/ThemeContext';
 import { useLanguage } from '../../contexts/LanguageContext';
 import "./ChatPage.css";
 import { conversationService } from "../../services/conversationService";
@@ -20,18 +20,19 @@ import { conversationService } from "../../services/conversationService";
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api/v1";
 const API_ORIGIN = API_BASE_URL.replace(/\/api\/v1\/?$/, "");
 
-// FIX TẠI ĐÂY: Dùng socket chung của app, tránh việc khởi tạo 2 socket cắn nhau rớt mạng.
+// FIX TẠI ĐÂY: Dùng socket chung của app, tránh việc khởi tạo 2 socket
 const socket = socketService?.socket || io(API_ORIGIN, { autoConnect: false, transports: ['websocket'] });
 
-const IMAGE_EXTS = ["jpg","jpeg","png","gif","webp","svg"];
-const VIDEO_EXTS = ["mp4","mov","avi","mkv","webm"];
-const DOC_EXTS = ["pdf","doc","docx","xls","xlsx","ppt","pptx","txt"];
-const ARCHIVE_EXTS = ["zip","rar","7z","tar","gz"];
+const IMAGE_EXTS = ["jpg", "jpeg", "png", "gif", "webp", "svg"];
+const VIDEO_EXTS = ["mp4", "mov", "avi", "mkv"];
+const DOC_EXTS = ["pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "txt"];
+const ARCHIVE_EXTS = ["zip", "rar", "7z", "tar", "gz"];
+const AUDIO_EXTS = ["mp3", "webm", "ogg", "wav", "m4a"];
 
-export function getExt(s=""){return(s.split(".").pop()||"").toLowerCase();}
-export function getCategory(n=""){const e=getExt(n);if(IMAGE_EXTS.includes(e))return"image";if(VIDEO_EXTS.includes(e))return"video";if(DOC_EXTS.includes(e))return"doc";if(ARCHIVE_EXTS.includes(e))return"archive";return"other";}
-export function getFileColor(n=""){const e=getExt(n);if(IMAGE_EXTS.includes(e))return"#10B981";if(VIDEO_EXTS.includes(e))return"#8B5CF6";if(e==="pdf")return"#EF4444";if(["doc","docx"].includes(e))return"#2563EB";if(["xls","xlsx"].includes(e))return"#16A34A";if(["ppt","pptx"].includes(e))return"#EA580C";if(ARCHIVE_EXTS.includes(e))return"#D97706";return"#6B7280";}
-export function formatBytes(b){if(!b)return"0 B";const k=1024,s=["B","KB","MB","GB"];const i=Math.floor(Math.log(b)/Math.log(k));return parseFloat((b/Math.pow(k,i)).toFixed(1))+" "+s[i];}
+export function getExt(s = "") { return (s.split(".").pop() || "").toLowerCase(); }
+export function getCategory(n = "") { const e = getExt(n); if (IMAGE_EXTS.includes(e)) return "image"; if (VIDEO_EXTS.includes(e)) return "video"; if (DOC_EXTS.includes(e)) return "doc"; if (ARCHIVE_EXTS.includes(e)) return "archive"; if (AUDIO_EXTS.includes(e)) return "audio"; return "other"; }
+export function getFileColor(n = "") { const e = getExt(n); if (IMAGE_EXTS.includes(e)) return "#10B981"; if (VIDEO_EXTS.includes(e)) return "#8B5CF6"; if (e === "pdf") return "#EF4444"; if (["doc", "docx"].includes(e)) return "#2563EB"; if (["xls", "xlsx"].includes(e)) return "#16A34A"; if (["ppt", "pptx"].includes(e)) return "#EA580C"; if (ARCHIVE_EXTS.includes(e)) return "#D97706"; return "#6B7280"; }
+export function formatBytes(b) { if (!b) return "0 B"; const k = 1024, s = ["B", "KB", "MB", "GB"]; const i = Math.floor(Math.log(b) / Math.log(k)); return parseFloat((b / Math.pow(k, i)).toFixed(1)) + " " + s[i]; }
 
 const formatChatTimestamp = (dateString) => {
   const d = new Date(dateString);
@@ -63,7 +64,7 @@ function UploadBubble({ name, percent }) {
     <div className="msg-wrap me" style={{ marginBottom: 16 }}>
       <div className="msg-body" style={{ alignItems: 'flex-end' }}>
         <div className="mdc-uploading-bubble msg-bubble" style={{ background: '#0084FF', color: 'white', borderRadius: '18px 18px 4px 18px', padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 8 }}>
-          <FaSpinner className="spin" size={14}/>
+          <FaSpinner className="spin" size={14} />
           <div className="mdc-upl-info" style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
             <span className="mdc-upl-name" style={{ fontSize: 13 }}>{name}</span>
             <div className="mdc-upl-bar" style={{ background: 'rgba(255,255,255,0.3)', height: 4, borderRadius: 2, width: 100 }}>
@@ -85,13 +86,13 @@ export default function ChatPage() {
   const [messages, setMessages] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [showStrangerPanel, setShowStrangerPanel] = useState(false);
-  
+
   const { appliedTheme } = useTheme();
   const { t } = useLanguage();
-  
+
   const [uploads, setUploads] = useState([]);
   const [isDragging, setIsDragging] = useState(false);
-  const [showRightPanel, setShowRightPanel] = useState(true); 
+  const [showRightPanel, setShowRightPanel] = useState(true);
 
   const [shareModalOpen, setShareModalOpen] = useState(false);
   const [msgToShare, setMsgToShare] = useState(null);
@@ -115,9 +116,9 @@ export default function ChatPage() {
     try {
       const userObj = JSON.parse(localStorage.getItem("user") || "{}");
       if (userObj && (userObj._id || userObj.id)) return String(userObj._id || userObj.id).trim();
-    } catch (e) {}
+    } catch (e) { }
     return null;
-  }, []); 
+  }, []);
 
   const token = localStorage.getItem("token");
 
@@ -157,12 +158,12 @@ export default function ChatPage() {
     if (!friends || friends.length === 0) return conversations;
     const validConvs = conversations.filter(c => {
       if (c.type === 'group' || c.roomModel === 'Group') return true;
-      return getOtherParticipant(c) !== null; 
+      return getOtherParticipant(c) !== null;
     });
 
     const convs = [...validConvs];
     const directMap = new Set();
-    
+
     convs.forEach(c => {
       if (c.type === 'direct' && !c.isMock) {
         const other = getOtherParticipant(c);
@@ -178,7 +179,7 @@ export default function ChatPage() {
       if (!directMap.has(fId)) {
         convs.push({
           _id: `mock_${fId}`,
-          isMock: true, 
+          isMock: true,
           type: 'direct',
           participants: [{ _id: userId }, friend],
           latestMessage: null,
@@ -237,12 +238,12 @@ export default function ChatPage() {
   }, [mergedConversations, friendIds, getOtherParticipant, userId]);
 
   useEffect(() => {
-      if (roomId && mergedConversations.length > 0) {
-        const targetRoom = mergedConversations.find(c => String(c._id) === String(roomId));
-        if (targetRoom && (!activeConversation || String(activeConversation._id) !== String(roomId))) {
-          setActiveConversation(targetRoom);
-        }
+    if (roomId && mergedConversations.length > 0) {
+      const targetRoom = mergedConversations.find(c => String(c._id) === String(roomId));
+      if (targetRoom && (!activeConversation || String(activeConversation._id) !== String(roomId))) {
+        setActiveConversation(targetRoom);
       }
+    }
   }, [roomId, mergedConversations, activeConversation]);
   useEffect(() => {
     activeConvIdRef.current = activeConversation?._id;
@@ -324,13 +325,13 @@ export default function ChatPage() {
         const target = { ...newConvs[index], latestMessage };
 
         if (convIdStr !== activeIdStr && !isMyMessage) {
-           target.unreadCount = (target.unreadCount || 0) + 1;
+          target.unreadCount = (target.unreadCount || 0) + 1;
         } else if (convIdStr === activeIdStr) {
-           target.unreadCount = 0; 
+          target.unreadCount = 0;
         }
 
         newConvs.splice(index, 1);
-        return [target, ...newConvs]; 
+        return [target, ...newConvs];
       });
     });
 
@@ -387,7 +388,7 @@ export default function ChatPage() {
     setMessages([]);
     setJustSentRequestTo(null);
 
-    if (activeConversation.isMock) return; 
+    if (activeConversation.isMock) return;
 
     const fetchMessages = async () => {
       try {
@@ -455,15 +456,15 @@ export default function ChatPage() {
     if (!activeConversation.isMock) return activeConversation._id;
     const otherParticipant = getOtherParticipant(activeConversation);
     const targetId = otherParticipant._id || otherParticipant.id;
-    
+
     const createRes = await axios.post(`${API_BASE_URL}/conversations`, {
       type: "direct", participantIds: [targetId]
     }, { headers: { Authorization: `Bearer ${token}` } });
-    
+
     const realConv = createRes.data.data || createRes.data;
-    realConv.participants = activeConversation.participants; 
+    realConv.participants = activeConversation.participants;
     const currentConvId = realConv._id || realConv.id;
-    
+
     setActiveConversation(realConv);
     setConversations(prev => [realConv, ...prev.filter(c => c._id !== activeConversation._id)]);
     socket.emit("join_conversation", { conversationId: currentConvId });
@@ -492,7 +493,7 @@ export default function ChatPage() {
         { content: content, conversationId: currentConvId },
         { headers: { Authorization: `Bearer ${token}` } }
       );
-      
+
       const realMsg = res.data.data || res.data;
       const realMsgId = String(realMsg._id || realMsg.id);
 
@@ -515,7 +516,7 @@ export default function ChatPage() {
         } : m);
       });
 
-    } catch (err) { 
+    } catch (err) {
       toast.error("Lỗi gửi tin nhắn");
       setMessages(prev => prev.filter(m => m._id !== tempId));
     }
@@ -546,8 +547,8 @@ export default function ChatPage() {
       const realMsg = res.data.data || res.data;
       setMessages(prev => prev.map(m => m._id === tempId ? realMsg : m));
 
-    } catch (err) { 
-      console.error("Lỗi gửi Like", err); 
+    } catch (err) {
+      console.error("Lỗi gửi Like", err);
       setMessages(prev => prev.filter(m => m._id !== tempId));
     }
   };
@@ -559,7 +560,7 @@ export default function ChatPage() {
 
     try {
       const currentConvId = await ensureRealConversation();
-      const media = await uploadFile(file, { 
+      const media = await uploadFile(file, {
         folder: "zaloapp/chat",
         onProgress: (pct) => setUploads(prev => prev.map(u => u.id === uid ? { ...u, percent: pct } : u))
       });
@@ -692,10 +693,10 @@ export default function ChatPage() {
       const existingConv = conversations.find(c => c.type === 'direct' && c.participants.some(p => (p._id || p.id) === targetId));
 
       if (existingConv) {
-         targetConvId = existingConv._id;
+        targetConvId = existingConv._id;
       } else {
-         const createRes = await axios.post(`${API_BASE_URL}/conversations`, { type: "direct", participantIds: [targetId] }, { headers: { Authorization: `Bearer ${token}` } });
-         targetConvId = createRes.data.data?._id || createRes.data?._id;
+        const createRes = await axios.post(`${API_BASE_URL}/conversations`, { type: "direct", participantIds: [targetId] }, { headers: { Authorization: `Bearer ${token}` } });
+        targetConvId = createRes.data.data?._id || createRes.data?._id;
       }
 
       const content = msgToShare.content || "";
@@ -714,8 +715,8 @@ export default function ChatPage() {
   };
 
   const allMedia = messages.flatMap(m => m.attachments || m.mediaIds || m.media || []).filter(m => typeof m !== 'string');
-  const imgFiles = allMedia.filter(m => ["image","video"].includes(getCategory(m.name || m.fileName)));
-  const docFiles = allMedia.filter(m => !["image","video"].includes(getCategory(m.name || m.fileName)));
+  const imgFiles = allMedia.filter(m => ["image", "video"].includes(getCategory(m.name || m.fileName)));
+  const docFiles = allMedia.filter(m => !["image", "video", "audio"].includes(getCategory(m.name || m.fileName)));
   const linkRegex = /(https?:\/\/[^\s]+)/g;
   const linkItems = [];
   messages.forEach(m => {
@@ -726,13 +727,13 @@ export default function ChatPage() {
   });
 
   return (
-    <div className={`chat-page ${appliedTheme === 'dark' ? 'dark-mode' : ''}`} ref={pageRef}> 
-      
-      <ShareMessageModal 
-        isOpen={shareModalOpen} 
-        onClose={() => setShareModalOpen(false)} 
-        friends={friends} 
-        onForward={executeForward} 
+    <div className={`chat-page ${appliedTheme === 'dark' ? 'dark-mode' : ''}`} ref={pageRef}>
+
+      <ShareMessageModal
+        isOpen={shareModalOpen}
+        onClose={() => setShareModalOpen(false)}
+        friends={friends}
+        onForward={executeForward}
       />
 
       {isDragging && (
@@ -759,19 +760,19 @@ export default function ChatPage() {
             <div
               className="chat-list-item"
               onClick={() => setShowStrangerPanel(true)}
-              style={{ cursor:'pointer' }}
+              style={{ cursor: 'pointer' }}
             >
-              <div style={{ width:44, height:44, borderRadius:'50%', background:'#0068FF', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+              <div style={{ width: 44, height: 44, borderRadius: '50%', background: '#0068FF', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                 <FaUserSecret size={20} color="#fff" />
               </div>
               <div className="cli-info">
                 <div className="cli-top">
-                  <span className="cli-name" style={{ fontWeight:700 }}>Tin nhắn từ người lạ</span>
-                  <span className="cli-time" style={{ color:'var(--z-primary)' }}></span>
+                  <span className="cli-name" style={{ fontWeight: 700 }}>Tin nhắn từ người lạ</span>
+                  <span className="cli-time" style={{ color: 'var(--z-primary)' }}></span>
                 </div>
                 <div className="cli-bottom">
                   <span className="cli-msg">Gửi từ người chưa có trong danh bạ...</span>
-                  <div className="cli-unread" style={{ background:'#ef4444' }}>●</div>
+                  <div className="cli-unread" style={{ background: '#ef4444' }}>●</div>
                 </div>
               </div>
             </div>
@@ -788,12 +789,12 @@ export default function ChatPage() {
                   <div className="cli-top">
                     <span className="cli-name" style={{ fontWeight: unread > 0 ? 800 : 600, color: unread > 0 ? 'var(--z-text-primary)' : '' }}>{getConversationName(conv)}</span>
                     <span className="cli-time" style={{ color: unread > 0 ? 'var(--z-primary)' : 'var(--z-text-muted)' }}>
-                        {conv.latestMessage ? formatChatTimestamp(conv.latestMessage.createdAt) : ''}
+                      {conv.latestMessage ? formatChatTimestamp(conv.latestMessage.createdAt) : ''}
                     </span>
                   </div>
                   <div className="cli-bottom">
                     <span className="cli-msg" style={{ fontWeight: unread > 0 ? 700 : 400, color: unread > 0 ? 'var(--z-text-primary)' : 'var(--z-text-secondary)' }}>
-                        {conv.latestMessage?.isRecalled ? t('recalledMessage') || 'Tin nhắn đã thu hồi' : (conv.latestMessage?.content || (conv.latestMessage?.mediaIds?.length > 0 || conv.latestMessage?.attachments?.length > 0 ? '[Hình ảnh/File]' : t('noMessages') || 'Chưa có tin nhắn'))}
+                      {conv.latestMessage?.isRecalled ? t('recalledMessage') || 'Tin nhắn đã thu hồi' : (conv.latestMessage?.content || (conv.latestMessage?.mediaIds?.length > 0 || conv.latestMessage?.attachments?.length > 0 ? '[Hình ảnh/File]' : t('noMessages') || 'Chưa có tin nhắn'))}
                     </span>
                     {unread > 0 && <div className="cli-unread">{unread > 99 ? '99+' : unread}</div>}
                   </div>
@@ -808,7 +809,7 @@ export default function ChatPage() {
       {/* ── Ở GIỮA: CHAT KHU VỰC CHÍNH ── */}
       {activeConversation ? (
         <main className="chat-main">
-          <ChatHeader 
+          <ChatHeader
             room={{
               ...activeConversation,
               name: getConversationName(activeConversation),
@@ -839,27 +840,27 @@ export default function ChatPage() {
                 const fromId = r.fromUserId?._id
                   ? String(r.fromUserId._id)
                   : r.fromUserId?.id
-                  ? String(r.fromUserId.id)
-                  : String(r.fromUserId || '');
+                    ? String(r.fromUserId.id)
+                    : String(r.fromUserId || '');
                 return fromId === otherId;
               });
 
               if (hasOutgoing) return (
-                <div style={{ position:'sticky', top:0, zIndex:10, padding:'12px 20px', background:'rgba(0,104,255,0.06)', borderBottom:'1px solid var(--z-border)', display:'flex', alignItems:'center', gap:10, fontSize:13, backdropFilter:'blur(8px)' }}>
-                  <FaUserPlus size={14} color="var(--z-primary)" style={{ flexShrink:0 }} />
-                  <span style={{ color:'var(--z-text-secondary)' }}>
-                    Đang chờ <strong style={{ color:'var(--z-text-primary)' }}>{otherName}</strong> đồng ý kết bạn
+                <div style={{ position: 'sticky', top: 0, zIndex: 10, padding: '12px 20px', background: 'rgba(0,104,255,0.06)', borderBottom: '1px solid var(--z-border)', display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, backdropFilter: 'blur(8px)' }}>
+                  <FaUserPlus size={14} color="var(--z-primary)" style={{ flexShrink: 0 }} />
+                  <span style={{ color: 'var(--z-text-secondary)' }}>
+                    Đang chờ <strong style={{ color: 'var(--z-text-primary)' }}>{otherName}</strong> đồng ý kết bạn
                   </span>
                 </div>
               );
 
               if (incomingReq) return (
-                <div style={{ position:'sticky', top:0, zIndex:10, padding:'12px 20px', background:'rgba(0,104,255,0.06)', borderBottom:'1px solid var(--z-border)', display:'flex', alignItems:'center', gap:12, backdropFilter:'blur(8px)' }}>
-                  <FaUserPlus size={14} color="var(--z-primary)" style={{ flexShrink:0 }} />
-                  <span style={{ flex:1, fontSize:13, color:'var(--z-text-secondary)' }}>
-                    <strong style={{ color:'var(--z-text-primary)' }}>{otherName}</strong> đã gửi lời mời kết bạn
+                <div style={{ position: 'sticky', top: 0, zIndex: 10, padding: '12px 20px', background: 'rgba(0,104,255,0.06)', borderBottom: '1px solid var(--z-border)', display: 'flex', alignItems: 'center', gap: 12, backdropFilter: 'blur(8px)' }}>
+                  <FaUserPlus size={14} color="var(--z-primary)" style={{ flexShrink: 0 }} />
+                  <span style={{ flex: 1, fontSize: 13, color: 'var(--z-text-secondary)' }}>
+                    <strong style={{ color: 'var(--z-text-primary)' }}>{otherName}</strong> đã gửi lời mời kết bạn
                   </span>
-                  <div style={{ display:'flex', gap:8, flexShrink:0 }}>
+                  <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
                     <button
                       onClick={async () => {
                         try {
@@ -868,7 +869,7 @@ export default function ChatPage() {
                           await Promise.all([fetchIncomingRequests(), fetchFriends()]);
                         } catch (e) { alert('Không thể chấp nhận'); }
                       }}
-                      style={{ display:'flex', alignItems:'center', gap:5, padding:'6px 14px', borderRadius:8, border:'none', background:'var(--z-primary)', color:'#fff', cursor:'pointer', fontWeight:600, fontSize:13 }}
+                      style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 14px', borderRadius: 8, border: 'none', background: 'var(--z-primary)', color: '#fff', cursor: 'pointer', fontWeight: 600, fontSize: 13 }}
                     >
                       <FaCheck size={11} />Đồng ý
                     </button>
@@ -880,7 +881,7 @@ export default function ChatPage() {
                           await fetchIncomingRequests();
                         } catch (e) { alert('Không thể từ chối'); }
                       }}
-                      style={{ display:'flex', alignItems:'center', gap:5, padding:'6px 14px', borderRadius:8, border:'1px solid var(--z-border)', background:'transparent', color:'var(--z-text-secondary)', cursor:'pointer', fontWeight:600, fontSize:13 }}
+                      style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 14px', borderRadius: 8, border: '1px solid var(--z-border)', background: 'transparent', color: 'var(--z-text-secondary)', cursor: 'pointer', fontWeight: 600, fontSize: 13 }}
                     >
                       <FaTimes size={11} />Từ chối
                     </button>
@@ -889,10 +890,10 @@ export default function ChatPage() {
               );
 
               return (
-                <div style={{ position:'sticky', top:0, zIndex:10, padding:'12px 20px', background:'rgba(0,104,255,0.06)', borderBottom:'1px solid var(--z-border)', display:'flex', alignItems:'center', gap:12, backdropFilter:'blur(8px)' }}>
-                  <FaUserPlus size={14} color="var(--z-primary)" style={{ flexShrink:0 }} />
-                  <span style={{ flex:1, fontSize:13, color:'var(--z-text-secondary)' }}>
-                    Bạn và <strong style={{ color:'var(--z-text-primary)' }}>{otherName}</strong> chưa kết bạn
+                <div style={{ position: 'sticky', top: 0, zIndex: 10, padding: '12px 20px', background: 'rgba(0,104,255,0.06)', borderBottom: '1px solid var(--z-border)', display: 'flex', alignItems: 'center', gap: 12, backdropFilter: 'blur(8px)' }}>
+                  <FaUserPlus size={14} color="var(--z-primary)" style={{ flexShrink: 0 }} />
+                  <span style={{ flex: 1, fontSize: 13, color: 'var(--z-text-secondary)' }}>
+                    Bạn và <strong style={{ color: 'var(--z-text-primary)' }}>{otherName}</strong> chưa kết bạn
                   </span>
                   <button
                     onClick={async () => {
@@ -906,7 +907,7 @@ export default function ChatPage() {
                         if (code === 'REVERSE_REQUEST_EXISTS') fetchIncomingRequests();
                       }
                     }}
-                    style={{ display:'flex', alignItems:'center', gap:5, padding:'6px 14px', borderRadius:8, border:'1px solid var(--z-primary)', background:'transparent', color:'var(--z-primary)', cursor:'pointer', fontWeight:600, fontSize:13, flexShrink:0 }}
+                    style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 14px', borderRadius: 8, border: '1px solid var(--z-primary)', background: 'transparent', color: 'var(--z-primary)', cursor: 'pointer', fontWeight: 600, fontSize: 13, flexShrink: 0 }}
                   >
                     <FaUserPlus size={11} />Gửi kết bạn
                   </button>
@@ -926,13 +927,13 @@ export default function ChatPage() {
                   return (
                     <React.Fragment key={msg._id}>
                       {showDate && <div className="msg-date">{formatChatTimestamp(msg.createdAt)}</div>}
-                      <MessageBubble 
-                        message={msg} 
-                        isMe={isMe} 
-                        onReaction={handleReaction} 
+                      <MessageBubble
+                        message={msg}
+                        isMe={isMe}
+                        onReaction={handleReaction}
                         onRecall={handleRecall}
-                        onDelete={handleDelete} 
-                        onForward={openShareModal} 
+                        onDelete={handleDelete}
+                        onForward={openShareModal}
                         onReply={(msg) => console.log('Trả lời:', msg)}
                       />
                     </React.Fragment>
@@ -946,9 +947,9 @@ export default function ChatPage() {
             )}
           </div>
 
-          <MessageInput 
-            key={activeConversation._id} 
-            theme={appliedTheme} 
+          <MessageInput
+            key={activeConversation._id}
+            theme={appliedTheme}
             placeholder={`Nhập @, tin nhắn tới ${getConversationName(activeConversation)}`}
             onSend={handleSendText}
             onSendLike={handleSendLike}
@@ -968,31 +969,31 @@ export default function ChatPage() {
             <img className="crp-avatar" src={getConversationAvatar(activeConversation)} alt="avt" />
             <div className="crp-name">{getConversationName(activeConversation)}</div>
             <div className="crp-actions">
-              <div className="crp-action-btn"><div className="crp-action-icon"><FaBell size={16}/></div>Tắt thông báo</div>
-              <div className="crp-action-btn"><div className="crp-action-icon"><FaThumbtack size={16}/></div>Ghim</div>
-               {/* nut tao nhom */}
-             {activeConversation.type !== 'group' ? (
-              // NẾU LÀ CHAT 1-1
-              <>
-                <div className="crp-action-btn" onClick={() => navigate('/group/create')}>
-                  <div className="crp-action-icon"><FaUsers size={16}/></div>Tạo nhóm
+              <div className="crp-action-btn"><div className="crp-action-icon"><FaBell size={16} /></div>Tắt thông báo</div>
+              <div className="crp-action-btn"><div className="crp-action-icon"><FaThumbtack size={16} /></div>Ghim</div>
+              {/* nut tao nhom */}
+              {activeConversation.type !== 'group' ? (
+                // NẾU LÀ CHAT 1-1
+                <>
+                  <div className="crp-action-btn" onClick={() => navigate('/group/create')}>
+                    <div className="crp-action-icon"><FaUsers size={16} /></div>Tạo nhóm
+                  </div>
+                  <div className="crp-action-btn" onClick={handleDeleteConversation}>
+                    <div className="crp-action-icon" style={{ color: '#ef4444' }}><FaTrashAlt size={16} /></div>
+                    <span style={{ color: '#ef4444' }}>Xóa chat</span>
+                  </div>
+                </>
+              ) : (
+                // NẾU LÀ NHÓM CHAT
+                <div className="crp-action-btn" onClick={handleLeaveGroup}>
+                  <div className="crp-action-icon" style={{ color: '#ef4444' }}><FaSignOutAlt size={16} /></div>
+                  <span style={{ color: '#ef4444' }}>Rời nhóm</span>
                 </div>
-                <div className="crp-action-btn" onClick={handleDeleteConversation}>
-                  <div className="crp-action-icon" style={{color: '#ef4444'}}><FaTrashAlt size={16}/></div>
-                  <span style={{color: '#ef4444'}}>Xóa chat</span>
-                </div>
-              </>
-            ) : (
-              // NẾU LÀ NHÓM CHAT
-              <div className="crp-action-btn" onClick={handleLeaveGroup}>
-                <div className="crp-action-icon" style={{color: '#ef4444'}}><FaSignOutAlt size={16}/></div>
-                <span style={{color: '#ef4444'}}>Rời nhóm</span>
-              </div>
-            )}
+              )}
               {/* <div className="crp-action-btn"><div className="crp-action-icon"><FaUsers size={16}/></div>Tạo nhóm</div> */}
             </div>
           </div>
-          
+
           <div className="crp-section">
             <div className="crp-sec-title">{t('imageVideo')}</div>
             {imgFiles.length > 0 ? (
@@ -1004,7 +1005,7 @@ export default function ChatPage() {
                 </div>
                 <button className="crp-view-all">Xem tất cả</button>
               </>
-            ) : <div style={{fontSize: 12, color: 'var(--z-text-muted)'}}>{t('noImageVideo')}</div>}
+            ) : <div style={{ fontSize: 12, color: 'var(--z-text-muted)' }}>{t('noImageVideo')}</div>}
           </div>
 
           <div className="crp-section">
@@ -1015,7 +1016,7 @@ export default function ChatPage() {
                   const fname = m.name || m.fileName;
                   return (
                     <div key={i} className="crp-file-row">
-                      <div className="crp-file-icon" style={{background: getFileColor(fname)}}>{getExt(fname).substring(0,3).toUpperCase()}</div>
+                      <div className="crp-file-icon" style={{ background: getFileColor(fname) }}>{getExt(fname).substring(0, 3).toUpperCase()}</div>
                       <div className="crp-file-info">
                         <div className="crp-file-name">{fname}</div>
                         <div className="crp-file-meta">{formatBytes(m.size)}</div>
@@ -1025,7 +1026,7 @@ export default function ChatPage() {
                 })}
                 <button className="crp-view-all">Xem tất cả</button>
               </>
-            ) : <div style={{fontSize: 12, color: 'var(--z-text-muted)'}}>Chưa có File nào</div>}
+            ) : <div style={{ fontSize: 12, color: 'var(--z-text-muted)' }}>Chưa có File nào</div>}
           </div>
 
           <div className="crp-section">
@@ -1034,68 +1035,68 @@ export default function ChatPage() {
               <>
                 {linkItems.slice(0, 3).map((link, i) => (
                   <div key={i} className="crp-link-row">
-                    <div className="crp-link-icon"><FaLink size={14}/></div>
+                    <div className="crp-link-icon"><FaLink size={14} /></div>
                     <a href={link} target="_blank" rel="noreferrer" className="crp-link-url">{link}</a>
                   </div>
                 ))}
                 <button className="crp-view-all">Xem tất cả</button>
               </>
-            ) : <div style={{fontSize: 12, color: 'var(--z-text-muted)'}}>Chưa có Link nào</div>}
+            ) : <div style={{ fontSize: 12, color: 'var(--z-text-muted)' }}>Chưa có Link nào</div>}
           </div>
         </aside>
       )}
 
       {/* ── PANEL: Tin nhắn từ người lạ ── */}
       {showStrangerPanel && (
-        <div style={{ position:'fixed', inset:0, zIndex:1000, display:'flex' }}>
+        <div style={{ position: 'fixed', inset: 0, zIndex: 1000, display: 'flex' }}>
           {/* Overlay */}
-          <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.3)' }} onClick={() => setShowStrangerPanel(false)} />
+          <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.3)' }} onClick={() => setShowStrangerPanel(false)} />
           {/* Panel */}
-          <div style={{ position:'relative', width:360, height:'100%', background:'var(--z-bg-sidebar)', display:'flex', flexDirection:'column', boxShadow:'4px 0 20px rgba(0,0,0,0.2)' }}>
+          <div style={{ position: 'relative', width: 360, height: '100%', background: 'var(--z-bg-sidebar)', display: 'flex', flexDirection: 'column', boxShadow: '4px 0 20px rgba(0,0,0,0.2)' }}>
             {/* Header */}
-            <div style={{ padding:'16px 20px', borderBottom:'1px solid var(--z-border)', display:'flex', alignItems:'center', gap:12 }}>
-              <button onClick={() => setShowStrangerPanel(false)} style={{ background:'none', border:'none', cursor:'pointer', color:'var(--z-text-primary)', padding:4 }}>
+            <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--z-border)', display: 'flex', alignItems: 'center', gap: 12 }}>
+              <button onClick={() => setShowStrangerPanel(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--z-text-primary)', padding: 4 }}>
                 <FaArrowLeft size={16} />
               </button>
-              <span style={{ fontWeight:700, fontSize:16, color:'var(--z-text-primary)' }}>Tin nhắn từ người lạ</span>
+              <span style={{ fontWeight: 700, fontSize: 16, color: 'var(--z-text-primary)' }}>Tin nhắn từ người lạ</span>
             </div>
             {/* Notice */}
-            <div style={{ padding:'10px 16px', fontSize:12, color:'var(--z-text-secondary)', borderBottom:'1px solid var(--z-border)' }}>
+            <div style={{ padding: '10px 16px', fontSize: 12, color: 'var(--z-text-secondary)', borderBottom: '1px solid var(--z-border)' }}>
               Người lạ có thể nhắn tin cho bạn.{' '}
-              <span style={{ color:'var(--z-primary)', cursor:'pointer' }}>Cài đặt quyền riêng tư</span>
+              <span style={{ color: 'var(--z-primary)', cursor: 'pointer' }}>Cài đặt quyền riêng tư</span>
             </div>
             {/* List */}
-            <div style={{ flex:1, overflowY:'auto' }}>
+            <div style={{ flex: 1, overflowY: 'auto' }}>
               {strangerConvs.map(conv => {
                 const unread = conv.unreadCount || 0;
                 return (
                   <div
                     key={conv._id}
-                    style={{ display:'flex', alignItems:'center', gap:12, padding:'12px 16px', cursor:'pointer', borderBottom:'1px solid var(--z-border)' }}
+                    style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', cursor: 'pointer', borderBottom: '1px solid var(--z-border)' }}
                     onClick={() => { setActiveConversation(conv); setShowStrangerPanel(false); }}
                     onMouseEnter={e => e.currentTarget.style.background = 'var(--z-bg-hover)'}
                     onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                   >
-                    <img src={getConversationAvatar(conv)} alt="" style={{ width:44, height:44, borderRadius:'50%', objectFit:'cover', flexShrink:0 }} />
-                    <div style={{ flex:1, minWidth:0 }}>
-                      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-                        <span style={{ fontWeight:700, fontSize:14, color:'var(--z-text-primary)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{getConversationName(conv)}</span>
-                        <span style={{ fontSize:11, color:'var(--z-text-muted)', flexShrink:0, marginLeft:8 }}>
+                    <img src={getConversationAvatar(conv)} alt="" style={{ width: 44, height: 44, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontWeight: 700, fontSize: 14, color: 'var(--z-text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{getConversationName(conv)}</span>
+                        <span style={{ fontSize: 11, color: 'var(--z-text-muted)', flexShrink: 0, marginLeft: 8 }}>
                           {conv.latestMessage ? formatChatTimestamp(conv.latestMessage.createdAt) : ''}
                         </span>
                       </div>
-                      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginTop:2 }}>
-                        <span style={{ fontSize:12, color:'var(--z-text-secondary)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 2 }}>
+                        <span style={{ fontSize: 12, color: 'var(--z-text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {conv.latestMessage?.content || '[Hình ảnh/File]'}
                         </span>
-                        {unread > 0 && <div style={{ background:'#ef4444', color:'#fff', borderRadius:10, padding:'1px 6px', fontSize:11, flexShrink:0 }}>{unread}</div>}
+                        {unread > 0 && <div style={{ background: '#ef4444', color: '#fff', borderRadius: 10, padding: '1px 6px', fontSize: 11, flexShrink: 0 }}>{unread}</div>}
                       </div>
                     </div>
                   </div>
                 );
               })}
               {strangerConvs.length === 0 && (
-                <div style={{ textAlign:'center', padding:40, color:'var(--z-text-muted)', fontSize:13 }}>Không có tin nhắn từ người lạ</div>
+                <div style={{ textAlign: 'center', padding: 40, color: 'var(--z-text-muted)', fontSize: 13 }}>Không có tin nhắn từ người lạ</div>
               )}
             </div>
           </div>

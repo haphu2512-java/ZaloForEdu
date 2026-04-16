@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { FaSpinner, FaPaperPlane, FaThumbsUp, FaSmile, FaTimes, FaMicrophone } from 'react-icons/fa';
-import { VoiceRecorder } from './VoiceRecorder';
+import { VoiceRecorder } from '../../components/shared/VoiceRecorder';
 
 /* Zalo reply icon */
 const ReplyIconSmall = () => (

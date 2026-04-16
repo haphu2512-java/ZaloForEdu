@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { FaDownload, FaSpinner, FaCloud, FaThumbtack, FaTrash, FaCopy, FaStar, FaEllipsisH, FaTimes, FaSmile, FaShare, FaCheck, FaPlay, FaPause } from 'react-icons/fa';
 import toast from 'react-hot-toast';
 import { fmtTime, getCategory, getExt, getFileColor, formatBytes } from './CloudUtils';
+import { AudioBubble } from '../../components/shared/AudioBubble';
 
 const EMOJIS = ['👍','❤️','😂','😲','😢','😡'];
 
@@ -44,78 +45,7 @@ export function UploadBubble({name, percent}) {
   );
 }
 
-export function AudioBubble({ url }) {
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [duration, setDuration] = useState(0);
-  const [currentTime, setCurrentTime] = useState(0);
-  const audioRef = useRef(new Audio(url));
 
-  useEffect(() => {
-    const audio = audioRef.current;
-    
-    // Attempt to load metadata to get duration
-    const handleLoadedMetadata = () => {
-      if (audio.duration && audio.duration !== Infinity) {
-        setDuration(audio.duration);
-      }
-    };
-    
-    const handleTimeUpdate = () => setCurrentTime(audio.currentTime);
-    const handleEnded = () => {
-      setIsPlaying(false);
-      setCurrentTime(0);
-    };
-
-    audio.addEventListener('loadedmetadata', handleLoadedMetadata);
-    audio.addEventListener('timeupdate', handleTimeUpdate);
-    audio.addEventListener('ended', handleEnded);
-
-    return () => {
-      audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
-      audio.removeEventListener('timeupdate', handleTimeUpdate);
-      audio.removeEventListener('ended', handleEnded);
-      audio.pause();
-    };
-  }, [url]);
-
-  const togglePlay = () => {
-    const audio = audioRef.current;
-    if (isPlaying) {
-      audio.pause();
-      setIsPlaying(false);
-    } else {
-      audio.play().catch(console.error);
-      setIsPlaying(true);
-    }
-  };
-
-  const formatTime = (secs) => {
-    if (!secs || isNaN(secs)) return "00:00";
-    const m = Math.floor(secs / 60).toString().padStart(2, '0');
-    const s = Math.floor(secs % 60).toString().padStart(2, '0');
-    return `${m}:${s}`;
-  };
-
-  const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
-
-  return (
-    <div className="mdc-audio-bubble">
-      <button className="mdc-audio-play-btn" onClick={togglePlay}>
-        {isPlaying ? <FaPause size={14} /> : <FaPlay size={14} style={{marginLeft: 2}} />}
-      </button>
-      <div className="mdc-audio-waveform">
-        <div className="mdc-audio-progress" style={{ width: `${progress}%` }}></div>
-        {/* Giả lập sóng âm */}
-        <div className="mdc-audio-bars">
-           {Array.from({length: 25}).map((_, i) => (
-             <div key={i} className="mdc-audio-bar" style={{height: `${Math.max(20, Math.random() * 80)}%`}}></div>
-           ))}
-        </div>
-      </div>
-      <span className="mdc-audio-time">{formatTime(isPlaying ? currentTime : (duration || 0))}</span>
-    </div>
-  );
-}
 
 export function CloudMsgBubble({msg, onDelete, onPreview, onReaction, pinnedIds, onPin, onForward, onReply, isRemoving}) {
   const [showMenu, setShowMenu] = useState(false);

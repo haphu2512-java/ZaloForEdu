@@ -1,10 +1,12 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { FaSpinner, FaPaperPlane, FaThumbsUp, FaSmile } from 'react-icons/fa';
+import { FaSpinner, FaPaperPlane, FaThumbsUp, FaSmile, FaMicrophone } from 'react-icons/fa';
+import { VoiceRecorder } from '../../components/shared/VoiceRecorder';
 
 export const MessageInput = ({ theme, placeholder, onSend, onSendLike, onUploadFiles }) => {
   const [text, setText] = useState('');
   const [showEmoji, setShowEmoji] = useState(false);
   const [isSending, setIsSending] = useState(false);
+  const [showRecorder, setShowRecorder] = useState(false);
 
   // Refs quản lý input ẩn cho file/hình ảnh
   const imageRef = useRef(null);
@@ -69,6 +71,9 @@ export const MessageInput = ({ theme, placeholder, onSend, onSendLike, onUploadF
         <button type="button" className="mdc-tool-btn" title="Gửi thư mục" onClick={() => { if(folderRef.current){ folderRef.current.setAttribute("webkitdirectory",""); folderRef.current.click(); } }}>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
         </button>
+        <button type="button" className="mdc-tool-btn" title="Gửi ghi âm" onClick={() => setShowRecorder(true)}>
+          <FaMicrophone size={16} />
+        </button>
 
         {/* Bảng chọn Emoji */}
         {showEmoji && (
@@ -88,34 +93,46 @@ export const MessageInput = ({ theme, placeholder, onSend, onSendLike, onUploadF
         )}
       </div>
 
-      {/* Khung nhập text */}
-      <div className="mdc-input-row">
-        <div className="mdc-input-wrap">
-          <input 
-            className="mdc-input"
-            placeholder={placeholder} 
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                handleSend();
-              }
-            }}
+      {/* Khung nhập text / Voice Recorder */}
+      {showRecorder ? (
+        <div style={{ padding: '8px 14px 12px' }}>
+          <VoiceRecorder 
+            onCancel={() => setShowRecorder(false)} 
+            onSend={(blob) => {
+              onUploadFiles([new File([blob], `voice_${Date.now()}.webm`, { type: blob.type })]);
+              setShowRecorder(false);
+            }} 
           />
         </div>
-        
-        {/* Nút gửi hoặc Like */}
-        {text.trim() ? (
-          <button className="mdc-send-btn" onClick={handleSend}>
-            <FaPaperPlane size={15} />
-          </button>
-        ) : (
-          <button className="mdc-like-btn" onClick={onSendLike}>
-            <FaThumbsUp size={16} />
-          </button>
-        )}
-      </div>
+      ) : (
+        <div className="mdc-input-row">
+          <div className="mdc-input-wrap">
+            <input 
+              className="mdc-input"
+              placeholder={placeholder} 
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSend();
+                }
+              }}
+            />
+          </div>
+          
+          {/* Nút gửi hoặc Like */}
+          {text.trim() ? (
+            <button className="mdc-send-btn" onClick={handleSend}>
+              <FaPaperPlane size={15} />
+            </button>
+          ) : (
+            <button className="mdc-like-btn" onClick={onSendLike}>
+              <FaThumbsUp size={16} />
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 };

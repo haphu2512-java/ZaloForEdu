@@ -4,6 +4,7 @@ import {
   FaShare, FaReply, FaEllipsisH, FaUndo, FaTrash, FaCopy, FaThumbtack 
 } from 'react-icons/fa';
 import { getExt, getCategory, getFileColor, formatBytes } from './ChatPage';
+import { AudioBubble } from '../../components/shared/AudioBubble';
 
 const API_ORIGIN = (import.meta.env.VITE_API_URL || 'http://localhost:5000/api/v1').replace(/\/api\/v1$/, '');
 
@@ -68,12 +69,18 @@ export const MessageBubble = ({
 
   // Tách riêng Ảnh/Video và File Document
   const isImageOrVideo = (att) => {
+    const cat = getCategory(att.name || att.fileName || '');
+    if (cat === 'audio' || att.mimeType?.startsWith('audio/')) return false;
     if (att.mimeType?.startsWith('image/') || att.mimeType?.startsWith('video/')) return true;
-    return ["image", "video"].includes(getCategory(att.name || att.fileName || ''));
+    return ["image", "video"].includes(cat);
   };
 
   const images = mediaList.filter(isImageOrVideo);
-  const docs   = mediaList.filter(att => !isImageOrVideo(att));
+  const audios = mediaList.filter(att => {
+    if (att.mimeType?.startsWith('audio/')) return true;
+    return getCategory(att.name || att.fileName || '') === 'audio';
+  });
+  const docs   = mediaList.filter(att => !isImageOrVideo(att) && !audios.includes(att));
 
   const handleJumpToReply = (e) => {
     e.stopPropagation();
@@ -124,7 +131,7 @@ export const MessageBubble = ({
                 {content && <p style={{ margin: 0, fontSize: '15px', lineHeight: '1.4', color: isMe ? '#FFFFFF' : '#050505', wordBreak: 'break-word' }}>{content}</p>}
 
                 {/* KHU VỰC RENDER MEDIA */}
-                {(images.length > 0 || docs.length > 0) && (
+                {(images.length > 0 || docs.length > 0 || audios.length > 0) && (
                   <div style={{ marginTop: content ? '8px' : '0', display: 'flex', flexDirection: 'column', gap: '6px' }}>
                     
                     {/* Render GRID Ảnh Zalo-style */}
@@ -195,6 +202,11 @@ export const MessageBubble = ({
                         </div>
                       );
                     })}
+
+                    {/* Render Tin nhắn thoại (Voice Chat) */}
+                    {audios.length > 0 && audios.map((att, i) => (
+                      <AudioBubble key={`audio-${i}`} url={att.url} />
+                    ))}
                   </div>
                 )}
 
