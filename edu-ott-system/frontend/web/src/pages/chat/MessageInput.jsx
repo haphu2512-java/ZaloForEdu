@@ -119,7 +119,7 @@ export const MessageInput = ({ theme, placeholder, onSend, onSendLike, onUploadF
               });
               onUploadFiles([new File([blob], `voice_${Date.now()}${extension}`, { type: blob.type })]);
               setShowRecorder(false);
-            }}} 
+            }}
           />
         </div>
       ) : (
