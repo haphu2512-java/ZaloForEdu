@@ -127,11 +127,11 @@ export const registerMedia = async ({ fileName, mimeType, size, url, publicId, r
   return response.data.data;
 };
 
-// ========== LOCAL UPLOAD (dùng cho Chat — giống mobile) ==========
+// ========== LOCAL UPLOAD (dùng cho Chat) ==========
 
 /**
- * Upload file vào /uploads (giống mobile uploadMediaBase64)
- * Đọc file → base64 → POST /media/upload
+ * Upload file vào /uploads qua Multipart FormData — POST /media/upload-form
+ * Đồng bộ với Mobile (uploadMediaForm). Không cần đọc Base64, nhẹ và nhanh hơn.
  */
 export const uploadFile = async (file, { onProgress } = {}) => {
   const extNoDot = getExtension(file.name).replace(".", "").toLowerCase();
@@ -141,20 +141,20 @@ export const uploadFile = async (file, { onProgress } = {}) => {
 
   onProgress?.(10);
 
-  // Đọc file thành base64
-  const contentBase64 = await new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result.split(",")[1]);
-    reader.onerror = () => reject(new Error("Không đọc được file"));
-    reader.readAsDataURL(file);
-  });
+  const formData = new FormData();
+  formData.append("file", file);
 
-  onProgress?.(50);
+  onProgress?.(30);
 
-  const response = await api.post("/media/upload", {
-    fileName: file.name,
-    mimeType: file.type || "application/octet-stream",
-    contentBase64,
+  const response = await api.post("/media/upload-form", formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+    onUploadProgress: (progressEvent) => {
+      if (progressEvent.total && onProgress) {
+        const pct = Math.round((progressEvent.loaded / progressEvent.total) * 100);
+        // Map 30% → 95% trong quá trình upload thực
+        onProgress(30 + Math.round(pct * 0.65));
+      }
+    },
   });
 
   onProgress?.(100);

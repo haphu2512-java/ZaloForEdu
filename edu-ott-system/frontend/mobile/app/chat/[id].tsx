@@ -18,8 +18,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
-import * as FileSystem from 'expo-file-system/legacy';
-import * as ImageManipulator from 'expo-image-manipulator';
+
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../context/auth';
@@ -34,7 +33,7 @@ import {
 } from '../../utils/messageService';
 import { API_BASE_URL } from '../../utils/api';
 import { getPinnedMessages, pinMessage, unpinMessage } from '../../utils/groupFeatureService';
-import { uploadMediaBase64, getMediaById, uploadImageToCloudinary } from '../../utils/mediaService';
+import { getMediaById, uploadMediaForm } from '../../utils/mediaService';
 import {
   connectSocket,
   joinConversation,
@@ -163,7 +162,7 @@ export default function ChatScreen() {
   const [isForwarding, setIsForwarding] = useState(false);
 
   const [conversation, setConversation] = useState<Conversation | null>(null);
-  const [pinnedItems, setPinnedItems] = useState<any[]>([]); // Bảng tin
+  const [pinnedItems, setPinnedItems] = useState<any[]>([]);
   const [mediaById, setMediaById] = useState<Record<string, MediaItem>>({});
 
   // Action Menu
@@ -172,11 +171,8 @@ export default function ChatScreen() {
   // Image viewer
   const [viewImageUrl, setViewImageUrl] = useState<string | null>(null);
 
-  const getUserId = (value: any): string => {
-    if (!value) return '';
-    if (typeof value === 'string') return value;
-    return value._id || value.id || '';
-  };
+  // Tránh mở Picker nhiều lần cùng lúc gây lỗi "picking in progress"
+  const isPicking = useRef(false);
 
   const getPinnedMessageId = (pinnedItem: any): string => {
     const messageRef = pinnedItem?.messageId;
@@ -266,18 +262,15 @@ export default function ChatScreen() {
 
   const handleInputChange = useCallback((text: string) => {
     setInputText(text);
-
     if (!isSocketReady) return;
     if (!text.trim()) {
       stopTypingWithEmit();
       return;
     }
-
     if (!isTypingRef.current) {
       emitTyping(conversationId);
       isTypingRef.current = true;
     }
-
     if (typingStopTimeoutRef.current) {
       clearTimeout(typingStopTimeoutRef.current);
     }
@@ -292,15 +285,11 @@ export default function ChatScreen() {
       const unreadMessages = messages.filter((m) => {
         const mid = getMessageIdStr(m);
         if (markedMessageIds.current.has(mid)) return false;
-
         const senderId = getMessageSenderId(m);
-        // Don't mark our own messages as read
         if (senderId === currentUserId) return false;
-
         const seenList = getNormalizedUserIds(m.seenBy || []);
         return !seenList.includes(currentUserId);
       });
-
       if (unreadMessages.length > 0) {
         unreadMessages.forEach(m => markedMessageIds.current.add(getMessageIdStr(m)));
         Promise.all(
@@ -335,12 +324,10 @@ export default function ChatScreen() {
 
   useEffect(() => {
     let mounted = true;
-    let socketRef: any = null;
 
     const setupSocket = async () => {
       const socket = await connectSocket();
       if (!mounted || !socket) return;
-      socketRef = socket;
       joinConversation(conversationId);
       setIsSocketReady(socket.connected);
 
@@ -493,31 +480,30 @@ export default function ChatScreen() {
   };
 
   const handlePickImage = async () => {
+    if (isPicking.current) return;
+    isPicking.current = true;
     setShowMediaMenu(false);
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permission.granted) {
-      Alert.alert('Lỗi', 'Bạn cần cấp quyền truy cập thư viện ảnh');
-      return;
-    }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      quality: 0.85,
-      allowsMultipleSelection: true,
-    });
-    if (result.canceled || !result.assets?.length) return;
-    setIsSending(true);
+    // Chờ Modal ẩn hoàn toàn trước khi mở Picker (đặc biệt quan trọng trên iOS)
+    await new Promise((resolve) => setTimeout(resolve, 500));
     try {
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert('Lỗi', 'Bạn cần cấp quyền truy cập thư viện ảnh');
+        return;
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: 'Images' as any,
+        quality: 0.8,
+        allowsMultipleSelection: true,
+      });
+      if (result.canceled || !result.assets?.length) return;
+      setIsSending(true);
       const uploadPromises = result.assets.map(async (asset) => {
         try {
-          // Resize về max 800px để tránh đứng app khi đọc Base64
-          const compressed = await ImageManipulator.manipulateAsync(
-            asset.uri,
-            [{ resize: { width: 800 } }],
-            { compress: 0.6, format: ImageManipulator.SaveFormat.JPEG }
-          );
-          const base64 = await FileSystem.readAsStringAsync(compressed.uri, { encoding: FileSystem.EncodingType.Base64 });
-          const media = await uploadMediaBase64({ fileName: `photo-${Date.now()}-${Math.random().toString(36).slice(2, 9)}.jpg`, mimeType: 'image/jpeg', contentBase64: base64 });
-          return media;
+          const ext = asset.uri.split('.').pop()?.toLowerCase() || 'jpg';
+          const mimeType = asset.mimeType || (ext === 'png' ? 'image/png' : 'image/jpeg');
+          const fileName = asset.fileName || `photo-${Date.now()}.${ext}`;
+          return await uploadMediaForm({ uri: asset.uri, fileName, mimeType });
         } catch (error) {
           console.error('Failed to upload image:', error);
           return null;
@@ -528,14 +514,11 @@ export default function ChatScreen() {
         .filter((m): m is MediaItem => m !== null)
         .map((m) => m._id || m.id)
         .filter(Boolean) as string[];
-      if (!mediaIds.length) throw new Error('No images uploaded successfully');
+      if (!mediaIds.length) throw new Error('Không upload được ảnh nào');
       setMediaById((prev) => {
         const updated = { ...prev };
         uploads.forEach((m) => {
-          if (m) {
-            const id = m._id || m.id;
-            if (id) updated[id] = m;
-          }
+          if (m) { const id = m._id || m.id; if (id) updated[id] = m; }
         });
         return updated;
       });
@@ -547,64 +530,60 @@ export default function ChatScreen() {
       Alert.alert('Lỗi', err.message || 'Không thể gửi ảnh');
     } finally {
       setIsSending(false);
+      isPicking.current = false;
     }
   };
 
   const handleDocumentPick = async () => {
+    if (isPicking.current) return;
+    isPicking.current = true;
     setShowMediaMenu(false);
+    await new Promise((resolve) => setTimeout(resolve, 500));
     try {
       const result = await DocumentPicker.getDocumentAsync({ copyToCacheDirectory: true, multiple: true });
       if (result.canceled || !result.assets?.length) return;
       setIsSending(true);
-      try {
-        const uploadPromises = result.assets.map(async (asset) => {
-          try {
-            const fileName = asset.name || `file-${Date.now()}`;
-            const base64 = await FileSystem.readAsStringAsync(asset.uri, { encoding: FileSystem.EncodingType.Base64 });
-            const media = await uploadMediaBase64({
-              fileName,
-              mimeType: asset.mimeType || getMimeTypeFromFileName(fileName),
-              contentBase64: base64,
-            });
-            return media;
-          } catch (error) {
-            console.error('Failed to upload file:', error);
-            return null;
-          }
-        });
-        const uploads = await Promise.all(uploadPromises);
-        const mediaIds = uploads
-          .filter((m): m is MediaItem => m !== null)
-          .map((m) => m._id || m.id)
-          .filter(Boolean) as string[];
-        if (!mediaIds.length) throw new Error('No files uploaded successfully');
-        setMediaById((prev) => {
-          const updated = { ...prev };
-          uploads.forEach((m) => {
-            if (m) {
-              const id = m._id || m.id;
-              if (id) updated[id] = m;
-            }
+      const uploadPromises = result.assets.map(async (asset) => {
+        try {
+          const fileName = asset.name || `file-${Date.now()}`;
+          return await uploadMediaForm({
+            uri: asset.uri,
+            fileName,
+            mimeType: asset.mimeType || getMimeTypeFromFileName(fileName),
           });
-          return updated;
+        } catch (error) {
+          console.error('Failed to upload file:', error);
+          return null;
+        }
+      });
+      const uploads = await Promise.all(uploadPromises);
+      const mediaIds = uploads
+        .filter((m): m is MediaItem => m !== null)
+        .map((m) => m._id || m.id)
+        .filter(Boolean) as string[];
+      if (!mediaIds.length) throw new Error('Không thể tải lên tệp tin nào');
+      setMediaById((prev) => {
+        const updated = { ...prev };
+        uploads.forEach((m) => {
+          if (m) { const id = m._id || m.id; if (id) updated[id] = m; }
         });
-        const fileCount = result.assets.length;
-        const newMsg = await sendMessage({
-          conversationId,
-          mediaIds,
-          content: `Đã gửi ${fileCount} file${fileCount > 1 ? '' : ''}`,
-        });
-        setMessages((prev) =>
-          prev.some((m) => getMessageId(m) === getMessageId(newMsg)) ? prev : [newMsg, ...prev],
-        );
-      } catch (uploadErr: any) {
-        Alert.alert('Lỗi', uploadErr.message || 'Không thể tải lên file');
-      } finally {
-        setIsSending(false);
-      }
+        return updated;
+      });
+      const fileCount = result.assets.length;
+      const newMsg = await sendMessage({
+        conversationId,
+        mediaIds,
+        content: `Đã gửi ${fileCount} file`,
+      });
+      setMessages((prev) =>
+        prev.some((m) => getMessageId(m) === getMessageId(newMsg)) ? prev : [newMsg, ...prev],
+      );
     } catch (e: any) {
       console.error('Document picker error:', e);
-      Alert.alert('Lỗi', 'Không thể chọn file');
+      Alert.alert('Lỗi', e.message || 'Không thể chọn file');
+    } finally {
+      setIsSending(false);
+      isPicking.current = false;
     }
   };
 
@@ -715,7 +694,7 @@ export default function ChatScreen() {
           } catch { Alert.alert('Lỗi', 'Không thể xóa'); }
         },
       });
-      buttons.push({ text: '😊 thả cảm xúc', onPress: () => handleReactToMessage(msg) });
+      buttons.push({ text: '😊 Thả cảm xúc', onPress: () => handleReactToMessage(msg) });
       buttons.push({ text: '↗ Chuyển tiếp', onPress: () => openForwardModal(msg) });
     }
     if (isGroup && !msg.isRecalled) {
@@ -727,7 +706,7 @@ export default function ChatScreen() {
             setPinnedItems(updatedItems);
             Alert.alert('Thành công', isPinned ? 'Đã gỡ ghim tin nhắn' : 'Đã ghim tin nhắn');
           } catch (err: any) {
-            Alert.alert('Lỗi', err.message || (isPinned ? 'Không thể gỡ ghim tin nhắn' : 'Không thể ghim tin nhắn'));
+            Alert.alert('Lỗi', err.message || (isPinned ? 'Không thể gỡ ghim' : 'Không thể ghim tin nhắn'));
           }
         },
       });
@@ -735,7 +714,6 @@ export default function ChatScreen() {
     setActionMenu({ visible: true, options: buttons });
   };
 
-  /** Render message status icon for my messages */
   const renderMessageStatus = (item: Message) => {
     if (item.status === 'sending') return <Ionicons name="time-outline" size={11} color="rgba(255,255,255,0.6)" />;
     const seenBy = getNormalizedUserIds(item.seenBy || []).filter((id) => id !== currentUserId);
@@ -777,7 +755,6 @@ export default function ChatScreen() {
       );
     }
 
-    // Is it a poll?
     if (item.type === 'poll' && item.pollId) {
       return (
         <View style={{ marginBottom: 8 }}>
@@ -792,12 +769,10 @@ export default function ChatScreen() {
       );
     }
 
-    // Get reply info
     const replyMsg = item.replyTo ? (typeof item.replyTo === 'object' ? item.replyTo : null) : null;
 
     return (
       <Pressable onLongPress={() => handleMessageLongPress(item)} style={[styles.bubbleWrapper, isMine ? styles.myWrapper : styles.theirWrapper]}>
-        {/* Avatar for their messages */}
         {!isMine && (
           <Image
             source={{ uri: senderAvatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(senderName || 'U')}&background=0EA5E9&color=fff&size=60&bold=true` }}
@@ -805,83 +780,73 @@ export default function ChatScreen() {
           />
         )}
         <View style={{ flex: 1, alignItems: isMine ? 'flex-end' : 'flex-start', maxWidth: '80%' }}>
-          {/* Sender name in groups */}
           {!isMine && conversation?.type === 'group' && senderName ? (
             <Text style={{ fontSize: 11, color: colors.tint, fontWeight: '600', marginBottom: 2, marginLeft: 4 }}>{senderName}</Text>
           ) : null}
 
           <View style={[styles.bubbleContainer, reactionEntries.length > 0 && styles.bubbleContainerWithReaction]}>
             <View style={[styles.bubble, isMine ? { backgroundColor: '#0068FF' } : { backgroundColor: colorScheme === 'dark' ? '#374151' : '#F1F5F9' }]}>
-            {/* Reply quote */}
-            {replyMsg && (
-              <View style={[styles.replyQuote, { borderLeftColor: isMine ? 'rgba(255,255,255,0.5)' : colors.tint }]}>
-                <Text style={{ color: isMine ? 'rgba(255,255,255,0.6)' : colors.tint, fontSize: 11, fontWeight: '600' }} numberOfLines={1}>
-                  {typeof (replyMsg as any).senderId === 'object' ? (replyMsg as any).senderId?.username : 'Tin nhắn'}
-                </Text>
-                <Text style={{ color: isMine ? 'rgba(255,255,255,0.7)' : colors.muted, fontSize: 12 }} numberOfLines={2}>
-                  {(replyMsg as any).content || 'File đính kèm...'}
-                </Text>
-              </View>
-            )}
+              {replyMsg && (
+                <View style={[styles.replyQuote, { borderLeftColor: isMine ? 'rgba(255,255,255,0.5)' : colors.tint }]}>
+                  <Text style={{ color: isMine ? 'rgba(255,255,255,0.6)' : colors.tint, fontSize: 11, fontWeight: '600' }} numberOfLines={1}>
+                    {typeof (replyMsg as any).senderId === 'object' ? (replyMsg as any).senderId?.username : 'Tin nhắn'}
+                  </Text>
+                  <Text style={{ color: isMine ? 'rgba(255,255,255,0.7)' : colors.muted, fontSize: 12 }} numberOfLines={2}>
+                    {(replyMsg as any).content || 'File đính kèm...'}
+                  </Text>
+                </View>
+              )}
 
-            {/* Forward tag */}
-            {item.forwardFrom && (
-              <Text style={{ color: isMine ? '#DBEAFE' : colors.muted, fontSize: 11, marginBottom: 4, fontStyle: 'italic' }}>↪ Chuyển tiếp</Text>
-            )}
+              {item.forwardFrom && (
+                <Text style={{ color: isMine ? '#DBEAFE' : colors.muted, fontSize: 11, marginBottom: 4, fontStyle: 'italic' }}>↪ Chuyển tiếp</Text>
+              )}
 
-            {/* Text content */}
-            {item.content ? (
-              <Text style={{ color: isMine ? '#fff' : colors.text, fontSize: 16, lineHeight: 22 }}>{item.content}</Text>
-            ) : null}
+              {item.content ? (
+                <Text style={{ color: isMine ? '#fff' : colors.text, fontSize: 16, lineHeight: 22 }}>{item.content}</Text>
+              ) : null}
 
-            {/* Media attachments */}
-            {!!item.mediaIds?.length && (
-              <View style={{ marginTop: item.content ? 8 : 0, gap: 6 }}>
-                {item.mediaIds.map((mediaItem: any, idx) => {
-                  const mediaId = typeof mediaItem === 'string' ? mediaItem : (mediaItem._id || mediaItem.id || '');
-                  const rawMedia = typeof mediaItem === 'string' ? mediaById[mediaId] : mediaItem;
-                  const media = rawMedia ? { ...rawMedia, url: toAbsoluteMediaUrl(rawMedia.url) } : null;
-                  const isImage = isImageAttachment(media);
-                  const fileName = media?.fileName || `Tệp đính kèm ${idx + 1}`;
-                  const canOpen = !!media?.url;
+              {!!item.mediaIds?.length && (
+                <View style={{ marginTop: item.content ? 8 : 0, gap: 6 }}>
+                  {item.mediaIds.map((mediaItem: any, idx) => {
+                    const mediaId = typeof mediaItem === 'string' ? mediaItem : (mediaItem._id || mediaItem.id || '');
+                    const rawMedia = typeof mediaItem === 'string' ? mediaById[mediaId] : mediaItem;
+                    const media = rawMedia ? { ...rawMedia, url: toAbsoluteMediaUrl(rawMedia.url) } : null;
+                    const isImage = isImageAttachment(media);
+                    const fileName = media?.fileName || `Tệp đính kèm ${idx + 1}`;
+                    const canOpen = !!media?.url;
 
-                  if (isImage && media?.url) {
+                    if (isImage && media?.url) {
+                      return (
+                        <TouchableOpacity key={`${mediaId}-${idx}`} onPress={() => setViewImageUrl(media.url)} activeOpacity={0.9}>
+                          <Image source={{ uri: media.url }} style={styles.inlineImage} resizeMode="cover" />
+                        </TouchableOpacity>
+                      );
+                    }
+
                     return (
-                      <TouchableOpacity key={`${mediaId}-${idx}`} onPress={() => setViewImageUrl(media.url)} activeOpacity={0.9}>
-                        <Image
-                          source={{ uri: media.url }}
-                          style={styles.inlineImage}
-                          resizeMode="cover"
-                        />
+                      <TouchableOpacity
+                        key={`${mediaId}-${idx}`}
+                        disabled={!canOpen}
+                        onPress={() => openAttachment(media)}
+                        style={[styles.fileAttachment, { backgroundColor: isMine ? '#1D4ED8' : colors.border }]}
+                      >
+                        <Ionicons name="document-attach-outline" size={18} color={isMine ? '#DBEAFE' : colors.text} />
+                        <Text numberOfLines={1} style={{ flex: 1, color: isMine ? '#DBEAFE' : colors.text, fontSize: 13, fontWeight: '600' }}>
+                          {fileName}
+                        </Text>
+                        {canOpen && <Ionicons name="download-outline" size={16} color={isMine ? '#DBEAFE' : colors.muted} />}
                       </TouchableOpacity>
                     );
-                  }
+                  })}
+                </View>
+              )}
 
-                  return (
-                    <TouchableOpacity
-                      key={`${mediaId}-${idx}`}
-                      disabled={!canOpen}
-                      onPress={() => openAttachment(media)}
-                      style={[styles.fileAttachment, { backgroundColor: isMine ? '#1D4ED8' : colors.border }]}
-                    >
-                      <Ionicons name="document-attach-outline" size={18} color={isMine ? '#DBEAFE' : colors.text} />
-                      <Text numberOfLines={1} style={{ flex: 1, color: isMine ? '#DBEAFE' : colors.text, fontSize: 13, fontWeight: '600' }}>
-                        {fileName}
-                      </Text>
-                      {canOpen && <Ionicons name="download-outline" size={16} color={isMine ? '#DBEAFE' : colors.muted} />}
-                    </TouchableOpacity>
-                  );
-                })}
+              <View style={[styles.msgMeta, { justifyContent: isMine ? 'flex-end' : 'flex-start' }]}>
+                <Text style={{ color: isMine ? 'rgba(255,255,255,0.5)' : colors.muted, fontSize: 10 }}>
+                  {new Date(item.createdAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
+                </Text>
+                {isMine && <View style={{ marginLeft: 4 }}>{renderMessageStatus(item)}</View>}
               </View>
-            )}
-
-            {/* Time + Status */}
-            <View style={[styles.msgMeta, { justifyContent: isMine ? 'flex-end' : 'flex-start' }]}>
-              <Text style={{ color: isMine ? 'rgba(255,255,255,0.5)' : colors.muted, fontSize: 10 }}>
-                {new Date(item.createdAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
-              </Text>
-              {isMine && <View style={{ marginLeft: 4 }}>{renderMessageStatus(item)}</View>}
-            </View>
             </View>
 
             {!!reactionEntries.length && (
@@ -952,14 +917,12 @@ export default function ChatScreen() {
         }}
       />
 
-      {/* Socket offline banner */}
       {!isSocketReady && (
         <View style={{ paddingVertical: 5, backgroundColor: colorScheme === 'dark' ? '#78350F' : '#FEF3C7', alignItems: 'center' }}>
           <Text style={{ color: colorScheme === 'dark' ? '#FDE68A' : '#92400E', fontSize: 11 }}>Đang kết nối...</Text>
         </View>
       )}
 
-      {/* Pinned message */}
       {conversation?.type === 'group' && pinnedItems.length > 0 && (
         <PinnedBar
           pinnedItems={pinnedItems}
@@ -983,7 +946,6 @@ export default function ChatScreen() {
         />
         <TypingIndicator isVisible={typingParticipants.length > 0} text={typingText} />
 
-        {/* Emoji panel */}
         {showEmojiPanel && (
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 12, paddingVertical: 8, gap: 8, backgroundColor: colors.surface }}>
             {QUICK_EMOJIS.map((emoji) => (
@@ -995,7 +957,6 @@ export default function ChatScreen() {
           </View>
         )}
 
-        {/* Reply preview */}
         {replyTo && (
           <View style={[styles.replyPreview, { backgroundColor: colors.surface, borderTopColor: colors.border }]}>
             <View style={[styles.replyPreviewBar, { backgroundColor: colors.tint }]} />
@@ -1011,7 +972,6 @@ export default function ChatScreen() {
           </View>
         )}
 
-        {/* Input bar */}
         <View style={[styles.inputBar, { borderTopColor: colors.border, backgroundColor: colors.surface, paddingBottom: Math.max(12, insets.bottom) }]}>
           <TouchableOpacity onPress={() => setShowEmojiPanel((prev) => !prev)} style={styles.iconBtn}>
             <Ionicons name={showEmojiPanel ? 'happy' : 'happy-outline'} size={24} color={showEmojiPanel ? colors.tint : colors.muted} />
@@ -1041,8 +1001,7 @@ export default function ChatScreen() {
         </View>
       </KeyboardAvoidingView>
 
-      {/* Media menu modal */}
-      <Modal visible={showMediaMenu} transparent animationType="fade" onRequestClose={() => setShowMediaMenu(false)}>
+      <Modal visible={showMediaMenu} transparent animationType="slide" onRequestClose={() => setShowMediaMenu(false)}>
         <TouchableOpacity style={styles.mediaMenuOverlay} activeOpacity={1} onPress={() => setShowMediaMenu(false)}>
           <View style={[styles.mediaMenu, { backgroundColor: colors.surface }]}>
             <TouchableOpacity style={styles.mediaMenuItem} onPress={handlePickImage}>
@@ -1057,7 +1016,6 @@ export default function ChatScreen() {
               </View>
               <Text style={{ color: colors.text, fontSize: 13, fontWeight: '600', marginTop: 4 }}>Tệp tài liệu</Text>
             </TouchableOpacity>
-
             {conversation?.type === 'group' && (
               <TouchableOpacity
                 style={styles.mediaMenuItem}
@@ -1076,7 +1034,6 @@ export default function ChatScreen() {
         </TouchableOpacity>
       </Modal>
 
-      {/* Image viewer */}
       <Modal visible={!!viewImageUrl} transparent animationType="fade" onRequestClose={() => setViewImageUrl(null)}>
         <View style={styles.imageViewerOverlay}>
           <TouchableOpacity style={styles.imageViewerClose} onPress={() => setViewImageUrl(null)}>
@@ -1088,7 +1045,6 @@ export default function ChatScreen() {
         </View>
       </Modal>
 
-      {/* Forward modal */}
       <Modal visible={forwardModalVisible} animationType="slide" onRequestClose={() => setForwardModalVisible(false)}>
         <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
           <View style={{ paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: colors.surface }}>
@@ -1114,7 +1070,6 @@ export default function ChatScreen() {
         </SafeAreaView>
       </Modal>
 
-      {/* Custom Action Menu for Message Long Press */}
       <Modal visible={actionMenu.visible} transparent animationType="fade" onRequestClose={() => setActionMenu({ visible: false, options: [] })}>
         <TouchableOpacity style={styles.actionMenuOverlay} activeOpacity={1} onPress={() => setActionMenu({ visible: false, options: [] })}>
           <View style={[styles.actionMenuContainer, { backgroundColor: colors.surface }]}>
@@ -1188,5 +1143,3 @@ const styles = StyleSheet.create({
   actionMenuContainer: { borderRadius: 14, overflow: 'hidden', paddingBottom: Platform.OS === 'ios' ? 20 : 0 },
   actionMenuBtn: { paddingVertical: 16, alignItems: 'center', justifyContent: 'center' },
 });
-
-

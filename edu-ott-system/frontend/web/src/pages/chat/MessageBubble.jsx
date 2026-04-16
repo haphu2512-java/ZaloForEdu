@@ -37,8 +37,11 @@ export const MessageBubble = ({
   // Lấy mediaList và convert URL tương đối → tuyệt đối
   const rawMediaList = isRecalled ? [] : (message.attachments || message.mediaIds || message.media || []);
   const mediaList = rawMediaList
-    .filter(att => att && typeof att !== 'string')
-    .map(att => ({ ...att, url: toAbsoluteUrl(att.url) }));
+    .map(att => {
+      if (typeof att === 'string') return { _id: att, url: '', fileName: 'Loading...', mimeType: 'image/jpeg' };
+      return { ...att, url: toAbsoluteUrl(att.url) };
+    })
+    .filter(att => att && (att._id || att.id));
   
   const timeString = new Date(createdAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
   const avatar = toAbsoluteUrl(sender?.avatarUrl || sender?.avatar) || 'https://i.pravatar.cc/150';
@@ -129,9 +132,11 @@ export const MessageBubble = ({
                             <div key={i} style={{
                               position: 'relative',
                               width: '100%',
-                              aspectRatio: images.length === 1 ? 'auto' : '1 / 1',
+                              // Nếu có 3 ảnh và đây là ảnh đầu (span 2), cho nó landscape (2:1) để tổng grid cân đối
+                              aspectRatio: (images.length === 3 && i === 0) ? '2 / 1' : (images.length === 1 ? 'auto' : '1 / 1'),
                               gridColumn: (images.length === 3 && i === 0) ? 'span 2' : 'auto',
-                              cursor: 'pointer'
+                              cursor: 'pointer',
+                              backgroundColor: '#f0f2f5'
                             }}>
                               {isVideo ? (
                                 <video src={att.url} controls style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />

@@ -156,21 +156,6 @@ const getMyMedia = asyncHandler(async (req, res) => {
   }, 'My media fetched');
 });
 
-const downloadMediaById = asyncHandler(async (req, res) => {
-  const media = await Media.findById(req.params.id);
-  if (!media) {
-    throw new ApiError(404, 'MEDIA_NOT_FOUND', 'Media not found');
-  }
-  if (media.storage === 'local') {
-    const relativePath = media.url.replace(/^[\\/]/, '');
-    const absolutePath = path.join(__dirname, '..', relativePath);
-    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(media.fileName)}"`);
-    if (media.mimeType) res.setHeader('Content-Type', media.mimeType);
-    return res.sendFile(absolutePath);
-  }
-  return res.redirect(media.url);
-});
-
 module.exports = {
   uploadMedia,
   uploadMediaForm,

@@ -32,7 +32,9 @@ const createMessage = async ({ conversationId, senderId, content = '', mediaIds 
 
   await Conversation.findByIdAndUpdate(conversationId, { lastMessageAt: new Date() });
 
-  return message;
+  return await Message.findById(message._id)
+    .populate('mediaIds', 'fileName url size mimeType providerResourceType')
+    .populate('senderId', 'username avatarUrl');
 };
 
 module.exports = {
