@@ -148,7 +148,14 @@ export const CloudInput = ({ onSendText, isSending, onUploadFiles, replyTo, onCl
           <VoiceRecorder 
             onCancel={() => setShowRecorder(false)} 
             onSend={(blob, duration) => {
-              const file = new File([blob], `voice_message_${Date.now()}.webm`, { type: blob.type || 'audio/webm' });
+              // Xác định extension dựa trên mimeType thực tế
+              let extension = '.webm'; // fallback
+              if (blob.type.includes('mp4')) extension = '.mp4';
+              else if (blob.type.includes('mpeg')) extension = '.mp3';
+              else if (blob.type.includes('wav')) extension = '.wav';
+              
+              console.log('📤 Sending audio:', { type: blob.type, extension, duration });
+              const file = new File([blob], `voice_message_${Date.now()}${extension}`, { type: blob.type });
               onUploadFiles([file], replyTo?._id || null);
               setShowRecorder(false);
               onClearReply?.();

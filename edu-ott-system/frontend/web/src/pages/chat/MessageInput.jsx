@@ -99,7 +99,14 @@ export const MessageInput = ({ theme, placeholder, onSend, onSendLike, onUploadF
           <VoiceRecorder 
             onCancel={() => setShowRecorder(false)} 
             onSend={(blob) => {
-              onUploadFiles([new File([blob], `voice_${Date.now()}.webm`, { type: blob.type })]);
+              // Xác định extension dựa trên mimeType thực tế
+              let extension = '.webm'; // fallback
+              if (blob.type.includes('mp4')) extension = '.mp4';
+              else if (blob.type.includes('mpeg')) extension = '.mp3';
+              else if (blob.type.includes('wav')) extension = '.wav';
+              
+              console.log('📤 Sending audio:', { type: blob.type, extension });
+              onUploadFiles([new File([blob], `voice_${Date.now()}${extension}`, { type: blob.type })]);
               setShowRecorder(false);
             }} 
           />
