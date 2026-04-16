@@ -53,7 +53,23 @@ const createApp = () => {
   app.use(express.json({ limit: '50mb' }));
   app.use(express.urlencoded({ extended: true }));
 
-  app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+  // Serve uploads với đúng MIME types cho audio compatibility
+  app.use('/uploads', (req, res, next) => {
+    const ext = req.path.split('.').pop()?.toLowerCase();
+    const mimeTypes = {
+      'm4a': 'audio/mp4',
+      'mp3': 'audio/mpeg',
+      'wav': 'audio/wav',
+      'mp4': 'audio/mp4',
+      'webm': 'audio/webm',
+      'ogg': 'audio/ogg',
+    };
+    if (mimeTypes[ext]) {
+      res.setHeader('Content-Type', mimeTypes[ext]);
+      res.setHeader('Accept-Ranges', 'bytes');
+    }
+    next();
+  }, express.static(path.join(__dirname, 'uploads')));
   app.get('/health', (_req, res) => {
     res.json({
       success: true,
