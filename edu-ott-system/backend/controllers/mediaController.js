@@ -1,6 +1,10 @@
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const crypto = require('node:crypto');
+const { execFile } = require('node:child_process');
+const { promisify } = require('node:util');
+
+const execFileAsync = promisify(execFile);
 
 const Media = require('../models/Media');
 const asyncHandler = require('../utils/asyncHandler');
@@ -10,16 +14,83 @@ const cloudinaryService = require('../services/cloudinaryService');
 
 const uploadsFolder = path.join(__dirname, '..', 'uploads');
 
+// Convert audio to AAC/M4A using ffmpeg for iOS compatibility
+const convertToM4A = async (inputPath, outputPath) => {
+  const ffmpegPath = process.env.FFMPEG_PATH || 'ffmpeg';
+  try {
+    await execFileAsync(ffmpegPath, [
+      '-i', inputPath,
+      '-vn',                    // No video
+      '-acodec', 'aac',         // AAC codec - iOS compatible
+      '-ar', '44100',           // Sample rate
+      '-ab', '128k',            // Bitrate
+      '-movflags', '+faststart', // Optimize for streaming
+      '-y',                     // Overwrite output
+      outputPath
+    ]);
+    return true;
+  } catch (err) {
+    console.error('ffmpeg conversion failed:', err.message);
+    return false;
+  }
+};
+
+// Determine if a file needs conversion for iOS compatibility
+const needsConversion = (mimeType, filename) => {
+  const ext = path.extname(filename).toLowerCase();
+  // WebM and raw MP4 from browser MediaRecorder need conversion
+  if (ext === '.webm') return true;
+  if (mimeType?.includes('webm')) return true;
+  // MP4 from browser MediaRecorder (often has Opus codec) needs conversion
+  if (ext === '.mp4' && mimeType?.includes('mp4')) return true;
+  return false;
+};
+
+const uploadsFolder = path.join(__dirname, '..', 'uploads');
+
 const uploadMediaForm = asyncHandler(async (req, res) => {
   if (!req.file) throw new ApiError(400, 'NO_FILE', 'No file uploaded');
+
+  let finalFilename = req.file.filename;
+  let finalMimeType = req.file.mimetype;
+  let finalSize = req.file.size;
+  let finalUrl = `/uploads/${req.file.filename}`;
+
+  // Auto-convert audio files to M4A for iOS compatibility
+  const isAudio = req.file.mimetype?.startsWith('audio/') || 
+                  ['.webm', '.mp4', '.wav', '.mpeg', '.mp3'].includes(
+                    path.extname(req.file.originalname).toLowerCase()
+                  );
+
+  if (isAudio && needsConversion(req.file.mimetype, req.file.originalname)) {
+    const inputPath = path.join(uploadsFolder, req.file.filename);
+    const m4aFilename = req.file.filename.replace(/\.[^.]+$/, '') + '.m4a';
+    const outputPath = path.join(uploadsFolder, m4aFilename);
+
+    console.log(`Converting audio: ${req.file.filename} -> ${m4aFilename}`);
+    const converted = await convertToM4A(inputPath, outputPath);
+
+    if (converted) {
+      // Delete original file, use converted
+      await fs.unlink(inputPath).catch(() => null);
+      const stat = await fs.stat(outputPath).catch(() => null);
+      finalFilename = m4aFilename;
+      finalMimeType = 'audio/mp4';
+      finalSize = stat?.size || req.file.size;
+      finalUrl = `/uploads/${m4aFilename}`;
+      console.log(`Audio converted successfully: ${m4aFilename}`);
+    } else {
+      console.warn(`Audio conversion failed, using original: ${req.file.filename}`);
+    }
+  }
 
   const media = await Media.create({
     uploaderId: req.user._id,
     fileName: req.file.originalname,
-    mimeType: req.file.mimetype,
-    size: req.file.size,
+    mimeType: finalMimeType,
+    size: finalSize,
     storage: 'local',
-    url: `/uploads/${req.file.filename}`,
+    url: finalUrl,
   });
 
   return successResponse(res, media, 'Media uploaded', 201);
