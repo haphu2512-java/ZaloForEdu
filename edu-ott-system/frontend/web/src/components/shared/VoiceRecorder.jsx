@@ -140,31 +140,39 @@ export const VoiceRecorder = ({ onCancel, onSend }) => {
       let options = {};
       
       // Thử các format theo thứ tự ưu tiên - QUAN TRỌNG: phải chỉ định codec AAC cho iOS
-      if (MediaRecorder.isTypeSupported('audio/mp4;codecs=mp4a.40.2')) {
-        // MP4 với AAC-LC codec (mp4a.40.2) - tương thích TỐT NHẤT với iOS
-        options = { mimeType: 'audio/mp4;codecs=mp4a.40.2', audioBitsPerSecond: 128000 };
-      } else if (MediaRecorder.isTypeSupported('audio/mp4')) {
-        // MP4 fallback - có thể vẫn dùng Opus (không tốt cho iOS)
-        console.warn('⚠️ Using MP4 without AAC codec - may not work on iOS');
-        options = { mimeType: 'audio/mp4', audioBitsPerSecond: 128000 };
-      } else if (MediaRecorder.isTypeSupported('audio/mpeg')) {
-        // MP3 - tương thích tốt
+      if (MediaRecorder.isTypeSupported('audio/mpeg')) {
+        // MP3 - tương thích TỐT NHẤT với iOS (fallback từ AAC)
+        console.log('✅ Using MP3 format for maximum iOS compatibility');
         options = { mimeType: 'audio/mpeg', audioBitsPerSecond: 128000 };
+      } else if (MediaRecorder.isTypeSupported('audio/mp4;codecs=mp4a.40.5')) {
+        // MP4 với AAC-HE codec (mp4a.40.5) - thử profile khác
+        console.log('✅ Using MP4+AAC-HE for iOS compatibility');
+        options = { mimeType: 'audio/mp4;codecs=mp4a.40.5', audioBitsPerSecond: 128000 };
+      } else if (MediaRecorder.isTypeSupported('audio/mp4;codecs=mp4a.40.2')) {
+        // MP4 với AAC-LC codec (mp4a.40.2) - tương thích với iOS
+        console.log('✅ Using MP4+AAC-LC for iOS compatibility');
+        options = { mimeType: 'audio/mp4;codecs=mp4a.40.2', audioBitsPerSecond: 128000 };
       } else if (MediaRecorder.isTypeSupported('audio/wav')) {
         // WAV - tương thích tốt nhưng file lớn
+        console.log('✅ Using WAV format for iOS compatibility');
         options = { mimeType: 'audio/wav' };
+      } else if (MediaRecorder.isTypeSupported('audio/mp4')) {
+        // MP4 fallback - có thể vẫn dùng Opus (không tốt cho iOS)
+        console.warn('⚠️ Using MP4 without specific codec - may not work on iOS');
+        options = { mimeType: 'audio/mp4', audioBitsPerSecond: 128000 };
       } else if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) {
         // WebM - chỉ dùng khi không có lựa chọn khác (không tương thích iOS)
-        console.warn('⚠️ Using WebM format - may not work on iOS');
+        console.warn('⚠️ Using WebM format - will NOT work on iOS');
         options = { mimeType: 'audio/webm;codecs=opus', audioBitsPerSecond: 128000 };
       }
 
       console.log('🎤 Recording with format:', options.mimeType || 'default');
       console.log('🔍 Codec support check:', {
-        'MP4+AAC': MediaRecorder.isTypeSupported('audio/mp4;codecs=mp4a.40.2'),
-        'MP4': MediaRecorder.isTypeSupported('audio/mp4'),
         'MP3': MediaRecorder.isTypeSupported('audio/mpeg'),
+        'MP4+AAC-HE': MediaRecorder.isTypeSupported('audio/mp4;codecs=mp4a.40.5'),
+        'MP4+AAC-LC': MediaRecorder.isTypeSupported('audio/mp4;codecs=mp4a.40.2'),
         'WAV': MediaRecorder.isTypeSupported('audio/wav'),
+        'MP4': MediaRecorder.isTypeSupported('audio/mp4'),
         'WebM+Opus': MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
       });
 
@@ -205,7 +213,7 @@ export const VoiceRecorder = ({ onCancel, onSend }) => {
         setAudioUrl(audioUrl);
       };
 
-      mediaRecorder.start(); // Thu toàn bộ stream thay vì cắt nhỏ mỗi 100ms để tránh lệch rate
+      mediaRecorder.start(1000); // Thu mỗi 1 giây để đảm bảo metadata đúng
       setIsRecording(true);
       
       setRecordingTime(0);

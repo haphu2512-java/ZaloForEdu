@@ -73,6 +73,13 @@ export const AudioBubbleMobile: React.FC<AudioBubbleMobileProps> = ({ url, isMe 
       }
     } catch (error: any) {
       console.error('Lỗi khi phát âm thanh:', error);
+      console.error('Audio URL:', url);
+      console.error('Error details:', {
+        message: error.message,
+        code: error.code,
+        domain: error.domain,
+        nativeStackIOS: error.nativeStackIOS
+      });
       setIsLoading(false);
       
       let msg = 'Không thể phát âm thanh này.';
