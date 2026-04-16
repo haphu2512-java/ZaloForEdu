@@ -276,20 +276,38 @@ export default function ChatPage() {
       const isMyMessage = String(latestMessage?.senderId?._id || latestMessage?.senderId) === String(userId);
 
       if (convIdStr === activeIdStr) {
+        const msgIdStr = String(latestMessage?._id || latestMessage?.id);
+        const normalizedMsg = {
+          ...latestMessage,
+          mediaIds: (latestMessage.mediaIds || []).map(media =>
+            typeof media === 'object' && media.url && !/^https?:\/\//i.test(media.url)
+              ? { ...media, url: `${API_ORIGIN}${media.url}` }
+              : media
+          )
+        };
+
         setMessages(prev => {
-          if (prev.some(m => String(m._id) === String(latestMessage._id))) return prev;
-          const normalizedMsg = {
-            ...latestMessage,
-            mediaIds: (latestMessage.mediaIds || []).map(media =>
-              typeof media === 'object' && media.url && !/^https?:\/\//i.test(media.url)
-                ? { ...media, url: `${API_ORIGIN}${media.url}` }
-                : media
-            )
-          };
-          // Dedup toàn bộ trước khi thêm
-          const deduped = [...prev.filter(m => String(m._id) !== String(normalizedMsg._id)), normalizedMsg];
-          return deduped;
+          // 1. Tin nhắn thật đã có trong list rồi (cả từ API lẫn từ socket cũ) → bỏ qua
+          if (prev.some(m => !String(m._id || m.id).startsWith('temp-') && String(m._id || m.id) === msgIdStr)) {
+            return prev;
+          }
+
+          // 2. Tìm tin nhắn tạm (Optimistic) để thay thế - dù isMyMessage đúng hay sai
+          const tempIdx = prev.findIndex(m =>
+            String(m._id || m.id).startsWith('temp-') &&
+            (m.content || '').trim() === (normalizedMsg.content || '').trim()
+          );
+
+          if (tempIdx !== -1) {
+            const arr = [...prev];
+            arr[tempIdx] = normalizedMsg;
+            return arr;
+          }
+
+          // 3. Tin nhắn mới từ người khác, chưa có → thêm vào
+          return [...prev, normalizedMsg];
         });
+
         socket.emit("message_delivered", { messageId: latestMessage._id });
         socket.emit("message_seen", { messageId: latestMessage._id });
       } else if (!isMyMessage) {
@@ -454,25 +472,84 @@ export default function ChatPage() {
 
   // ==================== TƯƠNG TÁC ====================
   const handleSendText = async (content) => {
-    if (!activeConversation) return;
+    if (!activeConversation || !content.trim()) return;
+
+    // OPTIMISTIC UI: Thêm tin nhắn tạm thời
+    const tempId = `temp-${Date.now()}`;
+    const tempMsg = {
+      _id: tempId,
+      content: content,
+      senderId: { _id: userId }, // Đóng vai trò sender là chính mình
+      conversationId: activeConversation._id,
+      createdAt: new Date().toISOString(),
+      status: 'sending'
+    };
+    setMessages(prev => [...prev, tempMsg]);
+
     try {
       const currentConvId = await ensureRealConversation();
-      await axios.post(`${API_BASE_URL}/messages/send`,
+      const res = await axios.post(`${API_BASE_URL}/messages/send`,
         { content: content, conversationId: currentConvId },
         { headers: { Authorization: `Bearer ${token}` } }
       );
-    } catch (err) { toast.error("Lỗi gửi tin nhắn"); }
+      
+      const realMsg = res.data.data || res.data;
+      const realMsgId = String(realMsg._id || realMsg.id);
+
+      // Cập nhật tin nhắn tạm bằng tin nhắn thật từ server
+      // Nếu socket đã replace temp trước → realMsg đã có trong list, chỉ ensure không bị trùng
+      setMessages(prev => {
+        // Kiểm tra realMsg đã có chưa (socket có thể đã add vào rồi)
+        if (prev.some(m => !String(m._id || m.id).startsWith('temp-') && String(m._id || m.id) === realMsgId)) {
+          // Đã có, chỉ xóa temp nếu còn sót
+          return prev.filter(m => m._id !== tempId);
+        }
+        // Chưa có → replace temp bằng real
+        return prev.map(m => m._id === tempId ? {
+          ...realMsg,
+          mediaIds: (realMsg.mediaIds || []).map(media =>
+            typeof media === 'object' && media.url && !/^https?:\/\//i.test(media.url)
+              ? { ...media, url: `${API_ORIGIN}${media.url}` }
+              : media
+          )
+        } : m);
+      });
+
+    } catch (err) { 
+      toast.error("Lỗi gửi tin nhắn");
+      setMessages(prev => prev.filter(m => m._id !== tempId));
+    }
   };
 
   const handleSendLike = async () => {
     if (!activeConversation) return;
+
+    // OPTIMISTIC LIKE
+    const tempId = `temp-like-${Date.now()}`;
+    const tempMsg = {
+      _id: tempId,
+      content: "👍",
+      senderId: { _id: userId },
+      conversationId: activeConversation._id,
+      createdAt: new Date().toISOString(),
+      status: 'sending'
+    };
+    setMessages(prev => [...prev, tempMsg]);
+
     try {
       const currentConvId = await ensureRealConversation();
-      await axios.post(`${API_BASE_URL}/messages/send`,
+      const res = await axios.post(`${API_BASE_URL}/messages/send`,
         { content: "👍", conversationId: currentConvId },
         { headers: { Authorization: `Bearer ${token}` } }
       );
-    } catch (err) { console.error("Lỗi gửi Like", err); }
+
+      const realMsg = res.data.data || res.data;
+      setMessages(prev => prev.map(m => m._id === tempId ? realMsg : m));
+
+    } catch (err) { 
+      console.error("Lỗi gửi Like", err); 
+      setMessages(prev => prev.filter(m => m._id !== tempId));
+    }
   };
 
   const handleUploadFile = async (file) => {

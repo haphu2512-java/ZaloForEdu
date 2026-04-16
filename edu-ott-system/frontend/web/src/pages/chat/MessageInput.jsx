@@ -107,8 +107,8 @@ export const MessageInput = ({ theme, placeholder, onSend, onSendLike, onUploadF
         
         {/* Nút gửi hoặc Like */}
         {text.trim() ? (
-          <button className="mdc-send-btn" onClick={handleSend} disabled={isSending}>
-            {isSending ? <FaSpinner className="spin" size={14} /> : <FaPaperPlane size={15} />}
+          <button className="mdc-send-btn" onClick={handleSend}>
+            <FaPaperPlane size={15} />
           </button>
         ) : (
           <button className="mdc-like-btn" onClick={onSendLike}>

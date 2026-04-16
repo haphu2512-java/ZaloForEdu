@@ -151,35 +151,23 @@ export default function ChatScreen() {
   const [showEmojiPanel, setShowEmojiPanel] = useState(false);
   const [showMediaMenu, setShowMediaMenu] = useState(false);
   const [typingUserIds, setTypingUserIds] = useState<string[]>([]);
-
-  // Reply
   const [replyTo, setReplyTo] = useState<Message | null>(null);
-
-  // Forwarding
   const [forwardModalVisible, setForwardModalVisible] = useState(false);
   const [forwardSource, setForwardSource] = useState<Message | null>(null);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [isForwarding, setIsForwarding] = useState(false);
-
   const [conversation, setConversation] = useState<Conversation | null>(null);
   const [pinnedItems, setPinnedItems] = useState<any[]>([]);
   const [mediaById, setMediaById] = useState<Record<string, MediaItem>>({});
-
-  // Action Menu
   const [actionMenu, setActionMenu] = useState<{ visible: boolean; options: ActionMenuOption[] }>({ visible: false, options: [] });
-
-  // Image viewer
   const [viewImageUrl, setViewImageUrl] = useState<string | null>(null);
 
   // Tránh mở Picker nhiều lần cùng lúc gây lỗi "picking in progress"
   const isPicking = useRef(false);
-
-  const getPinnedMessageId = (pinnedItem: any): string => {
-    const messageRef = pinnedItem?.messageId;
-    if (!messageRef) return '';
-    if (typeof messageRef === 'string') return messageRef;
-    return messageRef._id || messageRef.id || '';
-  };
+  // Theo dõi tin nhắn đã đánh dấu đọc trong session này
+  const markedMessageIds = useRef<Set<string>>(new Set());
+  const isTypingRef = useRef(false);
+  const typingStopTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const otherParticipant =
     conversation?.type === 'direct'
@@ -194,34 +182,62 @@ export default function ChatScreen() {
     ? conversation.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(conversationTitle)}&background=8B5CF6&color=fff&size=150&bold=true`
     : otherParticipant?.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(conversationTitle)}&background=2563EB&color=fff&size=150&bold=true`;
 
-  const ensureMediaLoaded = useCallback(async (mediaIds: string[]) => {
-    const uniqueIds = Array.from(new Set((mediaIds || []).filter(Boolean)));
-    const missingIds = uniqueIds.filter((id) => !mediaById[id]);
-    if (missingIds.length === 0) return;
-    const entries = await Promise.all(
-      missingIds.map(async (id) => {
-        try {
-          const media = await getMediaById(id);
-          return [id, media] as const;
-        } catch {
-          return null;
+  // ==================== MEDIA HARVESTING ====================
+  // Trích xuất thông tin Media từ tin nhắn vào cache, tránh gọi API thừa
+  const harvestMediaFromMessages = useCallback((msgs: Message[]) => {
+    const mediaMap: Record<string, MediaItem> = {};
+    msgs.forEach((m) => {
+      (m.mediaIds || []).forEach((media: any) => {
+        if (media && typeof media === 'object' && (media._id || media.id)) {
+          const id = media._id || media.id;
+          mediaMap[id] = media;
         }
-      }),
-    );
-    const validEntries = entries.filter((e): e is readonly [string, MediaItem] => !!e);
-    if (!validEntries.length) return;
-    setMediaById((prev) => ({
-      ...prev,
-      ...Object.fromEntries(validEntries),
-    }));
-  }, [mediaById]);
+      });
+    });
+    if (Object.keys(mediaMap).length > 0) {
+      setMediaById((prev) => ({ ...prev, ...mediaMap }));
+    }
+  }, []);
 
+  // Tải media còn thiếu một cách bất đồng bộ, không tạo vòng lặp phụ thuộc
+  const ensureMediaLoaded = useCallback((mediaIds: string[]) => {
+    const uniqueIds = Array.from(new Set((mediaIds || []).filter(Boolean)));
+    setMediaById((currentCache) => {
+      const missingIds = uniqueIds.filter(
+        (id) => !currentCache[id] && !id.startsWith('temp-')
+      );
+      if (missingIds.length === 0) return currentCache;
+
+      void (async () => {
+        const entries = await Promise.all(
+          missingIds.map(async (id) => {
+            try {
+              const media = await getMediaById(id);
+              return [id, media] as const;
+            } catch {
+              return null;
+            }
+          }),
+        );
+        const validEntries = entries.filter((e): e is readonly [string, MediaItem] => !!e);
+        if (validEntries.length > 0) {
+          setMediaById((prev) => ({ ...prev, ...Object.fromEntries(validEntries) }));
+        }
+      })();
+
+      return currentCache;
+    });
+  }, []);
+
+  // ==================== LOAD TIN NHẮN BAN ĐẦU ====================
   const loadInitialMessages = useCallback(async () => {
     setIsLoading(true);
     try {
       const res = await getMessages({ conversationId, limit: 30 });
       setMessages(res.items);
       setNextCursor(res.nextCursor);
+      harvestMediaFromMessages(res.items);
+
       const convRes = await getConversations(null, 100);
       const matched = (convRes.items || []).find((item) => (item._id || item.id) === conversationId) || null;
       setConversation(matched);
@@ -234,16 +250,13 @@ export default function ChatScreen() {
     } finally {
       setIsLoading(false);
     }
-  }, [conversationId]);
+  }, [conversationId, harvestMediaFromMessages]);
 
   useEffect(() => {
     loadInitialMessages();
   }, [loadInitialMessages]);
 
-  const markedMessageIds = useRef<Set<string>>(new Set());
-  const isTypingRef = useRef(false);
-  const typingStopTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
+  // ==================== HELPERS ====================
   const getNormalizedUserIds = useCallback((ids: any[] = []): string[] => (
     ids
       .map((u: any) => (typeof u === 'string' ? u : u?._id || u?.id || ''))
@@ -271,57 +284,59 @@ export default function ChatScreen() {
       emitTyping(conversationId);
       isTypingRef.current = true;
     }
-    if (typingStopTimeoutRef.current) {
-      clearTimeout(typingStopTimeoutRef.current);
-    }
+    if (typingStopTimeoutRef.current) clearTimeout(typingStopTimeoutRef.current);
     typingStopTimeoutRef.current = setTimeout(() => {
       stopTypingWithEmit();
     }, 1500);
   }, [conversationId, isSocketReady, stopTypingWithEmit]);
 
+  // ==================== ĐÁNH DẤU ĐÃ XEM (chống vòng lặp) ====================
   useEffect(() => {
-    if (messages.length > 0 && currentUserId) {
-      const getMessageIdStr = (m: any) => typeof m._id === 'string' ? m._id : m.id;
-      const unreadMessages = messages.filter((m) => {
-        const mid = getMessageIdStr(m);
-        if (markedMessageIds.current.has(mid)) return false;
-        const senderId = getMessageSenderId(m);
-        if (senderId === currentUserId) return false;
-        const seenList = getNormalizedUserIds(m.seenBy || []);
-        return !seenList.includes(currentUserId);
-      });
-      if (unreadMessages.length > 0) {
-        unreadMessages.forEach(m => markedMessageIds.current.add(getMessageIdStr(m)));
-        Promise.all(
-          unreadMessages.map(async (m) => {
-            const messageId = getMessageIdStr(m);
-            emitMessageDelivered(messageId);
-            try {
-              await markMessageRead(messageId);
-            } catch {
-              // Keep socket read receipt even if HTTP call fails.
-            }
-            emitMessageSeen(messageId);
-          }),
-        ).catch(() => null);
-      }
-    }
-  }, [messages, currentUserId, getNormalizedUserIds]);
+    if (messages.length === 0 || !currentUserId) return;
 
+    const getIdStr = (m: any): string => m._id || m.id || '';
+
+    const unread = messages.filter((m) => {
+      const mid = getIdStr(m);
+      // Bỏ qua tin nhắn tạm và tin đã xử lý
+      if (!mid || mid.startsWith('temp-')) return false;
+      if (markedMessageIds.current.has(mid)) return false;
+      if (getMessageSenderId(m) === currentUserId) return false;
+      return !getNormalizedUserIds(m.seenBy || []).includes(currentUserId);
+    });
+
+    if (unread.length > 0) {
+      // Đánh dấu ngay vào Ref trước khi gọi API để tránh re-trigger
+      unread.forEach((m) => markedMessageIds.current.add(getIdStr(m)));
+
+      void (async () => {
+        await Promise.allSettled(
+          unread.map(async (m) => {
+            const mid = getIdStr(m);
+            emitMessageDelivered(mid);
+            try { await markMessageRead(mid); } catch { /* ignore */ }
+            emitMessageSeen(mid);
+          })
+        );
+      })();
+    }
+    // Chỉ phụ thuộc vào ĐỘ DÀI của mảng, không phải toàn bộ object để tránh vòng lặp
+  }, [messages.length, currentUserId, getNormalizedUserIds]);
+
+  // Dọn dẹp typing khi unmount
   useEffect(() => () => stopTypingWithEmit(), [stopTypingWithEmit]);
 
+  // Tải media còn thiếu khi danh sách tin nhắn thay đổi
   useEffect(() => {
-    const ids = messages
-      .flatMap((m) =>
-        (m.mediaIds || []).map((mid: any) =>
-          typeof mid === 'string' ? mid : (mid._id || mid.id || ''),
-        ))
-      .filter(Boolean);
-    if (ids.length) {
-      void ensureMediaLoaded(ids);
-    }
-  }, [messages, ensureMediaLoaded]);
+    const stringIds = messages.flatMap((m) =>
+      (m.mediaIds || [])
+        .map((mid: any) => typeof mid === 'string' ? mid : (mid._id || mid.id || ''))
+        .filter((id: string) => !!id && !id.startsWith('temp-'))
+    );
+    if (stringIds.length > 0) ensureMediaLoaded(stringIds);
+  }, [messages.length, ensureMediaLoaded]);
 
+  // ==================== SOCKET ====================
   useEffect(() => {
     let mounted = true;
 
@@ -337,21 +352,38 @@ export default function ChatScreen() {
       const onNewMessage = (message: Message) => {
         const msgConvId = getConversationIdFromMessage(message);
         if (msgConvId !== conversationId) return;
+
         setMessages((prev) => {
+          // 1. Kiểm tra trùng lặp theo ID thật
           if (prev.some((m) => getMessageId(m) === getMessageId(message))) return prev;
-          let enhancedMessage = { ...message };
-          if (enhancedMessage.replyTo && typeof enhancedMessage.replyTo === 'string') {
-            const originalMsg = prev.find((m) => getMessageId(m) === enhancedMessage.replyTo);
-            if (originalMsg) enhancedMessage.replyTo = originalMsg;
+
+          let enhanced = { ...message };
+          if (enhanced.replyTo && typeof enhanced.replyTo === 'string') {
+            const original = prev.find((m) => getMessageId(m) === enhanced.replyTo);
+            if (original) enhanced.replyTo = original;
           }
-          return [enhancedMessage, ...prev];
+
+          // 2. Thay thế tin nhắn tạm (Optimistic) nếu tìm thấy
+          const tempIdx = prev.findIndex(
+            (m) =>
+              (m.status === 'sending' as any) &&
+              (m.content || '').trim() === (message.content || '').trim() &&
+              getMessageSenderId(m) === getMessageSenderId(message)
+          );
+
+          if (tempIdx !== -1) {
+            const updated = [...prev];
+            updated[tempIdx] = enhanced;
+            return updated;
+          }
+
+          return [enhanced, ...prev];
         });
+
         if (getMessageSenderId(message) !== currentUserId) {
-          const messageId = getMessageId(message);
-          emitMessageDelivered(messageId);
-          markMessageRead(messageId)
-            .catch(() => null)
-            .finally(() => emitMessageSeen(messageId));
+          const mid = getMessageId(message);
+          emitMessageDelivered(mid);
+          markMessageRead(mid).catch(() => null).finally(() => emitMessageSeen(mid));
           setTypingUserIds((prev) => prev.filter((id) => id !== getMessageSenderId(message)));
         }
       };
@@ -359,7 +391,7 @@ export default function ChatScreen() {
       const onMessageRecalled = (payload: { messageId: string; conversationId: string }) => {
         if (payload.conversationId !== conversationId) return;
         setMessages((prev) =>
-          prev.map((m) => (getMessageId(m) === payload.messageId ? { ...m, isRecalled: true } : m)),
+          prev.map((m) => getMessageId(m) === payload.messageId ? { ...m, isRecalled: true } : m)
         );
       };
 
@@ -367,9 +399,13 @@ export default function ChatScreen() {
         setMessages((prev) =>
           prev.map((m) =>
             getMessageId(m) === payload.messageId
-              ? { ...m, seenBy: Array.from(new Set([...(m.seenBy || []), payload.userId])), deliveredTo: Array.from(new Set([...(m.deliveredTo || []), payload.userId])) }
-              : m,
-          ),
+              ? {
+                  ...m,
+                  seenBy: Array.from(new Set([...(m.seenBy || []), payload.userId])),
+                  deliveredTo: Array.from(new Set([...(m.deliveredTo || []), payload.userId])),
+                }
+              : m
+          )
         );
       };
 
@@ -378,14 +414,14 @@ export default function ChatScreen() {
           prev.map((m) =>
             getMessageId(m) === payload.messageId
               ? { ...m, deliveredTo: Array.from(new Set([...(m.deliveredTo || []), payload.userId])) }
-              : m,
-          ),
+              : m
+          )
         );
       };
 
       const onTyping = (payload: { conversationId: string; userId: string }) => {
         if (payload.conversationId !== conversationId || payload.userId === currentUserId) return;
-        setTypingUserIds((prev) => (prev.includes(payload.userId) ? prev : [...prev, payload.userId]));
+        setTypingUserIds((prev) => prev.includes(payload.userId) ? prev : [...prev, payload.userId]);
       };
 
       const onStopTyping = (payload: { conversationId: string; userId: string }) => {
@@ -393,13 +429,11 @@ export default function ChatScreen() {
         setTypingUserIds((prev) => prev.filter((id) => id !== payload.userId));
       };
 
-      const onPinnedItemsUpdated = (items: any[]) => {
-        setPinnedItems(items);
-      };
+      const onPinnedItemsUpdated = (items: any[]) => setPinnedItems(items);
 
       const onMessageReacted = (payload: { messageId: string; reactions: any[] }) => {
         setMessages((prev) =>
-          prev.map((m) => (getMessageId(m) === payload.messageId ? { ...m, reactions: payload.reactions } : m)),
+          prev.map((m) => getMessageId(m) === payload.messageId ? { ...m, reactions: payload.reactions } : m)
         );
       };
 
@@ -431,10 +465,13 @@ export default function ChatScreen() {
     const cleanupPromise = setupSocket();
     return () => {
       mounted = false;
-      Promise.resolve(cleanupPromise).then((cleanup) => { if (typeof cleanup === 'function') cleanup(); });
+      Promise.resolve(cleanupPromise).then((cleanup) => {
+        if (typeof cleanup === 'function') cleanup();
+      });
     };
   }, [conversationId, currentUserId]);
 
+  // ==================== LOAD MORE ====================
   const loadMoreMessages = async () => {
     if (!nextCursor || isFetchingMore) return;
     setIsFetchingMore(true);
@@ -443,6 +480,7 @@ export default function ChatScreen() {
       setMessages((prev) => {
         const existing = new Set(prev.map((m) => getMessageId(m)));
         const incoming = (res.items || []).filter((m) => !existing.has(getMessageId(m)));
+        harvestMediaFromMessages(incoming);
         return [...prev, ...incoming];
       });
       setNextCursor(res.nextCursor);
@@ -453,37 +491,59 @@ export default function ChatScreen() {
     }
   };
 
+  // ==================== GỬI TIN NHẮN (OPTIMISTIC UI) ====================
   const handleSendText = async () => {
     const text = inputText.trim();
-    if (!text) return;
+    if (!text || isSending) return;
     stopTypingWithEmit();
-    setIsSending(true);
+
     const replyId = replyTo ? getMessageId(replyTo) : undefined;
+    const currentReplyTo = replyTo;
+
+    const tempId = `temp-${Date.now()}`;
+    const tempMsg: Message = {
+      _id: tempId,
+      id: tempId,
+      content: text,
+      senderId: user as any,
+      conversationId,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      status: 'sending',
+      replyTo: currentReplyTo ?? null,
+      mediaIds: [],
+      attachments: [],
+      deliveredTo: [],
+      seenBy: [],
+      reactions: [],
+    };
+
+    setInputText('');
     setReplyTo(null);
+    setShowEmojiPanel(false);
+    setIsSending(true);
+    setMessages((prev) => [tempMsg, ...prev]);
+
     try {
       const newMsg = await sendMessage({ conversationId, content: text, replyTo: replyId });
-      setMessages((prev) => {
-        if (prev.some((m) => getMessageId(m) === getMessageId(newMsg))) return prev;
-        let enhancedMessage = { ...newMsg };
-        if (enhancedMessage.replyTo && typeof enhancedMessage.replyTo === 'string' && replyTo) {
-          enhancedMessage.replyTo = replyTo;
-        }
-        return [enhancedMessage, ...prev];
-      });
-      setInputText('');
-      setShowEmojiPanel(false);
+      // Thay thế tin nhắn tạm bằng tin nhắn thật từ server
+      setMessages((prev) => prev.map((m) => getMessageId(m) === tempId ? newMsg : m));
+      if (newMsg.mediaIds?.length) harvestMediaFromMessages([newMsg]);
     } catch (error) {
+      console.error('Failed to send message:', error);
+      setMessages((prev) => prev.filter((m) => getMessageId(m) !== tempId));
       Alert.alert('Lỗi', 'Không thể gửi tin nhắn');
+      setInputText(text);
     } finally {
       setIsSending(false);
     }
   };
 
+  // ==================== CHỌN ẢNH ====================
   const handlePickImage = async () => {
     if (isPicking.current) return;
     isPicking.current = true;
     setShowMediaMenu(false);
-    // Chờ Modal ẩn hoàn toàn trước khi mở Picker (đặc biệt quan trọng trên iOS)
     await new Promise((resolve) => setTimeout(resolve, 500));
     try {
       const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -498,18 +558,19 @@ export default function ChatScreen() {
       });
       if (result.canceled || !result.assets?.length) return;
       setIsSending(true);
-      const uploadPromises = result.assets.map(async (asset) => {
-        try {
-          const ext = asset.uri.split('.').pop()?.toLowerCase() || 'jpg';
-          const mimeType = asset.mimeType || (ext === 'png' ? 'image/png' : 'image/jpeg');
-          const fileName = asset.fileName || `photo-${Date.now()}.${ext}`;
-          return await uploadMediaForm({ uri: asset.uri, fileName, mimeType });
-        } catch (error) {
-          console.error('Failed to upload image:', error);
-          return null;
-        }
-      });
-      const uploads = await Promise.all(uploadPromises);
+      const uploads = await Promise.all(
+        result.assets.map(async (asset) => {
+          try {
+            const ext = asset.uri.split('.').pop()?.toLowerCase() || 'jpg';
+            const mimeType = asset.mimeType || (ext === 'png' ? 'image/png' : 'image/jpeg');
+            const fileName = asset.fileName || `photo-${Date.now()}.${ext}`;
+            return await uploadMediaForm({ uri: asset.uri, fileName, mimeType });
+          } catch (e) {
+            console.error('Failed to upload image:', e);
+            return null;
+          }
+        })
+      );
       const mediaIds = uploads
         .filter((m): m is MediaItem => m !== null)
         .map((m) => m._id || m.id)
@@ -517,14 +578,12 @@ export default function ChatScreen() {
       if (!mediaIds.length) throw new Error('Không upload được ảnh nào');
       setMediaById((prev) => {
         const updated = { ...prev };
-        uploads.forEach((m) => {
-          if (m) { const id = m._id || m.id; if (id) updated[id] = m; }
-        });
+        uploads.forEach((m) => { if (m) { const id = m._id || m.id; if (id) updated[id] = m; } });
         return updated;
       });
       const newMsg = await sendMessage({ conversationId, mediaIds, content: '' });
       setMessages((prev) =>
-        prev.some((m) => getMessageId(m) === getMessageId(newMsg)) ? prev : [newMsg, ...prev],
+        prev.some((m) => getMessageId(m) === getMessageId(newMsg)) ? prev : [newMsg, ...prev]
       );
     } catch (err: any) {
       Alert.alert('Lỗi', err.message || 'Không thể gửi ảnh');
@@ -534,6 +593,7 @@ export default function ChatScreen() {
     }
   };
 
+  // ==================== CHỌN FILE ====================
   const handleDocumentPick = async () => {
     if (isPicking.current) return;
     isPicking.current = true;
@@ -543,20 +603,21 @@ export default function ChatScreen() {
       const result = await DocumentPicker.getDocumentAsync({ copyToCacheDirectory: true, multiple: true });
       if (result.canceled || !result.assets?.length) return;
       setIsSending(true);
-      const uploadPromises = result.assets.map(async (asset) => {
-        try {
-          const fileName = asset.name || `file-${Date.now()}`;
-          return await uploadMediaForm({
-            uri: asset.uri,
-            fileName,
-            mimeType: asset.mimeType || getMimeTypeFromFileName(fileName),
-          });
-        } catch (error) {
-          console.error('Failed to upload file:', error);
-          return null;
-        }
-      });
-      const uploads = await Promise.all(uploadPromises);
+      const uploads = await Promise.all(
+        result.assets.map(async (asset) => {
+          try {
+            const fileName = asset.name || `file-${Date.now()}`;
+            return await uploadMediaForm({
+              uri: asset.uri,
+              fileName,
+              mimeType: asset.mimeType || getMimeTypeFromFileName(fileName),
+            });
+          } catch (e) {
+            console.error('Failed to upload file:', e);
+            return null;
+          }
+        })
+      );
       const mediaIds = uploads
         .filter((m): m is MediaItem => m !== null)
         .map((m) => m._id || m.id)
@@ -564,19 +625,16 @@ export default function ChatScreen() {
       if (!mediaIds.length) throw new Error('Không thể tải lên tệp tin nào');
       setMediaById((prev) => {
         const updated = { ...prev };
-        uploads.forEach((m) => {
-          if (m) { const id = m._id || m.id; if (id) updated[id] = m; }
-        });
+        uploads.forEach((m) => { if (m) { const id = m._id || m.id; if (id) updated[id] = m; } });
         return updated;
       });
-      const fileCount = result.assets.length;
       const newMsg = await sendMessage({
         conversationId,
         mediaIds,
-        content: `Đã gửi ${fileCount} file`,
+        content: `Đã gửi ${result.assets.length} file`,
       });
       setMessages((prev) =>
-        prev.some((m) => getMessageId(m) === getMessageId(newMsg)) ? prev : [newMsg, ...prev],
+        prev.some((m) => getMessageId(m) === getMessageId(newMsg)) ? prev : [newMsg, ...prev]
       );
     } catch (e: any) {
       console.error('Document picker error:', e);
@@ -587,6 +645,7 @@ export default function ChatScreen() {
     }
   };
 
+  // ==================== CÁC ACTION KHÁC ====================
   const openAttachment = useCallback(async (media?: MediaItem | null) => {
     if (!media?.url) return;
     try {
@@ -603,7 +662,7 @@ export default function ChatScreen() {
       setConversations(targets);
       setForwardSource(msg);
       setForwardModalVisible(true);
-    } catch (e) {
+    } catch {
       Alert.alert('Lỗi', 'Không thể tải danh sách cuộc trò chuyện');
     }
   };
@@ -632,20 +691,20 @@ export default function ChatScreen() {
   const handleReactToMessage = async (msg: Message) => {
     Alert.alert(
       'Chọn cảm xúc', '',
-      [...QUICK_EMOJIS, 'Gửi cảm xúc', 'Hủy'].map((emoji) => ({
+      [...QUICK_EMOJIS, 'Hủy'].map((emoji) => ({
         text: emoji,
         onPress: async () => {
           if (emoji === 'Hủy') return;
           try {
-            const reactions = await reactToMessage(getMessageId(msg), emoji === 'Gửi cảm xúc' ? undefined : emoji);
+            const reactions = await reactToMessage(getMessageId(msg), emoji);
             setMessages((prev) =>
-              prev.map((m) => getMessageId(m) === getMessageId(msg) ? { ...m, reactions: reactions || [] } : m),
+              prev.map((m) => getMessageId(m) === getMessageId(msg) ? { ...m, reactions: reactions || [] } : m)
             );
-          } catch (_e) {
+          } catch {
             Alert.alert('Lỗi', 'Không thể thả cảm xúc');
           }
         },
-      })),
+      }))
     );
   };
 
@@ -654,12 +713,14 @@ export default function ChatScreen() {
     router.push({ pathname: '/conversation-details', params: { id: conversationId } });
   };
 
-  const handleVoiceCall = () => {
-    Alert.alert('Thông báo', 'Tính năng gọi thoại sẽ sớm được cập nhật');
-  };
+  const handleVoiceCall = () => Alert.alert('Thông báo', 'Tính năng gọi thoại sẽ sớm được cập nhật');
+  const handleVideoCall = () => Alert.alert('Thông báo', 'Tính năng gọi video sẽ sớm được cập nhật');
 
-  const handleVideoCall = () => {
-    Alert.alert('Thông báo', 'Tính năng gọi video sẽ sớm được cập nhật');
+  const getPinnedMessageId = (pinnedItem: any): string => {
+    const messageRef = pinnedItem?.messageId;
+    if (!messageRef) return '';
+    if (typeof messageRef === 'string') return messageRef;
+    return messageRef._id || messageRef.id || '';
   };
 
   const handleMessageLongPress = (msg: Message) => {
@@ -678,7 +739,9 @@ export default function ChatScreen() {
         onPress: async () => {
           try {
             await recallMessage(getMessageId(msg));
-            setMessages((prev) => prev.map((m) => getMessageId(m) === getMessageId(msg) ? { ...m, isRecalled: true } : m));
+            setMessages((prev) =>
+              prev.map((m) => getMessageId(m) === getMessageId(msg) ? { ...m, isRecalled: true } : m)
+            );
           } catch { Alert.alert('Lỗi', 'Không thể thu hồi'); }
         },
       });
@@ -702,7 +765,9 @@ export default function ChatScreen() {
         text: isPinned ? 'Bỏ ghim' : 'Ghim tin nhắn',
         onPress: async () => {
           try {
-            const updatedItems = isPinned ? await unpinMessage(conversationId, messageId) : await pinMessage(conversationId, messageId);
+            const updatedItems = isPinned
+              ? await unpinMessage(conversationId, messageId)
+              : await pinMessage(conversationId, messageId);
             setPinnedItems(updatedItems);
             Alert.alert('Thành công', isPinned ? 'Đã gỡ ghim tin nhắn' : 'Đã ghim tin nhắn');
           } catch (err: any) {
@@ -714,8 +779,9 @@ export default function ChatScreen() {
     setActionMenu({ visible: true, options: buttons });
   };
 
+  // ==================== RENDER ====================
   const renderMessageStatus = (item: Message) => {
-    if (item.status === 'sending') return <Ionicons name="time-outline" size={11} color="rgba(255,255,255,0.6)" />;
+    if ((item.status as any) === 'sending') return <Ionicons name="time-outline" size={11} color="rgba(255,255,255,0.6)" />;
     const seenBy = getNormalizedUserIds(item.seenBy || []).filter((id) => id !== currentUserId);
     if (seenBy.length > 0) return <Ionicons name="checkmark-done" size={11} color="#60EFFF" />;
     const deliveredTo = getNormalizedUserIds(item.deliveredTo || []).filter((id) => id !== currentUserId);
@@ -737,6 +803,8 @@ export default function ChatScreen() {
     const isMine = getMessageSenderId(item) === currentUserId;
     const senderName = typeof item.senderId === 'string' ? '' : item.senderId?.username || '';
     const senderAvatarUrl = typeof item.senderId === 'string' ? null : item.senderId?.avatarUrl;
+    const isSendingMsg = (item.status as any) === 'sending';
+
     const groupedReactions = (item.reactions || []).reduce((acc, reaction: any) => {
       const emoji = reaction?.emoji;
       if (!emoji) return acc;
@@ -769,10 +837,17 @@ export default function ChatScreen() {
       );
     }
 
-    const replyMsg = item.replyTo ? (typeof item.replyTo === 'object' ? item.replyTo : null) : null;
+    const replyMsg = item.replyTo && typeof item.replyTo === 'object' ? item.replyTo : null;
 
     return (
-      <Pressable onLongPress={() => handleMessageLongPress(item)} style={[styles.bubbleWrapper, isMine ? styles.myWrapper : styles.theirWrapper]}>
+      <Pressable
+        onLongPress={() => !isSendingMsg && handleMessageLongPress(item)}
+        style={[
+          styles.bubbleWrapper,
+          isMine ? styles.myWrapper : styles.theirWrapper,
+          isSendingMsg && { opacity: 0.7 }, // Tin nhắn tạm hiện mờ hơn
+        ]}
+      >
         {!isMine && (
           <Image
             source={{ uri: senderAvatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(senderName || 'U')}&background=0EA5E9&color=fff&size=60&bold=true` }}
@@ -871,6 +946,7 @@ export default function ChatScreen() {
     );
   };
 
+  // ==================== LOADING STATE ====================
   if (isLoading) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background }}>
@@ -879,6 +955,7 @@ export default function ChatScreen() {
     );
   }
 
+  // ==================== MAIN RENDER ====================
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
       <Stack.Screen
@@ -949,8 +1026,11 @@ export default function ChatScreen() {
         {showEmojiPanel && (
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 12, paddingVertical: 8, gap: 8, backgroundColor: colors.surface }}>
             {QUICK_EMOJIS.map((emoji) => (
-              <TouchableOpacity key={emoji} onPress={() => setInputText((prev) => `${prev}${emoji}`)}
-                style={{ paddingVertical: 6, paddingHorizontal: 10, borderRadius: 12, backgroundColor: colors.tint + '20' }}>
+              <TouchableOpacity
+                key={emoji}
+                onPress={() => setInputText((prev) => `${prev}${emoji}`)}
+                style={{ paddingVertical: 6, paddingHorizontal: 10, borderRadius: 12, backgroundColor: colors.tint + '20' }}
+              >
                 <Text style={{ fontSize: 20 }}>{emoji}</Text>
               </TouchableOpacity>
             ))}
@@ -996,11 +1076,12 @@ export default function ChatScreen() {
             disabled={isSending || inputText.trim().length === 0}
             style={[styles.sendBtn, { backgroundColor: inputText.trim().length > 0 ? '#0068FF' : '#D1D5DB' }]}
           >
-            {isSending ? <ActivityIndicator color="#fff" size="small" /> : <Ionicons name="send" size={18} color="#fff" style={{ marginLeft: 3 }} />}
+            <Ionicons name="send" size={18} color="#fff" style={{ marginLeft: 3 }} />
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
 
+      {/* Modal chọn media */}
       <Modal visible={showMediaMenu} transparent animationType="slide" onRequestClose={() => setShowMediaMenu(false)}>
         <TouchableOpacity style={styles.mediaMenuOverlay} activeOpacity={1} onPress={() => setShowMediaMenu(false)}>
           <View style={[styles.mediaMenu, { backgroundColor: colors.surface }]}>
@@ -1034,6 +1115,7 @@ export default function ChatScreen() {
         </TouchableOpacity>
       </Modal>
 
+      {/* Modal xem ảnh */}
       <Modal visible={!!viewImageUrl} transparent animationType="fade" onRequestClose={() => setViewImageUrl(null)}>
         <View style={styles.imageViewerOverlay}>
           <TouchableOpacity style={styles.imageViewerClose} onPress={() => setViewImageUrl(null)}>
@@ -1045,6 +1127,7 @@ export default function ChatScreen() {
         </View>
       </Modal>
 
+      {/* Modal chuyển tiếp */}
       <Modal visible={forwardModalVisible} animationType="slide" onRequestClose={() => setForwardModalVisible(false)}>
         <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
           <View style={{ paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: colors.surface }}>
@@ -1056,7 +1139,7 @@ export default function ChatScreen() {
           </View>
           <FlatList
             data={conversations}
-            keyExtractor={(item) => item._id}
+            keyExtractor={(item) => item._id || item.id || ''}
             renderItem={({ item }) => (
               <TouchableOpacity
                 disabled={isForwarding}
@@ -1070,6 +1153,7 @@ export default function ChatScreen() {
         </SafeAreaView>
       </Modal>
 
+      {/* Modal action menu (long press) */}
       <Modal visible={actionMenu.visible} transparent animationType="fade" onRequestClose={() => setActionMenu({ visible: false, options: [] })}>
         <TouchableOpacity style={styles.actionMenuOverlay} activeOpacity={1} onPress={() => setActionMenu({ visible: false, options: [] })}>
           <View style={[styles.actionMenuContainer, { backgroundColor: colors.surface }]}>

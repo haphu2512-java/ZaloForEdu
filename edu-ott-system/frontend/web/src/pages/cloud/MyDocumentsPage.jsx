@@ -145,24 +145,40 @@ export default function MyDocumentsPage(){
 
   const handleSendText=async(text, replyToId=null)=>{
     if(!text.trim()||!convId||isSending)return;
-    setIsSending(true);
     // Capture replyTo before state clears
     const replySnapshot = replyTo;
+    const userId = user?._id || user?.id;
+
+    // OPTIMISTIC UI: hiện tin nhắn ngay lập tức
+    const tempId = `temp-${Date.now()}`;
+    const tempMsg = {
+      _id: tempId,
+      content: text.trim(),
+      senderId: user,
+      conversationId: convId,
+      createdAt: new Date().toISOString(),
+      status: 'sending',
+      replyTo: replySnapshot || null,
+      mediaIds: [], media: [], attachments: [],
+    };
+    setMessages(prev=>[...prev, tempMsg]);
+    setReplyTo(null);
+
     try{
       const payload={conversationId:convId,content:text.trim()};
       if(replyToId) payload.replyTo=replyToId;
       const res=await chatService.sendMessage(payload);
       const newMsg=res.data?.data;
       if(newMsg){
-        // Attach full replyTo object locally (backend may only return replyToId)
-        if(replySnapshot && !newMsg.replyTo){
-          newMsg.replyTo = replySnapshot;
-        }
-        setMessages(prev=>[...prev,newMsg]);
+        if(replySnapshot && !newMsg.replyTo) newMsg.replyTo = replySnapshot;
+        // Replace temp với tin nhắn thật
+        setMessages(prev=>prev.map(m=>m._id===tempId ? newMsg : m));
       }
     }
-    catch(err){toast.error("Gửi thất bại: "+(err.response?.data?.message||err.message));}
-    finally{setIsSending(false);setReplyTo(null);}
+    catch(err){
+      toast.error("Gửi thất bại: "+(err.response?.data?.message||err.message));
+      setMessages(prev=>prev.filter(m=>m._id!==tempId));
+    }
   };
 
   const handleDelete=async(msgId)=>{

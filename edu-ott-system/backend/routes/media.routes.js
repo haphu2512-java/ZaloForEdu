@@ -44,6 +44,41 @@ const upload = multer({ storage, limits: { fileSize: 50 * 1024 * 1024 } }); // 5
  *         description: Media uploaded
  */
 router.post('/upload', auth, validate({ body: uploadMediaSchema }), mediaController.uploadMedia);
+
+/**
+ * @openapi
+ * /media/upload-form:
+ *   post:
+ *     tags: [Media]
+ *     summary: Upload media (multipart/form-data)
+ *     description: Upload a file directly to the server storage using FormData.
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               file:
+ *                 type: string
+ *                 format: binary
+ *                 description: The file to upload (Max 50MB)
+ *     responses:
+ *       201:
+ *         description: Media uploaded successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status:
+ *                   type: string
+ *                   example: success
+ *                 data:
+ *                   $ref: '#/components/schemas/Media'
+ */
 router.post('/upload-form', auth, upload.single('file'), mediaController.uploadMediaForm);
 /**
  * @openapi
