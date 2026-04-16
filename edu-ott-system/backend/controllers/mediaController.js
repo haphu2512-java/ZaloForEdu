@@ -46,8 +46,6 @@ const needsConversion = (mimeType, filename) => {
   return false;
 };
 
-const uploadsFolder = path.join(__dirname, '..', 'uploads');
-
 const uploadMediaForm = asyncHandler(async (req, res) => {
   if (!req.file) throw new ApiError(400, 'NO_FILE', 'No file uploaded');
 
