@@ -171,7 +171,7 @@ export const CloudInput = ({ onSendText, isSending, onUploadFiles, replyTo, onCl
               onUploadFiles([file], replyTo?._id || null);
               setShowRecorder(false);
               onClearReply?.();
-            }}} 
+            }}
           />
         </div>
       ) : (
