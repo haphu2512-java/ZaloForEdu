@@ -139,15 +139,15 @@ export const VoiceRecorder = ({ onCancel, onSend }) => {
       // UNIVERSAL COMPATIBILITY STRATEGY - cascade fallback for maximum compatibility
       let options = {};
       
-      // Strategy: MP3 > WAV > M4A > WebM (in order of universal compatibility)
-      if (MediaRecorder.isTypeSupported('audio/mpeg')) {
-        // MP3 - BEST universal compatibility (iOS, Android, Web, Desktop)
+      // Strategy: WAV > MP3 > M4A > WebM (WAV first for maximum universal compatibility)
+      if (MediaRecorder.isTypeSupported('audio/wav')) {
+        // WAV - BEST universal compatibility (iOS, Android, Web, Desktop)
+        console.log('🌍 Using WAV - Universal compatibility across all platforms');
+        options = { mimeType: 'audio/wav' };
+      } else if (MediaRecorder.isTypeSupported('audio/mpeg')) {
+        // MP3 - Excellent universal compatibility
         console.log('🌍 Using MP3 - Universal compatibility across all platforms');
         options = { mimeType: 'audio/mpeg', audioBitsPerSecond: 128000 };
-      } else if (MediaRecorder.isTypeSupported('audio/wav')) {
-        // WAV - Excellent compatibility but larger files
-        console.log('🌍 Using WAV - Universal compatibility (larger files)');
-        options = { mimeType: 'audio/wav' };
       } else if (MediaRecorder.isTypeSupported('audio/mp4;codecs=mp4a.40.2')) {
         // M4A/AAC - Good mobile compatibility
         console.log('📱 Using M4A/AAC - Good mobile compatibility');
@@ -164,8 +164,8 @@ export const VoiceRecorder = ({ onCancel, onSend }) => {
 
       console.log('🎤 Recording with format:', options.mimeType || 'default');
       console.log('🔍 Universal Audio Format Support Check:', {
-        '🥇 MP3 (Best Universal)': MediaRecorder.isTypeSupported('audio/mpeg'),
-        '🥈 WAV (Universal + Large)': MediaRecorder.isTypeSupported('audio/wav'), 
+        '🥇 WAV (Best Universal)': MediaRecorder.isTypeSupported('audio/wav'),
+        '🥈 MP3 (Universal)': MediaRecorder.isTypeSupported('audio/mpeg'), 
         '🥉 M4A/AAC (Mobile Good)': MediaRecorder.isTypeSupported('audio/mp4;codecs=mp4a.40.2'),
         '⚠️ WebM (Web Only)': MediaRecorder.isTypeSupported('audio/webm;codecs=opus'),
         '📊 Browser': navigator.userAgent.includes('Chrome') ? 'Chrome' : 
