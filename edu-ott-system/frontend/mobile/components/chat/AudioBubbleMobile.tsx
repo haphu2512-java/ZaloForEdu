@@ -33,6 +33,19 @@ export const AudioBubbleMobile: React.FC<AudioBubbleMobileProps> = ({ url, isMe 
         setPosition(0);
         sound?.setPositionAsync(0);
       }
+    } else if (status.error) {
+      // Handle playback errors that don't throw exceptions
+      console.error('Playback status error:', status.error);
+      setIsLoading(false);
+      setIsPlaying(false);
+      
+      import('react-native').then(({ Alert }) => {
+        Alert.alert(
+          '⚠️ Không thể phát audio', 
+          'File audio này có thể không tương thích với thiết bị của bạn.\n\nNguyên nhân: Format hoặc codec không được hỗ trợ.',
+          [{ text: 'Đóng', style: 'cancel' }]
+        );
+      });
     }
   };
 
@@ -54,6 +67,19 @@ export const AudioBubbleMobile: React.FC<AudioBubbleMobileProps> = ({ url, isMe 
         }
       } else {
         setIsLoading(true);
+        
+        // Timeout để tránh loading vô hạn
+        const loadTimeout = setTimeout(() => {
+          setIsLoading(false);
+          import('react-native').then(({ Alert }) => {
+            Alert.alert(
+              '⏱️ Timeout', 
+              'Audio mất quá lâu để load. File có thể bị lỗi hoặc không tương thích.',
+              [{ text: 'Đóng', style: 'cancel' }]
+            );
+          });
+        }, 10000); // 10 seconds timeout
+        
         // Force audio to loudspeaker
         await Audio.setAudioModeAsync({
           allowsRecordingIOS: false,
@@ -63,11 +89,15 @@ export const AudioBubbleMobile: React.FC<AudioBubbleMobileProps> = ({ url, isMe 
           staysActiveInBackground: false,
         });
 
+        console.log('🎵 Attempting to load audio:', url);
         const { sound: newSound } = await Audio.Sound.createAsync(
           { uri: url },
           { shouldPlay: true },
           onPlaybackStatusUpdate
         );
+        
+        console.log('✅ Audio loaded successfully');
+        clearTimeout(loadTimeout); // Clear timeout if successful
         setSound(newSound);
         setIsLoading(false);
       }
