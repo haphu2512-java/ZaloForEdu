@@ -91,7 +91,13 @@ export default function MyDocumentsPage(){
   useEffect(()=>{
     if(!convId)return;
     socketService.connect();
-    const handler=(msg)=>{const cid=msg.conversationId?._id||msg.conversationId;if(cid===convId)setMessages(prev=>prev.some(m=>m._id===msg._id)?prev:[...prev,normalizeMsg(msg)]);};    socketService.on("new_message",handler);
+    const handler=(msg)=>{
+      const cid=msg.conversationId?._id||msg.conversationId;
+      if(cid!==convId)return;
+      // Bỏ qua nếu đã có trong list (API đã add rồi)
+      setMessages(prev=>prev.some(m=>m._id===msg._id)?prev:[...prev,normalizeMsg(msg)]);
+    };
+    socketService.on("new_message",handler);
     return()=>socketService.off("new_message",handler);
   },[convId]);
 
@@ -145,25 +151,8 @@ export default function MyDocumentsPage(){
 
   const handleSendText=async(text, replyToId=null)=>{
     if(!text.trim()||!convId||isSending)return;
-    // Capture replyTo before state clears
+    setIsSending(true);
     const replySnapshot = replyTo;
-    const userId = user?._id || user?.id;
-
-    // OPTIMISTIC UI: hiện tin nhắn ngay lập tức
-    const tempId = `temp-${Date.now()}`;
-    const tempMsg = {
-      _id: tempId,
-      content: text.trim(),
-      senderId: user,
-      conversationId: convId,
-      createdAt: new Date().toISOString(),
-      status: 'sending',
-      replyTo: replySnapshot || null,
-      mediaIds: [], media: [], attachments: [],
-    };
-    setMessages(prev=>[...prev, tempMsg]);
-    setReplyTo(null);
-
     try{
       const payload={conversationId:convId,content:text.trim()};
       if(replyToId) payload.replyTo=replyToId;
@@ -171,14 +160,11 @@ export default function MyDocumentsPage(){
       const newMsg=res.data?.data;
       if(newMsg){
         if(replySnapshot && !newMsg.replyTo) newMsg.replyTo = replySnapshot;
-        // Replace temp với tin nhắn thật
-        setMessages(prev=>prev.map(m=>m._id===tempId ? newMsg : m));
+        setMessages(prev=>[...prev,newMsg]);
       }
     }
-    catch(err){
-      toast.error("Gửi thất bại: "+(err.response?.data?.message||err.message));
-      setMessages(prev=>prev.filter(m=>m._id!==tempId));
-    }
+    catch(err){toast.error("Gửi thất bại: "+(err.response?.data?.message||err.message));}
+    finally{setIsSending(false);setReplyTo(null);}
   };
 
   const handleDelete=async(msgId)=>{
