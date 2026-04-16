@@ -19,7 +19,9 @@ export const ALLOWED_EXTENSIONS = {
   video: ["mp4", "mov", "avi", "mkv", "webm"],
   doc: ["pdf", "docx", "doc", "xlsx", "xls", "pptx", "ppt", "txt"],
   archive: ["zip", "rar", "7z", "tar", "gz"],
+  audio: ["mp3", "webm", "ogg", "wav", "m4a"],
 };
+
 
 export const ALL_ALLOWED_EXTENSIONS = Object.values(ALLOWED_EXTENSIONS).flat();
 
@@ -44,6 +46,7 @@ export const getResourceType = (extension) => {
   const ext = extension.toLowerCase().replace(".", "");
   if (ALLOWED_EXTENSIONS.image.includes(ext)) return "image";
   if (ALLOWED_EXTENSIONS.video.includes(ext)) return "video";
+  if (ALLOWED_EXTENSIONS.audio.includes(ext)) return "video"; // Cloudinary treats audio as video internally sometimes, but 'video' is safer for upload
   return "raw"; // pdf, docx, zip, rar,...
 };
 
@@ -54,6 +57,7 @@ export const getFileCategory = (extension) => {
   if (ALLOWED_EXTENSIONS.video.includes(ext)) return "video";
   if (ALLOWED_EXTENSIONS.doc.includes(ext)) return "doc";
   if (ALLOWED_EXTENSIONS.archive.includes(ext)) return "archive";
+  if (ALLOWED_EXTENSIONS.audio.includes(ext)) return "audio";
   return "other";
 };
 

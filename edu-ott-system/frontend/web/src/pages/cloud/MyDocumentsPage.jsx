@@ -53,6 +53,8 @@ export default function MyDocumentsPage(){
   const[preview,setPreview]=useState(null);
   const[pinnedIds,setPinnedIds]=useState(new Set());
   const[showRightPanel, setShowRightPanel] = useState(true);
+  const[msgToDelete, setMsgToDelete] = useState(null);
+  const[removingId, setRemovingId] = useState(null);
 
   const pageRef=useRef(null);
   const messagesEndRef=useRef(null);
@@ -167,13 +169,38 @@ export default function MyDocumentsPage(){
     finally{setIsSending(false);setReplyTo(null);}
   };
 
-  const handleDelete=async(msgId)=>{
-    if(!window.confirm("Xóa tin nhắn này?"))return;
-    try{await chatService.deleteMessage(msgId);setMessages(prev=>prev.filter(m=>m._id!==msgId));toast.success("Đã xóa");}
-    catch(err){toast.error("Xóa thất bại: "+(err.response?.data?.message||err.message));}
+  const confirmDelete = (msgId) => {
+    setMsgToDelete(msgId);
   };
 
-  const handleBulkDelete=async(msgIds)=>{
+  const executeDelete = async () => {
+    if (!msgToDelete) return;
+    try {
+      await chatService.deleteMessage(msgToDelete);
+      // Kích hoạt hiệu ứng biến mất
+      setRemovingId(msgToDelete);
+      
+      // Đợi animation chạy xong (300ms) mới xóa khỏi state
+      setTimeout(() => {
+        setMessages(prev => prev.filter(m => m._id !== msgToDelete));
+        setRemovingId(null);
+        toast.success("Đã xóa tin nhắn", {
+          icon: '🗑️',
+          style: {
+            borderRadius: '10px',
+            background: '#333',
+            color: '#fff',
+          },
+        });
+      }, 300);
+    } catch(err) {
+      toast.error("Xóa thất bại: " + (err.response?.data?.message || err.message));
+    } finally {
+      setMsgToDelete(null);
+    }
+  };
+
+  const handleBulkDelete = async (msgIds) => {
     if(!window.confirm(`Xóa ${msgIds.length} tin nhắn đã chọn?`))return;
     try{
       await Promise.all(msgIds.map(id=>chatService.deleteMessage(id)));
@@ -331,7 +358,7 @@ export default function MyDocumentsPage(){
           {loading?(<div className="mdc-loading"><FaSpinner className="spin" size={28}/></div>):filtered.length===0&&uploads.length===0?(
             <div className="mdc-empty"><div className="mdc-empty-icon"><FaCloud size={52}/></div><h3>{searchQuery?"Không tìm thấy kết quả":"Chưa có nội dung nào"}</h3><p>{searchQuery?`Không có file nào chứa từ khóa "${searchQuery}"`:"Gửi ảnh, video, tài liệu hoặc ghi chú để lưu trữ cá nhân"}</p></div>
           ):(
-            <>{Object.entries(grouped).map(([dateLabel,items])=>(<div key={dateLabel}><div className="mdc-date-sep">{dateLabel}</div>{items.map(msg=>(<CloudMsgBubble key={msg._id} msg={msg} onDelete={handleDelete} onPreview={(url,name)=>setPreview({url,name})} onReaction={handleReaction} pinnedIds={pinnedIds} onPin={handlePin} onForward={openShareModal} onReply={(m)=>setReplyTo(m)}/>))}</div>))}{uploads.map(u=>(<UploadBubble key={u.id} name={u.name} percent={u.percent}/>))}</>
+            <>{Object.entries(grouped).map(([dateLabel,items])=>(<div key={dateLabel}><div className="mdc-date-sep">{dateLabel}</div>{items.map(msg=>(<CloudMsgBubble key={msg._id} msg={msg} isRemoving={removingId===msg._id} onDelete={confirmDelete} onPreview={(url,name)=>setPreview({url,name})} onReaction={handleReaction} pinnedIds={pinnedIds} onPin={handlePin} onForward={openShareModal} onReply={(m)=>setReplyTo(m)}/>))}</div>))}{uploads.map(u=>(<UploadBubble key={u.id} name={u.name} percent={u.percent}/>))}</>
 
           )}
           <div ref={messagesEndRef}/>
@@ -400,6 +427,33 @@ export default function MyDocumentsPage(){
                   </div>
                 ))
               }
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Modal xác nhận xóa tin nhắn */}
+      {msgToDelete && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ background: 'var(--bg-sidebar, #fff)', width: 400, borderRadius: 8, overflow: 'hidden', boxShadow: '0 4px 20px rgba(0,0,0,0.2)', animation: 'slideDown 0.2s ease-out' }}>
+            <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border-color, #E5E7EB)' }}>
+              <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: 'var(--text-primary, #111827)' }}>Xác nhận xóa</h3>
+            </div>
+            <div style={{ padding: '20px', fontSize: 14, color: 'var(--text-secondary, #4B5563)' }}>
+              Bạn có chắc chắn muốn xóa tin nhắn này không? Tin nhắn đã xóa sẽ không thể khôi phục.
+            </div>
+            <div style={{ padding: '12px 20px', display: 'flex', justifyContent: 'flex-end', gap: 12, borderTop: '1px solid var(--border-color, #E5E7EB)', background: 'var(--bg-hover, #F9FAFB)' }}>
+              <button 
+                onClick={() => setMsgToDelete(null)}
+                style={{ padding: '8px 16px', background: 'var(--bg-main, #EAECEF)', color: 'var(--text-primary, #111827)', border: 'none', borderRadius: 4, fontWeight: 600, cursor: 'pointer' }}
+              >
+                Hủy
+              </button>
+              <button 
+                onClick={executeDelete}
+                style={{ padding: '8px 16px', background: '#EF4444', color: '#fff', border: 'none', borderRadius: 4, fontWeight: 600, cursor: 'pointer' }}
+              >
+                Xóa
+              </button>
             </div>
           </div>
         </div>

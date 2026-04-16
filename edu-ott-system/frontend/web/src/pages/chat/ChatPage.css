@@ -143,6 +143,15 @@
 }
 .msg-deleted { background: transparent !important; border: 1px dashed var(--z-text-muted) !important; color: var(--z-text-muted) !important; font-style: italic; font-size: 13px; }
 
+.highlight-msg {
+  animation: bg-pulse-chat 1.5s ease-out;
+  border-radius: 8px;
+}
+@keyframes bg-pulse-chat {
+  0% { background-color: rgba(0, 104, 255, 0.2); }
+  100% { background-color: transparent; }
+}
+
 .msg-reply { border-left: 3px solid rgba(255,255,255,0.5); padding-left: 8px; margin-bottom: 8px; background: rgba(0,0,0,0.1); padding: 6px; border-radius: 6px; }
 .msg-wrap.them .msg-reply { border-left-color: var(--z-primary); background: var(--z-bg-hover); }
 .msg-reply-name { font-size: 11px; font-weight: bold; margin-bottom: 2px; }

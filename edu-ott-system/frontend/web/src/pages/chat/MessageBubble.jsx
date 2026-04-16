@@ -75,8 +75,21 @@ export const MessageBubble = ({
   const images = mediaList.filter(isImageOrVideo);
   const docs   = mediaList.filter(att => !isImageOrVideo(att));
 
+  const handleJumpToReply = (e) => {
+    e.stopPropagation();
+    if (!replyTo?._id && !replyTo?.id) return;
+    const targetId = replyTo._id || replyTo.id;
+    const el = document.getElementById(`msg-${targetId}`);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      el.classList.add('highlight-msg');
+      setTimeout(() => el.classList.remove('highlight-msg'), 1500);
+    }
+  };
+
   return (
     <div 
+      id={`msg-${_id}`}
       style={{ display: 'flex', flexDirection: isMe ? 'row-reverse' : 'row', gap: '8px', marginBottom: '24px', position: 'relative', width: '100%' }} 
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => { setIsHovered(false); if (!showMoreMenu && !showEmojiPicker) setShowMoreMenu(false); }}
@@ -99,7 +112,10 @@ export const MessageBubble = ({
             ) : (
               <>
                 {replyTo && (
-                  <div style={{ borderLeft: `3px solid ${isMe ? '#FFFFFF' : '#0084FF'}`, paddingLeft: '8px', marginBottom: '8px', opacity: 0.85, background: isMe ? 'rgba(0,0,0,0.1)' : '#F0F2F5', padding: '6px', borderRadius: '4px' }}>
+                  <div 
+                    style={{ borderLeft: `3px solid ${isMe ? '#FFFFFF' : '#0084FF'}`, paddingLeft: '8px', marginBottom: '8px', opacity: 0.85, background: isMe ? 'rgba(0,0,0,0.1)' : '#F0F2F5', padding: '6px', borderRadius: '4px', cursor: 'pointer' }}
+                    onClick={handleJumpToReply}
+                  >
                     <div style={{ fontSize: '11px', fontWeight: 'bold', color: isMe ? '#fff' : '#050505' }}>{replyTo.sender?.fullName || 'Người dùng'}</div>
                     <div style={{ fontSize: '13px', color: isMe ? '#fff' : '#050505' }}>{replyTo.content || '[Hình ảnh/File]'}</div>
                   </div>

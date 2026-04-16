@@ -227,6 +227,25 @@
   flex-direction: row-reverse;
 }
 
+.highlight-msg {
+  animation: bg-pulse-blue 1.5s ease-out;
+  border-radius: 8px;
+}
+@keyframes bg-pulse-blue {
+  0% { background-color: rgba(0, 104, 255, 0.2); }
+  100% { background-color: transparent; }
+}
+
+.mdc-msg-wrap.removing {
+  animation: msgFadeOut 0.3s forwards;
+  pointer-events: none;
+}
+
+@keyframes msgFadeOut {
+  0% { opacity: 1; transform: scale(1); max-height: 500px; margin-bottom: 4px; }
+  100% { opacity: 0; transform: scale(0.9); max-height: 0; margin-bottom: 0; padding: 0; overflow: hidden; }
+}
+
 .mdc-msg-body { max-width: 70%; }
 
 /* Recalled */
@@ -388,6 +407,80 @@
   color: white;
   margin: 0;
   font-size: 11px;
+}
+
+/* Audio bubble */
+.mdc-audio-bubble {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: #E8F4FD;
+  border: 1px solid #D1E5F7;
+  border-radius: 18px;
+  padding: 8px 14px;
+  min-width: 220px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+[data-theme="dark"] .mdc-audio-bubble { background: #1B3147; border-color: #24415C; }
+
+.mdc-audio-play-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--primary-color);
+  color: white;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.15s;
+}
+.mdc-audio-play-btn:hover { background: var(--primary-hover); }
+
+.mdc-audio-waveform {
+  flex: 1;
+  position: relative;
+  height: 24px;
+  display: flex;
+  align-items: flex-end;
+  background: rgba(0,0,0,0.04);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.mdc-audio-progress {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  background: rgba(0,104,255,0.15);
+  transition: width 0.1s linear;
+  pointer-events: none;
+}
+
+.mdc-audio-bars {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 4px;
+}
+
+.mdc-audio-bar {
+  flex: 1;
+  background: var(--primary-color);
+  border-radius: 2px;
+  opacity: 0.6;
+}
+
+.mdc-audio-time {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
 }
 
 /* Message time */
