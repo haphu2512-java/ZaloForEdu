@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { FaDownload, FaSpinner, FaCloud, FaThumbtack, FaTrash, FaCopy, FaStar, FaEllipsisH, FaTimes, FaSmile, FaShare } from 'react-icons/fa';
+import { FaDownload, FaSpinner, FaCloud, FaThumbtack, FaTrash, FaCopy, FaStar, FaEllipsisH, FaTimes, FaSmile, FaShare, FaCheck } from 'react-icons/fa';
 import toast from 'react-hot-toast';
 import { fmtTime, getCategory, getExt, getFileColor, formatBytes } from './CloudUtils';
 
@@ -149,7 +149,22 @@ export function CloudMsgBubble({msg, onDelete, onPreview, onReaction, pinnedIds,
                 <span className="mdc-fb-cloud"><FaCloud size={9}/> Đã có trên Cloud</span>
               </div>
             </div>
-            <a className="mdc-fb-btn" href={media.url} target="_blank" rel="noreferrer"><FaDownload size={13}/></a>
+            <div style={{display:'flex',gap:6,alignItems:'center'}}>
+              {/* Preview PDF/docx qua Google Docs Viewer — chỉ với Cloudinary URL */}
+              {media.url && media.url.includes('cloudinary.com') && (
+                <a
+                  className="mdc-fb-btn"
+                  href={`https://docs.google.com/viewer?url=${encodeURIComponent(media.url)}&embedded=true`}
+                  target="_blank"
+                  rel="noreferrer"
+                  title="Xem trước"
+                  style={{fontSize:11,padding:'3px 8px',background:'#3B82F6',color:'#fff',borderRadius:6,textDecoration:'none'}}
+                >
+                  Xem
+                </a>
+              )}
+              <a className="mdc-fb-btn" href={media.url} target="_blank" rel="noreferrer" title="Tải về"><FaDownload size={13}/></a>
+            </div>
           </div>
         )}
 
@@ -166,7 +181,7 @@ export function CloudMsgBubble({msg, onDelete, onPreview, onReaction, pinnedIds,
 
         <div className="mdc-msg-time">
           {fmtTime(msg.createdAt)}
-          <span className="mdc-msg-sent">✓ Đã gửi</span>
+          <span className="mdc-msg-sent"><FaCheck size={10} /> Đã gửi</span>
         </div>
       </div>
 

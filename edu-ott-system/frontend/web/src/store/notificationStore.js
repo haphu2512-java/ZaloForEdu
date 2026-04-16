@@ -73,9 +73,13 @@ export const useNotificationStore = create((set, get) => ({
   },
 
   addSocketNotification: (notification) => {
-    set((state) => ({
-      notifications: [notification, ...state.notifications],
-      unreadCount: state.unreadCount + 1,
-    }));
+    set((state) => {
+      // Dedup: không thêm nếu đã có
+      if (state.notifications.some(n => n._id === notification._id)) return state;
+      return {
+        notifications: [notification, ...state.notifications],
+        unreadCount: state.unreadCount + 1,
+      };
+    });
   },
 }));

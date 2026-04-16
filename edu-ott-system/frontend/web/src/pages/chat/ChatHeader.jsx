@@ -1,25 +1,100 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FaPhone, FaVideo, FaEllipsisV, FaUsers, FaFileAlt } from 'react-icons/fa';
+import { FaPhone, FaVideo, FaEllipsisV, FaUsers, FaFileAlt, FaUserPlus, FaCheck, FaSpinner, FaTimes } from 'react-icons/fa';
 import { useAuthStore } from '../../store/authStore';
 import { socketService } from '../../services/socketService';
-// THÊM: Import hook useTheme của bạn
 import { useTheme } from '../../contexts/ThemeContext';
+import { friendService } from '../../services/friendService';
+import { useFriendStore } from '../../store/friendStore';
 
 export const ChatHeader = ({ room, onCall, onVideo, onInfo }) => {
   const navigate = useNavigate();
   const currentUser = useAuthStore((state) => state.user);
-  
-  // Lấy theme hiện tại từ Context
   const { appliedTheme } = useTheme();
   const isDark = appliedTheme === 'dark';
+  const { outgoingRequests, incomingRequests, fetchOutgoingRequests, fetchIncomingRequests, acceptRequest, rejectRequest } = useFriendStore();
+  const [friendRequestSent, setFriendRequestSent] = useState(false);
+  const [cancelLoading, setCancelLoading] = useState(false);
+  const [acceptLoading, setAcceptLoading] = useState(false);
+  const [rejectLoading, setRejectLoading] = useState(false);
+
+  // Check xem đã gửi lời mời chưa (A → B)
+  const hasOutgoingRequest = outgoingRequests.some(r =>
+    String(r.toUserId?._id || r.toUserId || '') === String(room?.strangerId || '')
+  );
+  const outgoingRequest = outgoingRequests.find(r =>
+    String(r.toUserId?._id || r.toUserId || '') === String(room?.strangerId || '')
+  );
+
+  // Check xem có lời mời đến không (B nhận từ A)
+  const incomingRequest = incomingRequests.find(r =>
+    String(r.fromUserId?._id || r.fromUserId || '') === String(room?.strangerId || '')
+  );
+
+  useEffect(() => {
+    if (room?.isStranger) {
+      fetchOutgoingRequests();
+      fetchIncomingRequests();
+    }
+  }, [room?.strangerId, room?.isStranger]);
 
   if (!room) return null;
 
   const isOnline = room.isOnline;
   const isClass = room.type?.toLowerCase() === 'class' || room.roomModel === 'Class';
+  const isStranger = room.isStranger && room.type === 'direct';
+  const alreadySentRequest = isStranger && (hasOutgoingRequest || friendRequestSent);
 
-  const handleCallClick = (type) => {
+  const handleSendFriendRequest = async () => {
+    try {
+      await friendService.sendFriendRequest(room.strangerId);
+      setFriendRequestSent(true);
+      fetchOutgoingRequests();
+    } catch (err) {
+      const code = err.response?.data?.error?.code;
+      if (code === 'REVERSE_REQUEST_EXISTS') {
+        // Người kia đã gửi lời mời → refresh để hiện nút Chấp nhận/Từ chối
+        fetchIncomingRequests();
+      } else {
+        alert(err.response?.data?.error?.message || err.response?.data?.message || 'Không thể gửi lời mời kết bạn');
+      }
+    }
+  };
+
+  const handleCancelFriendRequest = async () => {
+    const requestId = outgoingRequest?._id;
+    if (!requestId) return;
+    setCancelLoading(true);
+    try {
+      await friendService.cancelFriendRequest(requestId);
+      setFriendRequestSent(false);
+      fetchOutgoingRequests();
+    } catch (err) {
+      alert(err.response?.data?.message || 'Không thể hủy lời mời');
+    } finally { setCancelLoading(false); }
+  };
+
+  const handleAcceptRequest = async () => {
+    if (!incomingRequest?._id) return;
+    setAcceptLoading(true);
+    try {
+      await acceptRequest(incomingRequest._id);
+      fetchIncomingRequests();
+    } catch (err) {
+      alert(err.response?.data?.message || 'Không thể chấp nhận');
+    } finally { setAcceptLoading(false); }
+  };
+
+  const handleRejectRequest = async () => {
+    if (!incomingRequest?._id) return;
+    setRejectLoading(true);
+    try {
+      await rejectRequest(incomingRequest._id);
+      fetchIncomingRequests();
+    } catch (err) {
+      alert(err.response?.data?.message || 'Không thể từ chối');
+    } finally { setRejectLoading(false); }
+  };  const handleCallClick = (type) => {
     const myId = currentUser?._id || currentUser?.id;
 
     const targetUserId =
@@ -33,7 +108,8 @@ export const ChatHeader = ({ room, onCall, onVideo, onInfo }) => {
       return;
     }
 
-    const roomId = `room_${myId}_${targetUserId}`;
+    // Sort 2 userId để roomId luôn nhất quán dù ai gọi trước
+    const roomId = [myId, targetUserId].sort().join('_');
 
     // FIX: Đã xóa cái check isConnected() ảo ma ở đây.
     // Cứ gọi thẳng giống hệt cách bên ContactsPage đang làm.
@@ -92,23 +168,23 @@ export const ChatHeader = ({ room, onCall, onVideo, onInfo }) => {
         </div>
 
         <div>
-          {/* Tăng kích thước Text Tên */}
-          <div className={`text-lg font-bold ${textColor}`}>
+          <div className={`text-lg font-bold ${textColor}`} style={{ display:'flex', alignItems:'center', gap:8 }}>
             {room.name}
+            {isStranger && (
+              <span style={{ fontSize:10, fontWeight:700, background:'#ef4444', color:'#fff', padding:'2px 6px', borderRadius:4, letterSpacing:1 }}>
+                NGƯỜI LẠ
+              </span>
+            )}
           </div>
 
           <div className={`text-sm ${subTextColor}`}>
             {isClass ? (
               <span className="flex items-center gap-1.5 mt-0.5">
                 <FaUsers size={12} />
-                {room.memberCount
-                  ? `${room.memberCount} thành viên`
-                  : 'Đang hoạt động'}
+                {room.memberCount ? `${room.memberCount} thành viên` : 'Đang hoạt động'}
               </span>
             ) : isOnline ? (
-              <span className="text-green-500 font-medium mt-0.5 inline-block">
-                Đang trực tuyến
-              </span>
+              <span className="text-green-500 font-medium mt-0.5 inline-block">Đang trực tuyến</span>
             ) : (
               <span className="mt-0.5 inline-block">Ngoại tuyến</span>
             )}

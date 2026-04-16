@@ -19,6 +19,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system/legacy';
+import * as ImageManipulator from 'expo-image-manipulator';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../context/auth';
@@ -508,12 +509,14 @@ export default function ChatScreen() {
     try {
       const uploadPromises = result.assets.map(async (asset) => {
         try {
-          await uploadImageToCloudinary(asset.uri);
-          const base64 = await FileSystem.readAsStringAsync(asset.uri, { encoding: FileSystem.EncodingType.Base64 });
-          const ext = asset.uri.split('.').pop()?.toLowerCase() || 'jpg';
-          const mimeType = ext === 'png' ? 'image/png' : 'image/jpeg';
-          const fileName = `photo-${Date.now()}-${Math.random().toString(36).slice(2, 9)}.${ext}`;
-          const media = await uploadMediaBase64({ fileName, mimeType, contentBase64: base64 });
+          // Resize về max 800px để tránh đứng app khi đọc Base64
+          const compressed = await ImageManipulator.manipulateAsync(
+            asset.uri,
+            [{ resize: { width: 800 } }],
+            { compress: 0.6, format: ImageManipulator.SaveFormat.JPEG }
+          );
+          const base64 = await FileSystem.readAsStringAsync(compressed.uri, { encoding: FileSystem.EncodingType.Base64 });
+          const media = await uploadMediaBase64({ fileName: `photo-${Date.now()}-${Math.random().toString(36).slice(2, 9)}.jpg`, mimeType: 'image/jpeg', contentBase64: base64 });
           return media;
         } catch (error) {
           console.error('Failed to upload image:', error);

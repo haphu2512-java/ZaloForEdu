@@ -1,4 +1,7 @@
 const express = require('express');
+const multer = require('multer');
+const path = require('node:path');
+const crypto = require('node:crypto');
 
 const mediaController = require('../controllers/mediaController');
 const auth = require('../middlewares/auth');
@@ -11,6 +14,16 @@ const {
 } = require('../validators/mediaSchemas');
 
 const router = express.Router();
+
+// Multer config — lưu vào uploads/
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, path.join(__dirname, '..', 'uploads')),
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname);
+    cb(null, `${Date.now()}-${crypto.randomUUID()}${ext}`);
+  },
+});
+const upload = multer({ storage, limits: { fileSize: 50 * 1024 * 1024 } }); // 50MB
 
 /**
  * @openapi
@@ -31,6 +44,7 @@ const router = express.Router();
  *         description: Media uploaded
  */
 router.post('/upload', auth, validate({ body: uploadMediaSchema }), mediaController.uploadMedia);
+router.post('/upload-form', auth, upload.single('file'), mediaController.uploadMediaForm);
 /**
  * @openapi
  * /media/cloudinary/signature:

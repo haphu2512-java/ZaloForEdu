@@ -1,5 +1,18 @@
 import api from "./authService";
 
+const API_ORIGIN = (import.meta.env.VITE_API_URL || "http://localhost:5000/api/v1").replace(/\/api\/v1\/?$/, "");
+
+const toAbsoluteUrl = (url) => {
+  if (!url) return url;
+  if (/^https?:\/\//i.test(url)) return url;
+  return `${API_ORIGIN}${url.startsWith("/") ? "" : "/"}${url}`;
+};
+
+const normalizeMedia = (item) => ({
+  ...item,
+  url: toAbsoluteUrl(item.url),
+});
+
 // Các định dạng file được phép
 export const ALLOWED_EXTENSIONS = {
   image: ["jpg", "jpeg", "png", "gif", "webp", "svg"],

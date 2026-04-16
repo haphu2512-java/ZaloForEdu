@@ -9,6 +9,22 @@ import toast from "react-hot-toast";
 import "./MyDocumentsPage.css";
 
 import { getCategory } from "./CloudUtils";
+
+const API_ORIGIN = (import.meta.env.VITE_API_URL || "http://localhost:5000/api/v1").replace(/\/api\/v1\/?$/, "");
+const toAbsoluteUrl = (url) => {
+  if (!url) return url;
+  if (/^https?:\/\//i.test(url)) return url;
+  return `${API_ORIGIN}${url.startsWith("/") ? "" : "/"}${url}`;
+};
+const normalizeMsg = (msg) => ({
+  ...msg,
+  mediaIds: (msg.mediaIds || []).map(m =>
+    typeof m === "object" && m.url ? { ...m, url: toAbsoluteUrl(m.url) } : m
+  ),
+  media: (msg.media || []).map(m =>
+    typeof m === "object" && m.url ? { ...m, url: toAbsoluteUrl(m.url) } : m
+  ),
+});
 import { CloudHeader } from "./CloudHeader";
 import { CloudInput } from "./CloudInput";
 import { CloudRightPanel } from "./CloudRightPanel";
@@ -57,7 +73,7 @@ export default function MyDocumentsPage(){
 
   const loadMessages=useCallback(async(cid)=>{
     if(!cid)return;
-    try{const res=await chatService.getMessages(cid,null,100);const items=res.data?.data?.items||[];setMessages([...items].reverse());}
+    try{const res=await chatService.getMessages(cid,null,100);const items=res.data?.data?.items||[];setMessages([...items].reverse().map(normalizeMsg));}
     catch(err){console.error("Load msgs:",err);}
   },[]);
 
@@ -75,8 +91,7 @@ export default function MyDocumentsPage(){
   useEffect(()=>{
     if(!convId)return;
     socketService.connect();
-    const handler=(msg)=>{const cid=msg.conversationId?._id||msg.conversationId;if(cid===convId)setMessages(prev=>prev.some(m=>m._id===msg._id)?prev:[...prev,msg]);};
-    socketService.on("new_message",handler);
+    const handler=(msg)=>{const cid=msg.conversationId?._id||msg.conversationId;if(cid===convId)setMessages(prev=>prev.some(m=>m._id===msg._id)?prev:[...prev,normalizeMsg(msg)]);};    socketService.on("new_message",handler);
     return()=>socketService.off("new_message",handler);
   },[convId]);
 
@@ -106,7 +121,10 @@ export default function MyDocumentsPage(){
       const sendRes=await chatService.sendMessage(payload);
       const newMsg=sendRes.data?.data;
       if(newMsg){
-        newMsg.media=[media];
+        // Gắn media object đầy đủ vào cả media lẫn mediaIds để render ngay
+        const normalizedMedia = { ...media, url: toAbsoluteUrl(media.url) };
+        newMsg.media=[normalizedMedia];
+        newMsg.mediaIds=[normalizedMedia];
         if(replySnapshot && !newMsg.replyTo){
           newMsg.replyTo = replySnapshot;
         }
@@ -306,10 +324,6 @@ export default function MyDocumentsPage(){
             Tìm thấy <strong>{filtered.length}</strong> kết quả cho "<strong>{searchQuery}</strong>"
           </div>
         )}
-
-        <div className="mdc-filter-tabs">
-          {[{k:"all",l:"Tất cả"},{k:"image",l:"Ảnh/Video"},{k:"file",l:"File"},{k:"text",l:"Ghi chú"}].map(t=>(<button key={t.k} className={`mdc-ftab ${filterTab===t.k?"active":""}`} onClick={()=>setFilterTab(t.k)}>{t.l}</button>))}
-        </div>
 
         <div className="mdc-messages" style={{ flex: 1, overflowY: 'auto' }}>
           {loading?(<div className="mdc-loading"><FaSpinner className="spin" size={28}/></div>):filtered.length===0&&uploads.length===0?(

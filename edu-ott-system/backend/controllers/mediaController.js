@@ -10,6 +10,21 @@ const cloudinaryService = require('../services/cloudinaryService');
 
 const uploadsFolder = path.join(__dirname, '..', 'uploads');
 
+const uploadMediaForm = asyncHandler(async (req, res) => {
+  if (!req.file) throw new ApiError(400, 'NO_FILE', 'No file uploaded');
+
+  const media = await Media.create({
+    uploaderId: req.user._id,
+    fileName: req.file.originalname,
+    mimeType: req.file.mimetype,
+    size: req.file.size,
+    storage: 'local',
+    url: `/uploads/${req.file.filename}`,
+  });
+
+  return successResponse(res, media, 'Media uploaded', 201);
+});
+
 const uploadMedia = asyncHandler(async (req, res) => {
   const { fileName, mimeType, contentBase64 } = req.body;
 
@@ -141,8 +156,24 @@ const getMyMedia = asyncHandler(async (req, res) => {
   }, 'My media fetched');
 });
 
+const downloadMediaById = asyncHandler(async (req, res) => {
+  const media = await Media.findById(req.params.id);
+  if (!media) {
+    throw new ApiError(404, 'MEDIA_NOT_FOUND', 'Media not found');
+  }
+  if (media.storage === 'local') {
+    const relativePath = media.url.replace(/^[\\/]/, '');
+    const absolutePath = path.join(__dirname, '..', relativePath);
+    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(media.fileName)}"`);
+    if (media.mimeType) res.setHeader('Content-Type', media.mimeType);
+    return res.sendFile(absolutePath);
+  }
+  return res.redirect(media.url);
+});
+
 module.exports = {
   uploadMedia,
+  uploadMediaForm,
   getCloudinarySignature,
   registerCloudinaryMedia,
   getMyMedia,

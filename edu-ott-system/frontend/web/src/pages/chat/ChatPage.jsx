@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useMemo, useCallback } from "react"
 import axios from "axios";
 import io from "socket.io-client";
 import { useParams, useNavigate } from "react-router-dom";
-import { FaSearch, FaBell, FaThumbtack, FaUsers, FaCloud, FaSpinner, FaLink, FaTrashAlt, FaSignOutAlt } from "react-icons/fa";
+import { FaSearch, FaBell, FaThumbtack, FaUsers, FaCloud, FaSpinner, FaLink, FaTrashAlt, FaSignOutAlt, FaUserSecret, FaArrowLeft, FaUserPlus, FaCheck, FaTimes } from "react-icons/fa";
 import toast from "react-hot-toast";
 
 import { uploadFile } from "../../services/mediaService"; 
@@ -13,13 +13,15 @@ import { ShareMessageModal } from "./Modals/ShareMessageModal";
 import { ChatHeader } from "./ChatHeader"; 
 import { MessageInput } from "./MessageInput"; 
 import { useTheme } from '../../contexts/ThemeContext'; 
+import { useLanguage } from '../../contexts/LanguageContext';
 import "./ChatPage.css";
 import { conversationService } from "../../services/conversationService";
 
-const API_BASE_URL = "http://localhost:5000/api/v1";
+const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api/v1";
+const API_ORIGIN = API_BASE_URL.replace(/\/api\/v1\/?$/, "");
 
 // FIX TẠI ĐÂY: Dùng socket chung của app, tránh việc khởi tạo 2 socket cắn nhau rớt mạng.
-const socket = socketService?.socket || io("http://localhost:5000", { autoConnect: false, transports: ['websocket'] });
+const socket = socketService?.socket || io(API_ORIGIN, { autoConnect: false, transports: ['websocket'] });
 
 const IMAGE_EXTS = ["jpg","jpeg","png","gif","webp","svg"];
 const VIDEO_EXTS = ["mp4","mov","avi","mkv","webm"];
@@ -81,9 +83,11 @@ export default function ChatPage() {
   const [conversations, setConversations] = useState([]);
   const [activeConversation, setActiveConversation] = useState(null);
   const [messages, setMessages] = useState([]);
-  const [searchQuery, setSearchQuery] = useState(""); 
+  const [searchQuery, setSearchQuery] = useState("");
+  const [showStrangerPanel, setShowStrangerPanel] = useState(false);
   
-  const { appliedTheme } = useTheme(); 
+  const { appliedTheme } = useTheme();
+  const { t } = useLanguage();
   
   const [uploads, setUploads] = useState([]);
   const [isDragging, setIsDragging] = useState(false);
@@ -91,14 +95,19 @@ export default function ChatPage() {
 
   const [shareModalOpen, setShareModalOpen] = useState(false);
   const [msgToShare, setMsgToShare] = useState(null);
+  const [justSentRequestTo, setJustSentRequestTo] = useState(null); // track optimistic state
 
   const pageRef = useRef(null);
   const messagesEndRef = useRef(null);
   const activeConvIdRef = useRef(null);
 
-  const { friends, fetchFriends } = useFriendStore();
+  const { friends, fetchFriends, fetchOutgoingRequests, fetchIncomingRequests } = useFriendStore();
 
-  useEffect(() => { if (friends.length === 0) fetchFriends(); }, [friends.length, fetchFriends]);
+  useEffect(() => {
+    fetchFriends();
+    fetchOutgoingRequests();
+    fetchIncomingRequests();
+  }, []);
 
   const userId = useMemo(() => {
     let id = localStorage.getItem("userId");
@@ -187,6 +196,46 @@ export default function ChatPage() {
     if (!searchQuery.trim()) return convs;
     return convs.filter(conv => getConversationName(conv).toLowerCase().includes(searchQuery.toLowerCase()));
   }, [conversations, friends, searchQuery, userId, getConversationName, getOtherParticipant]);
+  // Phân loại: bạn bè vs người lạ
+  const friendIds = useMemo(() => new Set(friends.map(f => String(f._id || f.id))), [friends]);
+
+  const { outgoingRequests, incomingRequests, acceptRequest, rejectRequest } = useFriendStore();
+  const outgoingRequestIds = useMemo(() =>
+    new Set(outgoingRequests.map(r =>
+      r.toUserId?._id ? String(r.toUserId._id) : String(r.toUserId || '')
+    )),
+    [outgoingRequests]
+  );
+
+  const { friendConvs, strangerConvs } = useMemo(() => {
+    const friendConvs = [];
+    const strangerConvs = [];
+    mergedConversations.forEach(conv => {
+      if (conv.type === 'group' || conv.roomModel === 'Group' || conv.isMock) {
+        friendConvs.push(conv);
+        return;
+      }
+      const other = getOtherParticipant(conv);
+      const otherId = other && typeof other === 'object' ? String(other._id || other.id) : null;
+      const isOtherFriend = otherId && friendIds.has(otherId);
+
+      if (isOtherFriend) {
+        friendConvs.push(conv);
+      } else {
+        // Phân loại dựa vào người gửi tin nhắn đầu tiên
+        const firstSenderId = String(conv.firstSenderId?._id || conv.firstSenderId || conv.createdBy?._id || conv.createdBy || '');
+        const myId = String(userId || '');
+        const iSentFirst = !firstSenderId || firstSenderId === myId;
+        if (iSentFirst) {
+          friendConvs.push(conv);
+        } else {
+          strangerConvs.push(conv);
+        }
+      }
+    });
+    return { friendConvs, strangerConvs };
+  }, [mergedConversations, friendIds, getOtherParticipant, userId]);
+
   useEffect(() => {
       if (roomId && mergedConversations.length > 0) {
         const targetRoom = mergedConversations.find(c => String(c._id) === String(roomId));
@@ -194,7 +243,7 @@ export default function ChatPage() {
           setActiveConversation(targetRoom);
         }
       }
-    }, [roomId, mergedConversations, activeConversation])
+  }, [roomId, mergedConversations, activeConversation]);
   useEffect(() => {
     activeConvIdRef.current = activeConversation?._id;
   }, [activeConversation]);
@@ -202,14 +251,16 @@ export default function ChatPage() {
   const fetchConversationsData = useCallback(async () => {
     try {
       const res = await axios.get(`${API_BASE_URL}/conversations`, { headers: { Authorization: `Bearer ${token}` } });
-      setConversations(res.data.data?.items || res.data.items || []);
+      const allConvs = res.data.data?.items || res.data.items || [];
+      // Lọc bỏ self-conversation (My Documents) khỏi danh sách chat
+      const filtered = allConvs.filter(c => !(c.type === 'direct' && c.participants?.length === 1));
+      setConversations(filtered);
     } catch (err) { console.error("Lỗi lấy danh sách:", err); }
   }, [token]);
 
   // ==================== KHỞI TẠO SOCKET ====================
   useEffect(() => {
     if (!token) return;
-    
     // FIX TẠI ĐÂY: Chỉ connect khi socket thực sự chưa được bật để tránh đá mất socketService
     if (!socket.connected) {
       socket.auth = { token };
@@ -227,7 +278,17 @@ export default function ChatPage() {
       if (convIdStr === activeIdStr) {
         setMessages(prev => {
           if (prev.some(m => String(m._id) === String(latestMessage._id))) return prev;
-          return [...prev, latestMessage];
+          const normalizedMsg = {
+            ...latestMessage,
+            mediaIds: (latestMessage.mediaIds || []).map(media =>
+              typeof media === 'object' && media.url && !/^https?:\/\//i.test(media.url)
+                ? { ...media, url: `${API_ORIGIN}${media.url}` }
+                : media
+            )
+          };
+          // Dedup toàn bộ trước khi thêm
+          const deduped = [...prev.filter(m => String(m._id) !== String(normalizedMsg._id)), normalizedMsg];
+          return deduped;
         });
         socket.emit("message_delivered", { messageId: latestMessage._id });
         socket.emit("message_seen", { messageId: latestMessage._id });
@@ -256,6 +317,7 @@ export default function ChatPage() {
     });
 
     socket.on("message_recalled", ({ messageId }) => {
+      console.log('[recall received]', messageId);
       setMessages(prev => prev.map(m => String(m._id) === String(messageId) ? { ...m, isRecalled: true, content: "", attachments: [], mediaIds: [] } : m));
       setConversations(prev => prev.map(c => {
         if (c.latestMessage && String(c.latestMessage._id) === String(messageId)) {
@@ -270,15 +332,34 @@ export default function ChatPage() {
     });
 
     // Bỏ tắt cái toast.error ở connect_error đi để khỏi spam UI 
+    // Refresh lời mời kết bạn khi nhận notification mới
+    socket.on("new_notification", (notif) => {
+      if (notif?.type === 'friend_request') fetchIncomingRequests();
+      if (notif?.type === 'friend_accepted') { fetchFriends(); fetchOutgoingRequests(); }
+    });
     socket.on("connect_error", (err) => {
       console.error("Socket lỗi kết nối:", err.message);
     });
 
+    // Lắng nghe message_recalled từ socketService (user room) để đảm bảo nhận được
+    const handleRecalledFromService = ({ messageId }) => {
+      console.log('[recall received via socketService]', messageId);
+      setMessages(prev => prev.map(m => String(m._id) === String(messageId) ? { ...m, isRecalled: true, content: "", attachments: [], mediaIds: [] } : m));
+      setConversations(prev => prev.map(c => {
+        if (c.latestMessage && String(c.latestMessage._id) === String(messageId)) {
+          return { ...c, latestMessage: { ...c.latestMessage, isRecalled: true, content: "" } };
+        }
+        return c;
+      }));
+    };
+    socketService.on('message_recalled', handleRecalledFromService);
     return () => {
       socket.off("conversation_updated");
       socket.off("message_recalled");
       socket.off("message_reacted");
+      socket.off("new_notification");
       socket.off("connect_error");
+      socketService.off('message_recalled', handleRecalledFromService);
     };
   }, [token, userId, fetchConversationsData]);
 
@@ -286,6 +367,7 @@ export default function ChatPage() {
   useEffect(() => {
     if (!activeConversation) return;
     setMessages([]);
+    setJustSentRequestTo(null);
 
     if (activeConversation.isMock) return; 
 
@@ -293,7 +375,26 @@ export default function ChatPage() {
       try {
         const res = await axios.get(`${API_BASE_URL}/messages/conversation/${activeConversation._id}?limit=50`, { headers: { Authorization: `Bearer ${token}` } });
         const fetchedMessages = res.data.data?.items || res.data.items || [];
-        setMessages(fetchedMessages.reverse());
+        const normalized = fetchedMessages.map(m => ({
+          ...m,
+          mediaIds: (m.mediaIds || []).map(media =>
+            typeof media === 'object' && media.url && !/^https?:\/\//i.test(media.url)
+              ? { ...media, url: `${API_ORIGIN}${media.url}` }
+              : media
+          )
+        }));
+        // Dedup và merge với messages đã có từ socket trong lúc fetch, sort theo thời gian
+        setMessages(prev => {
+          const merged = [...normalized, ...prev];
+          const seen = new Set();
+          const deduped = merged.filter(m => {
+            const id = String(m._id);
+            if (seen.has(id)) return false;
+            seen.add(id);
+            return true;
+          });
+          return deduped.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+        });
         setConversations(prev => prev.map(c => String(c._id) === String(activeConversation._id) ? { ...c, unreadCount: 0 } : c));
       } catch (err) { setMessages([]); }
     };
@@ -573,10 +674,32 @@ export default function ChatPage() {
         </div>
         <div className="rs-search-bar">
           <FaSearch color="var(--z-text-secondary)" size={14} />
-          <input placeholder="Tìm kiếm bạn bè, nhóm..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+          <input placeholder={t('searchPlaceholder')} value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
         </div>
         <div className="rs-list">
-          {mergedConversations.map((conv) => {
+          {/* Item đặc biệt: Tin nhắn từ người lạ */}
+          {strangerConvs.length > 0 && (
+            <div
+              className="chat-list-item"
+              onClick={() => setShowStrangerPanel(true)}
+              style={{ cursor:'pointer' }}
+            >
+              <div style={{ width:44, height:44, borderRadius:'50%', background:'#0068FF', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+                <FaUserSecret size={20} color="#fff" />
+              </div>
+              <div className="cli-info">
+                <div className="cli-top">
+                  <span className="cli-name" style={{ fontWeight:700 }}>Tin nhắn từ người lạ</span>
+                  <span className="cli-time" style={{ color:'var(--z-primary)' }}></span>
+                </div>
+                <div className="cli-bottom">
+                  <span className="cli-msg">Gửi từ người chưa có trong danh bạ...</span>
+                  <div className="cli-unread" style={{ background:'#ef4444' }}>●</div>
+                </div>
+              </div>
+            </div>
+          )}
+          {friendConvs.map((conv) => {
             const isActive = activeConversation?._id === conv._id;
             const convName = getConversationName(conv);
             if (!convName) return null;
@@ -593,7 +716,7 @@ export default function ChatPage() {
                   </div>
                   <div className="cli-bottom">
                     <span className="cli-msg" style={{ fontWeight: unread > 0 ? 700 : 400, color: unread > 0 ? 'var(--z-text-primary)' : 'var(--z-text-secondary)' }}>
-                        {conv.latestMessage?.isRecalled ? 'Tin nhắn đã thu hồi' : (conv.latestMessage?.content || (conv.latestMessage?.mediaIds?.length > 0 || conv.latestMessage?.attachments?.length > 0 ? '[Hình ảnh/File]' : 'Chưa có tin nhắn'))}
+                        {conv.latestMessage?.isRecalled ? t('recalledMessage') || 'Tin nhắn đã thu hồi' : (conv.latestMessage?.content || (conv.latestMessage?.mediaIds?.length > 0 || conv.latestMessage?.attachments?.length > 0 ? '[Hình ảnh/File]' : t('noMessages') || 'Chưa có tin nhắn'))}
                     </span>
                     {unread > 0 && <div className="cli-unread">{unread > 99 ? '99+' : unread}</div>}
                   </div>
@@ -601,7 +724,7 @@ export default function ChatPage() {
               </div>
             );
           })}
-          {mergedConversations.length === 0 && <div style={{ textAlign: 'center', padding: '20px', color: 'var(--z-text-muted)', fontSize: 13 }}>Không tìm thấy cuộc trò chuyện nào</div>}
+          {friendConvs.length === 0 && <div style={{ textAlign: 'center', padding: '20px', color: 'var(--z-text-muted)', fontSize: 13 }}>Không tìm thấy cuộc trò chuyện nào</div>}
         </div>
       </aside>
 
@@ -614,12 +737,105 @@ export default function ChatPage() {
               name: getConversationName(activeConversation),
               avatar: getConversationAvatar(activeConversation),
               targetUserId: getOtherParticipant(activeConversation)?._id || getOtherParticipant(activeConversation)?.id,
-              isOnline: true 
+              isOnline: true,
+              isStranger: (() => {
+                const other = getOtherParticipant(activeConversation);
+                const otherId = other && typeof other === 'object' ? String(other._id || other.id) : null;
+                return otherId ? !friendIds.has(otherId) : false;
+              })(),
+              strangerId: getOtherParticipant(activeConversation)?._id || getOtherParticipant(activeConversation)?.id,
             }}
             onInfo={() => setShowRightPanel(!showRightPanel)}
           />
 
           <div className="chat-messages">
+            {/* Banner thông báo trạng thái kết bạn */}
+            {(() => {
+              const other = getOtherParticipant(activeConversation);
+              const otherId = other && typeof other === 'object' ? String(other._id || other.id) : null;
+              const otherName = other && typeof other === 'object' ? (other.username || other.fullName || 'Người dùng') : 'Người dùng';
+              const isStranger = otherId && !friendIds.has(otherId);
+              if (!isStranger) return null;
+
+              const hasOutgoing = outgoingRequestIds.has(otherId) || justSentRequestTo === otherId;
+              const incomingReq = incomingRequests.find(r => {
+                const fromId = r.fromUserId?._id
+                  ? String(r.fromUserId._id)
+                  : r.fromUserId?.id
+                  ? String(r.fromUserId.id)
+                  : String(r.fromUserId || '');
+                return fromId === otherId;
+              });
+
+              if (hasOutgoing) return (
+                <div style={{ position:'sticky', top:0, zIndex:10, padding:'12px 20px', background:'rgba(0,104,255,0.06)', borderBottom:'1px solid var(--z-border)', display:'flex', alignItems:'center', gap:10, fontSize:13, backdropFilter:'blur(8px)' }}>
+                  <FaUserPlus size={14} color="var(--z-primary)" style={{ flexShrink:0 }} />
+                  <span style={{ color:'var(--z-text-secondary)' }}>
+                    Đang chờ <strong style={{ color:'var(--z-text-primary)' }}>{otherName}</strong> đồng ý kết bạn
+                  </span>
+                </div>
+              );
+
+              if (incomingReq) return (
+                <div style={{ position:'sticky', top:0, zIndex:10, padding:'12px 20px', background:'rgba(0,104,255,0.06)', borderBottom:'1px solid var(--z-border)', display:'flex', alignItems:'center', gap:12, backdropFilter:'blur(8px)' }}>
+                  <FaUserPlus size={14} color="var(--z-primary)" style={{ flexShrink:0 }} />
+                  <span style={{ flex:1, fontSize:13, color:'var(--z-text-secondary)' }}>
+                    <strong style={{ color:'var(--z-text-primary)' }}>{otherName}</strong> đã gửi lời mời kết bạn
+                  </span>
+                  <div style={{ display:'flex', gap:8, flexShrink:0 }}>
+                    <button
+                      onClick={async () => {
+                        try {
+                          const reqId = String(incomingReq._id || incomingReq.id);
+                          await acceptRequest(reqId);
+                          await Promise.all([fetchIncomingRequests(), fetchFriends()]);
+                        } catch (e) { alert('Không thể chấp nhận'); }
+                      }}
+                      style={{ display:'flex', alignItems:'center', gap:5, padding:'6px 14px', borderRadius:8, border:'none', background:'var(--z-primary)', color:'#fff', cursor:'pointer', fontWeight:600, fontSize:13 }}
+                    >
+                      <FaCheck size={11} />Đồng ý
+                    </button>
+                    <button
+                      onClick={async () => {
+                        try {
+                          const reqId = String(incomingReq._id || incomingReq.id);
+                          await rejectRequest(reqId);
+                          await fetchIncomingRequests();
+                        } catch (e) { alert('Không thể từ chối'); }
+                      }}
+                      style={{ display:'flex', alignItems:'center', gap:5, padding:'6px 14px', borderRadius:8, border:'1px solid var(--z-border)', background:'transparent', color:'var(--z-text-secondary)', cursor:'pointer', fontWeight:600, fontSize:13 }}
+                    >
+                      <FaTimes size={11} />Từ chối
+                    </button>
+                  </div>
+                </div>
+              );
+
+              return (
+                <div style={{ position:'sticky', top:0, zIndex:10, padding:'12px 20px', background:'rgba(0,104,255,0.06)', borderBottom:'1px solid var(--z-border)', display:'flex', alignItems:'center', gap:12, backdropFilter:'blur(8px)' }}>
+                  <FaUserPlus size={14} color="var(--z-primary)" style={{ flexShrink:0 }} />
+                  <span style={{ flex:1, fontSize:13, color:'var(--z-text-secondary)' }}>
+                    Bạn và <strong style={{ color:'var(--z-text-primary)' }}>{otherName}</strong> chưa kết bạn
+                  </span>
+                  <button
+                    onClick={async () => {
+                      try {
+                        const { friendService } = await import('../../services/friendService');
+                        await friendService.sendFriendRequest(otherId);
+                        setJustSentRequestTo(otherId); // optimistic update ngay lập tức
+                        fetchOutgoingRequests();
+                      } catch (e) {
+                        const code = e.response?.data?.error?.code;
+                        if (code === 'REVERSE_REQUEST_EXISTS') fetchIncomingRequests();
+                      }
+                    }}
+                    style={{ display:'flex', alignItems:'center', gap:5, padding:'6px 14px', borderRadius:8, border:'1px solid var(--z-primary)', background:'transparent', color:'var(--z-primary)', cursor:'pointer', fontWeight:600, fontSize:13, flexShrink:0 }}
+                  >
+                    <FaUserPlus size={11} />Gửi kết bạn
+                  </button>
+                </div>
+              );
+            })()}
             {messages.length === 0 && uploads.length === 0 ? (
               <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
                 <img src={getConversationAvatar(activeConversation)} alt="avatar" style={{ width: 100, height: 100, borderRadius: '50%', objectFit: 'cover', margin: '0 auto 16px' }} />
@@ -701,7 +917,7 @@ export default function ChatPage() {
           </div>
           
           <div className="crp-section">
-            <div className="crp-sec-title">Ảnh/Video</div>
+            <div className="crp-sec-title">{t('imageVideo')}</div>
             {imgFiles.length > 0 ? (
               <>
                 <div className="crp-grid">
@@ -711,7 +927,7 @@ export default function ChatPage() {
                 </div>
                 <button className="crp-view-all">Xem tất cả</button>
               </>
-            ) : <div style={{fontSize: 12, color: 'var(--z-text-muted)'}}>Chưa có Ảnh/Video nào</div>}
+            ) : <div style={{fontSize: 12, color: 'var(--z-text-muted)'}}>{t('noImageVideo')}</div>}
           </div>
 
           <div className="crp-section">
@@ -750,6 +966,63 @@ export default function ChatPage() {
             ) : <div style={{fontSize: 12, color: 'var(--z-text-muted)'}}>Chưa có Link nào</div>}
           </div>
         </aside>
+      )}
+
+      {/* ── PANEL: Tin nhắn từ người lạ ── */}
+      {showStrangerPanel && (
+        <div style={{ position:'fixed', inset:0, zIndex:1000, display:'flex' }}>
+          {/* Overlay */}
+          <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.3)' }} onClick={() => setShowStrangerPanel(false)} />
+          {/* Panel */}
+          <div style={{ position:'relative', width:360, height:'100%', background:'var(--z-bg-sidebar)', display:'flex', flexDirection:'column', boxShadow:'4px 0 20px rgba(0,0,0,0.2)' }}>
+            {/* Header */}
+            <div style={{ padding:'16px 20px', borderBottom:'1px solid var(--z-border)', display:'flex', alignItems:'center', gap:12 }}>
+              <button onClick={() => setShowStrangerPanel(false)} style={{ background:'none', border:'none', cursor:'pointer', color:'var(--z-text-primary)', padding:4 }}>
+                <FaArrowLeft size={16} />
+              </button>
+              <span style={{ fontWeight:700, fontSize:16, color:'var(--z-text-primary)' }}>Tin nhắn từ người lạ</span>
+            </div>
+            {/* Notice */}
+            <div style={{ padding:'10px 16px', fontSize:12, color:'var(--z-text-secondary)', borderBottom:'1px solid var(--z-border)' }}>
+              Người lạ có thể nhắn tin cho bạn.{' '}
+              <span style={{ color:'var(--z-primary)', cursor:'pointer' }}>Cài đặt quyền riêng tư</span>
+            </div>
+            {/* List */}
+            <div style={{ flex:1, overflowY:'auto' }}>
+              {strangerConvs.map(conv => {
+                const unread = conv.unreadCount || 0;
+                return (
+                  <div
+                    key={conv._id}
+                    style={{ display:'flex', alignItems:'center', gap:12, padding:'12px 16px', cursor:'pointer', borderBottom:'1px solid var(--z-border)' }}
+                    onClick={() => { setActiveConversation(conv); setShowStrangerPanel(false); }}
+                    onMouseEnter={e => e.currentTarget.style.background = 'var(--z-bg-hover)'}
+                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                  >
+                    <img src={getConversationAvatar(conv)} alt="" style={{ width:44, height:44, borderRadius:'50%', objectFit:'cover', flexShrink:0 }} />
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                        <span style={{ fontWeight:700, fontSize:14, color:'var(--z-text-primary)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{getConversationName(conv)}</span>
+                        <span style={{ fontSize:11, color:'var(--z-text-muted)', flexShrink:0, marginLeft:8 }}>
+                          {conv.latestMessage ? formatChatTimestamp(conv.latestMessage.createdAt) : ''}
+                        </span>
+                      </div>
+                      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginTop:2 }}>
+                        <span style={{ fontSize:12, color:'var(--z-text-secondary)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                          {conv.latestMessage?.content || '[Hình ảnh/File]'}
+                        </span>
+                        {unread > 0 && <div style={{ background:'#ef4444', color:'#fff', borderRadius:10, padding:'1px 6px', fontSize:11, flexShrink:0 }}>{unread}</div>}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+              {strangerConvs.length === 0 && (
+                <div style={{ textAlign:'center', padding:40, color:'var(--z-text-muted)', fontSize:13 }}>Không có tin nhắn từ người lạ</div>
+              )}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
