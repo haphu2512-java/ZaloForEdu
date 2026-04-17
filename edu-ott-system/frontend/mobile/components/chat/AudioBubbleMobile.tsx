@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, TouchableOpacity, ActivityIndicator, StyleSheet } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, TouchableOpacity, ActivityIndicator, StyleSheet, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Audio } from 'expo-av';
+import * as FileSystem from 'expo-file-system/legacy';
 
 interface AudioBubbleMobileProps {
   url: string;
@@ -14,6 +15,7 @@ export const AudioBubbleMobile: React.FC<AudioBubbleMobileProps> = ({ url, isMe 
   const [isLoading, setIsLoading] = useState(false);
   const [position, setPosition] = useState(0);
   const [duration, setDuration] = useState(0);
+  const [cachedUri, setCachedUri] = useState<string | null>(null);
 
   useEffect(() => {
     return () => {
@@ -22,6 +24,19 @@ export const AudioBubbleMobile: React.FC<AudioBubbleMobileProps> = ({ url, isMe 
       }
     };
   }, [sound]);
+
+  useEffect(() => {
+    // Reset khi đổi source audio để không giữ state cũ
+    if (sound) {
+      void sound.unloadAsync();
+    }
+    setSound(null);
+    setIsPlaying(false);
+    setIsLoading(false);
+    setPosition(0);
+    setDuration(0);
+    setCachedUri(null);
+  }, [url]);
 
   const onPlaybackStatusUpdate = (status: any) => {
     if (status.isLoaded) {
@@ -38,14 +53,19 @@ export const AudioBubbleMobile: React.FC<AudioBubbleMobileProps> = ({ url, isMe 
       console.error('Playback status error:', status.error);
       setIsLoading(false);
       setIsPlaying(false);
-      
-      import('react-native').then(({ Alert }) => {
-        Alert.alert(
-          '⚠️ Không thể phát audio', 
-          'File audio này có thể không tương thích với thiết bị của bạn.\n\nNguyên nhân: Format hoặc codec không được hỗ trợ.',
-          [{ text: 'Đóng', style: 'cancel' }]
-        );
+      Alert.alert('Không thể phát audio', 'File audio không tương thích với thiết bị.');
+    }
+  };
+
+  const withTimeout = async <T,>(promise: Promise<T>, timeoutMs: number, timeoutMessage: string): Promise<T> => {
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    try {
+      const timeoutPromise = new Promise<T>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(timeoutMessage)), timeoutMs);
       });
+      return await Promise.race([promise, timeoutPromise]);
+    } finally {
+      if (timer) clearTimeout(timer);
     }
   };
 
@@ -57,29 +77,26 @@ export const AudioBubbleMobile: React.FC<AudioBubbleMobileProps> = ({ url, isMe 
           if (isPlaying) {
             await sound.pauseAsync();
           } else {
+            const nearEnd =
+              !!status.durationMillis &&
+              status.positionMillis >= status.durationMillis - 250;
+            if (nearEnd) {
+              await sound.setPositionAsync(0);
+              setPosition(0);
+            }
             await sound.playAsync();
           }
         } else {
           // Reset if sound is in invalid state
+          await sound.unloadAsync().catch(() => null);
           setSound(null);
           setIsPlaying(false);
-          await togglePlayback(); // Try to reload
+          setPosition(0);
+          setDuration(0);
         }
       } else {
         setIsLoading(true);
-        
-        // Timeout để tránh loading vô hạn
-        const loadTimeout = setTimeout(() => {
-          setIsLoading(false);
-          import('react-native').then(({ Alert }) => {
-            Alert.alert(
-              '⏱️ Timeout', 
-              'Audio mất quá lâu để load. File có thể bị lỗi hoặc không tương thích.',
-              [{ text: 'Đóng', style: 'cancel' }]
-            );
-          });
-        }, 10000); // 10 seconds timeout
-        
+
         // Force audio to loudspeaker
         await Audio.setAudioModeAsync({
           allowsRecordingIOS: false,
@@ -89,15 +106,61 @@ export const AudioBubbleMobile: React.FC<AudioBubbleMobileProps> = ({ url, isMe 
           staysActiveInBackground: false,
         });
 
-        console.log('🎵 Attempting to load audio:', url);
-        const { sound: newSound } = await Audio.Sound.createAsync(
-          { uri: url },
-          { shouldPlay: true },
-          onPlaybackStatusUpdate
-        );
-        
-        console.log('✅ Audio loaded successfully');
-        clearTimeout(loadTimeout); // Clear timeout if successful
+        console.log('🎵 Attempting to load audio:', cachedUri || url);
+
+        let newSound: Audio.Sound | null = null;
+
+        try {
+          // Ưu tiên local cache để giảm lỗi timeout/metadata khi stream trên iOS
+          let localSource = cachedUri;
+          if (!localSource) {
+            console.log('⬇️ Downloading audio to cache before playback...');
+            const safeFile = encodeURIComponent(url.split('/').pop() || `voice-${Date.now()}.m4a`);
+            const localUri = `${FileSystem.cacheDirectory || ''}voice-${Date.now()}-${safeFile}`;
+            const downloaded = await withTimeout(
+              FileSystem.downloadAsync(url, localUri),
+              15000,
+              'DOWNLOAD_TIMEOUT'
+            );
+            localSource = downloaded.uri;
+            setCachedUri(downloaded.uri);
+          }
+
+          const local = await withTimeout(
+            Audio.Sound.createAsync(
+              { uri: localSource },
+              { shouldPlay: true },
+              onPlaybackStatusUpdate
+            ),
+            12000,
+            'LOAD_TIMEOUT'
+          );
+          newSound = local.sound;
+          console.log('✅ Audio loaded successfully (cached/local)');
+        } catch (localError) {
+          console.warn('⚠️ Local playback failed, fallback to stream', localError);
+          const remote = await withTimeout(
+            Audio.Sound.createAsync(
+              { uri: url },
+              { shouldPlay: true },
+              onPlaybackStatusUpdate
+            ),
+            12000,
+            'STREAM_LOAD_TIMEOUT'
+          );
+          newSound = remote.sound;
+          console.log('✅ Audio loaded successfully (stream fallback)');
+        }
+
+        if (!newSound) {
+          throw new Error('Không thể khởi tạo trình phát audio');
+        }
+
+        const initialStatus = await newSound.getStatusAsync();
+        if (initialStatus.isLoaded && initialStatus.durationMillis) {
+          setDuration(initialStatus.durationMillis);
+        }
+
         setSound(newSound);
         setIsLoading(false);
       }
@@ -129,13 +192,14 @@ export const AudioBubbleMobile: React.FC<AudioBubbleMobileProps> = ({ url, isMe 
               '• Yêu cầu người gửi dùng Chrome/Safari\n' +
               '• Hoặc ghi âm từ thiết bị iOS/Android\n' +
               '• Kiểm tra cài đặt trình duyệt';
+      } else if (error.message?.includes('DOWNLOAD_TIMEOUT') || error.message?.includes('LOAD_TIMEOUT') || error.message?.includes('STREAM_LOAD_TIMEOUT')) {
+        title = '⏱️ Tải audio quá lâu';
+        msg = 'Không thể tải file audio kịp thời. Vui lòng kiểm tra mạng hoặc thử lại sau.';
       }
       
-      import('react-native').then(({ Alert }) => {
-        Alert.alert(title, msg, [
-          { text: 'Đóng', style: 'cancel' }
-        ]);
-      });
+      Alert.alert(title, msg, [
+        { text: 'Đóng', style: 'cancel' }
+      ]);
     }
   };
 

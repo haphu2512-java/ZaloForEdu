@@ -49,6 +49,8 @@ import Colors from '@/constants/Colors';
 import PinnedBar from '@/components/chat/PinnedBar';
 import PollBubble from '@/components/chat/PollBubble';
 import { TypingIndicator } from '@/components/chat/TypingIndicator';
+import { AudioBubbleMobile } from '@/components/chat/AudioBubbleMobile';
+import { VoiceRecorderMobile } from '@/components/chat/VoiceRecorderMobile';
 
 const QUICK_EMOJIS = ['😀', '😂', '😍', '🥰', '👍', '❤️', '🔥', '😭', '🙏', '🎉'];
 
@@ -132,6 +134,13 @@ function isImageAttachment(media?: MediaItem | null): boolean {
   return isImageMimeType(inferredMimeType);
 }
 
+function isAudioAttachment(media?: MediaItem | null): boolean {
+  if (!media) return false;
+  if (media.mimeType?.startsWith('audio/')) return true;
+  const fileName = (media.fileName || '').toLowerCase();
+  return /\.(mp3|m4a|aac|wav|ogg|opus|webm)$/i.test(fileName);
+}
+
 export default function ChatScreen() {
   const { id: conversationId } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
@@ -150,6 +159,7 @@ export default function ChatScreen() {
   const [isSocketReady, setIsSocketReady] = useState(false);
   const [showEmojiPanel, setShowEmojiPanel] = useState(false);
   const [showMediaMenu, setShowMediaMenu] = useState(false);
+  const [showVoiceRecorder, setShowVoiceRecorder] = useState(false);
   const [typingUserIds, setTypingUserIds] = useState<string[]>([]);
   const [replyTo, setReplyTo] = useState<Message | null>(null);
   const [forwardModalVisible, setForwardModalVisible] = useState(false);
@@ -539,6 +549,53 @@ export default function ChatScreen() {
     }
   };
 
+  const getAudioMimeTypeFromUri = (uri: string): string => {
+    const ext = uri.split('.').pop()?.toLowerCase();
+    switch (ext) {
+      case 'm4a':
+        return 'audio/mp4';
+      case 'mp3':
+        return 'audio/mpeg';
+      case 'wav':
+        return 'audio/wav';
+      case 'aac':
+        return 'audio/aac';
+      case 'webm':
+        return 'audio/webm';
+      default:
+        return 'audio/mp4';
+    }
+  };
+
+  const handleSendVoice = async (uri: string) => {
+    if (!uri || isSending) return;
+    setShowVoiceRecorder(false);
+    setIsSending(true);
+
+    try {
+      const ext = uri.split('.').pop()?.toLowerCase() || 'm4a';
+      const fileName = `voice-${Date.now()}.${ext}`;
+      const mimeType = getAudioMimeTypeFromUri(uri);
+      const uploaded = await uploadMediaForm({ uri, fileName, mimeType });
+      const mediaId = uploaded._id || uploaded.id;
+
+      if (!mediaId) {
+        throw new Error('Upload voice không trả về mediaId');
+      }
+
+      setMediaById((prev) => ({ ...prev, [mediaId]: uploaded }));
+      const newMsg = await sendMessage({ conversationId, mediaIds: [mediaId], content: '' });
+      setMessages((prev) =>
+        prev.some((m) => getMessageId(m) === getMessageId(newMsg)) ? prev : [newMsg, ...prev]
+      );
+    } catch (err: any) {
+      Alert.alert('Lỗi', err?.message || 'Không thể gửi ghi âm');
+      console.error('Voice send failed:', err);
+    } finally {
+      setIsSending(false);
+    }
+  };
+
   // ==================== CHỌN ẢNH ====================
   const handlePickImage = async () => {
     if (isPicking.current) return;
@@ -887,6 +944,7 @@ export default function ChatScreen() {
                     const rawMedia = typeof mediaItem === 'string' ? mediaById[mediaId] : mediaItem;
                     const media = rawMedia ? { ...rawMedia, url: toAbsoluteMediaUrl(rawMedia.url) } : null;
                     const isImage = isImageAttachment(media);
+                    const isAudio = isAudioAttachment(media);
                     const fileName = media?.fileName || `Tệp đính kèm ${idx + 1}`;
                     const canOpen = !!media?.url;
 
@@ -895,6 +953,14 @@ export default function ChatScreen() {
                         <TouchableOpacity key={`${mediaId}-${idx}`} onPress={() => setViewImageUrl(media.url)} activeOpacity={0.9}>
                           <Image source={{ uri: media.url }} style={styles.inlineImage} resizeMode="cover" />
                         </TouchableOpacity>
+                      );
+                    }
+
+                    if (isAudio && media?.url) {
+                      return (
+                        <View key={`${mediaId}-${idx}`} style={styles.audioAttachment}>
+                          <AudioBubbleMobile url={media.url} isMe={isMine} />
+                        </View>
                       );
                     }
 
@@ -1052,6 +1118,14 @@ export default function ChatScreen() {
           </View>
         )}
 
+        {showVoiceRecorder ? (
+          <View style={[styles.voiceRecorderWrap, { borderTopColor: colors.border, backgroundColor: colors.surface, paddingBottom: Math.max(12, insets.bottom) }]}>
+            <VoiceRecorderMobile
+              onCancel={() => setShowVoiceRecorder(false)}
+              onSend={handleSendVoice}
+            />
+          </View>
+        ) : (
         <View style={[styles.inputBar, { borderTopColor: colors.border, backgroundColor: colors.surface, paddingBottom: Math.max(12, insets.bottom) }]}>
           <TouchableOpacity onPress={() => setShowEmojiPanel((prev) => !prev)} style={styles.iconBtn}>
             <Ionicons name={showEmojiPanel ? 'happy' : 'happy-outline'} size={24} color={showEmojiPanel ? colors.tint : colors.muted} />
@@ -1078,7 +1152,17 @@ export default function ChatScreen() {
           >
             <Ionicons name="send" size={18} color="#fff" style={{ marginLeft: 3 }} />
           </TouchableOpacity>
+          {inputText.trim().length === 0 && (
+            <TouchableOpacity
+              onPress={() => setShowVoiceRecorder(true)}
+              disabled={isSending}
+              style={styles.iconBtn}
+            >
+              <Ionicons name="mic-outline" size={24} color={colors.muted} />
+            </TouchableOpacity>
+          )}
         </View>
+        )}
       </KeyboardAvoidingView>
 
       {/* Modal chọn media */}
@@ -1209,10 +1293,12 @@ const styles = StyleSheet.create({
   replyQuote: { borderLeftWidth: 3, paddingLeft: 8, marginBottom: 6, opacity: 0.85 },
   msgMeta: { flexDirection: 'row', alignItems: 'center', marginTop: 4, gap: 2 },
   inlineImage: { width: 200, height: 160, borderRadius: 12 },
+  audioAttachment: { maxWidth: 260 },
   fileAttachment: { flexDirection: 'row', alignItems: 'center', gap: 8, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 8 },
   replyPreview: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 8, borderTopWidth: 1, gap: 8 },
   replyPreviewBar: { width: 3, height: '100%', borderRadius: 2, minHeight: 30 },
   inputBar: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingTop: 10, borderTopWidth: StyleSheet.hairlineWidth, gap: 6 },
+  voiceRecorderWrap: { paddingHorizontal: 10, paddingTop: 10, borderTopWidth: StyleSheet.hairlineWidth },
   iconBtn: { padding: 4 },
   textInput: { flex: 1, borderWidth: 1, borderRadius: 22, paddingHorizontal: 14, paddingVertical: 8, fontSize: 16, maxHeight: 100 },
   sendBtn: { width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center' },

@@ -41,9 +41,22 @@ const needsConversion = (mimeType, filename) => {
   // WebM and raw MP4 from browser MediaRecorder need conversion
   if (ext === '.webm') return true;
   if (mimeType?.includes('webm')) return true;
-  // MP4 from browser MediaRecorder (often has Opus codec) needs conversion
-  if (ext === '.mp4' && mimeType?.includes('mp4')) return true;
+  // MP4 from browser MediaRecorder often needs conversion
+  if (mimeType?.includes('mp4')) return true;
+  if (ext === '.mp4') return true;
   return false;
+};
+
+const withTimeout = async (promise, timeoutMs, timeoutMessage) => {
+  let timer;
+  try {
+    const timeout = new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Error(timeoutMessage)), timeoutMs);
+    });
+    return await Promise.race([promise, timeout]);
+  } finally {
+    clearTimeout(timer);
+  }
 };
 
 const uploadMediaForm = asyncHandler(async (req, res) => {
@@ -62,15 +75,23 @@ const uploadMediaForm = asyncHandler(async (req, res) => {
 
   if (isAudio && needsConversion(req.file.mimetype, req.file.originalname)) {
     const inputPath = path.join(uploadsFolder, req.file.filename);
-    const m4aFilename = req.file.filename.replace(/\.[^.]+$/, '') + '.m4a';
+    const baseName = req.file.filename.replace(/\.[^.]+$/, '');
+    const m4aFilename = `${baseName}.m4a`;
+    const tmpFilename = `${baseName}.converted.m4a`;
+    const tempOutputPath = path.join(uploadsFolder, tmpFilename);
     const outputPath = path.join(uploadsFolder, m4aFilename);
 
-    console.log(`Converting audio: ${req.file.filename} -> ${m4aFilename}`);
-    const converted = await convertToM4A(inputPath, outputPath);
+    console.log(`Converting audio: ${req.file.filename} -> ${m4aFilename} (via temp file)`);
+    const converted = await withTimeout(
+      convertToM4A(inputPath, tempOutputPath),
+      30000,
+      'Audio conversion timeout'
+    );
 
     if (converted) {
-      // Delete original file, use converted
+      // Delete original and move converted temp into final path
       await fs.unlink(inputPath).catch(() => null);
+      await fs.rename(tempOutputPath, outputPath);
       const stat = await fs.stat(outputPath).catch(() => null);
       finalFilename = m4aFilename;
       finalMimeType = 'audio/mp4';
@@ -78,7 +99,9 @@ const uploadMediaForm = asyncHandler(async (req, res) => {
       finalUrl = `/uploads/${m4aFilename}`;
       console.log(`Audio converted successfully: ${m4aFilename}`);
     } else {
-      console.warn(`Audio conversion failed, using original: ${req.file.filename}`);
+      await fs.unlink(tempOutputPath).catch(() => null);
+      // Fallback: giữ file gốc để không làm mất tin nhắn voice
+      console.warn(`Audio conversion failed, fallback to original file: ${req.file.filename}`);
     }
   }
 
