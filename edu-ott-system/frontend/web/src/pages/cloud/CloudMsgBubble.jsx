@@ -6,6 +6,21 @@ import { AudioBubble } from '../../components/shared/AudioBubble';
 
 const EMOJIS = ['👍','❤️','😂','😲','😢','😡'];
 
+/* Highlight search keyword trong text */
+function HighlightText({ text, query }) {
+  if (!query || !text) return <>{text}</>;
+  const parts = text.split(new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi'));
+  return (
+    <>
+      {parts.map((part, i) =>
+        part.toLowerCase() === query.toLowerCase()
+          ? <mark key={i} style={{ background: '#FEF08A', color: '#1a1a1a', borderRadius: 2, padding: '0 1px' }}>{part}</mark>
+          : part
+      )}
+    </>
+  );
+}
+
 /* Zalo-style reply SVG icon */
 const ReplyIcon = () => (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
@@ -47,7 +62,7 @@ export function UploadBubble({name, percent}) {
 
 
 
-export function CloudMsgBubble({msg, onDelete, onPreview, onReaction, pinnedIds, onPin, onForward, onReply, isRemoving}) {
+export function CloudMsgBubble({msg, onDelete, onPreview, onReaction, pinnedIds, onPin, onForward, onReply, isRemoving, searchQuery}) {
   const [showMenu, setShowMenu] = useState(false);
   const [showReaction, setShowReaction] = useState(false);
   const menuRef = useRef(null);
@@ -150,7 +165,9 @@ export function CloudMsgBubble({msg, onDelete, onPreview, onReaction, pinnedIds,
               </div>
             )}
             {msg.content && (
-              <div style={{padding: msg.replyTo ? '8px 12px' : undefined}}>{msg.content}</div>
+              <div style={{padding: msg.replyTo ? '8px 12px' : undefined}}>
+                <HighlightText text={msg.content} query={searchQuery} />
+              </div>
             )}
           </div>
         )}
@@ -222,8 +239,7 @@ export function CloudMsgBubble({msg, onDelete, onPreview, onReaction, pinnedIds,
         )}
 
         <div className="mdc-msg-time">
-          {fmtTime(msg.createdAt)}
-          <span className="mdc-msg-sent"><FaCheck size={10} /> Đã gửi</span>
+          <span className="mdc-msg-sent"><FaCheck size={10} /> Đã lưu lúc {fmtTime(msg.createdAt)}</span>
         </div>
       </div>
 

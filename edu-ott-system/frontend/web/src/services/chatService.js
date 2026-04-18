@@ -28,6 +28,10 @@ export const chatService = {
 
   reactToMessage: (messageId, emoji) => api.put(`/messages/${messageId}/react`, { emoji }),
 
+  // --- Search ---
+  searchMessages: (conversationId, query, limit = 20) =>
+    api.get('/search/messages', { params: { conversationId, q: query, limit } }),
+
   // --- Pins ---
   pinMessage: (conversationId, messageId) =>
     api.post(`/conversations/${conversationId}/pins`, { messageId }),

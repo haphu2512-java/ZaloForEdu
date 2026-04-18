@@ -48,6 +48,9 @@ export default function MyDocumentsPage(){
   
   const[searchQuery,setSearchQuery]=useState("");
   const[filterTab,setFilterTab]=useState("all");
+  const[apiSearchResults,setApiSearchResults]=useState(null); // null = chưa search API
+  const[isSearching,setIsSearching]=useState(false);
+  const searchDebounceRef=useRef(null);
   
   const[showCleanup,setShowCleanup]=useState(false);
   const[preview,setPreview]=useState(null);
@@ -96,6 +99,26 @@ export default function MyDocumentsPage(){
 
   // load friend list for forward modal
   useEffect(()=>{ fetchFriends(); },[fetchFriends]);
+
+  // Debounced API search khi query >= 2 ký tự
+  useEffect(()=>{
+    if(searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+    if(!searchQuery.trim()||searchQuery.trim().length<2){
+      setApiSearchResults(null);
+      return;
+    }
+    searchDebounceRef.current=setTimeout(async()=>{
+      if(!convId)return;
+      setIsSearching(true);
+      try{
+        const res=await chatService.searchMessages(convId,searchQuery.trim());
+        const items=(res.data?.data?.items||[]).map(normalizeMsg);
+        setApiSearchResults(items);
+      }catch{setApiSearchResults(null);}
+      finally{setIsSearching(false);}
+    },500);
+    return()=>{if(searchDebounceRef.current)clearTimeout(searchDebounceRef.current);};
+  },[searchQuery,convId]);
 
   useEffect(()=>{messagesEndRef.current?.scrollIntoView({behavior:"smooth"});},[messages,uploads]);
 
@@ -287,18 +310,18 @@ export default function MyDocumentsPage(){
     }
   };
 
-  // search + filter messages
-  const filtered=messages.filter(msg=>{
-    // Filter by tab
+  // Dùng kết quả API search nếu có, ngược lại dùng client-side filter
+  const baseList = apiSearchResults !== null ? apiSearchResults : messages;
+  const filtered = baseList.filter(msg=>{
     const media=msg.mediaIds?.[0]||msg.media?.[0];
     let passTab=true;
     if(filterTab==="text")passTab=!media&&!!msg.content;
     else if(filterTab==="image")passTab=!!media&&["image","video"].includes(getCategory(media.fileName||""));
     else if(filterTab==="file")passTab=!!media&&!["image","video"].includes(getCategory(media.fileName||""));
 
-    // Filter by search (tìm trong tên file và nội dung)
+    // Client-side filter chỉ áp dụng khi chưa có API results
     let passSearch=true;
-    if(searchQuery.trim()){
+    if(apiSearchResults===null&&searchQuery.trim()){
       const q=searchQuery.toLowerCase();
       const inContent=(msg.content||"").toLowerCase().includes(q);
       const inFileName=(media?.fileName||"").toLowerCase().includes(q);
@@ -363,8 +386,11 @@ export default function MyDocumentsPage(){
 
 
         {searchQuery&&(
-          <div style={{padding:'4px 16px',fontSize:12,color:'#8A8D91',background:'var(--z-bg-secondary)'}}>
-            Tìm thấy <strong>{filtered.length}</strong> kết quả cho "<strong>{searchQuery}</strong>"
+          <div style={{padding:'4px 16px',fontSize:12,color:'#8A8D91',background:'var(--z-bg-secondary)',display:'flex',alignItems:'center',gap:6}}>
+            {isSearching
+              ? <><FaSpinner className="spin" size={11}/> Đang tìm kiếm...</>
+              : <>Tìm thấy <strong>{filtered.length}</strong> kết quả cho "<strong>{searchQuery}</strong>"{apiSearchResults!==null&&<span style={{color:'#60a5fa',marginLeft:4}}>(kết quả từ server)</span>}</>
+            }
           </div>
         )}
 
@@ -372,7 +398,7 @@ export default function MyDocumentsPage(){
           {loading?(<div className="mdc-loading"><FaSpinner className="spin" size={28}/></div>):filtered.length===0&&uploads.length===0?(
             <div className="mdc-empty"><div className="mdc-empty-icon"><FaCloud size={52}/></div><h3>{searchQuery?"Không tìm thấy kết quả":"Chưa có nội dung nào"}</h3><p>{searchQuery?`Không có file nào chứa từ khóa "${searchQuery}"`:"Gửi ảnh, video, tài liệu hoặc ghi chú để lưu trữ cá nhân"}</p></div>
           ):(
-            <>{Object.entries(grouped).map(([dateLabel,items])=>(<div key={dateLabel}><div className="mdc-date-sep">{dateLabel}</div>{items.map(msg=>(<CloudMsgBubble key={msg._id} msg={msg} isRemoving={removingId===msg._id} onDelete={confirmDelete} onPreview={(url,name)=>setPreview({url,name})} onReaction={handleReaction} pinnedIds={pinnedIds} onPin={handlePin} onForward={openShareModal} onReply={(m)=>setReplyTo(m)}/>))}</div>))}{uploads.map(u=>(<UploadBubble key={u.id} name={u.name} percent={u.percent}/>))}</>
+            <>{Object.entries(grouped).map(([dateLabel,items])=>(<div key={dateLabel}><div className="mdc-date-sep">{dateLabel}</div>{items.map(msg=>(<CloudMsgBubble key={msg._id} msg={msg} isRemoving={removingId===msg._id} onDelete={confirmDelete} onPreview={(url,name)=>setPreview({url,name})} onReaction={handleReaction} pinnedIds={pinnedIds} onPin={handlePin} onForward={openShareModal} onReply={(m)=>setReplyTo(m)} searchQuery={searchQuery}/>))}</div>))}{uploads.map(u=>(<UploadBubble key={u.id} name={u.name} percent={u.percent}/>))}</>
 
           )}
           <div ref={messagesEndRef}/>
