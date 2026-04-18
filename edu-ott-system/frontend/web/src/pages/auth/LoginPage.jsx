@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
   FaEnvelope, FaLock, FaEye, FaEyeSlash, FaPhone, FaUser,
   FaArrowRight, FaSpinner, FaComments, FaHandPeace, FaHeart,
@@ -9,12 +9,14 @@ import "./LoginPage.css";
 
 export default function LoginPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { login, isLoading, error, clearError } = useAuthStore();
 
   const [form, setForm] = useState({ identifier: "", password: "" });
   const [showPass, setShowPass] = useState(false);
   const [fieldErrors, setFieldErrors] = useState({});
   const [mounted, setMounted] = useState(false);
+  const sessionExpired = searchParams.get("reason") === "session_expired";
 
   useEffect(() => {
     const t = setTimeout(() => setMounted(true), 60);
@@ -107,6 +109,13 @@ export default function LoginPage() {
           <h1 className="auth-logo-title">ZaloApp</h1>
         </div>
         <p className="auth-tagline">Chào mừng bạn quay trở lại 👋</p>
+
+        {/* Session expired banner */}
+        {sessionExpired && (
+          <div className="auth-error" style={{ background: "#fef3c7", color: "#92400e", borderColor: "#fcd34d" }}>
+            ⚠️ Tài khoản vừa đăng nhập trên thiết bị khác. Vui lòng đăng nhập lại.
+          </div>
+        )}
 
         {/* Error */}
         {error && <div className="auth-error">{error}</div>}

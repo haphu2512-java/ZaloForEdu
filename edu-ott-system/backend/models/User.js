@@ -47,6 +47,14 @@ const userSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
+    webTokenVersion: {
+      type: Number,
+      default: 0,
+    },
+    mobileTokenVersion: {
+      type: Number,
+      default: 0,
+    },
     isOnline: {
       type: Boolean,
       default: false,
@@ -85,14 +93,6 @@ const userSchema = new mongoose.Schema(
     },
     deletedAt: {
       type: Date,
-      default: null,
-    },
-    isActive: {
-      type: Boolean,
-      default: true,
-    },
-    banReason: {
-      type: String,
       default: null,
     },
   },
