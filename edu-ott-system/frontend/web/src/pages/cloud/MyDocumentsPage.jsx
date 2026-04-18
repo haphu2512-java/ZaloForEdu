@@ -25,6 +25,9 @@ const normalizeMsg = (msg) => ({
     typeof m === "object" && m.url ? { ...m, url: toAbsoluteUrl(m.url) } : m
   ),
 });
+
+// Kiểm tra replyTo có phải object đầy đủ không (không phải string ID)
+const isPopulatedReply = (r) => r && typeof r === "object" && (r.content !== undefined || r.mediaIds || r.media);
 import { CloudHeader } from "./CloudHeader";
 import { CloudInput } from "./CloudInput";
 import { CloudRightPanel } from "./CloudRightPanel";
@@ -128,8 +131,17 @@ export default function MyDocumentsPage(){
     const handler=(msg)=>{
       const cid=msg.conversationId?._id||msg.conversationId;
       if(cid!==convId)return;
-      // Bỏ qua nếu đã có trong list (API đã add rồi)
-      setMessages(prev=>prev.some(m=>m._id===msg._id)?prev:[...prev,normalizeMsg(msg)]);
+      setMessages(prev=>{
+        if(prev.some(m=>m._id===msg._id))return prev;
+        const normalized=normalizeMsg(msg);
+        // Populate replyTo từ messages hiện có nếu backend trả về string ID
+        if(normalized.replyTo && !isPopulatedReply(normalized.replyTo)){
+          const replyId=typeof normalized.replyTo==="string"?normalized.replyTo:normalized.replyTo?._id;
+          const original=prev.find(m=>m._id===replyId);
+          if(original) normalized.replyTo=original;
+        }
+        return [...prev,normalized];
+      });
     };
     socketService.on("new_message",handler);
     return()=>socketService.off("new_message",handler);
@@ -165,7 +177,7 @@ export default function MyDocumentsPage(){
         const normalizedMedia = { ...media, url: toAbsoluteUrl(media.url) };
         newMsg.media=[normalizedMedia];
         newMsg.mediaIds=[normalizedMedia];
-        if(replySnapshot && !newMsg.replyTo){
+        if(replySnapshot && !isPopulatedReply(newMsg.replyTo)){
           newMsg.replyTo = replySnapshot;
         }
         setMessages(prev=>[...prev,newMsg]);
@@ -193,7 +205,7 @@ export default function MyDocumentsPage(){
       const res=await chatService.sendMessage(payload);
       const newMsg=res.data?.data;
       if(newMsg){
-        if(replySnapshot && !newMsg.replyTo) newMsg.replyTo = replySnapshot;
+        if(replySnapshot && !isPopulatedReply(newMsg.replyTo)) newMsg.replyTo = replySnapshot;
         setMessages(prev=>[...prev,newMsg]);
       }
     }
