@@ -27,4 +27,14 @@ export const chatService = {
   recallMessage: (messageId) => api.put(`/messages/${messageId}/recall`),
 
   reactToMessage: (messageId, emoji) => api.put(`/messages/${messageId}/react`, { emoji }),
+
+  // --- Pins ---
+  pinMessage: (conversationId, messageId) =>
+    api.post(`/conversations/${conversationId}/pins`, { messageId }),
+
+  unpinMessage: (conversationId, messageId) =>
+    api.delete(`/conversations/${conversationId}/pins/${messageId}`),
+
+  getPinnedMessages: (conversationId) =>
+    api.get(`/conversations/${conversationId}/pins`),
 };

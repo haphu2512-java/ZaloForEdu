@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { FaTrash, FaPlay, FaPause, FaPaperPlane, FaStop, FaMicrophone } from 'react-icons/fa';
 import './VoiceRecorder.css';
 
@@ -23,6 +23,11 @@ export const VoiceRecorder = ({ onCancel, onSend }) => {
 
   // Audio playback ref
   const audioPlayerRef = useRef(new Audio());
+
+  const waveHeights = useMemo(
+    () => Array.from({length: 15}, () => Math.max(20, Math.random() * 80)),
+    []
+  );
 
   useEffect(() => {
     startRecording();
@@ -293,8 +298,8 @@ export const VoiceRecorder = ({ onCancel, onSend }) => {
           {/* Sóng âm tĩnh tượng trưng khi đã ghi xong */}
           <div className="vr-playback-visualizer">
             <div className="vr-pseudo-wave">
-               {Array.from({length: 15}).map((_, i) => (
-                 <div key={i} className="vr-wave-bar" style={{height: `${Math.max(20, Math.random() * 80)}%`}}></div>
+               {waveHeights.map((h, i) => (
+                 <div key={i} className="vr-wave-bar" style={{height: `${h}%`}}></div>
                ))}
             </div>
             <div className="vr-timer">{formatTime(isPlaying ? playbackTime : recordingTime)}</div>

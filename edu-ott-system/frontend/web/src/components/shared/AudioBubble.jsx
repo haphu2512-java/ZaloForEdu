@@ -1,22 +1,28 @@
-import React, { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { FaPlay, FaPause } from 'react-icons/fa';
 
 export function AudioBubble({ url }) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [duration, setDuration] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
-  const audioRef = useRef(new Audio(url));
+  const audioRef = useRef(null);
+  const waveHeights = useMemo(
+    () => Array.from({length: 25}, () => Math.max(20, Math.random() * 80)),
+    []
+  );
 
   useEffect(() => {
-    const audio = audioRef.current;
-    
-    // Attempt to load metadata to get duration
+    const audio = new Audio(url);
+    audioRef.current = audio;
+    setIsPlaying(false);
+    setCurrentTime(0);
+    setDuration(0);
+
     const handleLoadedMetadata = () => {
       if (audio.duration && audio.duration !== Infinity) {
         setDuration(audio.duration);
       }
     };
-    
     const handleTimeUpdate = () => setCurrentTime(audio.currentTime);
     const handleEnded = () => {
       setIsPlaying(false);
@@ -32,6 +38,7 @@ export function AudioBubble({ url }) {
       audio.removeEventListener('timeupdate', handleTimeUpdate);
       audio.removeEventListener('ended', handleEnded);
       audio.pause();
+      audio.src = '';
     };
   }, [url]);
 
@@ -64,8 +71,8 @@ export function AudioBubble({ url }) {
         <div className="mdc-audio-progress" style={{ width: `${progress}%` }}></div>
         {/* Pseudo waves */}
         <div className="mdc-audio-bars">
-           {Array.from({length: 25}).map((_, i) => (
-             <div key={i} className="mdc-audio-bar" style={{height: `${Math.max(20, Math.random() * 80)}%`}}></div>
+           {waveHeights.map((h, i) => (
+             <div key={i} className="mdc-audio-bar" style={{height: `${h}%`}}></div>
            ))}
         </div>
       </div>

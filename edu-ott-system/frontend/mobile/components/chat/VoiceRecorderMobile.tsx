@@ -9,11 +9,12 @@ interface VoiceRecorderMobileProps {
 }
 
 export const VoiceRecorderMobile: React.FC<VoiceRecorderMobileProps> = ({ onCancel, onSend }) => {
-  const [recording, setRecording] = useState<Audio.Recording | null>(null);
   const [isRecording, setIsRecording] = useState(false);
   const [duration, setDuration] = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const [metering, setMetering] = useState<number[]>(new Array(20).fill(4));
+  const visualizerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // dùng ref để cleanup luôn trỏ đúng instance, tránh stale closure
+  const recordingRef = useRef<Audio.Recording | null>(null);
 
   // Anim cho các cột visualizer
   const animValues = useRef(new Array(20).fill(0).map(() => new Animated.Value(4))).current;
@@ -22,8 +23,9 @@ export const VoiceRecorderMobile: React.FC<VoiceRecorderMobileProps> = ({ onCanc
     startRecording();
     return () => {
       stopTimer();
-      if (recording) {
-        recording.stopAndUnloadAsync();
+      if (visualizerRef.current) clearInterval(visualizerRef.current);
+      if (recordingRef.current) {
+        recordingRef.current.stopAndUnloadAsync().catch(() => null);
       }
     };
   }, []);
@@ -44,7 +46,10 @@ export const VoiceRecorderMobile: React.FC<VoiceRecorderMobileProps> = ({ onCanc
   const startRecording = async () => {
     try {
       const permission = await Audio.requestPermissionsAsync();
-      if (permission.status !== 'granted') return;
+      if (permission.status !== 'granted') {
+        onCancel();
+        return;
+      }
 
       await Audio.setAudioModeAsync({
         allowsRecordingIOS: true,
@@ -58,13 +63,12 @@ export const VoiceRecorderMobile: React.FC<VoiceRecorderMobileProps> = ({ onCanc
         Audio.RecordingOptionsPresets.HIGH_QUALITY
       );
 
-      
-      setRecording(newRecording);
+      recordingRef.current = newRecording;
       setIsRecording(true);
       startTimer();
 
-      // Giả lập visualizer nếu không có metering real-time (Expo AV metering hơi phức tạp)
-      const visualizerInterval = setInterval(() => {
+      // Giả lập visualizer nếu không có metering real-time
+      visualizerRef.current = setInterval(() => {
         animValues.forEach((val) => {
           Animated.spring(val, {
             toValue: 4 + Math.random() * 20,
@@ -73,19 +77,20 @@ export const VoiceRecorderMobile: React.FC<VoiceRecorderMobileProps> = ({ onCanc
         });
       }, 150);
 
-      return () => clearInterval(visualizerInterval);
-
     } catch (err) {
       console.error('Failed to start recording', err);
+      onCancel();
     }
   };
 
   const handleStopAndSend = async () => {
-    if (!recording) return;
+    if (!recordingRef.current) return;
     try {
       stopTimer();
-      await recording.stopAndUnloadAsync();
-      const uri = recording.getURI();
+      if (visualizerRef.current) clearInterval(visualizerRef.current);
+      await recordingRef.current.stopAndUnloadAsync();
+      const uri = recordingRef.current.getURI();
+      recordingRef.current = null;
       if (uri) {
         onSend(uri);
       }
@@ -95,9 +100,11 @@ export const VoiceRecorderMobile: React.FC<VoiceRecorderMobileProps> = ({ onCanc
   };
 
   const handleCancel = async () => {
-    if (recording) {
-      stopTimer();
-      await recording.stopAndUnloadAsync();
+    stopTimer();
+    if (visualizerRef.current) clearInterval(visualizerRef.current);
+    if (recordingRef.current) {
+      await recordingRef.current.stopAndUnloadAsync().catch(() => null);
+      recordingRef.current = null;
     }
     onCancel();
   };

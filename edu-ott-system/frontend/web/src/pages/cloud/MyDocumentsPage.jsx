@@ -75,7 +75,16 @@ export default function MyDocumentsPage(){
 
   const loadMessages=useCallback(async(cid)=>{
     if(!cid)return;
-    try{const res=await chatService.getMessages(cid,null,100);const items=res.data?.data?.items||[];setMessages([...items].reverse().map(normalizeMsg));}
+    try{
+      const [msgRes, pinRes] = await Promise.all([
+        chatService.getMessages(cid,null,100),
+        chatService.getPinnedMessages(cid),
+      ]);
+      const items=msgRes.data?.data?.items||[];
+      setMessages([...items].reverse().map(normalizeMsg));
+      const pinned=pinRes.data?.data||[];
+      setPinnedIds(new Set(pinned.map(p=>p.messageId?._id||p.messageId||p._id)));
+    }
     catch(err){console.error("Load msgs:",err);}
   },[]);
 
@@ -86,7 +95,7 @@ export default function MyDocumentsPage(){
   },[getOrCreateSelfConv,loadMessages]);
 
   // load friend list for forward modal
-  useEffect(()=>{ fetchFriends(); },[]);
+  useEffect(()=>{ fetchFriends(); },[fetchFriends]);
 
   useEffect(()=>{messagesEndRef.current?.scrollIntoView({behavior:"smooth"});},[messages,uploads]);
 
@@ -225,20 +234,25 @@ export default function MyDocumentsPage(){
     }catch(err){console.error("Reaction err:",err);}
   };
 
-  const handlePin=(msgId)=>{
-    setPinnedIds(prev=>{
-      const s=new Set(prev);
-      if(s.has(msgId)){s.delete(msgId);toast.success("Đã bỏ ghim");}
-      else{
-        if(s.size>=3){
-          toast.error("Chỉ được ghim tối đa 3 tin nhắn. Vui lòng bỏ ghim tin nhắn cũ trước.");
-          return prev;
-        }
-        s.add(msgId);
+  const handlePin=async(msgId)=>{
+    const isPinned=pinnedIds.has(msgId);
+    if(!isPinned&&pinnedIds.size>=3){
+      toast.error("Chỉ được ghim tối đa 3 tin nhắn. Vui lòng bỏ ghim tin nhắn cũ trước.");
+      return;
+    }
+    try{
+      if(isPinned){
+        await chatService.unpinMessage(convId,msgId);
+        setPinnedIds(prev=>{const s=new Set(prev);s.delete(msgId);return s;});
+        toast.success("Đã bỏ ghim");
+      }else{
+        await chatService.pinMessage(convId,msgId);
+        setPinnedIds(prev=>new Set([...prev,msgId]));
         toast.success("Đã ghim lên đầu");
       }
-      return s;
-    });
+    }catch(err){
+      toast.error("Thao tác ghim thất bại: "+(err.response?.data?.message||err.message));
+    }
   };
 
   const openShareModal=(msg)=>{
