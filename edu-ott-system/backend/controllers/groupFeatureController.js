@@ -196,6 +196,19 @@ const requestToJoin = asyncHandler(async (req, res) => {
 
   await joinRequest.populate('userId', 'username avatarUrl email');
 
+  // Notify admins/owner about new join request
+  const adminIds = [
+    toStr(conversation.ownerId || conversation.createdBy),
+    ...(conversation.adminIds || []).map(toStr),
+  ].filter(Boolean);
+  adminIds.forEach((adminId) => {
+    socketService.emitToUser(adminId, 'join_request_received', {
+      conversationId: id,
+      conversationName: conversation.name,
+      joinRequest,
+    });
+  });
+
   return successResponse(res, joinRequest, 'Join request sent', 201);
 });
 
@@ -255,6 +268,13 @@ const processJoinRequest = asyncHandler(async (req, res) => {
   joinRequest.processedAt = new Date();
   await joinRequest.save();
   await joinRequest.populate('userId', 'username avatarUrl');
+
+  // Notify the requester of the decision
+  socketService.emitToUser(toStr(joinRequest.userId._id || joinRequest.userId), 'join_request_processed', {
+    conversationId: id,
+    conversationName: conversation.name,
+    action,
+  });
 
   return successResponse(res, joinRequest, `Join request ${action}d`);
 });

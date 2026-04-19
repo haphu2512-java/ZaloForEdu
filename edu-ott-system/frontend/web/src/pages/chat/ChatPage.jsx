@@ -94,12 +94,15 @@ export default function ChatPage() {
   const [activeConversation, setActiveConversation] = useState(null);
 
   const [reminders, setReminders] = useState([]);
+  const [joinRequests, setJoinRequests] = useState([]);
 
   useEffect(() => {
     if (activeConversation && activeConversation.type === 'group') {
       fetchReminders(activeConversation._id);
+      fetchJoinRequests(activeConversation._id);
     } else {
       setReminders([]);
+      setJoinRequests([]);
     }
   }, [activeConversation?._id]);
 
@@ -112,6 +115,15 @@ export default function ChatPage() {
     }
   };
 
+  const fetchJoinRequests = async (convId) => {
+    try {
+      const res = await conversationService.listJoinRequests(convId);
+      setJoinRequests(res.data?.items || []);
+    } catch (err) {
+      // not admin — ignore
+    }
+  };
+
   const handleCreateReminder = async (title, remindAt) => {
     if (!activeConversation) return;
     try {
@@ -120,20 +132,74 @@ export default function ChatPage() {
         title,
         remindAt: remindAt.toISOString(),
       });
-      fetchReminders(activeConversation._id);
-      toast.success("Đã tạo nhắc hẹn");
     } catch (err) {
       toast.error("Lỗi tạo nhắc hẹn");
     }
   };
 
+  const handleUpdateReminder = async (reminderId, title, remindAt) => {
+    try {
+      const res = await conversationService.updateReminder(reminderId, {
+        title,
+        remindAt: new Date(remindAt).toISOString(),
+      });
+      setReminders(prev => prev.map(r => r._id === reminderId ? (res.data || r) : r));
+      toast.success("Đã cập nhật nhắc hẹn");
+    } catch (err) {
+      toast.error("Lỗi cập nhật nhắc hẹn");
+    }
+  };
+
   const handleDeleteReminder = async (reminderId) => {
     try {
-      await conversationService.deleteReminder(reminderId);
-      fetchReminders(activeConversation._id);
-      toast.success("Đã xóa nhắc hẹn");
+      const res = await conversationService.deleteReminder(reminderId);
+      const deletedTitle = res.data?.title || '';
+      setReminders(prev => prev.filter(r => r._id !== reminderId));
+      // Show transient system message in chat
+      const sysMsgId = `sys_rem_del_${Date.now()}`;
+      setMessages(prev => [...prev, {
+        _id: sysMsgId,
+        type: 'system',
+        content: `Bạn đã xóa nhắc hẹn "${deletedTitle}"`,
+        createdAt: new Date().toISOString(),
+        conversationId: activeConversation._id,
+      }]);
     } catch (err) {
       toast.error("Lỗi xóa nhắc hẹn");
+    }
+  };
+
+  const handleJoinReminder = async (reminderId) => {
+    try {
+      const res = await conversationService.joinReminder(reminderId);
+      setReminders(prev => prev.map(r => r._id === reminderId ? (res.data || r) : r));
+    } catch (err) {
+      toast.error("Lỗi xác nhận tham gia");
+    }
+  };
+
+  const handleDeclineReminder = async (reminderId) => {
+    try {
+      const res = await conversationService.declineReminder(reminderId);
+      setReminders(prev => prev.map(r => r._id === reminderId ? (res.data || r) : r));
+    } catch (err) {
+      toast.error("Lỗi từ chối nhắc hẹn");
+    }
+  };
+
+  const handleProcessJoinRequest = async (requestId, action) => {
+    if (!activeConversation) return;
+    try {
+      await conversationService.processJoinRequest(activeConversation._id, requestId, action);
+      setJoinRequests(prev => prev.filter(r => r._id !== requestId));
+      if (action === 'approve') {
+        toast.success("Đã duyệt thành viên");
+        fetchConversationsData();
+      } else {
+        toast.success("Đã từ chối yêu cầu");
+      }
+    } catch (err) {
+      toast.error("Lỗi xử lý yêu cầu");
     }
   };
   const [messages, setMessages] = useState([]);
@@ -444,11 +510,51 @@ export default function ChatPage() {
       if (notif?.type === 'friend_accepted') { fetchFriends(); fetchOutgoingRequests(); }
     };
 
+    const handleReminderCreated = (reminder) => {
+      setReminders(prev => {
+        if (prev.some(r => r._id === reminder._id)) return prev;
+        return [...prev, reminder].sort((a, b) => new Date(a.remindAt) - new Date(b.remindAt));
+      });
+    };
+
+    const handleReminderUpdated = (reminder) => {
+      setReminders(prev => prev.map(r => r._id === reminder._id ? reminder : r));
+    };
+
+    const handleReminderDeleted = ({ reminderId }) => {
+      setReminders(prev => prev.filter(r => r._id !== reminderId));
+    };
+
+    const handleJoinRequestReceived = ({ conversationId, conversationName, joinRequest }) => {
+      const activeId = activeConvIdRef.current;
+      if (activeId && activeId === conversationId) {
+        setJoinRequests(prev => {
+          if (prev.some(r => r._id === joinRequest._id)) return prev;
+          return [joinRequest, ...prev];
+        });
+      }
+      toast(`Yêu cầu tham gia nhóm "${conversationName}" mới`, { icon: '👥' });
+    };
+
+    const handleJoinRequestProcessed = ({ conversationName, action }) => {
+      if (action === 'approve') {
+        toast.success(`Yêu cầu tham gia "${conversationName}" đã được chấp thuận!`);
+        fetchConversationsData();
+      } else {
+        toast.error(`Yêu cầu tham gia "${conversationName}" đã bị từ chối.`);
+      }
+    };
+
     socketService.on("conversation_updated", handleConversationUpdated);
     socketService.on("conversation_settings_updated", handleSettingsUpdated);
     socketService.on("message_recalled", handleMessageRecalled);
     socketService.on("message_reacted", handleMessageReacted);
     socketService.on("new_notification", handleNewNotification);
+    socketService.on("reminder_created", handleReminderCreated);
+    socketService.on("reminder_updated", handleReminderUpdated);
+    socketService.on("reminder_deleted", handleReminderDeleted);
+    socketService.on("join_request_received", handleJoinRequestReceived);
+    socketService.on("join_request_processed", handleJoinRequestProcessed);
 
     return () => {
       socketService.off("conversation_updated", handleConversationUpdated);
@@ -456,6 +562,11 @@ export default function ChatPage() {
       socketService.off("message_recalled", handleMessageRecalled);
       socketService.off("message_reacted", handleMessageReacted);
       socketService.off("new_notification", handleNewNotification);
+      socketService.off("reminder_created", handleReminderCreated);
+      socketService.off("reminder_updated", handleReminderUpdated);
+      socketService.off("reminder_deleted", handleReminderDeleted);
+      socketService.off("join_request_received", handleJoinRequestReceived);
+      socketService.off("join_request_processed", handleJoinRequestProcessed);
     };
   }, [token, userId, fetchConversationsData]);
 
@@ -1106,24 +1217,92 @@ export default function ChatPage() {
               </div>
             ) : (
               <>
-                {messages.map((msg, index) => {
-                  const showDate = shouldShowDateDivider(msg, messages[index - 1]);
-                  const isMe = getSenderIdStr(msg) === String(userId);
-                  return (
-                    <React.Fragment key={msg._id}>
-                      {showDate && <div className="msg-date-divider"><span>{formatDateDivider(msg.createdAt)}</span></div>}
-                      <MessageBubble
-                        message={msg}
-                        isMe={isMe}
-                        onReaction={handleReaction}
-                        onRecall={handleRecall}
-                        onDelete={handleDelete}
-                        onForward={openShareModal}
-                        onReply={(msg) => console.log('Trả lời:', msg)}
-                      />
-                    </React.Fragment>
+                {(() => {
+                  // Merge messages + reminders sorted by createdAt
+                  const reminderItems = reminders.map(r => ({ ...r, _isReminder: true }));
+                  const combined = [...messages, ...reminderItems].sort(
+                    (a, b) => new Date(a.createdAt) - new Date(b.createdAt)
                   );
-                })}
+                  return combined.map((item, index) => {
+                    const prev = combined[index - 1];
+                    const showDate = shouldShowDateDivider(item, prev);
+                    if (item._isReminder) {
+                      const rem = item;
+                      const hasJoined = (rem.participants || []).some(p => String(p._id || p) === String(userId));
+                      const hasDeclined = (rem.declinedBy || []).some(p => String(p._id || p) === String(userId));
+                      const participantCount = (rem.participants || []).length;
+                      const remDate = new Date(rem.remindAt);
+                      const dayNames = ['Chủ Nhật', 'Thứ Hai', 'Thứ Ba', 'Thứ Tư', 'Thứ Năm', 'Thứ Sáu', 'Thứ Bảy'];
+                      return (
+                        <React.Fragment key={`rem-${rem._id}`}>
+                          {showDate && <div className="msg-date-divider"><span>{formatDateDivider(rem.createdAt)}</span></div>}
+                          <div style={{ display: 'flex', justifyContent: 'center', margin: '8px 16px' }}>
+                            <div style={{ background: 'var(--z-bg-sidebar)', border: '1px solid var(--z-border)', borderRadius: 12, padding: '12px 16px', maxWidth: 320, width: '100%', boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
+                              <div style={{ fontSize: 12, color: 'var(--z-text-secondary)', marginBottom: 8 }}>
+                                <strong>{rem.createdBy?.username || 'Ai đó'}</strong> đã tạo nhắc hẹn mới
+                              </div>
+                              <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+                                <div style={{ background: 'var(--z-primary)', borderRadius: 8, padding: '8px 10px', textAlign: 'center', minWidth: 56, flexShrink: 0 }}>
+                                  <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.8)', textTransform: 'uppercase', letterSpacing: 0.5 }}>{dayNames[remDate.getDay()]}</div>
+                                  <div style={{ fontSize: 22, fontWeight: 700, color: 'white', lineHeight: 1.1 }}>{remDate.getDate()}</div>
+                                  <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.8)' }}>Tháng {remDate.getMonth() + 1}</div>
+                                </div>
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                  <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--z-text-primary)', marginBottom: 4 }}>{rem.title}</div>
+                                  <div style={{ fontSize: 12, color: 'var(--z-text-secondary)', display: 'flex', alignItems: 'center', gap: 4 }}>
+                                    🕐 {remDate.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
+                                  </div>
+                                  <div style={{ fontSize: 12, color: 'var(--z-text-secondary)', marginTop: 4 }}>
+                                    {participantCount} người tham gia
+                                  </div>
+                                </div>
+                              </div>
+                              <div style={{ marginTop: 10, borderTop: '1px solid var(--z-border)', paddingTop: 8 }}>
+                                {hasJoined ? (
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13 }}>
+                                    <span style={{ color: 'var(--z-primary)' }}>✓ Bạn xác nhận: Tham gia</span>
+                                    <button onClick={() => handleDeclineReminder(rem._id)} style={{ border: 'none', background: 'none', color: 'var(--z-text-secondary)', cursor: 'pointer', fontSize: 12, textDecoration: 'underline' }}>Thay đổi</button>
+                                  </div>
+                                ) : hasDeclined ? (
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13 }}>
+                                    <span style={{ color: '#ef4444' }}>✗ Bạn xác nhận: Không tham gia</span>
+                                    <button onClick={() => handleJoinReminder(rem._id)} style={{ border: 'none', background: 'none', color: 'var(--z-text-secondary)', cursor: 'pointer', fontSize: 12, textDecoration: 'underline' }}>Thay đổi</button>
+                                  </div>
+                                ) : (
+                                  <div style={{ display: 'flex', gap: 8 }}>
+                                    <button onClick={() => handleJoinReminder(rem._id)} style={{ flex: 1, padding: '6px', borderRadius: 8, border: 'none', background: 'var(--z-primary)', color: 'white', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Tham gia</button>
+                                    <button onClick={() => handleDeclineReminder(rem._id)} style={{ flex: 1, padding: '6px', borderRadius: 8, border: '1px solid var(--z-border)', background: 'transparent', color: 'var(--z-text-secondary)', fontSize: 13, cursor: 'pointer' }}>Từ chối</button>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </React.Fragment>
+                      );
+                    }
+                    const isMe = getSenderIdStr(item) === String(userId);
+                    return (
+                      <React.Fragment key={item._id}>
+                        {showDate && <div className="msg-date-divider"><span>{formatDateDivider(item.createdAt)}</span></div>}
+                        {item.type === 'system' ? (
+                          <div style={{ display: 'flex', justifyContent: 'center', margin: '4px 0' }}>
+                            <span style={{ fontSize: 12, color: 'var(--z-text-muted)', background: 'var(--z-bg-main)', padding: '3px 10px', borderRadius: 10 }}>{item.content}</span>
+                          </div>
+                        ) : (
+                          <MessageBubble
+                            message={item}
+                            isMe={isMe}
+                            onReaction={handleReaction}
+                            onRecall={handleRecall}
+                            onDelete={handleDelete}
+                            onForward={openShareModal}
+                            onReply={(msg) => console.log('Trả lời:', msg)}
+                          />
+                        )}
+                      </React.Fragment>
+                    );
+                  });
+                })()}
                 {uploads.map(u => (
                   <UploadBubble key={u.id} name={u.name} percent={u.percent} />
                 ))}
@@ -1189,7 +1368,10 @@ export default function ChatPage() {
           handleGroupAction={handleGroupAction}
           reminders={reminders}
           handleCreateReminder={handleCreateReminder}
+          handleUpdateReminder={handleUpdateReminder}
           handleDeleteReminder={handleDeleteReminder}
+          joinRequests={joinRequests}
+          handleProcessJoinRequest={handleProcessJoinRequest}
         />
       )}
 

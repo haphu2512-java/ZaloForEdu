@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { FaBell, FaThumbtack, FaUserPlus, FaUserSecret, FaArrowLeft, FaTrashAlt, FaSignOutAlt, FaLink, FaEllipsisH, FaChevronDown, FaChevronUp, FaCalendarAlt, FaUserTimes, FaKey, FaShare, FaSync } from 'react-icons/fa';
+import React, { useState, useEffect } from 'react';
+import { FaBell, FaThumbtack, FaUserPlus, FaUserSecret, FaArrowLeft, FaTrashAlt, FaSignOutAlt, FaLink, FaEllipsisH, FaChevronDown, FaChevronUp, FaCalendarAlt, FaUserTimes, FaKey, FaSync, FaPen, FaCheck, FaTimes } from 'react-icons/fa';
 import toast from 'react-hot-toast';
 import { conversationService } from '../../services/conversationService';
 import { useLanguage } from '../../contexts/LanguageContext';
@@ -42,7 +42,10 @@ export const ChatRightPanel = ({
   handleGroupAction,
   reminders = [],
   handleCreateReminder,
-  handleDeleteReminder
+  handleUpdateReminder,
+  handleDeleteReminder,
+  joinRequests = [],
+  handleProcessJoinRequest,
 }) => {
   const { t } = useLanguage();
 
@@ -56,6 +59,28 @@ export const ChatRightPanel = ({
   const [showAddReminder, setShowAddReminder] = useState(false);
   const [remTitle, setRemTitle] = useState('');
   const [remTime, setRemTime] = useState('');
+  const [editingReminder, setEditingReminder] = useState(null);
+  const [editRemTitle, setEditRemTitle] = useState('');
+  const [editRemTime, setEditRemTime] = useState('');
+  const [inviteLink, setInviteLink] = useState('');
+  const [inviteCode, setInviteCode] = useState('');
+
+  useEffect(() => {
+    if (!activeConversation || activeConversation.type !== 'group') return;
+    const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
+    const myId = currentUser._id || currentUser.id;
+    const isOwner = activeConversation?.ownerId?._id === myId || activeConversation?.ownerId === myId || activeConversation?.createdBy === myId;
+    const isAdmin = activeConversation?.adminIds?.some(aid => (aid._id || aid) === myId) || isOwner;
+    if (!isOwner && !isAdmin) return;
+    conversationService.getInviteLink(activeConversation._id)
+      .then(res => {
+        const data = res.data;
+        setInviteCode(data.inviteCode || '');
+        const origin = window.location.origin;
+        setInviteLink(`${origin}/join/${data.inviteCode}`);
+      })
+      .catch(() => {});
+  }, [activeConversation?._id]);
 
   const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
   const myId = currentUser._id || currentUser.id;
@@ -216,10 +241,21 @@ export const ChatRightPanel = ({
                       <div style={{ background: 'var(--z-bg-main)', padding: '10px', borderRadius: 8, marginBottom: 10 }}>
                         <input
                           placeholder="Nội dung nhắc hẹn..."
-                          style={{ width: '100%', marginBottom: 8, padding: '6px 10px', border: '1px solid var(--z-border)', borderRadius: 6, background: 'var(--z-bg-sidebar)', color: 'var(--z-text-primary)', fontSize: 13, boxSizing: 'border-box' }}
+                          style={{ width: '100%', marginBottom: 6, padding: '6px 10px', border: '1px solid var(--z-border)', borderRadius: 6, background: 'var(--z-bg-sidebar)', color: 'var(--z-text-primary)', fontSize: 13, boxSizing: 'border-box' }}
                           value={remTitle}
                           onChange={e => setRemTitle(e.target.value)}
                         />
+                        <div style={{ display: 'flex', gap: 6, marginBottom: 6, flexWrap: 'wrap' }}>
+                          {[{ label: '15 phút nữa', mins: 15 }, { label: '30 phút nữa', mins: 30 }, { label: '9:00 ngày mai', special: 'tomorrow9' }].map(opt => (
+                            <button key={opt.label} style={{ padding: '4px 8px', fontSize: 11, border: '1px solid var(--z-border)', borderRadius: 12, cursor: 'pointer', background: 'var(--z-bg-sidebar)', color: 'var(--z-text-primary)' }}
+                              onClick={() => {
+                                let d = new Date();
+                                if (opt.special === 'tomorrow9') { d.setDate(d.getDate() + 1); d.setHours(9, 0, 0, 0); }
+                                else d = new Date(d.getTime() + opt.mins * 60000);
+                                setRemTime(d.toISOString().slice(0, 16));
+                              }}>{opt.label}</button>
+                          ))}
+                        </div>
                         <input
                           type="datetime-local"
                           style={{ width: '100%', marginBottom: 8, padding: '6px 10px', border: '1px solid var(--z-border)', borderRadius: 6, background: 'var(--z-bg-sidebar)', color: 'var(--z-text-primary)', fontSize: 13, boxSizing: 'border-box' }}
@@ -238,6 +274,44 @@ export const ChatRightPanel = ({
                       </div>
                     )}
 
+                    {/* Edit reminder modal */}
+                    {editingReminder && (
+                      <div style={{ background: 'var(--z-bg-main)', padding: '10px', borderRadius: 8, marginBottom: 10, border: '1px solid var(--z-primary)' }}>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--z-primary)', marginBottom: 6 }}>Sửa nhắc hẹn</div>
+                        <input
+                          placeholder="Nội dung..."
+                          style={{ width: '100%', marginBottom: 6, padding: '6px 10px', border: '1px solid var(--z-border)', borderRadius: 6, background: 'var(--z-bg-sidebar)', color: 'var(--z-text-primary)', fontSize: 13, boxSizing: 'border-box' }}
+                          value={editRemTitle}
+                          onChange={e => setEditRemTitle(e.target.value)}
+                        />
+                        <div style={{ display: 'flex', gap: 6, marginBottom: 6, flexWrap: 'wrap' }}>
+                          {[{ label: '15 phút nữa', mins: 15 }, { label: '30 phút nữa', mins: 30 }, { label: '9:00 ngày mai', special: 'tomorrow9' }].map(opt => (
+                            <button key={opt.label} style={{ padding: '4px 8px', fontSize: 11, border: '1px solid var(--z-border)', borderRadius: 12, cursor: 'pointer', background: 'var(--z-bg-sidebar)', color: 'var(--z-text-primary)' }}
+                              onClick={() => {
+                                let d = new Date();
+                                if (opt.special === 'tomorrow9') { d.setDate(d.getDate() + 1); d.setHours(9, 0, 0, 0); }
+                                else d = new Date(d.getTime() + opt.mins * 60000);
+                                setEditRemTime(d.toISOString().slice(0, 16));
+                              }}>{opt.label}</button>
+                          ))}
+                        </div>
+                        <input
+                          type="datetime-local"
+                          style={{ width: '100%', marginBottom: 8, padding: '6px 10px', border: '1px solid var(--z-border)', borderRadius: 6, background: 'var(--z-bg-sidebar)', color: 'var(--z-text-primary)', fontSize: 13, boxSizing: 'border-box' }}
+                          value={editRemTime}
+                          onChange={e => setEditRemTime(e.target.value)}
+                        />
+                        <div style={{ display: 'flex', gap: 8 }}>
+                          <button style={{ flex: 1, padding: '5px', fontSize: 12, border: '1px solid var(--z-border)', borderRadius: 6, cursor: 'pointer', background: 'var(--z-bg-sidebar)', color: 'var(--z-text-primary)' }} onClick={() => setEditingReminder(null)}>Hủy</button>
+                          <button style={{ flex: 1, padding: '5px', fontSize: 12, background: 'var(--z-primary)', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer' }} onClick={() => {
+                            if (!editRemTitle || !editRemTime) return toast.error('Vui lòng điền đủ thông tin');
+                            handleUpdateReminder(editingReminder._id, editRemTitle, editRemTime);
+                            setEditingReminder(null);
+                          }}>Lưu</button>
+                        </div>
+                      </div>
+                    )}
+
                     {reminders.length === 0 ? (
                       <div style={{ fontSize: 12, color: 'var(--z-text-muted)', textAlign: 'center', padding: '12px 0' }}>Chưa có nhắc hẹn nào</div>
                     ) : (
@@ -247,13 +321,15 @@ export const ChatRightPanel = ({
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--z-text-primary)', wordBreak: 'break-word' }}>{rem.title}</div>
                             <div style={{ fontSize: 11, color: 'var(--z-primary)', marginTop: 2 }}>{new Date(rem.remindAt).toLocaleString('vi-VN')}</div>
+                            <div style={{ fontSize: 11, color: 'var(--z-text-muted)' }}>{(rem.participants||[]).length} người tham gia</div>
                             {rem.status === 'expired' && <div style={{ fontSize: 10, color: '#ef4444' }}>Đã hết hạn</div>}
                           </div>
-                          <button
-                            style={{ border: 'none', background: 'none', color: 'var(--z-text-muted)', cursor: 'pointer', padding: '2px', flexShrink: 0 }}
-                            onClick={() => handleDeleteReminder(rem._id)}
-                            title="Xóa"
-                          >
+                          <button title="Sửa" style={{ border: 'none', background: 'none', color: 'var(--z-primary)', cursor: 'pointer', padding: '2px', flexShrink: 0 }}
+                            onClick={() => { setEditingReminder(rem); setEditRemTitle(rem.title); setEditRemTime(new Date(rem.remindAt).toISOString().slice(0, 16)); }}>
+                            <FaPen size={10} />
+                          </button>
+                          <button title="Xóa" style={{ border: 'none', background: 'none', color: '#ef4444', cursor: 'pointer', padding: '2px', flexShrink: 0 }}
+                            onClick={() => { if (window.confirm(`Hủy nhắc hẹn "${rem.title}"?`)) handleDeleteReminder(rem._id); }}>
                             <FaTrashAlt size={11} />
                           </button>
                         </div>
@@ -391,18 +467,41 @@ export const ChatRightPanel = ({
                 </div>
 
                 {/* Link box */}
-                <div style={{ margin: '0 16px 16px', padding: '12px', background: 'var(--z-bg-main)', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'space-between', opacity: isPrivileged ? 1 : 0.6, pointerEvents: isPrivileged ? 'auto' : 'none' }}>
-                  <div style={{ fontSize: 14, color: isPrivileged ? 'var(--z-primary)' : 'var(--z-text-secondary)', fontWeight: 500 }}>zalo.me/g/xwrwov660</div>
-                  <div style={{ display: 'flex', gap: 12, color: isPrivileged ? 'var(--z-primary)' : 'var(--z-text-secondary)' }}>
-                    <FaLink size={14} style={{ cursor: 'pointer' }} onClick={() => toast.success('Đã copy link')} />
-                    <FaShare size={14} style={{ cursor: 'pointer' }} />
-                    <FaSync size={14} style={{ cursor: 'pointer' }} />
+                <div style={{ margin: '0 16px 16px', padding: '12px', background: 'var(--z-bg-main)', borderRadius: 8, opacity: isPrivileged ? 1 : 0.6, pointerEvents: isPrivileged ? 'auto' : 'none' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                    <div style={{ fontSize: 13, color: 'var(--z-primary)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
+                      {inviteLink || 'Đang tải link...'}
+                    </div>
+                    <div style={{ display: 'flex', gap: 12, color: 'var(--z-primary)', flexShrink: 0 }}>
+                      <FaLink size={14} style={{ cursor: 'pointer' }} title="Copy link" onClick={() => {
+                        if (inviteLink) { navigator.clipboard.writeText(inviteLink); toast.success('Đã copy link mời'); }
+                      }} />
+                      <FaSync size={14} style={{ cursor: 'pointer' }} title="Tạo link mới" onClick={async () => {
+                        if (!inviteCode) return;
+                        try {
+                          const res = await conversationService.resetInviteLink(inviteCode);
+                          const newCode = res.data.inviteCode;
+                          setInviteCode(newCode);
+                          setInviteLink(`${window.location.origin}/join/${newCode}`);
+                          toast.success('Đã tạo link mời mới');
+                        } catch { toast.error('Lỗi tạo link'); }
+                      }} />
+                    </div>
                   </div>
                 </div>
 
                 <div style={{ height: 8, background: 'var(--z-bg-main)', borderTop: '1px solid var(--z-border)', borderBottom: '1px solid var(--z-border)', margin: '8px 0' }} />
 
-                {/* 3. Phân quyền và Chặn */}
+                {/* 3. Duyệt thành viên & Phân quyền */}
+                {isPrivileged && (
+                  <div style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer' }} onClick={() => setRightPanelMode('join-requests')}>
+                    <FaUserPlus size={18} color="var(--z-text-secondary)" />
+                    <span style={{ fontSize: 15, color: 'var(--z-text-primary)', flex: 1 }}>Duyệt thành viên mới</span>
+                    {joinRequests.length > 0 && (
+                      <span style={{ background: '#ef4444', color: 'white', borderRadius: 10, padding: '2px 7px', fontSize: 11, fontWeight: 700 }}>{joinRequests.length}</span>
+                    )}
+                  </div>
+                )}
                 <div style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer' }}>
                   <FaUserTimes size={18} color="var(--z-text-secondary)" />
                   <span style={{ fontSize: 15, color: 'var(--z-text-primary)' }}>Chặn khỏi nhóm</span>
@@ -523,6 +622,40 @@ export const ChatRightPanel = ({
                   <div style={{ flex: 1, fontWeight: 500, fontSize: 14 }}>{member.fullName || member.username}</div>
                 </div>
               ))}
+            </div>
+          </div>
+        ) : rightPanelMode === 'join-requests' ? (
+          <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+            <div style={{ display: 'flex', alignItems: 'center', padding: '16px', borderBottom: '1px solid var(--z-border)', cursor: 'pointer' }} onClick={() => setRightPanelMode('manage')}>
+              <FaArrowLeft size={16} color="var(--z-text-secondary)" style={{ marginRight: 12 }} />
+              <span style={{ fontSize: 16, fontWeight: 600, color: 'var(--z-text-primary)' }}>Duyệt thành viên mới</span>
+            </div>
+            <div style={{ flex: 1, overflowY: 'auto', padding: '12px 16px' }}>
+              {joinRequests.length === 0 ? (
+                <div style={{ textAlign: 'center', color: 'var(--z-text-muted)', fontSize: 13, padding: '40px 0' }}>Không có yêu cầu nào đang chờ</div>
+              ) : joinRequests.map(req => {
+                const user = req.userId || {};
+                return (
+                  <div key={req._id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: '1px solid var(--z-border)' }}>
+                    <img src={user.avatarUrl || 'https://i.pravatar.cc/150'} style={{ width: 44, height: 44, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} alt="" />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--z-text-primary)' }}>{user.username || 'Người dùng'}</div>
+                      {req.reason && <div style={{ fontSize: 12, color: 'var(--z-text-secondary)', marginTop: 2 }}>"{req.reason}"</div>}
+                      <div style={{ fontSize: 11, color: 'var(--z-text-muted)', marginTop: 2 }}>{new Date(req.createdAt).toLocaleDateString('vi-VN')}</div>
+                    </div>
+                    <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                      <button onClick={() => handleProcessJoinRequest(req._id, 'approve')}
+                        style={{ padding: '6px 12px', borderRadius: 8, border: 'none', background: 'var(--z-primary)', color: 'white', fontSize: 12, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>
+                        <FaCheck size={10} /> Duyệt
+                      </button>
+                      <button onClick={() => handleProcessJoinRequest(req._id, 'reject')}
+                        style={{ padding: '6px 12px', borderRadius: 8, border: '1px solid #ef4444', background: 'transparent', color: '#ef4444', fontSize: 12, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>
+                        <FaTimes size={10} /> Từ chối
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         ) : null}

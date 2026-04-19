@@ -219,4 +219,24 @@ export const conversationService = {
     const res = await axios.delete(`${API_URL}/reminders/${id}`, getAuthHeaders());
     return res.data;
   },
+  updateReminder: async (id, data) => {
+    const res = await axios.put(`${API_URL}/reminders/${id}`, data, getAuthHeaders());
+    return res.data;
+  },
+  joinReminder: async (id) => {
+    const res = await axios.post(`${API_URL}/reminders/${id}/join`, {}, getAuthHeaders());
+    return res.data;
+  },
+  declineReminder: async (id) => {
+    const res = await axios.post(`${API_URL}/reminders/${id}/decline`, {}, getAuthHeaders());
+    return res.data;
+  },
+  listJoinRequests: async (conversationId) => {
+    const res = await axios.get(`${API_URL}/conversations/${conversationId}/join-requests`, getAuthHeaders());
+    return res.data;
+  },
+  processJoinRequest: async (conversationId, requestId, action) => {
+    const res = await axios.put(`${API_URL}/conversations/${conversationId}/join-requests/${requestId}`, { action }, getAuthHeaders());
+    return res.data;
+  },
 };

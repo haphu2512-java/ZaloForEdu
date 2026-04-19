@@ -16,6 +16,7 @@ import CompleteProfilePage from "./pages/auth/CompleteProfilePage";
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import VideoCallPage from './pages/chat/VideoCallPage';
 import CreateGroupPage from "./pages/group/CreateGroupPage";
+import JoinGroupPage from "./pages/chat/JoinGroupPage";
 
 function PrivateRoute({ children }) {
   const { isAuthenticated } = useAuthStore();
@@ -99,6 +100,7 @@ export default function App() {
           }
         />
 
+        <Route path="/join/:code" element={<PrivateRoute><JoinGroupPage /></PrivateRoute>} />
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     </BrowserRouter>
