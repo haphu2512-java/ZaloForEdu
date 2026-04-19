@@ -10,8 +10,11 @@ import { useFriendStore } from "../../store/friendStore";
 import { socketService } from "../../services/socketService"; // Đã import dịch vụ socket dùng chung
 import { MessageBubble } from "./MessageBubble";
 import { ShareMessageModal } from "./Modals/ShareMessageModal";
+import AddFriendModal from "./Modals/AddFriendModal";
+import CreateGroupModal from "./Modals/CreateGroupModal";
 import { ChatHeader } from "./ChatHeader";
 import { MessageInput } from "./MessageInput";
+import { ChatRightPanel } from "./ChatRightPanel";
 import { useTheme } from '../../contexts/ThemeContext';
 import { useLanguage } from '../../contexts/LanguageContext';
 import "./ChatPage.css";
@@ -23,16 +26,7 @@ const API_ORIGIN = API_BASE_URL.replace(/\/api\/v1\/?$/, "");
 // FIX TẠI ĐÂY: Dùng socket chung của app, tránh việc khởi tạo 2 socket
 const socket = socketService?.socket || io(API_ORIGIN, { autoConnect: false, transports: ['websocket'] });
 
-const IMAGE_EXTS = ["jpg", "jpeg", "png", "gif", "webp", "svg"];
-const VIDEO_EXTS = ["mp4", "mov", "avi", "mkv"];
-const DOC_EXTS = ["pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "txt"];
-const ARCHIVE_EXTS = ["zip", "rar", "7z", "tar", "gz"];
-const AUDIO_EXTS = ["mp3", "webm", "ogg", "wav", "m4a"];
-
-export function getExt(s = "") { return (s.split(".").pop() || "").toLowerCase(); }
-export function getCategory(n = "") { const e = getExt(n); if (IMAGE_EXTS.includes(e)) return "image"; if (VIDEO_EXTS.includes(e)) return "video"; if (DOC_EXTS.includes(e)) return "doc"; if (ARCHIVE_EXTS.includes(e)) return "archive"; if (AUDIO_EXTS.includes(e)) return "audio"; return "other"; }
-export function getFileColor(n = "") { const e = getExt(n); if (IMAGE_EXTS.includes(e)) return "#10B981"; if (VIDEO_EXTS.includes(e)) return "#8B5CF6"; if (e === "pdf") return "#EF4444"; if (["doc", "docx"].includes(e)) return "#2563EB"; if (["xls", "xlsx"].includes(e)) return "#16A34A"; if (["ppt", "pptx"].includes(e)) return "#EA580C"; if (ARCHIVE_EXTS.includes(e)) return "#D97706"; return "#6B7280"; }
-export function formatBytes(b) { if (!b) return "0 B"; const k = 1024, s = ["B", "KB", "MB", "GB"]; const i = Math.floor(Math.log(b) / Math.log(k)); return parseFloat((b / Math.pow(k, i)).toFixed(1)) + " " + s[i]; }
+import { getExt, getCategory, getFileColor, formatBytes } from './chatUtils';
 
 const formatChatTimestamp = (dateString) => {
   const d = new Date(dateString);
@@ -83,6 +77,50 @@ export default function ChatPage() {
   const { roomId } = useParams();
   const [conversations, setConversations] = useState([]);
   const [activeConversation, setActiveConversation] = useState(null);
+
+  const [reminders, setReminders] = useState([]);
+
+  useEffect(() => {
+    if (activeConversation && activeConversation.type === 'group') {
+      fetchReminders(activeConversation._id);
+    } else {
+      setReminders([]);
+    }
+  }, [activeConversation?._id]);
+
+  const fetchReminders = async (convId) => {
+    try {
+      const res = await conversationService.getReminders(convId);
+      setReminders(res.data || []);
+    } catch (err) {
+      console.error("Lỗi lấy danh sách nhắc hẹn:", err);
+    }
+  };
+
+  const handleCreateReminder = async (title, remindAt) => {
+    if (!activeConversation) return;
+    try {
+      await conversationService.createReminder({
+        conversationId: activeConversation._id,
+        title,
+        remindAt: remindAt.toISOString(),
+      });
+      fetchReminders(activeConversation._id);
+      toast.success("Đã tạo nhắc hẹn");
+    } catch (err) {
+      toast.error("Lỗi tạo nhắc hẹn");
+    }
+  };
+
+  const handleDeleteReminder = async (reminderId) => {
+    try {
+      await conversationService.deleteReminder(reminderId);
+      fetchReminders(activeConversation._id);
+      toast.success("Đã xóa nhắc hẹn");
+    } catch (err) {
+      toast.error("Lỗi xóa nhắc hẹn");
+    }
+  };
   const [messages, setMessages] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [showStrangerPanel, setShowStrangerPanel] = useState(false);
@@ -97,6 +135,8 @@ export default function ChatPage() {
   const [shareModalOpen, setShareModalOpen] = useState(false);
   const [msgToShare, setMsgToShare] = useState(null);
   const [justSentRequestTo, setJustSentRequestTo] = useState(null); // track optimistic state
+  const [showAddFriendModal, setShowAddFriendModal] = useState(false);
+  const [showCreateGroupModal, setShowCreateGroupModal] = useState(false);
 
   const pageRef = useRef(null);
   const messagesEndRef = useRef(null);
@@ -240,8 +280,11 @@ export default function ChatPage() {
   useEffect(() => {
     if (roomId && mergedConversations.length > 0) {
       const targetRoom = mergedConversations.find(c => String(c._id) === String(roomId));
-      if (targetRoom && (!activeConversation || String(activeConversation._id) !== String(roomId))) {
-        setActiveConversation(targetRoom);
+      if (targetRoom) {
+        // Cập nhật state activeConversation nếu id khác HOẶC tham chiếu bị thay đổi (do có dữ liệu mới từ fetch)
+        if (!activeConversation || String(activeConversation._id) !== String(roomId) || targetRoom !== activeConversation) {
+          setActiveConversation(targetRoom);
+        }
       }
     }
   }, [roomId, mergedConversations, activeConversation]);
@@ -677,7 +720,63 @@ export default function ChatPage() {
     }
   };
 
-  // --- Hàm xử lý Rời nhóm ---
+  // --- Các hàm quản lý nhóm nâng cao ---
+  const handleUpdateGroupSettings = async (settings) => {
+    if (!activeConversation) return;
+    try {
+      await axios.put(`${API_BASE_URL}/conversations/${activeConversation._id}/settings`, settings, { headers: { Authorization: `Bearer ${token}` } });
+      toast.success("Đã cập nhật cài đặt nhóm");
+      fetchConversationsData(); // Cập nhật lại UI
+    } catch (err) {
+      toast.error("Lỗi cập nhật cài đặt");
+    }
+  };
+
+  const handleMute = async (durationMinutes) => {
+    if (!activeConversation) return;
+    try {
+      let mutedUntil = null;
+      if (durationMinutes !== -1) {
+        mutedUntil = new Date(Date.now() + durationMinutes * 60 * 1000).toISOString();
+      } else {
+        mutedUntil = new Date(2099, 0, 1).toISOString(); // Mute forever
+      }
+      await conversationService.muteConversation(activeConversation._id, mutedUntil);
+      toast.success(durationMinutes === 0 ? "Đã bật lại thông báo" : "Đã tắt thông báo");
+      fetchConversationsData();
+    } catch (err) {
+      toast.error("Lỗi cập nhật trạng thái thông báo");
+    }
+  };
+
+  const handleGroupAction = async (action, memberId) => {
+    if (!activeConversation) return;
+    try {
+      if (action === 'promote') await conversationService.promoteGroupAdmin(activeConversation._id, memberId);
+      else if (action === 'demote') await conversationService.demoteGroupAdmin(activeConversation._id, memberId);
+      else if (action === 'remove') await conversationService.removeGroupMember(activeConversation._id, memberId);
+      else if (action === 'transfer') await conversationService.transferGroupOwner(activeConversation._id, memberId);
+
+      toast.success("Thao tác thành công");
+      fetchConversationsData();
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Thao tác thất bại");
+    }
+  };
+
+  const handleDisbandGroup = async () => {
+    if (!activeConversation) return;
+    if (!window.confirm("Giải tán nhóm sẽ xóa toàn bộ nội dung trò chuyện và các thành viên khỏi nhóm.\n\nBạn có chắc chắn muốn giải tán nhóm không?")) return;
+    try {
+      await conversationService.disbandGroup(activeConversation._id);
+      toast.success("Đã giải tán nhóm thành công!");
+      setActiveConversation(null);
+      fetchConversationsData();
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Lỗi giải tán nhóm");
+    }
+  };
+
   const handleLeaveGroup = async () => {
     if (!activeConversation) return;
     if (window.confirm(`Bạn có chắc chắn muốn rời khỏi nhóm ${getConversationName(activeConversation)} không?`)) {
@@ -692,7 +791,6 @@ export default function ChatPage() {
       }
     }
   };
-
   const executeForward = async (friend) => {
     try {
       const targetId = friend._id || friend.id;
@@ -744,6 +842,23 @@ export default function ChatPage() {
         onForward={executeForward}
       />
 
+      <AddFriendModal
+        isOpen={showAddFriendModal}
+        onClose={() => setShowAddFriendModal(false)}
+        outgoingRequestIds={outgoingRequestIds}
+        friends={friends}
+      />
+
+      <CreateGroupModal
+        isOpen={showCreateGroupModal}
+        onClose={() => setShowCreateGroupModal(false)}
+        friends={friends}
+        onCreated={(newConv) => {
+          fetchConversationsData();
+          setActiveConversation(newConv);
+        }}
+      />
+
       {isDragging && (
         <div className="mdc-drag-overlay">
           <div className="mdc-drag-inner">
@@ -757,6 +872,26 @@ export default function ChatPage() {
       <aside className="room-sidebar">
         <div className="rs-header">
           <span style={{ fontWeight: 800, fontSize: 18 }}>Đoạn chat</span>
+          <div style={{ display: "flex", gap: 6 }}>
+            <button
+              title="Thêm bạn bè"
+              onClick={() => setShowAddFriendModal(true)}
+              style={{ width: 34, height: 34, borderRadius: "50%", border: "none", background: "var(--z-bg-hover)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--z-text-secondary)", transition: "background 0.2s" }}
+              onMouseEnter={e => e.currentTarget.style.background = "var(--z-border)"}
+              onMouseLeave={e => e.currentTarget.style.background = "var(--z-bg-hover)"}
+            >
+              <FaUserPlus size={15} />
+            </button>
+            <button
+              title="Tạo nhóm"
+              onClick={() => setShowCreateGroupModal(true)}
+              style={{ width: 34, height: 34, borderRadius: "50%", border: "none", background: "var(--z-bg-hover)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--z-text-secondary)", transition: "background 0.2s" }}
+              onMouseEnter={e => e.currentTarget.style.background = "var(--z-border)"}
+              onMouseLeave={e => e.currentTarget.style.background = "var(--z-bg-hover)"}
+            >
+              <FaUsers size={15} />
+            </button>
+          </div>
         </div>
         <div className="rs-search-bar">
           <FaSearch color="var(--z-text-secondary)" size={14} />
@@ -837,6 +972,7 @@ export default function ChatPage() {
           <div className="chat-messages">
             {/* Banner thông báo trạng thái kết bạn */}
             {(() => {
+              if (!activeConversation || activeConversation.type === 'group' || activeConversation.roomModel === 'Group') return null;
               const other = getOtherParticipant(activeConversation);
               const otherId = other && typeof other === 'object' ? String(other._id || other.id) : null;
               const otherName = other && typeof other === 'object' ? (other.username || other.fullName || 'Người dùng') : 'Người dùng';
@@ -972,86 +1108,26 @@ export default function ChatPage() {
 
       {/* ── BÊN PHẢI: RIGHT PANEL ── */}
       {activeConversation && showRightPanel && (
-        <aside className="chat-right-panel">
-          <div className="crp-header">
-            <img className="crp-avatar" src={getConversationAvatar(activeConversation)} alt="avt" />
-            <div className="crp-name">{getConversationName(activeConversation)}</div>
-            <div className="crp-actions">
-              <div className="crp-action-btn"><div className="crp-action-icon"><FaBell size={16} /></div>Tắt thông báo</div>
-              <div className="crp-action-btn"><div className="crp-action-icon"><FaThumbtack size={16} /></div>Ghim</div>
-              {/* nut tao nhom */}
-              {activeConversation.type !== 'group' ? (
-                // NẾU LÀ CHAT 1-1
-                <>
-                  <div className="crp-action-btn" onClick={() => navigate('/group/create')}>
-                    <div className="crp-action-icon"><FaUsers size={16} /></div>Tạo nhóm
-                  </div>
-                  <div className="crp-action-btn" onClick={handleDeleteConversation}>
-                    <div className="crp-action-icon" style={{ color: '#ef4444' }}><FaTrashAlt size={16} /></div>
-                    <span style={{ color: '#ef4444' }}>Xóa chat</span>
-                  </div>
-                </>
-              ) : (
-                // NẾU LÀ NHÓM CHAT
-                <div className="crp-action-btn" onClick={handleLeaveGroup}>
-                  <div className="crp-action-icon" style={{ color: '#ef4444' }}><FaSignOutAlt size={16} /></div>
-                  <span style={{ color: '#ef4444' }}>Rời nhóm</span>
-                </div>
-              )}
-              {/* <div className="crp-action-btn"><div className="crp-action-icon"><FaUsers size={16}/></div>Tạo nhóm</div> */}
-            </div>
-          </div>
-
-          <div className="crp-section">
-            <div className="crp-sec-title">{t('imageVideo')}</div>
-            {imgFiles.length > 0 ? (
-              <>
-                <div className="crp-grid">
-                  {imgFiles.slice(0, 6).map((m, i) => (
-                    <img key={i} src={m.url} alt="" className="crp-grid-img" />
-                  ))}
-                </div>
-                <button className="crp-view-all">Xem tất cả</button>
-              </>
-            ) : <div style={{ fontSize: 12, color: 'var(--z-text-muted)' }}>{t('noImageVideo')}</div>}
-          </div>
-
-          <div className="crp-section">
-            <div className="crp-sec-title">File</div>
-            {docFiles.length > 0 ? (
-              <>
-                {docFiles.slice(0, 3).map((m, i) => {
-                  const fname = m.name || m.fileName;
-                  return (
-                    <div key={i} className="crp-file-row">
-                      <div className="crp-file-icon" style={{ background: getFileColor(fname) }}>{getExt(fname).substring(0, 3).toUpperCase()}</div>
-                      <div className="crp-file-info">
-                        <div className="crp-file-name">{fname}</div>
-                        <div className="crp-file-meta">{formatBytes(m.size)}</div>
-                      </div>
-                    </div>
-                  );
-                })}
-                <button className="crp-view-all">Xem tất cả</button>
-              </>
-            ) : <div style={{ fontSize: 12, color: 'var(--z-text-muted)' }}>Chưa có File nào</div>}
-          </div>
-
-          <div className="crp-section">
-            <div className="crp-sec-title">Link</div>
-            {linkItems.length > 0 ? (
-              <>
-                {linkItems.slice(0, 3).map((link, i) => (
-                  <div key={i} className="crp-link-row">
-                    <div className="crp-link-icon"><FaLink size={14} /></div>
-                    <a href={link} target="_blank" rel="noreferrer" className="crp-link-url">{link}</a>
-                  </div>
-                ))}
-                <button className="crp-view-all">Xem tất cả</button>
-              </>
-            ) : <div style={{ fontSize: 12, color: 'var(--z-text-muted)' }}>Chưa có Link nào</div>}
-          </div>
-        </aside>
+        <ChatRightPanel
+          activeConversation={activeConversation}
+          setActiveConversation={setActiveConversation}
+          getConversationAvatar={getConversationAvatar}
+          getConversationName={getConversationName}
+          fetchConversations={fetchConversationsData}
+          imgFiles={imgFiles}
+          docFiles={docFiles}
+          linkItems={linkItems}
+          handleDeleteConversation={handleDeleteConversation}
+          handleLeaveGroup={handleLeaveGroup}
+          handleDisbandGroup={handleDisbandGroup}
+          setShowCreateGroupModal={setShowCreateGroupModal}
+          handleUpdateGroupSettings={handleUpdateGroupSettings}
+          handleMute={handleMute}
+          handleGroupAction={handleGroupAction}
+          reminders={reminders}
+          handleCreateReminder={handleCreateReminder}
+          handleDeleteReminder={handleDeleteReminder}
+        />
       )}
 
       {/* ── PANEL: Tin nhắn từ người lạ ── */}

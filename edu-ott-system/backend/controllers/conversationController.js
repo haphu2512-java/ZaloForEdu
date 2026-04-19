@@ -306,6 +306,22 @@ const leaveGroup = asyncHandler(async (req, res) => {
   return successResponse(res, conversation, 'Left group successfully');
 });
 
+const disbandGroup = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const conversation = await Conversation.findById(id);
+  ensureGroupConversation(conversation);
+  ensureOwner(conversation, req.user._id);
+
+  // Soft delete messages, or permanent? Let's just delete them.
+  await Message.deleteMany({ conversationId: id });
+  // Delete preferences
+  await ConversationPreference.deleteMany({ conversationId: id });
+  // Delete conversation
+  await conversation.deleteOne();
+
+  return successResponse(res, null, 'Group disbanded successfully');
+});
+
 const updateGroupAvatar = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const { avatarUrl } = req.body;
@@ -422,6 +438,7 @@ module.exports = {
   demoteGroupAdmin,
   transferGroupOwner,
   leaveGroup,
+  disbandGroup,
   updateGroupAvatar,
   updateGroupNickname,
   pinGroupMessage,

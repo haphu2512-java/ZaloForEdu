@@ -29,13 +29,18 @@ export const MessageInput = ({ theme, placeholder, onSend, onSendLike, onUploadF
   const handleSend = async (e) => {
     if (e) e.preventDefault();
     if (!text.trim() || isSending) return;
-    
-    setIsSending(true);
-    await onSend(text.trim());
-    setIsSending(false);
-    
-    setText('');
+    const textToSend = text.trim();
+    setText('');          // Xóa ngay lập tức để tránh dính chữ
     setShowEmoji(false);
+    setIsSending(true);
+    try {
+      await onSend(textToSend);
+    } catch (err) {
+      // Nếu gửi thất bại, khôi phục lại text
+      setText(textToSend);
+    } finally {
+      setIsSending(false);
+    }
   };
 
   const handleFiles = (e) => {

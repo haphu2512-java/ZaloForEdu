@@ -32,6 +32,10 @@ const conversationPreferenceSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    mutedUntil: {
+      type: Date,
+      default: null,
+    },
   },
   { timestamps: true },
 );

@@ -1,88 +1,562 @@
-import React, { useState, useEffect } from 'react';
-import { FaBell, FaThumbtack, FaUsers, FaImage, FaFileAlt, FaChevronDown } from 'react-icons/fa';
-import axios from 'axios';
+import React, { useState } from 'react';
+import { FaBell, FaThumbtack, FaUserPlus, FaUserSecret, FaArrowLeft, FaTrashAlt, FaSignOutAlt, FaLink, FaEllipsisH, FaChevronDown, FaChevronUp, FaCalendarAlt, FaUserTimes, FaKey, FaShare, FaSync } from 'react-icons/fa';
+import toast from 'react-hot-toast';
+import { conversationService } from '../../services/conversationService';
+import { useLanguage } from '../../contexts/LanguageContext';
+import { getFileColor, getExt, formatBytes } from './chatUtils';
+import { toAbsoluteUrl } from './MessageBubble';
 
-export const ChatRightPanel = ({ room, messages }) => {
-  const [showMedia, setShowMedia] = useState(true);
-  const [showFiles, setShowFiles] = useState(true);
+// Accordion component dùng React state thay vì DOM manipulation
+const Accordion = ({ title, defaultOpen = false, children }) => {
+  const [isOpen, setIsOpen] = useState(defaultOpen);
+  return (
+    <div className="crp-accordion">
+      <div
+        className="crp-acc-header"
+        onClick={() => setIsOpen(o => !o)}
+        style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}
+      >
+        <span>{title}</span>
+        {isOpen ? <FaChevronUp size={11} /> : <FaChevronDown size={11} />}
+      </div>
+      {isOpen && <div className="crp-acc-body">{children}</div>}
+    </div>
+  );
+};
 
-  // Lọc lấy danh sách ảnh và file từ mảng messages hiện có
-  const mediaList = messages
-    .flatMap(m => m.attachments || [])
-    .filter(att => att.type?.startsWith('image/'))
-    .slice(0, 8); // Chỉ hiện 8 ảnh mới nhất
+export const ChatRightPanel = ({
+  activeConversation,
+  setActiveConversation,
+  getConversationAvatar,
+  getConversationName,
+  fetchConversations,
+  imgFiles,
+  docFiles,
+  linkItems,
+  handleDeleteConversation,
+  handleLeaveGroup,
+  handleDisbandGroup,
+  setShowCreateGroupModal,
+  handleUpdateGroupSettings,
+  handleMute,
+  handleGroupAction,
+  reminders = [],
+  handleCreateReminder,
+  handleDeleteReminder
+}) => {
+  const { t } = useLanguage();
 
-  const fileList = messages
-    .flatMap(m => m.attachments || [])
-    .filter(att => !att.type?.startsWith('image/'))
-    .slice(0, 5);
+  // Local states
+  const [rightPanelMode, setRightPanelMode] = useState('default');
+  const [showMuteModal, setShowMuteModal] = useState(false);
+  const [isGroupNameEditing, setIsGroupNameEditing] = useState(false);
+  const [editGroupName, setEditGroupName] = useState('');
+  const [showMemberActionId, setShowMemberActionId] = useState(null);
+  const [muteOption, setMuteOption] = useState(60);
+  const [showAddReminder, setShowAddReminder] = useState(false);
+  const [remTitle, setRemTitle] = useState('');
+  const [remTime, setRemTime] = useState('');
+
+  const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
+  const myId = currentUser._id || currentUser.id;
+
+  const isOwner = activeConversation?.ownerId?._id === myId || activeConversation?.ownerId === myId || activeConversation?.createdBy === myId;
+  const isAdmin = activeConversation?.adminIds?.some(aid => (aid._id || aid) === myId) || isOwner;
+  const isGroup = activeConversation?.type === 'group' || activeConversation?.roomModel === 'Group';
+
+  const getMemberRole = (member) => {
+    const mid = member._id || member.id;
+    if (activeConversation?.ownerId?._id === mid || activeConversation?.ownerId === mid || activeConversation?.createdBy === mid) return 'owner';
+    if (activeConversation?.adminIds?.some(aid => (aid._id || aid) === mid)) return 'admin';
+    return 'member';
+  };
+
+  const handleConfirmMute = () => {
+    setShowMuteModal(false);
+    handleMute(muteOption);
+  };
 
   return (
-    <aside className="chat-right-panel">
-      {/* 1. Header: Avatar & Tên (Tự cập nhật theo room prop) */}
-      <div className="crp-header">
-        <div className="crp-avatar-large" style={{ background: room.color }}>
-          {room.avatar ? <img src={room.avatar} alt="avt" /> : room.initials}
-        </div>
-        <h3 className="crp-name">{room.name}</h3>
-        <p className="crp-status">Class • {room.students?.length || room.studentCount || 0} thành viên</p>
-      </div>
+    <>
+      <aside className="chat-right-panel" style={{ width: 320, background: 'var(--z-bg-sidebar)', borderLeft: '1px solid var(--z-border)', display: 'flex', flexDirection: 'column' }}>
+        {rightPanelMode === 'default' ? (
+          <>
+            {/* HEADER */}
+            <div className="crp-header" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '20px 16px', borderBottom: '1px solid var(--z-border)' }}>
+              <img className="crp-avatar" src={getConversationAvatar(activeConversation)} alt="avt" style={{ width: 64, height: 64, borderRadius: '50%', objectFit: 'cover', marginBottom: 12 }} />
 
-      {/* 2. Quick Actions */}
-      <div className="crp-actions">
-        <div className="action-item"><button><FaBell /></button><span>Tắt thông báo</span></div>
-        <div className="action-item"><button><FaThumbtack /></button><span>Ghim hội thoại</span></div>
-        <div className="action-item"><button><FaUsers /></button><span>Tạo nhóm</span></div>
-      </div>
-
-      <div className="crp-divider" />
-
-      {/* 3. Nhóm chung (Danh sách thành viên) */}
-      <div className="crp-section">
-        <div className="section-header">
-          <span><FaUsers /> {room.students?.length || 0} thành viên lớp</span>
-        </div>
-        {/* Có thể map danh sách avatar thành viên ở đây */}
-      </div>
-
-      {/* 4. Ảnh/Video (Giống Zalo) */}
-      <div className="crp-section">
-        <div className="section-header" onClick={() => setShowMedia(!showMedia)}>
-          <span>Ảnh/Video</span>
-          <FaChevronDown className={showMedia ? '' : 'rotate-180'} />
-        </div>
-        {showMedia && (
-          <div className="media-grid">
-            {mediaList.map((img, i) => (
-              <img key={i} src={img.url} alt="media" className="media-thumb" />
-            ))}
-            {mediaList.length === 0 && <p className="empty-text">Chưa có ảnh nào</p>}
-          </div>
-        )}
-        {mediaList.length > 0 && <button className="view-all-btn">Xem tất cả</button>}
-      </div>
-
-      {/* 5. File (Giống Zalo) */}
-      <div className="crp-section">
-        <div className="section-header" onClick={() => setShowFiles(!showFiles)}>
-          <span>File đã gửi</span>
-          <FaChevronDown className={showFiles ? '' : 'rotate-180'} />
-        </div>
-        {showFiles && (
-          <div className="file-list">
-            {fileList.map((file, i) => (
-              <div key={i} className="file-item">
-                <div className="file-icon"><FaFileAlt /></div>
-                <div className="file-info">
-                  <p className="file-name">{file.name}</p>
-                  <p className="file-meta">30.66 KB • 31/10/2025</p>
-                </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, width: '100%', justifyContent: 'center' }}>
+                {isGroupNameEditing ? (
+                  <input
+                    className="crp-name-edit"
+                    value={editGroupName}
+                    onChange={e => setEditGroupName(e.target.value)}
+                    onBlur={() => {
+                      setIsGroupNameEditing(false);
+                      if (editGroupName.trim() && editGroupName !== activeConversation.name) {
+                        conversationService.updateGroupName(activeConversation._id, editGroupName).then(() => {
+                          setActiveConversation({ ...activeConversation, name: editGroupName });
+                          fetchConversations();
+                          toast.success('Đổi tên nhóm thành công');
+                        });
+                      }
+                    }}
+                    onKeyDown={e => { if (e.key === 'Enter') e.target.blur(); }}
+                    autoFocus
+                  />
+                ) : (
+                  <div className="crp-name" style={{ fontSize: 18, fontWeight: 600, color: 'var(--z-text-primary)', textAlign: 'center' }}>
+                    {getConversationName(activeConversation)}
+                  </div>
+                )}
+                {isGroup && !isGroupNameEditing && (
+                  <div style={{ cursor: 'pointer', color: 'var(--z-text-secondary)', padding: '2px' }} onClick={() => { setEditGroupName(activeConversation.name || ''); setIsGroupNameEditing(true); }}>
+                    <svg width="14" height="14" fill="currentColor" viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
+                  </div>
+                )}
               </div>
-            ))}
-            {fileList.length === 0 && <p className="empty-text">Chưa có file nào</p>}
+
+              {/* ACTION BUTTONS */}
+              <div className="crp-actions" style={{ display: 'flex', justifyContent: 'center', gap: 16, marginTop: 16, width: '100%' }}>
+                <div className="crp-action-btn" style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, cursor: 'pointer', color: 'var(--z-text-primary)' }} onClick={() => setShowMuteModal(true)}>
+                  <div className="crp-action-icon" style={{ background: 'var(--z-bg-main)', width: 36, height: 36, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><FaBell size={16} /></div>
+                  <span style={{ fontSize: 12 }}>Tắt TB</span>
+                </div>
+
+                {!isGroup ? (
+                  <>
+                    <div className="crp-action-btn" style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, cursor: 'pointer', color: 'var(--z-text-primary)' }} onClick={() => toast.success('Đã ghim hội thoại')}>
+                      <div className="crp-action-icon" style={{ background: 'var(--z-bg-main)', width: 36, height: 36, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><FaThumbtack size={16} /></div>
+                      <span style={{ fontSize: 12 }}>Ghim</span>
+                    </div>
+                    <div className="crp-action-btn" style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, cursor: 'pointer', color: 'var(--z-text-primary)' }} onClick={() => setShowCreateGroupModal(true)}>
+                      <div className="crp-action-icon" style={{ background: 'var(--z-bg-main)', width: 36, height: 36, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><FaUserPlus size={16} /></div>
+                      <span style={{ fontSize: 12 }}>Tạo nhóm</span>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="crp-action-btn" style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, cursor: 'pointer', color: 'var(--z-text-primary)' }} onClick={() => toast('Chức năng thêm thành viên')}>
+                      <div className="crp-action-icon" style={{ background: 'var(--z-bg-main)', width: 36, height: 36, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><FaUserPlus size={16} /></div>
+                      <span style={{ fontSize: 12 }}>Thêm TV</span>
+                    </div>
+                    <div className="crp-action-btn" style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, cursor: 'pointer', color: 'var(--z-text-primary)' }} onClick={() => setRightPanelMode('manage')}>
+                      <div className="crp-action-icon" style={{ background: 'var(--z-bg-main)', width: 36, height: 36, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><FaUserSecret size={16} /></div>
+                      <span style={{ fontSize: 12 }}>Quản lý</span>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+
+            {/* BODY */}
+            <div style={{ flex: 1, overflowY: 'auto' }}>
+
+              {/* ACCORDION THÀNH VIÊN */}
+              {isGroup && (
+                <Accordion title={`Thành viên nhóm (${activeConversation.participants?.length || 0})`}>
+                  <div style={{ padding: '8px 16px' }}>
+                    {(activeConversation.participants || []).map((p, idx) => {
+                      const role = getMemberRole(p);
+                      const pid = p._id || p.id || p;
+                      const keyStr = typeof pid === 'string' ? pid : (pid?._id || pid?.id || `member-${idx}`);
+                      const displayName = p.fullName || p.username || 'Người dùng';
+                      const avatarSrc = toAbsoluteUrl(p.avatar || p.avatarUrl) || 'https://i.pravatar.cc/150';
+                      return (
+                        <div key={keyStr} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', position: 'relative', borderBottom: '1px solid var(--z-border)' }}>
+                          <img src={avatarSrc} style={{ width: 34, height: 34, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} alt="" />
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--z-text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{displayName}</div>
+                            {role !== 'member' && (
+                              <div style={{ fontSize: 10, color: role === 'owner' ? '#f59e0b' : 'var(--z-primary)', fontWeight: 600 }}>
+                                {role === 'owner' ? '👑 Trưởng nhóm' : '⭐ Phó nhóm'}
+                              </div>
+                            )}
+                          </div>
+                          {isAdmin && keyStr !== myId && role !== 'owner' && (
+                            <div
+                              style={{ cursor: 'pointer', color: 'var(--z-text-secondary)', padding: '4px', borderRadius: 4, position: 'relative' }}
+                              onClick={() => setShowMemberActionId(showMemberActionId === keyStr ? null : keyStr)}
+                            >
+                              <FaEllipsisH size={14} />
+                            </div>
+                          )}
+                          {showMemberActionId === keyStr && (
+                            <div style={{ position: 'absolute', right: 0, top: '100%', background: 'var(--z-bg-sidebar)', border: '1px solid var(--z-border)', borderRadius: 6, zIndex: 10, boxShadow: '0 4px 12px rgba(0,0,0,0.15)', padding: '4px 0', width: 160 }}>
+                              {isOwner && role === 'member' && (
+                                <div className="m-action-item" onClick={() => { handleGroupAction('promote', keyStr); setShowMemberActionId(null); }}>⭐ Lên Phó nhóm</div>
+                              )}
+                              {isOwner && role === 'admin' && (
+                                <div className="m-action-item" onClick={() => { handleGroupAction('demote', keyStr); setShowMemberActionId(null); }}>Gỡ Phó nhóm</div>
+                              )}
+                              <div className="m-action-item danger" onClick={() => { if (window.confirm(`Mời ${displayName} ra khỏi nhóm?`)) handleGroupAction('remove', keyStr); setShowMemberActionId(null); }}>🚫 Mời ra khỏi nhóm</div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </Accordion>
+              )}
+
+              {/* NHẮC HẸN */}
+              {isGroup && (
+                <Accordion title={<span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><FaCalendarAlt size={13} /> Danh sách nhắc hẹn</span>} defaultOpen={false}>
+                  <div style={{ padding: '8px 16px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
+                      <button
+                        style={{ border: 'none', background: 'var(--z-primary)', color: 'white', fontSize: 11, cursor: 'pointer', padding: '4px 10px', borderRadius: 12 }}
+                        onClick={() => setShowAddReminder(v => !v)}
+                      >+ Tạo mới</button>
+                    </div>
+
+                    {showAddReminder && (
+                      <div style={{ background: 'var(--z-bg-main)', padding: '10px', borderRadius: 8, marginBottom: 10 }}>
+                        <input
+                          placeholder="Nội dung nhắc hẹn..."
+                          style={{ width: '100%', marginBottom: 8, padding: '6px 10px', border: '1px solid var(--z-border)', borderRadius: 6, background: 'var(--z-bg-sidebar)', color: 'var(--z-text-primary)', fontSize: 13, boxSizing: 'border-box' }}
+                          value={remTitle}
+                          onChange={e => setRemTitle(e.target.value)}
+                        />
+                        <input
+                          type="datetime-local"
+                          style={{ width: '100%', marginBottom: 8, padding: '6px 10px', border: '1px solid var(--z-border)', borderRadius: 6, background: 'var(--z-bg-sidebar)', color: 'var(--z-text-primary)', fontSize: 13, boxSizing: 'border-box' }}
+                          value={remTime}
+                          onChange={e => setRemTime(e.target.value)}
+                        />
+                        <div style={{ display: 'flex', gap: 8 }}>
+                          <button style={{ flex: 1, padding: '5px', fontSize: 12, border: '1px solid var(--z-border)', borderRadius: 6, cursor: 'pointer', background: 'var(--z-bg-sidebar)', color: 'var(--z-text-primary)' }} onClick={() => { setShowAddReminder(false); setRemTitle(''); setRemTime(''); }}>Hủy</button>
+                          <button style={{ flex: 1, padding: '5px', fontSize: 12, background: 'var(--z-primary)', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer' }} onClick={() => {
+                            if (!remTitle || !remTime) return toast.error('Vui lòng điền đủ thông tin');
+                            handleCreateReminder(remTitle, new Date(remTime));
+                            setShowAddReminder(false);
+                            setRemTitle(''); setRemTime('');
+                          }}>Lưu</button>
+                        </div>
+                      </div>
+                    )}
+
+                    {reminders.length === 0 ? (
+                      <div style={{ fontSize: 12, color: 'var(--z-text-muted)', textAlign: 'center', padding: '12px 0' }}>Chưa có nhắc hẹn nào</div>
+                    ) : (
+                      reminders.map((rem, idx) => (
+                        <div key={rem._id || `rem-${idx}`} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '8px 0', borderBottom: '1px solid var(--z-border)' }}>
+                          <FaCalendarAlt size={12} color="var(--z-primary)" style={{ marginTop: 3, flexShrink: 0 }} />
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--z-text-primary)', wordBreak: 'break-word' }}>{rem.title}</div>
+                            <div style={{ fontSize: 11, color: 'var(--z-primary)', marginTop: 2 }}>{new Date(rem.remindAt).toLocaleString('vi-VN')}</div>
+                            {rem.status === 'expired' && <div style={{ fontSize: 10, color: '#ef4444' }}>Đã hết hạn</div>}
+                          </div>
+                          <button
+                            style={{ border: 'none', background: 'none', color: 'var(--z-text-muted)', cursor: 'pointer', padding: '2px', flexShrink: 0 }}
+                            onClick={() => handleDeleteReminder(rem._id)}
+                            title="Xóa"
+                          >
+                            <FaTrashAlt size={11} />
+                          </button>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </Accordion>
+              )}
+
+              {/* ẢNH / VIDEO */}
+              <Accordion title={t('imageVideo') || 'Ảnh/Video'}>
+                <div style={{ padding: '8px 16px' }}>
+                  {imgFiles.length > 0 ? (
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 4, marginTop: 4 }}>
+                      {imgFiles.slice(0, 8).map((m, i) => (
+                        <img key={i} src={m.url} alt="" style={{ width: '100%', aspectRatio: '1/1', objectFit: 'cover', borderRadius: 4 }} />
+                      ))}
+                    </div>
+                  ) : <div style={{ fontSize: 13, color: 'var(--z-text-muted)', marginTop: 4, textAlign: 'center' }}>{t('noImageVideo') || 'Chưa có ảnh/video'}</div>}
+                </div>
+              </Accordion>
+
+              {/* FILE */}
+              <Accordion title="File">
+                <div style={{ padding: '8px 16px' }}>
+                  {docFiles.length > 0 ? (
+                    <div style={{ marginTop: 4, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                      {docFiles.slice(0, 3).map((m, i) => {
+                        const fname = m.name || m.fileName;
+                        return (
+                          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                            <div style={{ width: 36, height: 40, borderRadius: 6, background: getFileColor(fname), display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: 10, fontWeight: 'bold', flexShrink: 0 }}>
+                              {getExt(fname).substring(0, 3).toUpperCase()}
+                            </div>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ fontSize: 13, color: 'var(--z-text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{fname}</div>
+                              <div style={{ fontSize: 11, color: 'var(--z-text-secondary)' }}>{formatBytes(m.size)}</div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : <div style={{ fontSize: 13, color: 'var(--z-text-muted)', marginTop: 4, textAlign: 'center' }}>Chưa có File nào</div>}
+                </div>
+              </Accordion>
+
+              {/* LINK */}
+              <Accordion title="Link">
+                <div style={{ padding: '8px 16px' }}>
+                  {linkItems && linkItems.length > 0 ? (
+                    <div style={{ marginTop: 4, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                      {linkItems.slice(0, 3).map((link, i) => (
+                        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                          <div style={{ width: 36, height: 36, borderRadius: 6, background: 'var(--z-bg-main)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--z-primary)', flexShrink: 0 }}><FaLink size={14} /></div>
+                          <a href={link} target="_blank" rel="noreferrer" style={{ fontSize: 13, color: 'var(--z-text-primary)', textDecoration: 'none', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{link}</a>
+                        </div>
+                      ))}
+                    </div>
+                  ) : <div style={{ fontSize: 13, color: 'var(--z-text-muted)', marginTop: 4, textAlign: 'center' }}>Chưa có Link nào</div>}
+                </div>
+              </Accordion>
+
+            </div>
+          </>
+        ) : rightPanelMode === 'manage' ? (
+          // MANAGE MODE
+          <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+            <div style={{ display: 'flex', alignItems: 'center', padding: '16px', borderBottom: '1px solid var(--z-border)', cursor: 'pointer' }} onClick={() => setRightPanelMode('default')}>
+              <FaArrowLeft size={16} color="var(--z-text-secondary)" style={{ marginRight: 12 }} />
+              <span style={{ fontSize: 16, fontWeight: 600, color: 'var(--z-text-primary)' }}>Quản lý nhóm</span>
+            </div>
+            <div style={{ flex: 1, overflowY: 'auto' }}>
+              <div className="crp-group-manage" style={{ padding: 0 }}>
+                {/* 1. Quyền của thành viên (Checkboxes) */}
+                <div style={{ padding: '16px 16px 8px', fontSize: 14, fontWeight: 600, color: 'var(--z-text-primary)' }}>
+                  Cho phép các thành viên trong nhóm:
+                </div>
+                
+                {[
+                  'Thay đổi tên & ảnh đại diện của nhóm',
+                  'Ghim tin nhắn, ghi chú, bình chọn lên đầu hội thoại',
+                  'Tạo mới ghi chú, nhắc hẹn',
+                  'Tạo mới bình chọn',
+                  'Gửi tin nhắn'
+                ].map((txt, i) => (
+                  <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', cursor: 'pointer' }} onClick={(e) => {
+                    const icon = e.currentTarget.querySelector('svg');
+                    if (icon.style.color === 'var(--z-primary)') { icon.style.color = '#ccc'; icon.innerHTML = '<rect width="20" height="20" rx="4" fill="currentColor"/><path d="M14 8l-5 5-2-2" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>'; } 
+                    else { icon.style.color = 'var(--z-primary)'; icon.innerHTML = '<rect width="20" height="20" rx="4" fill="currentColor"/><path d="M14 8l-5 5-2-2" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>'; }
+                  }}>
+                    <span style={{ fontSize: 15, color: 'var(--z-text-primary)', flex: 1, paddingRight: 16 }}>{txt}</span>
+                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" style={{ color: 'var(--z-primary)', flexShrink: 0 }}>
+                      <rect width="20" height="20" rx="4" fill="currentColor"/>
+                      <path d="M14 8l-5 5-2-2" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  </div>
+                ))}
+
+                <div style={{ height: 8, background: 'var(--z-bg-main)', borderTop: '1px solid var(--z-border)', borderBottom: '1px solid var(--z-border)', margin: '8px 0' }} />
+
+                {/* 2. Cài đặt duyệt / Toggles */}
+                <div className="crp-gm-switch" style={{ padding: '12px 16px' }}>
+                  <div style={{ flex: 1, fontSize: 15, color: 'var(--z-text-primary)' }}>Chế độ phê duyệt thành viên mới</div>
+                  <div
+                    className={`crp-gm-switch-btn ${activeConversation?.settings?.isApprovalRequired ? 'active' : ''}`}
+                    onClick={() => handleUpdateGroupSettings({ isApprovalRequired: !activeConversation?.settings?.isApprovalRequired })}
+                  >
+                    <div className="crp-gm-switch-ball" />
+                  </div>
+                </div>
+
+                <div className="crp-gm-switch" style={{ padding: '12px 16px' }} onClick={(e) => e.currentTarget.querySelector('.crp-gm-switch-btn').classList.toggle('active')}>
+                  <div style={{ flex: 1, fontSize: 15, color: 'var(--z-text-primary)' }}>Đánh dấu tin nhắn từ trưởng/phó nhóm</div>
+                  <div className="crp-gm-switch-btn active"><div className="crp-gm-switch-ball" /></div>
+                </div>
+
+                <div className="crp-gm-switch" style={{ padding: '12px 16px' }} onClick={(e) => e.currentTarget.querySelector('.crp-gm-switch-btn').classList.toggle('active')}>
+                  <div style={{ flex: 1, fontSize: 15, color: 'var(--z-text-primary)' }}>Cho phép thành viên mới đọc tin nhắn gần nhất</div>
+                  <div className="crp-gm-switch-btn active"><div className="crp-gm-switch-ball" /></div>
+                </div>
+
+                <div className="crp-gm-switch" style={{ padding: '12px 16px' }} onClick={(e) => e.currentTarget.querySelector('.crp-gm-switch-btn').classList.toggle('active')}>
+                  <div style={{ flex: 1, fontSize: 15, color: 'var(--z-text-primary)' }}>Cho phép dùng link tham gia nhóm</div>
+                  <div className="crp-gm-switch-btn active"><div className="crp-gm-switch-ball" /></div>
+                </div>
+
+                {/* Link box */}
+                <div style={{ margin: '0 16px 16px', padding: '12px', background: 'var(--z-bg-main)', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ fontSize: 14, color: 'var(--z-primary)', fontWeight: 500 }}>zalo.me/g/xwrwov660</div>
+                  <div style={{ display: 'flex', gap: 12, color: 'var(--z-primary)' }}>
+                    <FaLink size={14} style={{ cursor: 'pointer' }} onClick={() => toast.success('Đã copy link')} />
+                    <FaShare size={14} style={{ cursor: 'pointer' }} />
+                    <FaSync size={14} style={{ cursor: 'pointer' }} />
+                  </div>
+                </div>
+
+                <div style={{ height: 8, background: 'var(--z-bg-main)', borderTop: '1px solid var(--z-border)', borderBottom: '1px solid var(--z-border)', margin: '8px 0' }} />
+
+                {/* 3. Phân quyền và Chặn */}
+                <div style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer' }}>
+                  <FaUserTimes size={18} color="var(--z-text-secondary)" />
+                  <span style={{ fontSize: 15, color: 'var(--z-text-primary)' }}>Chặn khỏi nhóm</span>
+                </div>
+                <div style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer' }} onClick={() => setRightPanelMode('manage-roles')}>
+                  <FaKey size={18} color="var(--z-text-secondary)" />
+                  <span style={{ fontSize: 15, color: 'var(--z-text-primary)' }}>Trưởng & phó nhóm</span>
+                </div>
+
+                <div style={{ height: 8, background: 'var(--z-bg-main)', borderTop: '1px solid var(--z-border)', borderBottom: '1px solid var(--z-border)', margin: '8px 0' }} />
+
+                {/* 4. Giải tán */}
+                {isOwner && (
+                  <div style={{ padding: '16px' }}>
+                    <button style={{ width: '100%', padding: '12px', borderRadius: 8, border: 'none', background: '#ffe4e6', color: '#e11d48', fontSize: 15, fontWeight: 600, cursor: 'pointer' }} onClick={handleDisbandGroup}>
+                      Giải tán nhóm
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        ) : rightPanelMode === 'manage-roles' ? (
+          <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+            <div style={{ display: 'flex', alignItems: 'center', padding: '16px', borderBottom: '1px solid var(--z-border)', cursor: 'pointer' }} onClick={() => setRightPanelMode('manage')}>
+              <FaArrowLeft size={16} color="var(--z-text-secondary)" style={{ marginRight: 12 }} />
+              <span style={{ fontSize: 16, fontWeight: 600, color: 'var(--z-text-primary)' }}>Trưởng & phó nhóm</span>
+            </div>
+            <div style={{ flex: 1, overflowY: 'auto', padding: '16px' }}>
+              {(() => {
+                const owner = activeConversation?.participants?.find(p => getMemberRole(p) === 'owner');
+                const admins = activeConversation?.participants?.filter(p => getMemberRole(p) === 'admin') || [];
+                return (
+                  <>
+                    {owner && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+                        <img src={toAbsoluteUrl(owner.avatarUrl || owner.avatar) || 'https://i.pravatar.cc/150'} style={{ width: 44, height: 44, borderRadius: '50%', objectFit: 'cover' }} alt="" />
+                        <div>
+                          <div style={{ fontWeight: 600, fontSize: 14 }}>{owner.fullName || owner.username}</div>
+                          <div style={{ fontSize: 13, color: 'var(--z-text-secondary)' }}>Trưởng nhóm</div>
+                        </div>
+                      </div>
+                    )}
+                    {admins.map(admin => {
+                      const adminId = admin._id || admin.id;
+                      return (
+                        <div key={adminId} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 0', borderTop: '1px solid var(--z-border)' }}>
+                          <img src={toAbsoluteUrl(admin.avatarUrl || admin.avatar) || 'https://i.pravatar.cc/150'} style={{ width: 44, height: 44, borderRadius: '50%', objectFit: 'cover' }} alt="" />
+                          <div style={{ flex: 1 }}>
+                            <div style={{ fontWeight: 600, fontSize: 14 }}>{admin.fullName || admin.username}</div>
+                            <div style={{ fontSize: 13, color: 'var(--z-text-secondary)' }}>Phó nhóm</div>
+                          </div>
+                          {isOwner && (
+                            <button style={{ border: 'none', background: '#ffe4e6', color: '#e11d48', padding: '6px 16px', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
+                              onClick={() => { if (window.confirm(`Gỡ quyền phó nhóm của ${admin.fullName || admin.username}?`)) handleGroupAction('demote', adminId); }}>
+                              Xóa
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+                    {isOwner && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 24 }}>
+                        <button style={{ padding: '12px', background: 'var(--z-bg-main)', border: '1px solid var(--z-border)', borderRadius: 8, fontWeight: 600, cursor: 'pointer', color: 'var(--z-text-primary)' }} onClick={() => setRightPanelMode('add-admin')}>
+                          Thêm phó nhóm
+                        </button>
+                        <button style={{ padding: '12px', background: 'var(--z-bg-main)', border: '1px solid var(--z-border)', borderRadius: 8, fontWeight: 600, cursor: 'pointer', color: 'var(--z-text-primary)' }} onClick={() => setRightPanelMode('transfer-owner')}>
+                          Chuyển quyền trưởng nhóm
+                        </button>
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
+            </div>
+          </div>
+        ) : rightPanelMode === 'add-admin' ? (
+          <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+            <div style={{ display: 'flex', alignItems: 'center', padding: '16px', borderBottom: '1px solid var(--z-border)', cursor: 'pointer' }} onClick={() => setRightPanelMode('manage-roles')}>
+              <FaArrowLeft size={16} color="var(--z-text-secondary)" style={{ marginRight: 12 }} />
+              <span style={{ fontSize: 16, fontWeight: 600, color: 'var(--z-text-primary)' }}>Thêm phó nhóm</span>
+            </div>
+            <div style={{ flex: 1, overflowY: 'auto', padding: '0 16px' }}>
+              {(activeConversation?.participants?.filter(p => getMemberRole(p) === 'member') || []).map(member => (
+                <div key={member._id || member.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 0', borderBottom: '1px solid var(--z-border)', cursor: 'pointer' }}
+                  onClick={() => {
+                    if (window.confirm(`Chỉ định ${member.fullName || member.username} làm phó nhóm?`)) {
+                      handleGroupAction('promote', member._id || member.id);
+                      setRightPanelMode('manage-roles');
+                    }
+                  }}>
+                  <img src={toAbsoluteUrl(member.avatarUrl || member.avatar) || 'https://i.pravatar.cc/150'} style={{ width: 44, height: 44, borderRadius: '50%', objectFit: 'cover' }} alt="" />
+                  <div style={{ flex: 1, fontWeight: 500, fontSize: 14 }}>{member.fullName || member.username}</div>
+                </div>
+              ))}
+              {(activeConversation?.participants?.filter(p => getMemberRole(p) === 'member').length === 0) && (
+                <div style={{ padding: 24, textAlign: 'center', color: 'var(--z-text-muted)' }}>Tất cả thành viên đã là Quản trị viên</div>
+              )}
+            </div>
+          </div>
+        ) : rightPanelMode === 'transfer-owner' ? (
+          <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+            <div style={{ display: 'flex', alignItems: 'center', padding: '16px', borderBottom: '1px solid var(--z-border)', cursor: 'pointer' }} onClick={() => setRightPanelMode('manage-roles')}>
+              <FaArrowLeft size={16} color="var(--z-text-secondary)" style={{ marginRight: 12 }} />
+              <span style={{ fontSize: 16, fontWeight: 600, color: 'var(--z-text-primary)' }}>Chuyển quyền trưởng nhóm</span>
+            </div>
+            <div style={{ flex: 1, overflowY: 'auto', padding: '0 16px' }}>
+              <div style={{ padding: '16px 0', fontSize: 13, color: 'var(--z-text-muted)' }}>Lưu ý: Nếu chuyển quyền trưởng nhóm, bạn sẽ trở thành Phó nhóm.</div>
+              {(activeConversation?.participants?.filter(p => getMemberRole(p) !== 'owner') || []).map(member => (
+                <div key={member._id || member.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 0', borderBottom: '1px solid var(--z-border)', cursor: 'pointer' }}
+                  onClick={() => {
+                    if (window.confirm(`Bạn có muốn nhường quyền trưởng nhóm cho ${member.fullName || member.username}? Bạn sẽ không thể khôi phục lại quyền trừ khi người đó chuyển lại cho bạn.`)) {
+                      handleGroupAction('transfer', member._id || member.id);
+                      setRightPanelMode('default'); // Xong thì nhảy ra ngoài vì không còn là owner
+                    }
+                  }}>
+                  <img src={toAbsoluteUrl(member.avatarUrl || member.avatar) || 'https://i.pravatar.cc/150'} style={{ width: 44, height: 44, borderRadius: '50%', objectFit: 'cover' }} alt="" />
+                  <div style={{ flex: 1, fontWeight: 500, fontSize: 14 }}>{member.fullName || member.username}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
+        {/* NÚT CUỐI - Xóa lịch sử hoặc Rời nhóm */}
+        {rightPanelMode === 'default' && (
+          <div style={{ padding: '16px', borderTop: '1px solid var(--z-border)' }}>
+            {!isGroup ? (
+              <div className="crp-gm-button danger" style={{ marginTop: 0 }} onClick={handleDeleteConversation}>
+                <FaTrashAlt size={14} /> Xóa lịch sử trò chuyện
+              </div>
+            ) : (
+              <div className="crp-gm-button danger" style={{ marginTop: 0 }} onClick={handleLeaveGroup}>
+                <FaSignOutAlt size={14} /> Rời nhóm
+              </div>
+            )}
           </div>
         )}
-      </div>
-    </aside>
+      </aside>
+
+      {/* MODAL TẮT THÔNG BÁO */}
+      {showMuteModal && (
+        <div className="mute-modal-overlay" onClick={() => setShowMuteModal(false)}>
+          <div className="mute-modal-box" onClick={e => e.stopPropagation()}>
+            <div className="mute-modal-title">🔕 Tắt thông báo</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {[
+                { label: 'Trong 1 giờ', val: 60 },
+                { label: 'Trong 4 giờ', val: 240 },
+                { label: 'Trong 8 giờ', val: 480 },
+                { label: 'Cho đến khi mở lại', val: -1 },
+                { label: '🔔 Bật lại thông báo', val: 0 },
+              ].map(opt => (
+                <label key={opt.val} className="mute-opt">
+                  <input type="radio" name="mute_duration" checked={muteOption === opt.val} onChange={() => setMuteOption(opt.val)} />
+                  <span>{opt.label}</span>
+                </label>
+              ))}
+            </div>
+            <div className="mute-actions">
+              <button className="mute-btn cancel" onClick={() => setShowMuteModal(false)}>Hủy</button>
+              <button className="mute-btn ok" onClick={handleConfirmMute}>Xác nhận</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 };

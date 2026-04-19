@@ -106,8 +106,18 @@ export const conversationService = {
     return res.data;
   },
 
+  transferGroupOwner: async (id, newOwnerId) => {
+    const res = await axios.put(`${API_URL}/conversations/${id}/owner`, { newOwnerId }, getAuthHeaders());
+    return res.data;
+  },
+
   leaveGroup: async (id) => {
     const res = await axios.post(`${API_URL}/conversations/${id}/leave`, {}, getAuthHeaders());
+    return res.data;
+  },
+
+  disbandGroup: async (id) => {
+    const res = await axios.delete(`${API_URL}/conversations/${id}/disband`, getAuthHeaders());
     return res.data;
   },
 
@@ -195,4 +205,24 @@ export const conversationService = {
   },
   leaveGroup: async (id) => axios.post(`${API_URL}/conversations/${id}/leave`, {}, getAuthHeaders()),
   updateGroupName: async (id, name) => axios.put(`${API_URL}/conversations/${id}/name`, { name }, getAuthHeaders()),
+
+  // TẮT THÔNG BÁO (MUTE)
+  muteConversation: async (id, mutedUntil) => {
+    const res = await axios.put(`${API_URL}/conversations/${id}/preferences`, { mutedUntil }, getAuthHeaders());
+    return res.data;
+  },
+
+  // NHẮC HẸN (REMINDERS)
+  getReminders: async (conversationId) => {
+    const res = await axios.get(`${API_URL}/reminders/conversation/${conversationId}`, getAuthHeaders());
+    return res.data;
+  },
+  createReminder: async (data) => {
+    const res = await axios.post(`${API_URL}/reminders`, data, getAuthHeaders());
+    return res.data;
+  },
+  deleteReminder: async (id) => {
+    const res = await axios.delete(`${API_URL}/reminders/${id}`, getAuthHeaders());
+    return res.data;
+  },
 };

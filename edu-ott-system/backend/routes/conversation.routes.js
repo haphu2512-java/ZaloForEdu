@@ -294,6 +294,34 @@ router.post(
   validate({ params: conversationIdParamSchema }),
   conversationController.leaveGroup,
 );
+/**
+ * @openapi
+ * /conversations/{id}/disband:
+ *   delete:
+ *     tags: [Conversations]
+ *     summary: Disband group (owner only)
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Group disbanded successfully
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ *       403:
+ *         description: Forbidden
+ */
+router.delete(
+  '/:id/disband',
+  auth,
+  validate({ params: conversationIdParamSchema }),
+  conversationController.disbandGroup,
+);
 router.put(
   '/:id/avatar',
   auth,

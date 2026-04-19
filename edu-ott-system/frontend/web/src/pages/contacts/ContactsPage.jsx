@@ -10,6 +10,7 @@ import { useFriendStore } from "../../store/friendStore";
 import { useChatStore } from "../../store/chatStore";
 import { useNavigate } from "react-router-dom";
 import AddFriendModal from "../../components/Modals/AddFriendModal";
+import CreateGroupModal from "../chat/Modals/CreateGroupModal";
 import { socketService } from "../../services/socketService";
 import { useAuthStore } from "../../store/authStore";
 import axios from "axios";
@@ -147,6 +148,7 @@ export default function ContactsPage() {
   const [activeTab, setActiveTab] = useState("friends");
   const [searchQuery, setSearchQuery] = useState("");
   const [showAddFriend, setShowAddFriend] = useState(false);
+  const [showCreateGroup, setShowCreateGroup] = useState(false);
   const [openMenuId, setOpenMenuId] = useState(null);
   const [selectedFriend, setSelectedFriend] = useState(null);
   const [sortBy, setSortBy] = useState("name");
@@ -266,9 +268,14 @@ export default function ContactsPage() {
       <div className="contacts-sidebar">
         <div className="cs-header">
           <span className="cs-title">Danh bạ</span>
-          <button className="cs-add-btn" onClick={() => setShowAddFriend(true)} title="Thêm bạn">
-            <FaUserPlus size={16} />
-          </button>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button className="cs-add-btn" onClick={() => setShowAddFriend(true)} title="Thêm bạn">
+              <FaUserPlus size={16} />
+            </button>
+            <button className="cs-add-btn" onClick={() => setShowCreateGroup(true)} title="Tạo nhóm">
+              <FaUsers size={16} />
+            </button>
+          </div>
         </div>
 
         <div className="cs-search">
@@ -374,6 +381,15 @@ export default function ContactsPage() {
       )}
 
       <AddFriendModal isOpen={showAddFriend} onClose={() => setShowAddFriend(false)} />
+      <CreateGroupModal 
+        isOpen={showCreateGroup} 
+        onClose={() => setShowCreateGroup(false)} 
+        friends={friends} 
+        onCreated={(newGroup) => {
+          setGroups(prev => [newGroup, ...prev]);
+          navigate(`/chat/${newGroup._id}`);
+        }} 
+      />
     </div>
   );
 }

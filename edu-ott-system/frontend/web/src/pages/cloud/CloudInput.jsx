@@ -39,10 +39,11 @@ export const CloudInput = ({ onSendText, isSending, onUploadFiles, replyTo, onCl
 
   const handleSend = () => {
     if (!textInput.trim() || isSending) return;
-    onSendText(textInput, replyTo?._id || null);
-    setTextInput("");
+    const currentText = textInput;
+    setTextInput("");      // Đảm bảo UI xóa text ngay lập tức
     setShowEmoji(false);
     setShowRecorder(false);
+    onSendText(currentText, replyTo?._id || null);
     onClearReply?.();
   };
 
