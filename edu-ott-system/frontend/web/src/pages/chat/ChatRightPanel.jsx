@@ -233,85 +233,9 @@ export const ChatRightPanel = ({
                     <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
                       <button
                         style={{ border: 'none', background: 'var(--z-primary)', color: 'white', fontSize: 11, cursor: 'pointer', padding: '4px 10px', borderRadius: 12 }}
-                        onClick={() => setShowAddReminder(v => !v)}
+                        onClick={() => { setRemTitle(''); setRemTime(''); setShowAddReminder(true); }}
                       >+ Tạo mới</button>
                     </div>
-
-                    {showAddReminder && (
-                      <div style={{ background: 'var(--z-bg-main)', padding: '10px', borderRadius: 8, marginBottom: 10 }}>
-                        <input
-                          placeholder="Nội dung nhắc hẹn..."
-                          style={{ width: '100%', marginBottom: 6, padding: '6px 10px', border: '1px solid var(--z-border)', borderRadius: 6, background: 'var(--z-bg-sidebar)', color: 'var(--z-text-primary)', fontSize: 13, boxSizing: 'border-box' }}
-                          value={remTitle}
-                          onChange={e => setRemTitle(e.target.value)}
-                        />
-                        <div style={{ display: 'flex', gap: 6, marginBottom: 6, flexWrap: 'wrap' }}>
-                          {[{ label: '15 phút nữa', mins: 15 }, { label: '30 phút nữa', mins: 30 }, { label: '9:00 ngày mai', special: 'tomorrow9' }].map(opt => (
-                            <button key={opt.label} style={{ padding: '4px 8px', fontSize: 11, border: '1px solid var(--z-border)', borderRadius: 12, cursor: 'pointer', background: 'var(--z-bg-sidebar)', color: 'var(--z-text-primary)' }}
-                              onClick={() => {
-                                let d = new Date();
-                                if (opt.special === 'tomorrow9') { d.setDate(d.getDate() + 1); d.setHours(9, 0, 0, 0); }
-                                else d = new Date(d.getTime() + opt.mins * 60000);
-                                setRemTime(d.toISOString().slice(0, 16));
-                              }}>{opt.label}</button>
-                          ))}
-                        </div>
-                        <input
-                          type="datetime-local"
-                          style={{ width: '100%', marginBottom: 8, padding: '6px 10px', border: '1px solid var(--z-border)', borderRadius: 6, background: 'var(--z-bg-sidebar)', color: 'var(--z-text-primary)', fontSize: 13, boxSizing: 'border-box' }}
-                          value={remTime}
-                          onChange={e => setRemTime(e.target.value)}
-                        />
-                        <div style={{ display: 'flex', gap: 8 }}>
-                          <button style={{ flex: 1, padding: '5px', fontSize: 12, border: '1px solid var(--z-border)', borderRadius: 6, cursor: 'pointer', background: 'var(--z-bg-sidebar)', color: 'var(--z-text-primary)' }} onClick={() => { setShowAddReminder(false); setRemTitle(''); setRemTime(''); }}>Hủy</button>
-                          <button style={{ flex: 1, padding: '5px', fontSize: 12, background: 'var(--z-primary)', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer' }} onClick={() => {
-                            if (!remTitle || !remTime) return toast.error('Vui lòng điền đủ thông tin');
-                            handleCreateReminder(remTitle, new Date(remTime));
-                            setShowAddReminder(false);
-                            setRemTitle(''); setRemTime('');
-                          }}>Lưu</button>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Edit reminder modal */}
-                    {editingReminder && (
-                      <div style={{ background: 'var(--z-bg-main)', padding: '10px', borderRadius: 8, marginBottom: 10, border: '1px solid var(--z-primary)' }}>
-                        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--z-primary)', marginBottom: 6 }}>Sửa nhắc hẹn</div>
-                        <input
-                          placeholder="Nội dung..."
-                          style={{ width: '100%', marginBottom: 6, padding: '6px 10px', border: '1px solid var(--z-border)', borderRadius: 6, background: 'var(--z-bg-sidebar)', color: 'var(--z-text-primary)', fontSize: 13, boxSizing: 'border-box' }}
-                          value={editRemTitle}
-                          onChange={e => setEditRemTitle(e.target.value)}
-                        />
-                        <div style={{ display: 'flex', gap: 6, marginBottom: 6, flexWrap: 'wrap' }}>
-                          {[{ label: '15 phút nữa', mins: 15 }, { label: '30 phút nữa', mins: 30 }, { label: '9:00 ngày mai', special: 'tomorrow9' }].map(opt => (
-                            <button key={opt.label} style={{ padding: '4px 8px', fontSize: 11, border: '1px solid var(--z-border)', borderRadius: 12, cursor: 'pointer', background: 'var(--z-bg-sidebar)', color: 'var(--z-text-primary)' }}
-                              onClick={() => {
-                                let d = new Date();
-                                if (opt.special === 'tomorrow9') { d.setDate(d.getDate() + 1); d.setHours(9, 0, 0, 0); }
-                                else d = new Date(d.getTime() + opt.mins * 60000);
-                                setEditRemTime(d.toISOString().slice(0, 16));
-                              }}>{opt.label}</button>
-                          ))}
-                        </div>
-                        <input
-                          type="datetime-local"
-                          style={{ width: '100%', marginBottom: 8, padding: '6px 10px', border: '1px solid var(--z-border)', borderRadius: 6, background: 'var(--z-bg-sidebar)', color: 'var(--z-text-primary)', fontSize: 13, boxSizing: 'border-box' }}
-                          value={editRemTime}
-                          onChange={e => setEditRemTime(e.target.value)}
-                        />
-                        <div style={{ display: 'flex', gap: 8 }}>
-                          <button style={{ flex: 1, padding: '5px', fontSize: 12, border: '1px solid var(--z-border)', borderRadius: 6, cursor: 'pointer', background: 'var(--z-bg-sidebar)', color: 'var(--z-text-primary)' }} onClick={() => setEditingReminder(null)}>Hủy</button>
-                          <button style={{ flex: 1, padding: '5px', fontSize: 12, background: 'var(--z-primary)', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer' }} onClick={() => {
-                            if (!editRemTitle || !editRemTime) return toast.error('Vui lòng điền đủ thông tin');
-                            handleUpdateReminder(editingReminder._id, editRemTitle, editRemTime);
-                            setEditingReminder(null);
-                          }}>Lưu</button>
-                        </div>
-                      </div>
-                    )}
-
                     {reminders.length === 0 ? (
                       <div style={{ fontSize: 12, color: 'var(--z-text-muted)', textAlign: 'center', padding: '12px 0' }}>Chưa có nhắc hẹn nào</div>
                     ) : (
@@ -675,6 +599,129 @@ export const ChatRightPanel = ({
           </div>
         )}
       </aside>
+
+      {/* MODAL TẠO / SỬA NHẮC HẸN */}
+      {(showAddReminder || editingReminder) && (() => {
+        const isEdit = !!editingReminder;
+        const title = isEdit ? editRemTitle : remTitle;
+        const time = isEdit ? editRemTime : remTime;
+        const setTitle = isEdit ? setEditRemTitle : setRemTitle;
+        const setTime = isEdit ? setEditRemTime : setRemTime;
+        const quickOpts = [
+          { label: '15 phút nữa', mins: 15 },
+          { label: '30 phút nữa', mins: 30 },
+          { label: '9:00 ngày mai', special: 'tomorrow9' },
+          { label: 'Khác', special: 'custom' },
+        ];
+        const formatDisplayTime = (val) => {
+          if (!val) return '';
+          const d = new Date(val);
+          const now = new Date();
+          const isToday = d.toDateString() === now.toDateString();
+          const tomorrow = new Date(now); tomorrow.setDate(now.getDate() + 1);
+          const isTomorrow = d.toDateString() === tomorrow.toDateString();
+          const timeStr = d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+          if (isToday) return `Hôm nay lúc ${timeStr}`;
+          if (isTomorrow) return `Ngày mai lúc ${timeStr}`;
+          return d.toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+        };
+        const activeQuick = (() => {
+          if (!time) return null;
+          const d = new Date(time);
+          const now = new Date();
+          const diffMs = d - now;
+          const diffMins = Math.round(diffMs / 60000);
+          if (diffMins >= 13 && diffMins <= 17) return '15 phút nữa';
+          if (diffMins >= 28 && diffMins <= 32) return '30 phút nữa';
+          const tomorrow = new Date(now); tomorrow.setDate(now.getDate() + 1); tomorrow.setHours(9, 0, 0, 0);
+          if (Math.abs(d - tomorrow) < 60000) return '9:00 ngày mai';
+          return null;
+        })();
+        const handleClose = () => { setShowAddReminder(false); setEditingReminder(null); setRemTitle(''); setRemTime(''); };
+        const handleSave = () => {
+          if (!title.trim()) return toast.error('Vui lòng nhập nội dung');
+          if (!time) return toast.error('Vui lòng chọn thời gian');
+          if (isEdit) {
+            handleUpdateReminder(editingReminder._id, title, time);
+            setEditingReminder(null);
+          } else {
+            handleCreateReminder(title.trim(), new Date(time));
+            setShowAddReminder(false);
+            setRemTitle(''); setRemTime('');
+          }
+        };
+        return (
+          <div style={{ position: 'fixed', inset: 0, zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.45)' }} onClick={handleClose}>
+            <div style={{ background: 'var(--z-bg-sidebar)', borderRadius: 16, width: 460, maxWidth: '94vw', boxShadow: '0 8px 40px rgba(0,0,0,0.25)', overflow: 'hidden' }} onClick={e => e.stopPropagation()}>
+              {/* Header */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 20px 14px', borderBottom: '1px solid var(--z-border)' }}>
+                <span style={{ fontSize: 17, fontWeight: 700, color: 'var(--z-text-primary)' }}>{isEdit ? 'Sửa nhắc hẹn' : 'Tạo nhắc hẹn'}</span>
+                <button onClick={handleClose} style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--z-text-secondary)', padding: 4, borderRadius: 6 }}>
+                  <FaTimes size={16} />
+                </button>
+              </div>
+              {/* Body */}
+              <div style={{ padding: '16px 20px' }}>
+                {/* Content input */}
+                <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--z-text-secondary)', marginBottom: 6 }}>Nhập nội dung</div>
+                <textarea
+                  autoFocus
+                  rows={4}
+                  placeholder="Nhập nội dung mới hoặc dán link"
+                  value={title}
+                  onChange={e => setTitle(e.target.value)}
+                  style={{ width: '100%', padding: '10px 12px', border: '1.5px solid var(--z-primary)', borderRadius: 8, background: 'var(--z-bg-main)', color: 'var(--z-text-primary)', fontSize: 14, resize: 'none', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' }}
+                />
+                {/* Quick time */}
+                <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--z-text-secondary)', margin: '14px 0 8px' }}>Chọn thời gian</div>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  {quickOpts.map(opt => {
+                    const isActive = activeQuick === opt.label;
+                    return (
+                      <button key={opt.label}
+                        style={{ padding: '6px 14px', fontSize: 13, border: `1.5px solid ${isActive ? 'var(--z-primary)' : 'var(--z-border)'}`, borderRadius: 20, cursor: 'pointer', background: isActive ? 'rgba(0,104,255,0.08)' : 'transparent', color: isActive ? 'var(--z-primary)' : 'var(--z-text-primary)', fontWeight: isActive ? 600 : 400, transition: 'all .15s' }}
+                        onClick={() => {
+                          if (opt.special === 'custom') return; // do nothing — user edits datetime input
+                          let d = new Date();
+                          if (opt.special === 'tomorrow9') { d.setDate(d.getDate() + 1); d.setHours(9, 0, 0, 0); }
+                          else d = new Date(d.getTime() + opt.mins * 60000);
+                          setTime(d.toISOString().slice(0, 16));
+                        }}>
+                        {opt.label}
+                      </button>
+                    );
+                  })}
+                </div>
+                {/* Date picker row */}
+                <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--z-text-secondary)', margin: '14px 0 8px' }}>Chọn ngày nhắc hẹn</div>
+                <label style={{ display: 'flex', alignItems: 'center', border: '1px solid var(--z-border)', borderRadius: 8, padding: '10px 12px', cursor: 'pointer', background: 'var(--z-bg-main)', position: 'relative' }}>
+                  <span style={{ flex: 1, fontSize: 14, color: time ? 'var(--z-text-primary)' : 'var(--z-text-muted)' }}>
+                    {time ? formatDisplayTime(time) : 'Chọn ngày giờ...'}
+                  </span>
+                  <span style={{ color: 'var(--z-text-secondary)' }}>📅</span>
+                  <input type="datetime-local" value={time} onChange={e => setTime(e.target.value)}
+                    style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer', width: '100%' }} />
+                </label>
+                {/* Repeat row */}
+                <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--z-text-secondary)', margin: '14px 0 8px' }}>Chọn kiểu lặp lại (vd: Lặp lại hàng tuần)</div>
+                <select style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--z-border)', borderRadius: 8, background: 'var(--z-bg-main)', color: 'var(--z-text-primary)', fontSize: 14, appearance: 'none', backgroundImage: 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'12\' height=\'12\' viewBox=\'0 0 24 24\'%3E%3Cpath fill=\'%23888\' d=\'M7 10l5 5 5-5z\'/%3E%3C/svg%3E")', backgroundRepeat: 'no-repeat', backgroundPosition: 'right 12px center', outline: 'none', cursor: 'pointer' }}>
+                  <option value="">Không lặp lại</option>
+                  <option value="daily">Hàng ngày</option>
+                  <option value="weekly">Hàng tuần</option>
+                  <option value="monthly">Hàng tháng</option>
+                </select>
+              </div>
+              {/* Footer */}
+              <div style={{ display: 'flex', gap: 10, padding: '0 20px 20px' }}>
+                <button onClick={handleClose} style={{ flex: 1, padding: '12px', borderRadius: 10, border: '1px solid var(--z-border)', background: 'transparent', color: 'var(--z-text-primary)', fontSize: 15, fontWeight: 600, cursor: 'pointer' }}>Hủy</button>
+                <button onClick={handleSave} style={{ flex: 1, padding: '12px', borderRadius: 10, border: 'none', background: 'var(--z-primary)', color: 'white', fontSize: 15, fontWeight: 600, cursor: 'pointer' }}>
+                  {isEdit ? 'Lưu thay đổi' : 'Tạo nhắc hẹn'}
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* MODAL TẮT THÔNG BÁO */}
       {showMuteModal && (
