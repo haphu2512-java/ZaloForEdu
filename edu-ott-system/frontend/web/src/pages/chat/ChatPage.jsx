@@ -355,9 +355,32 @@ export default function ChatPage() {
         socket.emit("message_delivered", { messageId: latestMessage._id });
         socket.emit("message_seen", { messageId: latestMessage._id });
       } else if (!isMyMessage) {
-        const senderName = latestMessage?.senderId?.username || 'Ai đó';
+        const senderObj = latestMessage?.senderId;
+        const senderName = senderObj?.username || senderObj?.fullName || 'Ai đó';
         const shortContent = latestMessage?.content || '[Hình ảnh/File đính kèm]';
-        toast.success(`💬 ${senderName}: ${shortContent}`, { position: "top-right", duration: 3000 });
+        const avatarSrc = senderObj?.avatarUrl || senderObj?.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(senderName)}&background=random`;
+        toast.custom((t) => (
+          <div
+            onClick={() => toast.dismiss(t.id)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 12,
+              background: 'var(--z-bg-sidebar)',
+              color: 'var(--z-text-primary)',
+              padding: '12px 16px', borderRadius: 10,
+              boxShadow: '0 6px 24px rgba(0,0,0,0.18)',
+              border: '1px solid var(--z-border)',
+              cursor: 'pointer', minWidth: 270, maxWidth: 340,
+              opacity: t.visible ? 1 : 0,
+              transition: 'opacity 0.3s ease',
+            }}
+          >
+            <img src={avatarSrc} alt="" style={{ width: 40, height: 40, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{senderName}</div>
+              <div style={{ fontSize: 12, color: 'var(--z-text-secondary)', marginTop: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{shortContent}</div>
+            </div>
+          </div>
+        ), { position: 'bottom-right', duration: 4000, id: `notif_${latestMessage?._id}` });
       }
 
       setConversations(prevConvs => {

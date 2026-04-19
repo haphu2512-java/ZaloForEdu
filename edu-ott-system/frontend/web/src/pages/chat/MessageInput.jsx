@@ -7,6 +7,7 @@ export const MessageInput = ({ theme, placeholder, onSend, onSendLike, onUploadF
   const [showEmoji, setShowEmoji] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [showRecorder, setShowRecorder] = useState(false);
+  const inputRef = useRef(null); // Direct input ref for force-clear
 
   // Refs quản lý input ẩn cho file/hình ảnh
   const imageRef = useRef(null);
@@ -30,14 +31,17 @@ export const MessageInput = ({ theme, placeholder, onSend, onSendLike, onUploadF
     if (e) e.preventDefault();
     if (!text.trim() || isSending) return;
     const textToSend = text.trim();
-    setText('');          // Xóa ngay lập tức để tránh dính chữ
+    // Force clear immediately - both state AND DOM value
+    setText('');
+    if (inputRef.current) inputRef.current.value = '';
     setShowEmoji(false);
     setIsSending(true);
     try {
       await onSend(textToSend);
     } catch (err) {
-      // Nếu gửi thất bại, khôi phục lại text
+      // Only restore text if truly failed
       setText(textToSend);
+      if (inputRef.current) inputRef.current.value = textToSend;
     } finally {
       setIsSending(false);
     }
@@ -131,6 +135,7 @@ export const MessageInput = ({ theme, placeholder, onSend, onSendLike, onUploadF
         <div className="mdc-input-row">
           <div className="mdc-input-wrap">
             <input 
+              ref={inputRef}
               className="mdc-input"
               placeholder={placeholder} 
               value={text}
