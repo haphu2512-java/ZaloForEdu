@@ -46,6 +46,8 @@ export const ChatRightPanel = ({
   handleDeleteReminder,
   joinRequests = [],
   handleProcessJoinRequest,
+  pendingEditReminder,
+  onPendingEditConsumed,
 }) => {
   const { t } = useLanguage();
 
@@ -64,6 +66,14 @@ export const ChatRightPanel = ({
   const [editRemTime, setEditRemTime] = useState('');
   const [inviteLink, setInviteLink] = useState('');
   const [inviteCode, setInviteCode] = useState('');
+
+  useEffect(() => {
+    if (!pendingEditReminder) return;
+    setEditingReminder(pendingEditReminder);
+    setEditRemTitle(pendingEditReminder.title);
+    setEditRemTime(new Date(pendingEditReminder.remindAt).toISOString().slice(0, 16));
+    onPendingEditConsumed?.();
+  }, [pendingEditReminder]);
 
   useEffect(() => {
     if (!activeConversation || activeConversation.type !== 'group') return;

@@ -1,9 +1,18 @@
 const Reminder = require('../models/Reminder');
 const Conversation = require('../models/Conversation');
+const Message = require('../models/Message');
 const asyncHandler = require('../utils/asyncHandler');
 const ApiError = require('../utils/apiError');
 const { successResponse } = require('../utils/apiResponse');
 const socketService = require('../services/socketService');
+
+const createSysReminderMsg = async (conversationId, senderId, content, reminderId, senderInfo) => {
+  const msg = await Message.create({ conversationId, senderId, content, type: 'system_reminder', reminderId });
+  await socketService.emitConversationUpdated(conversationId.toString(), {
+    conversationId: conversationId.toString(),
+    latestMessage: { ...msg.toObject(), senderId: senderInfo },
+  });
+};
 
 const toStr = (id) => id?.toString();
 
@@ -42,6 +51,9 @@ const createReminder = asyncHandler(async (req, res) => {
   await reminder.populate('participants', 'username avatarUrl');
 
   socketService.emitToConversation(conversationId.toString(), 'reminder_created', reminder);
+
+  const senderInfo = { _id: req.user._id, username: req.user.username, avatarUrl: req.user.avatarUrl };
+  await createSysReminderMsg(conversationId, req.user._id, `${req.user.username} đã tạo nhắc hẹn "${title}"`, reminder._id, senderInfo);
 
   return successResponse(res, reminder, 'Reminder created', 201);
 });
@@ -139,8 +151,12 @@ const joinReminder = asyncHandler(async (req, res) => {
   await reminder.save();
 
   await reminder.populate('participants', 'username avatarUrl');
+  await reminder.populate('createdBy', 'username avatarUrl');
 
   socketService.emitToConversation(reminder.conversationId.toString(), 'reminder_updated', reminder);
+
+  const senderInfoJoin = { _id: req.user._id, username: req.user.username, avatarUrl: req.user.avatarUrl };
+  await createSysReminderMsg(reminder.conversationId, req.user._id, `${req.user.username} đã tham gia nhắc hẹn "${reminder.title}"`, reminder._id, senderInfoJoin);
 
   return successResponse(res, reminder, 'Joined reminder');
 });
@@ -163,8 +179,12 @@ const declineReminder = asyncHandler(async (req, res) => {
   await reminder.save();
 
   await reminder.populate('declinedBy', 'username avatarUrl');
+  await reminder.populate('createdBy', 'username avatarUrl');
 
   socketService.emitToConversation(reminder.conversationId.toString(), 'reminder_updated', reminder);
+
+  const senderInfoDecline = { _id: req.user._id, username: req.user.username, avatarUrl: req.user.avatarUrl };
+  await createSysReminderMsg(reminder.conversationId, req.user._id, `${req.user.username} đã từ chối nhắc hẹn "${reminder.title}"`, reminder._id, senderInfoDecline);
 
   return successResponse(res, reminder, 'Declined reminder');
 });

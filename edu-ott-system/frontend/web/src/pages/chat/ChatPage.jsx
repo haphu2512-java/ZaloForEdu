@@ -169,10 +169,15 @@ export default function ChatPage() {
     }
   };
 
+  const [reminderDetailId, setReminderDetailId] = useState(null);
+  const [pendingEditReminder, setPendingEditReminder] = useState(null);
+
   const handleJoinReminder = async (reminderId) => {
     try {
       const res = await conversationService.joinReminder(reminderId);
-      setReminders(prev => prev.map(r => r._id === reminderId ? (res.data || r) : r));
+      const updated = res.data;
+      setReminders(prev => prev.map(r => r._id === reminderId ? (updated || r) : r));
+      // System message created by backend, arrives via conversation_updated socket
     } catch (err) {
       toast.error("Lỗi xác nhận tham gia");
     }
@@ -181,7 +186,9 @@ export default function ChatPage() {
   const handleDeclineReminder = async (reminderId) => {
     try {
       const res = await conversationService.declineReminder(reminderId);
-      setReminders(prev => prev.map(r => r._id === reminderId ? (res.data || r) : r));
+      const updated = res.data;
+      setReminders(prev => prev.map(r => r._id === reminderId ? (updated || r) : r));
+      // System message created by backend, arrives via conversation_updated socket
     } catch (err) {
       toast.error("Lỗi từ chối nhắc hẹn");
     }
@@ -440,7 +447,7 @@ export default function ChatPage() {
 
         socketService.socket?.emit("message_delivered", { messageId: latestMessage._id });
         socketService.socket?.emit("message_seen", { messageId: latestMessage._id });
-      } else if (!isMyMessage) {
+      } else if (!isMyMessage && latestMessage?.type !== 'system' && latestMessage?.type !== 'system_reminder') {
         const senderObj = latestMessage?.senderId;
         const senderName = senderObj?.username || senderObj?.fullName || 'Ai đó';
         const shortContent = latestMessage?.content || '[Hình ảnh/File đính kèm]';
@@ -515,6 +522,7 @@ export default function ChatPage() {
         if (prev.some(r => r._id === reminder._id)) return prev;
         return [...prev, reminder].sort((a, b) => new Date(a.remindAt) - new Date(b.remindAt));
       });
+      // System message is persisted by backend and arrives via conversation_updated
     };
 
     const handleReminderUpdated = (reminder) => {
@@ -536,7 +544,7 @@ export default function ChatPage() {
       toast(`Yêu cầu tham gia nhóm "${conversationName}" mới`, { icon: '👥' });
     };
 
-    const handleJoinRequestProcessed = ({ conversationName, action }) => {
+const handleJoinRequestProcessed = ({ conversationName, action }) => {
       if (action === 'approve') {
         toast.success(`Yêu cầu tham gia "${conversationName}" đã được chấp thuận!`);
         fetchConversationsData();
@@ -994,6 +1002,95 @@ export default function ChatPage() {
         onForward={executeForward}
       />
 
+      {/* ── REMINDER DETAIL MODAL ── */}
+      {reminderDetailId && (() => {
+        const rem = reminders.find(r => r._id === reminderDetailId);
+        if (!rem) return null;
+        const remDate = new Date(rem.remindAt);
+        const dayNames = ['Chủ Nhật', 'Thứ Hai', 'Thứ Ba', 'Thứ Tư', 'Thứ Năm', 'Thứ Sáu', 'Thứ Bảy'];
+        const hasJoined = (rem.participants || []).some(p => String(p._id || p) === String(userId));
+        const hasDeclined = (rem.declinedBy || []).some(p => String(p._id || p) === String(userId));
+        const participantCount = (rem.participants || []).length;
+        const declinedCount = (rem.declinedBy || []).length;
+        return (
+          <div style={{ position: 'fixed', inset: 0, zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.45)' }}
+            onClick={() => setReminderDetailId(null)}>
+            <div style={{ background: 'var(--z-bg-sidebar)', borderRadius: 16, width: 440, maxWidth: '94vw', boxShadow: '0 8px 40px rgba(0,0,0,0.25)', overflow: 'hidden' }}
+              onClick={e => e.stopPropagation()}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: '1px solid var(--z-border)' }}>
+                <span style={{ fontSize: 17, fontWeight: 700, color: 'var(--z-text-primary)' }}>Chi tiết nhắc hẹn</span>
+                <button onClick={() => setReminderDetailId(null)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--z-text-secondary)', fontSize: 18, lineHeight: 1, padding: 4 }}>✕</button>
+              </div>
+              <div style={{ padding: '20px' }}>
+                <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start', marginBottom: 16 }}>
+                  <div style={{ background: 'var(--z-primary)', borderRadius: 10, padding: '10px 12px', textAlign: 'center', minWidth: 64, flexShrink: 0 }}>
+                    <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.8)', textTransform: 'uppercase' }}>{dayNames[remDate.getDay()]}</div>
+                    <div style={{ fontSize: 28, fontWeight: 800, color: 'white', lineHeight: 1.1 }}>{remDate.getDate()}</div>
+                    <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.8)' }}>Tháng {remDate.getMonth() + 1}</div>
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--z-text-primary)', marginBottom: 6 }}>{rem.title}</div>
+                    <div style={{ fontSize: 13, color: 'var(--z-text-secondary)', display: 'flex', alignItems: 'center', gap: 4 }}>
+                      🕐 {remDate.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
+                    </div>
+                    <div style={{ fontSize: 13, color: 'var(--z-text-secondary)', marginTop: 4 }}>
+                      Tạo bởi: <strong>{rem.createdBy?.username || 'Ai đó'}</strong>
+                    </div>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: 16, marginBottom: 12, fontSize: 13 }}>
+                  <span style={{ color: 'var(--z-primary)', fontWeight: 600 }}>{participantCount} người tham gia</span>
+                  {declinedCount > 0 && <span style={{ color: '#ef4444', fontWeight: 600 }}>{declinedCount} không tham gia</span>}
+                </div>
+                {(rem.participants || []).length > 0 && (
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
+                    {(rem.participants || []).map((p, i) => (
+                      <div key={i} title={p.username || ''} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+                        <img src={p.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(p.username || 'U')}&background=0068ff&color=fff&size=40`}
+                          style={{ width: 36, height: 36, borderRadius: '50%', objectFit: 'cover' }} alt="" />
+                        <span style={{ fontSize: 10, color: 'var(--z-text-muted)', maxWidth: 44, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.username}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <div style={{ padding: '12px', background: 'var(--z-bg-main)', borderRadius: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  {hasJoined ? (
+                    <>
+                      <span style={{ fontSize: 13, color: 'var(--z-primary)' }}>✓ Bạn xác nhận: Tham gia</span>
+                      <button onClick={() => { handleDeclineReminder(rem._id); setReminderDetailId(null); }} style={{ border: 'none', background: 'none', color: 'var(--z-text-secondary)', fontSize: 12, cursor: 'pointer', textDecoration: 'underline' }}>Thay đổi</button>
+                    </>
+                  ) : hasDeclined ? (
+                    <>
+                      <span style={{ fontSize: 13, color: '#ef4444' }}>✗ Bạn xác nhận: Không tham gia</span>
+                      <button onClick={() => { handleJoinReminder(rem._id); setReminderDetailId(null); }} style={{ border: 'none', background: 'none', color: 'var(--z-text-secondary)', fontSize: 12, cursor: 'pointer', textDecoration: 'underline' }}>Thay đổi</button>
+                    </>
+                  ) : (
+                    <div style={{ display: 'flex', gap: 8, width: '100%' }}>
+                      <button onClick={() => { handleJoinReminder(rem._id); setReminderDetailId(null); }} style={{ flex: 1, padding: '8px', borderRadius: 8, border: 'none', background: 'var(--z-primary)', color: 'white', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Tham gia</button>
+                      <button onClick={() => { handleDeclineReminder(rem._id); setReminderDetailId(null); }} style={{ flex: 1, padding: '8px', borderRadius: 8, border: '1px solid var(--z-border)', background: 'transparent', color: 'var(--z-text-secondary)', fontSize: 13, cursor: 'pointer' }}>Từ chối</button>
+                    </div>
+                  )}
+                </div>
+              </div>
+              <div style={{ padding: '12px 20px', borderTop: '1px solid var(--z-border)', display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+                <button onClick={() => { setPendingEditReminder(rem); setReminderDetailId(null); }}
+                  style={{ padding: '8px 20px', borderRadius: 8, border: '1px solid var(--z-border)', background: 'transparent', color: 'var(--z-text-primary)', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
+                  Chỉnh sửa
+                </button>
+                <button onClick={() => { if (window.confirm(`Hủy nhắc hẹn "${rem.title}"?`)) { handleDeleteReminder(rem._id); setReminderDetailId(null); } }}
+                  style={{ padding: '8px 20px', borderRadius: 8, border: 'none', background: '#ffe4e6', color: '#e11d48', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
+                  Hủy nhắc hẹn
+                </button>
+                <button onClick={() => setReminderDetailId(null)}
+                  style={{ padding: '8px 20px', borderRadius: 8, border: 'none', background: 'var(--z-primary)', color: 'white', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
+                  Đóng
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       <AddFriendModal
         isOpen={showAddFriendModal}
         onClose={() => setShowAddFriendModal(false)}
@@ -1237,7 +1334,7 @@ export default function ChatPage() {
                         <React.Fragment key={`rem-${rem._id}`}>
                           {showDate && <div className="msg-date-divider"><span>{formatDateDivider(rem.createdAt)}</span></div>}
                           <div style={{ display: 'flex', justifyContent: 'center', margin: '8px 16px' }}>
-                            <div style={{ background: 'var(--z-bg-sidebar)', border: '1px solid var(--z-border)', borderRadius: 12, padding: '12px 16px', maxWidth: 320, width: '100%', boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
+                            <div style={{ background: 'var(--z-bg-sidebar)', border: '1px solid var(--z-border)', borderRadius: 12, padding: '12px 16px', maxWidth: 320, width: '100%', boxShadow: '0 1px 4px rgba(0,0,0,0.08)', cursor: 'pointer' }} onClick={() => setReminderDetailId(rem._id)}>
                               <div style={{ fontSize: 12, color: 'var(--z-text-secondary)', marginBottom: 8 }}>
                                 <strong>{rem.createdBy?.username || 'Ai đó'}</strong> đã tạo nhắc hẹn mới
                               </div>
@@ -1257,7 +1354,7 @@ export default function ChatPage() {
                                   </div>
                                 </div>
                               </div>
-                              <div style={{ marginTop: 10, borderTop: '1px solid var(--z-border)', paddingTop: 8 }}>
+                              <div style={{ marginTop: 10, borderTop: '1px solid var(--z-border)', paddingTop: 8 }} onClick={e => e.stopPropagation()}>
                                 {hasJoined ? (
                                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13 }}>
                                     <span style={{ color: 'var(--z-primary)' }}>✓ Bạn xác nhận: Tham gia</span>
@@ -1287,6 +1384,15 @@ export default function ChatPage() {
                         {item.type === 'system' ? (
                           <div style={{ display: 'flex', justifyContent: 'center', margin: '4px 0' }}>
                             <span style={{ fontSize: 12, color: 'var(--z-text-muted)', background: 'var(--z-bg-main)', padding: '3px 10px', borderRadius: 10 }}>{item.content}</span>
+                          </div>
+                        ) : item.type === 'system_reminder' ? (
+                          <div style={{ display: 'flex', justifyContent: 'center', margin: '4px 0' }}>
+                            <span style={{ fontSize: 12, color: 'var(--z-text-muted)', background: 'var(--z-bg-main)', padding: '4px 12px', borderRadius: 10, display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap', justifyContent: 'center' }}>
+                              🔔 {item.content}
+                              {(item.reminderId || item.reminderId?._id) && (
+                                <span style={{ color: 'var(--z-primary)', cursor: 'pointer', fontWeight: 600, marginLeft: 2 }} onClick={() => setReminderDetailId(String(item.reminderId?._id || item.reminderId))}>Xem</span>
+                              )}
+                            </span>
                           </div>
                         ) : (
                           <MessageBubble
@@ -1372,6 +1478,8 @@ export default function ChatPage() {
           handleDeleteReminder={handleDeleteReminder}
           joinRequests={joinRequests}
           handleProcessJoinRequest={handleProcessJoinRequest}
+          pendingEditReminder={pendingEditReminder}
+          onPendingEditConsumed={() => setPendingEditReminder(null)}
         />
       )}
 

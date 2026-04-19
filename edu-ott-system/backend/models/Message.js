@@ -54,12 +54,17 @@ const messageSchema = new mongoose.Schema(
     },
     type: {
       type: String,
-      enum: ['text', 'poll', 'system'],
+      enum: ['text', 'poll', 'system', 'system_reminder'],
       default: 'text',
     },
     pollId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Poll',
+      default: null,
+    },
+    reminderId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Reminder',
       default: null,
     },
     deletedBy: [
