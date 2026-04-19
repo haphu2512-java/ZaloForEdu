@@ -13,7 +13,7 @@ class SocketService {
   }
 
   connect() {
-    if (this.socket?.connected) return;
+    if (this.socket) return; // Đã có socket (dù đang connecting hay connected)
     const token = localStorage.getItem("token");
     if (!token) return;
 

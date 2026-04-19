@@ -1,13 +1,12 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import axios from "axios";
-import io from "socket.io-client";
 import { useParams, useNavigate } from "react-router-dom";
-import { FaSearch, FaBell, FaThumbtack, FaUsers, FaCloud, FaSpinner, FaLink, FaTrashAlt, FaSignOutAlt, FaUserSecret, FaArrowLeft, FaUserPlus, FaCheck, FaTimes } from "react-icons/fa";
+import { FaSearch, FaUsers, FaCloud, FaSpinner, FaUserSecret, FaArrowLeft, FaUserPlus, FaCheck, FaTimes } from "react-icons/fa";
 import toast from "react-hot-toast";
 
 import { uploadFile } from "../../services/mediaService";
 import { useFriendStore } from "../../store/friendStore";
-import { socketService } from "../../services/socketService"; // Đã import dịch vụ socket dùng chung
+import { socketService } from "../../services/socketService";
 import { MessageBubble } from "./MessageBubble";
 import { ShareMessageModal } from "./Modals/ShareMessageModal";
 import AddFriendModal from "./Modals/AddFriendModal";
@@ -17,16 +16,12 @@ import { MessageInput } from "./MessageInput";
 import { ChatRightPanel } from "./ChatRightPanel";
 import { useTheme } from '../../contexts/ThemeContext';
 import { useLanguage } from '../../contexts/LanguageContext';
+import { getCategory } from './chatUtils';
 import "./ChatPage.css";
 import { conversationService } from "../../services/conversationService";
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api/v1";
 const API_ORIGIN = API_BASE_URL.replace(/\/api\/v1\/?$/, "");
-
-// FIX TẠI ĐÂY: Dùng socket chung của app, tránh việc khởi tạo 2 socket
-const socket = socketService?.socket || io(API_ORIGIN, { autoConnect: false, transports: ['websocket'] });
-
-import { getExt, getCategory, getFileColor, formatBytes } from './chatUtils';
 
 const formatChatTimestamp = (dateString) => {
   const d = new Date(dateString);
@@ -44,13 +39,33 @@ const formatChatTimestamp = (dateString) => {
   return `${timeStr} ngày ${dateStr}`;
 };
 
+const DIVIDER_GAP_MS = 60 * 60 * 1000; // 1 tiếng
+
 const shouldShowDateDivider = (currentMsg, prevMsg) => {
   if (!prevMsg) return true;
-  const currTime = new Date(currentMsg.createdAt).getTime();
-  const prevTime = new Date(prevMsg.createdAt).getTime();
-  const diffHours = (currTime - prevTime) / (1000 * 60 * 60);
-  if (diffHours >= 6) return true;
-  return new Date(currentMsg.createdAt).toDateString() !== new Date(prevMsg.createdAt).toDateString();
+  const curr = new Date(currentMsg.createdAt);
+  const prev = new Date(prevMsg.createdAt);
+  if (curr.toDateString() !== prev.toDateString()) return true;
+  return curr - prev >= DIVIDER_GAP_MS;
+};
+
+const formatDateDivider = (dateString) => {
+  const d = new Date(dateString);
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const msgDay = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const diffDays = Math.round((today - msgDay) / (1000 * 60 * 60 * 24));
+  const timeStr = d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', hour12: false });
+  let label;
+  if (diffDays === 0) label = 'Hôm nay';
+  else if (diffDays === 1) label = 'Hôm qua';
+  else if (diffDays < 7) {
+    const days = ['Chủ nhật', 'Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7'];
+    label = days[d.getDay()];
+  } else {
+    label = d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  }
+  return `${timeStr} ${label}`;
 };
 
 function UploadBubble({ name, percent }) {
@@ -141,6 +156,7 @@ export default function ChatPage() {
   const pageRef = useRef(null);
   const messagesEndRef = useRef(null);
   const activeConvIdRef = useRef(null);
+  const activeConversationRef = useRef(null);
 
   const { friends, fetchFriends, fetchOutgoingRequests, fetchIncomingRequests } = useFriendStore();
 
@@ -290,6 +306,7 @@ export default function ChatPage() {
   }, [roomId, mergedConversations, activeConversation]);
   useEffect(() => {
     activeConvIdRef.current = activeConversation?._id;
+    activeConversationRef.current = activeConversation;
   }, [activeConversation]);
 
   const fetchConversationsData = useCallback(async () => {
@@ -305,19 +322,28 @@ export default function ChatPage() {
   // ==================== KHỞI TẠO SOCKET ====================
   useEffect(() => {
     if (!token) return;
-    // FIX TẠI ĐÂY: Chỉ connect khi socket thực sự chưa được bật để tránh đá mất socketService
-    if (!socket.connected) {
-      socket.auth = { token };
-      socket.connect();
-    }
-
+    socketService.connect();
     fetchConversationsData();
 
-    socket.on("conversation_updated", (payload) => {
+    const handleConversationUpdated = (payload) => {
       const { conversationId, latestMessage } = payload;
       const convIdStr = String(conversationId);
-      const activeIdStr = String(activeConvIdRef.current);
+      let activeIdStr = String(activeConvIdRef.current);
       const isMyMessage = String(latestMessage?.senderId?._id || latestMessage?.senderId) === String(userId);
+
+      // FIX: Phát hiện khi đang mở mock conversation mà nhận được update của conversation thật tương ứng
+      const activeCon = activeConversationRef.current;
+      if (activeCon?.isMock && convIdStr !== activeIdStr) {
+        const mockFriendId = String(activeCon._id).replace('mock_', '');
+        const senderId = String(latestMessage?.senderId?._id || latestMessage?.senderId || '');
+        if (senderId === mockFriendId || isMyMessage) {
+          // Conversation thật đã được tạo - chuyển sang conversation thật
+          const realConv = { ...activeCon, _id: convIdStr, isMock: false, latestMessage };
+          setActiveConversation(realConv);
+          activeConvIdRef.current = convIdStr;
+          activeIdStr = convIdStr;
+        }
+      }
 
       if (convIdStr === activeIdStr) {
         const msgIdStr = String(latestMessage?._id || latestMessage?.id);
@@ -331,29 +357,23 @@ export default function ChatPage() {
         };
 
         setMessages(prev => {
-          // 1. Tin nhắn thật đã có trong list rồi (cả từ API lẫn từ socket cũ) → bỏ qua
           if (prev.some(m => !String(m._id || m.id).startsWith('temp-') && String(m._id || m.id) === msgIdStr)) {
             return prev;
           }
-
-          // 2. Tìm tin nhắn tạm (Optimistic) để thay thế - dù isMyMessage đúng hay sai
           const tempIdx = prev.findIndex(m =>
             String(m._id || m.id).startsWith('temp-') &&
             (m.content || '').trim() === (normalizedMsg.content || '').trim()
           );
-
           if (tempIdx !== -1) {
             const arr = [...prev];
             arr[tempIdx] = normalizedMsg;
             return arr;
           }
-
-          // 3. Tin nhắn mới từ người khác, chưa có → thêm vào
           return [...prev, normalizedMsg];
         });
 
-        socket.emit("message_delivered", { messageId: latestMessage._id });
-        socket.emit("message_seen", { messageId: latestMessage._id });
+        socketService.socket?.emit("message_delivered", { messageId: latestMessage._id });
+        socketService.socket?.emit("message_seen", { messageId: latestMessage._id });
       } else if (!isMyMessage) {
         const senderObj = latestMessage?.senderId;
         const senderName = senderObj?.username || senderObj?.fullName || 'Ai đó';
@@ -376,7 +396,12 @@ export default function ChatPage() {
 
       setConversations(prevConvs => {
         const index = prevConvs.findIndex(c => String(c._id) === convIdStr);
-        if (index === -1) { fetchConversationsData(); return prevConvs; }
+        if (index === -1) {
+          fetchConversationsData();
+          // Xóa mock conversation nếu đang có (đã được tạo thật)
+          const mockId = `mock_${String(latestMessage?.senderId?._id || latestMessage?.senderId || '')}`;
+          return prevConvs.filter(c => c._id !== mockId);
+        }
 
         const newConvs = [...prevConvs];
         const target = { ...newConvs[index], latestMessage };
@@ -390,47 +415,17 @@ export default function ChatPage() {
         newConvs.splice(index, 1);
         return [target, ...newConvs];
       });
-    });
+    };
 
-    socket.on("conversation_settings_updated", (newSettings) => {
-      setActiveConversation(prev => {
-        if (!prev) return prev;
-        return { ...prev, settings: newSettings };
-      });
-      setConversations(prev => prev.map(c => {
-        if (activeConversation && c._id === activeConversation._id) return { ...c, settings: newSettings };
-        return c;
-      }));
-    });
+    const handleSettingsUpdated = (newSettings) => {
+      setActiveConversation(prev => prev ? { ...prev, settings: newSettings } : prev);
+      setConversations(prev => prev.map(c =>
+        activeConversationRef.current && c._id === activeConversationRef.current._id
+          ? { ...c, settings: newSettings } : c
+      ));
+    };
 
-    socket.on("message_recalled", ({ messageId }) => {
-      console.log('[recall received]', messageId);
-      setMessages(prev => prev.map(m => String(m._id) === String(messageId) ? { ...m, isRecalled: true, content: "", attachments: [], mediaIds: [] } : m));
-      setConversations(prev => prev.map(c => {
-        if (c.latestMessage && String(c.latestMessage._id) === String(messageId)) {
-          return { ...c, latestMessage: { ...c.latestMessage, isRecalled: true, content: "" } };
-        }
-        return c;
-      }));
-    });
-
-    socket.on("message_reacted", ({ messageId, reactions }) => {
-      setMessages(prev => prev.map(m => String(m._id) === String(messageId) ? { ...m, reactions } : m));
-    });
-
-    // Bỏ tắt cái toast.error ở connect_error đi để khỏi spam UI 
-    // Refresh lời mời kết bạn khi nhận notification mới
-    socket.on("new_notification", (notif) => {
-      if (notif?.type === 'friend_request') fetchIncomingRequests();
-      if (notif?.type === 'friend_accepted') { fetchFriends(); fetchOutgoingRequests(); }
-    });
-    socket.on("connect_error", (err) => {
-      console.error("Socket lỗi kết nối:", err.message);
-    });
-
-    // Lắng nghe message_recalled từ socketService (user room) để đảm bảo nhận được
-    const handleRecalledFromService = ({ messageId }) => {
-      console.log('[recall received via socketService]', messageId);
+    const handleMessageRecalled = ({ messageId }) => {
       setMessages(prev => prev.map(m => String(m._id) === String(messageId) ? { ...m, isRecalled: true, content: "", attachments: [], mediaIds: [] } : m));
       setConversations(prev => prev.map(c => {
         if (c.latestMessage && String(c.latestMessage._id) === String(messageId)) {
@@ -439,15 +434,28 @@ export default function ChatPage() {
         return c;
       }));
     };
-    socketService.on('message_recalled', handleRecalledFromService);
+
+    const handleMessageReacted = ({ messageId, reactions }) => {
+      setMessages(prev => prev.map(m => String(m._id) === String(messageId) ? { ...m, reactions } : m));
+    };
+
+    const handleNewNotification = (notif) => {
+      if (notif?.type === 'friend_request') fetchIncomingRequests();
+      if (notif?.type === 'friend_accepted') { fetchFriends(); fetchOutgoingRequests(); }
+    };
+
+    socketService.on("conversation_updated", handleConversationUpdated);
+    socketService.on("conversation_settings_updated", handleSettingsUpdated);
+    socketService.on("message_recalled", handleMessageRecalled);
+    socketService.on("message_reacted", handleMessageReacted);
+    socketService.on("new_notification", handleNewNotification);
+
     return () => {
-      socket.off("conversation_updated");
-      socket.off("message_recalled");
-      socket.off("conversation_settings_updated");
-      socket.off("message_reacted");
-      socket.off("new_notification");
-      socket.off("connect_error");
-      socketService.off('message_recalled', handleRecalledFromService);
+      socketService.off("conversation_updated", handleConversationUpdated);
+      socketService.off("conversation_settings_updated", handleSettingsUpdated);
+      socketService.off("message_recalled", handleMessageRecalled);
+      socketService.off("message_reacted", handleMessageReacted);
+      socketService.off("new_notification", handleNewNotification);
     };
   }, [token, userId, fetchConversationsData]);
 
@@ -488,7 +496,8 @@ export default function ChatPage() {
     };
 
     fetchMessages();
-    socket.emit("join_conversation", { conversationId: activeConversation._id });
+    // socket.io sẽ buffer emit này nếu chưa connect, và gửi khi connected
+    socketService.socket?.emit("join_conversation", { conversationId: activeConversation._id });
 
   }, [activeConversation?._id, token]);
 
@@ -536,7 +545,8 @@ export default function ChatPage() {
 
     setActiveConversation(realConv);
     setConversations(prev => [realConv, ...prev.filter(c => c._id !== activeConversation._id)]);
-    socket.emit("join_conversation", { conversationId: currentConvId });
+    socketService.socket?.emit("join_conversation", { conversationId: currentConvId });
+    navigate('/chat/' + currentConvId);
     return currentConvId;
   };
 
@@ -734,6 +744,11 @@ export default function ChatPage() {
     if (!activeConversation) return;
     if (window.confirm(`Bạn có chắc chắn muốn xóa cuộc trò chuyện với ${getConversationName(activeConversation)} không?`)) {
       try {
+        if (activeConversation.isMock) {
+          setActiveConversation(null);
+          navigate('/chat');
+          return;
+        }
         // Tạm thời gọi hàm Archive để làm nó biến mất vì BE chưa có API Delete thật
         await conversationService.archiveConversation(activeConversation._id);
         toast.success("Đã xóa cuộc trò chuyện");
@@ -952,7 +967,7 @@ export default function ChatPage() {
             if (!convName) return null;
             const unread = conv.unreadCount || 0;
             return (
-              <div key={conv._id} className={`chat-list-item ${isActive ? 'active' : ''}`} onClick={() => setActiveConversation(conv)}>
+              <div key={conv._id} className={`chat-list-item ${isActive ? 'active' : ''}`} onClick={() => { setActiveConversation(conv); navigate('/chat/' + conv._id); }}>
                 <img className="cli-avatar" src={getConversationAvatar(conv)} alt="avt" />
                 <div className="cli-info">
                   <div className="cli-top">
@@ -1096,7 +1111,7 @@ export default function ChatPage() {
                   const isMe = getSenderIdStr(msg) === String(userId);
                   return (
                     <React.Fragment key={msg._id}>
-                      {showDate && <div className="msg-date">{formatChatTimestamp(msg.createdAt)}</div>}
+                      {showDate && <div className="msg-date-divider"><span>{formatDateDivider(msg.createdAt)}</span></div>}
                       <MessageBubble
                         message={msg}
                         isMe={isMe}
@@ -1205,7 +1220,7 @@ export default function ChatPage() {
                   <div
                     key={conv._id}
                     style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', cursor: 'pointer', borderBottom: '1px solid var(--z-border)' }}
-                    onClick={() => { setActiveConversation(conv); setShowStrangerPanel(false); }}
+                    onClick={() => { setActiveConversation(conv); navigate('/chat/' + conv._id); setShowStrangerPanel(false); }}
                     onMouseEnter={e => e.currentTarget.style.background = 'var(--z-bg-hover)'}
                     onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                   >
