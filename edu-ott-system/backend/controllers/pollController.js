@@ -19,6 +19,16 @@ const ensureAdminOrOwner = (conversation, userId) => {
   if (!isOwner && !isAdmin) throw new ApiError(403, 'FORBIDDEN', 'Only owner/admin can perform this action');
 };
 
+const ensureCanCreatePolls = (conversation, userId) => {
+  const isOwner = toStr(conversation.ownerId || conversation.createdBy) === toStr(userId);
+  const isAdmin = (conversation.adminIds || []).some((a) => toStr(a) === toStr(userId));
+  if (!isOwner && !isAdmin) {
+    if (conversation.settings?.canMembersCreatePolls === false) {
+      throw new ApiError(403, 'FORBIDDEN', 'Only admin/owner can create polls in this group');
+    }
+  }
+};
+
 /**
  * POST /api/v1/polls
  * Tạo bình chọn mới trong nhóm
@@ -31,6 +41,7 @@ const createPoll = asyncHandler(async (req, res) => {
   if (!conversation) throw new ApiError(404, 'CONVERSATION_NOT_FOUND', 'Conversation not found');
   if (conversation.type !== 'group') throw new ApiError(400, 'INVALID_CONVERSATION_TYPE', 'Polls are only for group conversations');
   ensureGroupMember(conversation, req.user._id);
+  ensureCanCreatePolls(conversation, req.user._id);
 
   if (!options || options.length < 2) {
     throw new ApiError(400, 'INVALID_OPTIONS', 'Poll must have at least 2 options');

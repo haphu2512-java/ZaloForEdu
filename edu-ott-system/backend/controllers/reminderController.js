@@ -11,12 +11,23 @@ const ensureMember = (conversation, userId) => {
   if (!isMember) throw new ApiError(403, 'FORBIDDEN', 'You are not a member of this conversation');
 };
 
+const ensureCanCreateReminders = (conversation, userId) => {
+  const isOwner = toStr(conversation.ownerId || conversation.createdBy) === toStr(userId);
+  const isAdmin = (conversation.adminIds || []).some((a) => toStr(a) === toStr(userId));
+  if (!isOwner && !isAdmin) {
+    if (conversation.settings?.canMembersCreateReminders === false) {
+      throw new ApiError(403, 'FORBIDDEN', 'Only admin/owner can create reminders in this group');
+    }
+  }
+};
+
 const createReminder = asyncHandler(async (req, res) => {
   const { conversationId, title, remindAt } = req.body;
 
   const conversation = await Conversation.findById(conversationId);
   if (!conversation) throw new ApiError(404, 'CONVERSATION_NOT_FOUND', 'Conversation not found');
   ensureMember(conversation, req.user._id);
+  ensureCanCreateReminders(conversation, req.user._id);
 
   const reminder = await Reminder.create({
     conversationId,

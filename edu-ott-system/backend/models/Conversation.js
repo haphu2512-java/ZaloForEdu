@@ -74,6 +74,11 @@ const conversationSchema = new mongoose.Schema(
     // Feature 4: Join approval (Duyệt thành viên)
     settings: {
       isApprovalRequired: { type: Boolean, default: false },
+      canMembersUpdateInfo: { type: Boolean, default: true },
+      canMembersPin: { type: Boolean, default: true },
+      canMembersCreateReminders: { type: Boolean, default: true },
+      canMembersCreatePolls: { type: Boolean, default: true },
+      canMembersSendMessages: { type: Boolean, default: true },
     },
     // Feature 5: Invite link
     inviteCode: {

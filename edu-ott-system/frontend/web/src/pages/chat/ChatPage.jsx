@@ -378,6 +378,17 @@ export default function ChatPage() {
       });
     });
 
+    socket.on("conversation_settings_updated", (newSettings) => {
+      setActiveConversation(prev => {
+        if (!prev) return prev;
+        return { ...prev, settings: newSettings };
+      });
+      setConversations(prev => prev.map(c => {
+        if (activeConversation && c._id === activeConversation._id) return { ...c, settings: newSettings };
+        return c;
+      }));
+    });
+
     socket.on("message_recalled", ({ messageId }) => {
       console.log('[recall received]', messageId);
       setMessages(prev => prev.map(m => String(m._id) === String(messageId) ? { ...m, isRecalled: true, content: "", attachments: [], mediaIds: [] } : m));
@@ -418,6 +429,7 @@ export default function ChatPage() {
     return () => {
       socket.off("conversation_updated");
       socket.off("message_recalled");
+      socket.off("conversation_settings_updated");
       socket.off("message_reacted");
       socket.off("new_notification");
       socket.off("connect_error");
@@ -1091,14 +1103,36 @@ export default function ChatPage() {
             )}
           </div>
 
-          <MessageInput
-            key={activeConversation._id}
-            theme={appliedTheme}
-            placeholder={`Nhập @, tin nhắn tới ${getConversationName(activeConversation)}`}
-            onSend={handleSendText}
-            onSendLike={handleSendLike}
-            onUploadFiles={handleUploadFilesFromInput}
-          />
+          {(() => {
+            const isGroupConv = activeConversation?.type === 'group' || activeConversation?.roomModel === 'Group';
+            const isOwnerStr = activeConversation?.ownerId?._id || activeConversation?.ownerId || activeConversation?.createdBy;
+            const isOwner = isOwnerStr && String(isOwnerStr) === String(userId);
+            const isAdmin = activeConversation?.adminIds?.some(aid => String(aid._id || aid) === String(userId)) || isOwner;
+            const isPrivileged = isOwner || isAdmin;
+            const cannotSend = isGroupConv && !isPrivileged && activeConversation?.settings?.canMembersSendMessages === false;
+
+            if (cannotSend) {
+              return (
+                <div style={{ padding: '16px', background: 'var(--z-bg-main)', borderTop: '1px solid var(--z-border)', display: 'flex', alignItems: 'flex-start', color: 'var(--z-text-secondary)', fontSize: 13, gap: 12 }}>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, color: 'var(--z-primary)' }}><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+                  <div style={{ display: 'flex', flexDirection: 'row', gap: 4, flexWrap: 'wrap' }}>
+                    Chỉ trưởng/phó cộng đồng được gửi tin nhắn vào cộng đồng. <span style={{ color: 'var(--z-primary)', cursor: 'pointer' }}>Tìm hiểu thêm</span>
+                  </div>
+                </div>
+              );
+            }
+
+            return (
+              <MessageInput
+                key={activeConversation._id}
+                theme={appliedTheme}
+                placeholder={`Nhập @, tin nhắn tới ${getConversationName(activeConversation)}`}
+                onSend={handleSendText}
+                onSendLike={handleSendLike}
+                onUploadFiles={handleUploadFilesFromInput}
+              />
+            );
+          })()}
         </main>
       ) : (
         <main className="chat-main" style={{ alignItems: 'center', justifyItems: 'center', display: 'flex' }}>

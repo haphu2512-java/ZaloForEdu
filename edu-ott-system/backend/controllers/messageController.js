@@ -8,10 +8,24 @@ const ApiError = require('../utils/apiError');
 const { successResponse } = require('../utils/apiResponse');
 const socketService = require('../services/socketService');
 
+const toStr = (id) => id?.toString();
+
 const sendMessage = asyncHandler(async (req, res) => {
   const { conversationId, content, mediaIds, replyTo, forwardFrom } = req.body;
   if (!content && (!mediaIds || mediaIds.length === 0)) {
     throw new ApiError(400, 'INVALID_PAYLOAD', 'Message content or media is required');
+  }
+
+  const Conversation = require('../models/Conversation');
+  const conversation = await Conversation.findById(conversationId);
+  if (!conversation) throw new ApiError(404, 'CONVERSATION_NOT_FOUND', 'Conversation not found');
+
+  const isOwner = toStr(conversation.ownerId || conversation.createdBy) === toStr(req.user._id);
+  const isAdmin = (conversation.adminIds || []).some((a) => toStr(a) === toStr(req.user._id));
+  if (!isOwner && !isAdmin) {
+    if (conversation.settings?.canMembersSendMessages === false) {
+      throw new ApiError(403, 'FORBIDDEN', 'Only admin/owner can send messages in this group');
+    }
   }
 
   const message = await createMessage({
@@ -24,11 +38,10 @@ const sendMessage = asyncHandler(async (req, res) => {
   });
 
   // Set firstSenderId nếu chưa có (tin nhắn đầu tiên)
-  const Conversation = require('../models/Conversation');
-  await Conversation.findOneAndUpdate(
-    { _id: conversationId, firstSenderId: null },
-    { $set: { firstSenderId: req.user._id } }
-  );
+  if (!conversation.firstSenderId) {
+    conversation.firstSenderId = req.user._id;
+    await conversation.save();
+  }
 
   // Populate media để frontend hiển thị ngay
   await message.populate('mediaIds', 'fileName url size mimeType providerResourceType');

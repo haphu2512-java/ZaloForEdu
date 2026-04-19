@@ -382,6 +382,11 @@ router.get(
 // ==================== FEATURE 4: JOIN APPROVAL ====================
 const groupSettingsSchema = z.object({
   isApprovalRequired: z.boolean().optional(),
+  canMembersUpdateInfo: z.boolean().optional(),
+  canMembersPin: z.boolean().optional(),
+  canMembersCreateReminders: z.boolean().optional(),
+  canMembersCreatePolls: z.boolean().optional(),
+  canMembersSendMessages: z.boolean().optional(),
 });
 const joinRequestBodySchema = z.object({
   reason: z.string().max(300).optional(),

@@ -9,6 +9,7 @@ class SocketService {
   constructor() {
     this.socket = null;
     this._notifCallback = null;
+    this._pendingListeners = []; // listeners registered before connect()
   }
 
   connect() {
@@ -26,6 +27,11 @@ class SocketService {
 
     this.socket.on("connect", () => {
       console.log("Socket connected:", this.socket.id);
+      // Flush any listeners registered before socket was ready
+      this._pendingListeners.forEach(({ event, callback }) => {
+        this.socket.on(event, callback);
+      });
+      this._pendingListeners = [];
     });
 
     this.socket.on("connect_error", (err) => {
@@ -61,6 +67,9 @@ class SocketService {
   on(event, callback) {
     if (this.socket) {
       this.socket.on(event, callback);
+    } else {
+      // Queue until socket is ready
+      this._pendingListeners.push({ event, callback });
     }
   }
 

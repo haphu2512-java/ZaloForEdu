@@ -20,6 +20,16 @@ const ensureAdminOrOwner = (conversation, userId) => {
   if (!isOwner && !isAdmin) throw new ApiError(403, 'FORBIDDEN', 'Only owner/admin can perform this action');
 };
 
+const ensureCanPin = (conversation, userId) => {
+  const isOwner = toStr(conversation.ownerId || conversation.createdBy) === toStr(userId);
+  const isAdmin = (conversation.adminIds || []).some((a) => toStr(a) === toStr(userId));
+  if (!isOwner && !isAdmin) {
+    if (conversation.settings?.canMembersPin === false) {
+      throw new ApiError(403, 'FORBIDDEN', 'Only admin/owner can pin messages');
+    }
+  }
+};
+
 // ==================== FEATURE 2: PINNED ITEMS (Bảng tin) ====================
 
 /**
@@ -33,6 +43,7 @@ const pinMessage = asyncHandler(async (req, res) => {
   const conversation = await Conversation.findById(id);
   if (!conversation) throw new ApiError(404, 'CONVERSATION_NOT_FOUND', 'Conversation not found');
   ensureGroupMember(conversation, req.user._id);
+  ensureCanPin(conversation, req.user._id);
 
   const message = await Message.findById(messageId);
   if (!message || toStr(message.conversationId) !== toStr(id)) {
@@ -79,6 +90,7 @@ const unpinMessage = asyncHandler(async (req, res) => {
   const conversation = await Conversation.findById(id);
   if (!conversation) throw new ApiError(404, 'CONVERSATION_NOT_FOUND', 'Conversation not found');
   ensureGroupMember(conversation, req.user._id);
+  ensureCanPin(conversation, req.user._id);
 
   const prevLen = (conversation.pinnedItems || []).length;
   conversation.pinnedItems = (conversation.pinnedItems || []).filter(
@@ -131,17 +143,25 @@ const getPinnedMessages = asyncHandler(async (req, res) => {
  */
 const updateGroupSettings = asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const { isApprovalRequired } = req.body;
+  const { isApprovalRequired, canMembersUpdateInfo, canMembersPin, canMembersCreateReminders, canMembersCreatePolls, canMembersSendMessages } = req.body;
 
   const conversation = await Conversation.findById(id);
   if (!conversation) throw new ApiError(404, 'CONVERSATION_NOT_FOUND', 'Conversation not found');
   if (conversation.type !== 'group') throw new ApiError(400, 'INVALID_CONVERSATION_TYPE', 'Only for group conversations');
   ensureAdminOrOwner(conversation, req.user._id);
 
-  if (typeof isApprovalRequired === 'boolean') {
-    conversation.settings = { ...conversation.settings, isApprovalRequired };
-  }
+  const updates = {};
+  if (typeof isApprovalRequired === 'boolean') updates.isApprovalRequired = isApprovalRequired;
+  if (typeof canMembersUpdateInfo === 'boolean') updates.canMembersUpdateInfo = canMembersUpdateInfo;
+  if (typeof canMembersPin === 'boolean') updates.canMembersPin = canMembersPin;
+  if (typeof canMembersCreateReminders === 'boolean') updates.canMembersCreateReminders = canMembersCreateReminders;
+  if (typeof canMembersCreatePolls === 'boolean') updates.canMembersCreatePolls = canMembersCreatePolls;
+  if (typeof canMembersSendMessages === 'boolean') updates.canMembersSendMessages = canMembersSendMessages;
+
+  conversation.settings = { ...conversation.settings, ...updates };
   await conversation.save();
+
+  socketService.emitToConversation(id, 'conversation_settings_updated', conversation.settings);
 
   return successResponse(res, conversation.settings, 'Group settings updated');
 });

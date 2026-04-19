@@ -26,6 +26,7 @@ import { useNotificationStore } from "../../store/notificationStore";
 import NotificationsPanel from "../../pages/notifications/NotificationsPanel";
 import { socketService } from "../../services/socketService"; // Thêm import socketService
 import IncomingCallModal from '../../pages/chat/Modals/IncomingCallModal';
+import { toast, Toaster } from "react-hot-toast"; // Import toast for push notifications
 import "./MainLayout.css";
 
 function getInitials(name = "") {
@@ -272,8 +273,62 @@ export default function MainLayout() {
     socketService.connect(); // Đảm bảo socket connected khi vào app
     fetchUnreadCount();
     const interval = setInterval(fetchUnreadCount, 30000);
-    return () => clearInterval(interval);
-  }, []);
+
+    // Global listener cho push notification khi có tin nhắn mới
+    const handleNewMessage = (message) => {
+      // 1. Kiểm tra không phải tin nhắn của chính mình
+      const myId = user?._id || user?.id;
+      const senderIdObj = message?.senderId;
+      const senderIdStr = typeof senderIdObj === 'string' ? senderIdObj : (senderIdObj?._id || senderIdObj?.id);
+      if (String(senderIdStr) === String(myId)) return;
+
+      // 2. Chặn tự động toast nếu đang mở ChatPage và đang trỏ đúng vào conversationId đó
+      // (Bằng cách lấy path hiện tại)
+      const isChatWindowActive = window.location.pathname.startsWith('/chat');
+      // Thật ra nếu muốn cực kì chính xác phải check store, nhưng tạm thời có thể hiển thị dạng toast.
+      
+      const senderName = senderIdObj?.username || senderIdObj?.fullName || "Ai đó";
+      const contentStr = message?.content || (message?.mediaIds?.length ? "Đã gửi tệp đính kèm" : "Có tin nhắn mới");
+      const avatarSrc = senderIdObj?.avatarUrl || senderIdObj?.avatar || `https://ui-avatars.com/api/?name=${senderName}&background=random`;
+
+      toast.custom((t) => (
+        <div
+          onClick={() => {
+            toast.dismiss(t.id);
+            navigate('/chat');
+          }}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '12px',
+            background: 'var(--z-bg-sidebar)',
+            color: 'var(--z-text-primary)',
+            padding: '12px 16px',
+            borderRadius: '8px',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+            border: '1px solid var(--z-border)',
+            cursor: 'pointer',
+            minWidth: '280px',
+            maxWidth: '350px',
+            animation: t.visible ? 'animate-enter 0.3s ease' : 'animate-leave 0.3s ease forwards' // using hot-toast internal anim state
+          }}
+        >
+          <img src={avatarSrc} alt="" style={{ width: 40, height: 40, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 13, fontWeight: 'bold', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{senderName}</div>
+            <div style={{ fontSize: 12, color: 'var(--z-text-secondary)', marginTop: 4, display: '-webkit-box', WebkitLineClamp: 1, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{contentStr}</div>
+          </div>
+        </div>
+      ), { position: 'bottom-right', duration: 4000, id: `msg_${message?._id}` });
+    };
+
+    socketService.on("new_message", handleNewMessage);
+
+    return () => {
+      clearInterval(interval);
+      socketService.off("new_message", handleNewMessage);
+    };
+  }, [user?._id, navigate]);
 
   // incoming_call được xử lý bởi <IncomingCallModal />
 
@@ -383,9 +438,9 @@ export default function MainLayout() {
               onClick={() => setShowUserMenu(!showUserMenu)}
               title={displayName}
             >
-              {user?.avatarUrl ? (
+              {(user?.avatarUrl || user?.avatar) ? (
                 <img
-                  src={user.avatarUrl}
+                  src={user.avatarUrl || user.avatar}
                   alt={displayName}
                   className="sidebar-avatar-img"
                 />
@@ -441,9 +496,16 @@ export default function MainLayout() {
 
       {/* ── SETTINGS MODAL ── */}
       {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}
-        <IncomingCallModal /> {/* <--- Thêm dòng này vào */}
+        <IncomingCallModal />
       </div>{/* end main-layout-body */}
 
+      {/* Global push notification toasts - must be OUTSIDE main-layout-body to avoid clipping */}
+      <Toaster
+        position="bottom-right"
+        toastOptions={{
+          style: { background: 'transparent', boxShadow: 'none', padding: 0, margin: 0 },
+        }}
+      />
     </div>
   );
 }

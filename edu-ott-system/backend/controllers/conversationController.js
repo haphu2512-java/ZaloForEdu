@@ -39,6 +39,18 @@ const ensureAdminOrOwner = (conversation, userId) => {
   }
 };
 
+const ensureCanUpdateGroupInfo = (conversation, userId) => {
+  const isOwner = toStr(getOwnerId(conversation)) === toStr(userId);
+  const isAdmin = (conversation.adminIds || []).some((adminId) => toStr(adminId) === toStr(userId));
+  if (!isOwner && !isAdmin) {
+    if (conversation.settings?.canMembersUpdateInfo !== false) {
+      ensureGroupMember(conversation, userId);
+    } else {
+      throw new ApiError(403, 'FORBIDDEN', 'Only owner/admin can update group info');
+    }
+  }
+};
+
 const listConversations = asyncHandler(async (req, res) => {
   const limit = Math.min(Number(req.query.limit) || 20, 100);
   const { cursor } = req.query;
@@ -182,7 +194,7 @@ const updateGroupName = asyncHandler(async (req, res) => {
   const { name } = req.body;
   const conversation = await Conversation.findById(id);
   ensureGroupConversation(conversation);
-  ensureAdminOrOwner(conversation, req.user._id);
+  ensureCanUpdateGroupInfo(conversation, req.user._id);
 
   conversation.name = name.trim();
   await conversation.save();
@@ -327,7 +339,7 @@ const updateGroupAvatar = asyncHandler(async (req, res) => {
   const { avatarUrl } = req.body;
   const conversation = await Conversation.findById(id);
   ensureGroupConversation(conversation);
-  ensureAdminOrOwner(conversation, req.user._id);
+  ensureCanUpdateGroupInfo(conversation, req.user._id);
   conversation.avatarUrl = avatarUrl;
   await conversation.save();
   return successResponse(res, conversation, 'Group avatar updated');

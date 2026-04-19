@@ -62,7 +62,9 @@ export const ChatRightPanel = ({
 
   const isOwner = activeConversation?.ownerId?._id === myId || activeConversation?.ownerId === myId || activeConversation?.createdBy === myId;
   const isAdmin = activeConversation?.adminIds?.some(aid => (aid._id || aid) === myId) || isOwner;
+  const isPrivileged = isOwner || isAdmin;
   const isGroup = activeConversation?.type === 'group' || activeConversation?.roomModel === 'Group';
+  const canEditGroupInfo = isPrivileged || activeConversation?.settings?.canMembersUpdateInfo !== false;
 
   const getMemberRole = (member) => {
     const mid = member._id || member.id;
@@ -109,7 +111,7 @@ export const ChatRightPanel = ({
                     {getConversationName(activeConversation)}
                   </div>
                 )}
-                {isGroup && !isGroupNameEditing && (
+                {isGroup && !isGroupNameEditing && canEditGroupInfo && (
                   <div style={{ cursor: 'pointer', color: 'var(--z-text-secondary)', padding: '2px' }} onClick={() => { setEditGroupName(activeConversation.name || ''); setIsGroupNameEditing(true); }}>
                     <svg width="14" height="14" fill="currentColor" viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
                   </div>
@@ -325,63 +327,73 @@ export const ChatRightPanel = ({
             </div>
             <div style={{ flex: 1, overflowY: 'auto' }}>
               <div className="crp-group-manage" style={{ padding: 0 }}>
+                {/* BANNER CHO NON-ADMIN */}
+                {!isPrivileged && (
+                  <div style={{ padding: '12px', background: '#f3f4f6', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, color: '#1f2937', fontSize: 13, fontWeight: 500 }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zM9 6c0-1.66 1.34-3 3-3s3 1.34 3 3v2H9V6zm9 14H6V10h12v10zm-6-3c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2z"/></svg>
+                    Tính năng chỉ dành cho quản trị viên
+                  </div>
+                )}
+                
                 {/* 1. Quyền của thành viên (Checkboxes) */}
-                <div style={{ padding: '16px 16px 8px', fontSize: 14, fontWeight: 600, color: 'var(--z-text-primary)' }}>
+                <div style={{ padding: '16px 16px 8px', fontSize: 14, fontWeight: 600, color: isPrivileged ? 'var(--z-text-primary)' : 'var(--z-text-secondary)' }}>
                   Cho phép các thành viên trong nhóm:
                 </div>
                 
                 {[
-                  'Thay đổi tên & ảnh đại diện của nhóm',
-                  'Ghim tin nhắn, ghi chú, bình chọn lên đầu hội thoại',
-                  'Tạo mới ghi chú, nhắc hẹn',
-                  'Tạo mới bình chọn',
-                  'Gửi tin nhắn'
-                ].map((txt, i) => (
-                  <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', cursor: 'pointer' }} onClick={(e) => {
-                    const icon = e.currentTarget.querySelector('svg');
-                    if (icon.style.color === 'var(--z-primary)') { icon.style.color = '#ccc'; icon.innerHTML = '<rect width="20" height="20" rx="4" fill="currentColor"/><path d="M14 8l-5 5-2-2" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>'; } 
-                    else { icon.style.color = 'var(--z-primary)'; icon.innerHTML = '<rect width="20" height="20" rx="4" fill="currentColor"/><path d="M14 8l-5 5-2-2" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>'; }
-                  }}>
-                    <span style={{ fontSize: 15, color: 'var(--z-text-primary)', flex: 1, paddingRight: 16 }}>{txt}</span>
-                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" style={{ color: 'var(--z-primary)', flexShrink: 0 }}>
-                      <rect width="20" height="20" rx="4" fill="currentColor"/>
-                      <path d="M14 8l-5 5-2-2" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                    </svg>
-                  </div>
-                ))}
+                  { text: 'Thay đổi tên & ảnh đại diện của nhóm', key: 'canMembersUpdateInfo' },
+                  { text: 'Ghim tin nhắn, ghi chú, bình chọn lên đầu hội thoại', key: 'canMembersPin' },
+                  { text: 'Tạo mới ghi chú, nhắc hẹn', key: 'canMembersCreateReminders' },
+                  { text: 'Tạo mới bình chọn', key: 'canMembersCreatePolls' },
+                  { text: 'Gửi tin nhắn', key: 'canMembersSendMessages' }
+                ].map((item, i) => {
+                  const isChecked = activeConversation?.settings?.[item.key] !== false; // default is true
+                  return (
+                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', cursor: isPrivileged ? 'pointer' : 'default', opacity: isPrivileged ? 1 : 0.8 }} onClick={() => {
+                      if (!isPrivileged) return;
+                      handleUpdateGroupSettings({ [item.key]: !isChecked });
+                    }}>
+                      <span style={{ fontSize: 15, color: 'var(--z-text-primary)' /* Zalo uses primary text for these */, flex: 1, paddingRight: 16 }}>{item.text}</span>
+                      <svg width="20" height="20" viewBox="0 0 20 20" fill="none" style={{ color: isChecked ? (isPrivileged ? 'var(--z-primary)' : '#c8cdd4') : '#ccc', flexShrink: 0 }}>
+                        <rect width="20" height="20" rx="4" fill="currentColor"/>
+                        {isChecked && <path d="M14 8l-5 5-2-2" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>}
+                      </svg>
+                    </div>
+                  );
+                })}
 
                 <div style={{ height: 8, background: 'var(--z-bg-main)', borderTop: '1px solid var(--z-border)', borderBottom: '1px solid var(--z-border)', margin: '8px 0' }} />
 
                 {/* 2. Cài đặt duyệt / Toggles */}
-                <div className="crp-gm-switch" style={{ padding: '12px 16px' }}>
-                  <div style={{ flex: 1, fontSize: 15, color: 'var(--z-text-primary)' }}>Chế độ phê duyệt thành viên mới</div>
+                <div className="crp-gm-switch" style={{ padding: '12px 16px', opacity: isPrivileged ? 1 : 0.6, pointerEvents: isPrivileged ? 'auto' : 'none' }}>
+                  <div style={{ flex: 1, fontSize: 15, color: isPrivileged ? 'var(--z-text-primary)' : 'var(--z-text-secondary)' }}>Chế độ phê duyệt thành viên mới</div>
                   <div
                     className={`crp-gm-switch-btn ${activeConversation?.settings?.isApprovalRequired ? 'active' : ''}`}
-                    onClick={() => handleUpdateGroupSettings({ isApprovalRequired: !activeConversation?.settings?.isApprovalRequired })}
+                    onClick={() => { if(isPrivileged) handleUpdateGroupSettings({ isApprovalRequired: !activeConversation?.settings?.isApprovalRequired }); }}
                   >
                     <div className="crp-gm-switch-ball" />
                   </div>
                 </div>
 
-                <div className="crp-gm-switch" style={{ padding: '12px 16px' }} onClick={(e) => e.currentTarget.querySelector('.crp-gm-switch-btn').classList.toggle('active')}>
-                  <div style={{ flex: 1, fontSize: 15, color: 'var(--z-text-primary)' }}>Đánh dấu tin nhắn từ trưởng/phó nhóm</div>
+                <div className="crp-gm-switch" style={{ padding: '12px 16px', opacity: isPrivileged ? 1 : 0.6, pointerEvents: isPrivileged ? 'auto' : 'none' }} onClick={(e) => isPrivileged && e.currentTarget.querySelector('.crp-gm-switch-btn').classList.toggle('active')}>
+                  <div style={{ flex: 1, fontSize: 15, color: isPrivileged ? 'var(--z-text-primary)' : 'var(--z-text-secondary)' }}>Đánh dấu tin nhắn từ trưởng/phó nhóm</div>
                   <div className="crp-gm-switch-btn active"><div className="crp-gm-switch-ball" /></div>
                 </div>
 
-                <div className="crp-gm-switch" style={{ padding: '12px 16px' }} onClick={(e) => e.currentTarget.querySelector('.crp-gm-switch-btn').classList.toggle('active')}>
-                  <div style={{ flex: 1, fontSize: 15, color: 'var(--z-text-primary)' }}>Cho phép thành viên mới đọc tin nhắn gần nhất</div>
+                <div className="crp-gm-switch" style={{ padding: '12px 16px', opacity: isPrivileged ? 1 : 0.6, pointerEvents: isPrivileged ? 'auto' : 'none' }} onClick={(e) => isPrivileged && e.currentTarget.querySelector('.crp-gm-switch-btn').classList.toggle('active')}>
+                  <div style={{ flex: 1, fontSize: 15, color: isPrivileged ? 'var(--z-text-primary)' : 'var(--z-text-secondary)' }}>Cho phép thành viên mới đọc tin nhắn gần nhất</div>
                   <div className="crp-gm-switch-btn active"><div className="crp-gm-switch-ball" /></div>
                 </div>
 
-                <div className="crp-gm-switch" style={{ padding: '12px 16px' }} onClick={(e) => e.currentTarget.querySelector('.crp-gm-switch-btn').classList.toggle('active')}>
-                  <div style={{ flex: 1, fontSize: 15, color: 'var(--z-text-primary)' }}>Cho phép dùng link tham gia nhóm</div>
+                <div className="crp-gm-switch" style={{ padding: '12px 16px', opacity: isPrivileged ? 1 : 0.6, pointerEvents: isPrivileged ? 'auto' : 'none' }} onClick={(e) => isPrivileged && e.currentTarget.querySelector('.crp-gm-switch-btn').classList.toggle('active')}>
+                  <div style={{ flex: 1, fontSize: 15, color: isPrivileged ? 'var(--z-text-primary)' : 'var(--z-text-secondary)' }}>Cho phép dùng link tham gia nhóm</div>
                   <div className="crp-gm-switch-btn active"><div className="crp-gm-switch-ball" /></div>
                 </div>
 
                 {/* Link box */}
-                <div style={{ margin: '0 16px 16px', padding: '12px', background: 'var(--z-bg-main)', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <div style={{ fontSize: 14, color: 'var(--z-primary)', fontWeight: 500 }}>zalo.me/g/xwrwov660</div>
-                  <div style={{ display: 'flex', gap: 12, color: 'var(--z-primary)' }}>
+                <div style={{ margin: '0 16px 16px', padding: '12px', background: 'var(--z-bg-main)', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'space-between', opacity: isPrivileged ? 1 : 0.6, pointerEvents: isPrivileged ? 'auto' : 'none' }}>
+                  <div style={{ fontSize: 14, color: isPrivileged ? 'var(--z-primary)' : 'var(--z-text-secondary)', fontWeight: 500 }}>zalo.me/g/xwrwov660</div>
+                  <div style={{ display: 'flex', gap: 12, color: isPrivileged ? 'var(--z-primary)' : 'var(--z-text-secondary)' }}>
                     <FaLink size={14} style={{ cursor: 'pointer' }} onClick={() => toast.success('Đã copy link')} />
                     <FaShare size={14} style={{ cursor: 'pointer' }} />
                     <FaSync size={14} style={{ cursor: 'pointer' }} />
