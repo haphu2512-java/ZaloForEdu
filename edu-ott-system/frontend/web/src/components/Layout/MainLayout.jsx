@@ -502,8 +502,13 @@ export default function MainLayout() {
       {/* Global push notification toasts - must be OUTSIDE main-layout-body to avoid clipping */}
       <Toaster
         position="bottom-right"
+        gutter={10}
+        containerStyle={{ bottom: 24, right: 24, zIndex: 9999 }}
         toastOptions={{
-          style: { background: 'transparent', boxShadow: 'none', padding: 0, margin: 0 },
+          custom: {
+            style: { background: 'transparent', boxShadow: 'none', padding: 0 },
+            duration: 4500,
+          },
         }}
       />
     </div>

@@ -352,3 +352,35 @@
 .mute-btn.cancel:hover { background: var(--z-bg-hover); }
 .mute-btn.ok { background: var(--z-primary); color: white; }
 .mute-btn.ok:hover { opacity: 0.9; }
+/* ═══ PUSH NOTIFICATION TOAST ═══════════════════════════════ */
+@keyframes notif-slide-in {
+  0%   { opacity: 0; transform: translateX(110%); }
+  70%  { opacity: 1; transform: translateX(-6px); }
+  100% { opacity: 1; transform: translateX(0); }
+}
+@keyframes notif-slide-out {
+  0%   { opacity: 1; transform: translateX(0); }
+  100% { opacity: 0; transform: translateX(110%); }
+}
+.push-notif-card {
+  display: flex; align-items: center; gap: 12px;
+  background: var(--z-bg-sidebar); color: var(--z-text-primary);
+  padding: 13px 16px; border-radius: 12px;
+  box-shadow: 0 8px 28px rgba(0,0,0,0.22);
+  border: 1px solid var(--z-border);
+  cursor: pointer; min-width: 280px; max-width: 340px;
+  position: relative; overflow: hidden; user-select: none;
+}
+.push-notif-card::before {
+  content: ''; position: absolute; left: 0; top: 0; bottom: 0;
+  width: 4px; background: var(--z-primary);
+  border-radius: 12px 0 0 12px;
+}
+.push-notif-card.entering { animation: notif-slide-in 0.38s cubic-bezier(0.34,1.56,0.64,1) forwards; }
+.push-notif-card.leaving  { animation: notif-slide-out 0.28s ease-in forwards; }
+.push-notif-avatar { width: 42px; height: 42px; border-radius: 50%; object-fit: cover; flex-shrink: 0; box-shadow: 0 2px 6px rgba(0,0,0,0.15); }
+.push-notif-body  { flex: 1; min-width: 0; }
+.push-notif-sender  { font-size: 13px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 2px; }
+.push-notif-content { font-size: 12px; color: var(--z-text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.push-notif-close   { opacity: 0.35; font-size: 15px; flex-shrink: 0; padding: 0 4px; transition: opacity 0.2s; }
+.push-notif-card:hover .push-notif-close { opacity: 0.85; }
