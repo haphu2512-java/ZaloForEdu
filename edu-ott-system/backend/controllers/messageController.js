@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 
 const Message = require('../models/Message');
+const ConversationPreference = require('../models/ConversationPreference');
 const { createMessage, ensureConversationMember } = require('../services/messageService');
 const { decodeCursor, encodeCursor } = require('../utils/cursor');
 const asyncHandler = require('../utils/asyncHandler');
@@ -46,6 +47,12 @@ const sendMessage = asyncHandler(async (req, res) => {
   // Populate media để frontend hiển thị ngay
   await message.populate('mediaIds', 'fileName url size mimeType providerResourceType');
   await message.populate('senderId', 'username avatarUrl');
+
+  // Un-hide conversation for all participants who had hidden it (e.g. via "delete conversation")
+  await ConversationPreference.updateMany(
+    { conversationId, isHidden: true },
+    { $set: { isHidden: false } }
+  );
 
   socketService.emitToConversation(conversationId, 'new_message', message);
   await socketService.emitConversationUpdated(conversationId, {
