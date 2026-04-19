@@ -53,7 +53,7 @@ const sendFriendRequest = asyncHandler(async (req, res) => {
   const request = await FriendRequest.findOneAndUpdate(
     { fromUserId, toUserId },
     { status: 'pending', respondedAt: null },
-    { upsert: true, new: true, setDefaultsOnInsert: true },
+    { upsert: true, returnDocument: 'after', setDefaultsOnInsert: true },
   );
 
   // Tạo notification cho người nhận

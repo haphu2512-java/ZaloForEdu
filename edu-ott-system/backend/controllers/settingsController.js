@@ -16,7 +16,7 @@ const getMySettings = asyncHandler(async (req, res) => {
   const settings = await UserSettings.findOneAndUpdate(
     { userId: req.user._id },
     { $setOnInsert: { userId: req.user._id, ...defaultSettings } },
-    { new: true, upsert: true },
+    { returnDocument: 'after', upsert: true },
   );
 
   return successResponse(res, settings, 'User settings fetched');
@@ -27,7 +27,7 @@ const updateMySettings = asyncHandler(async (req, res) => {
   const settings = await UserSettings.findOneAndUpdate(
     { userId: req.user._id },
     { $set: updates, $setOnInsert: { userId: req.user._id } },
-    { new: true, upsert: true },
+    { returnDocument: 'after', upsert: true },
   );
 
   return successResponse(res, settings, 'User settings updated');

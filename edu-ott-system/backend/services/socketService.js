@@ -166,7 +166,7 @@ const initSocket = (server) => {
       const message = await Message.findByIdAndUpdate(
         messageId,
         { $addToSet: { deliveredTo: socket.user._id } },
-        { new: true },
+        { returnDocument: 'after' },
       );
       if (!message) return;
       emitToConversation(message.conversationId.toString(), 'message_delivered', {
@@ -180,7 +180,7 @@ const initSocket = (server) => {
       const message = await Message.findByIdAndUpdate(
         messageId,
         { $addToSet: { seenBy: socket.user._id, deliveredTo: socket.user._id } },
-        { new: true },
+        { returnDocument: 'after' },
       );
       if (!message) return;
       emitToConversation(message.conversationId.toString(), 'message_seen', {

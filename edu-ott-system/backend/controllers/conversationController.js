@@ -434,7 +434,7 @@ const updateConversationPreference = asyncHandler(async (req, res) => {
   const pref = await ConversationPreference.findOneAndUpdate(
     { userId: req.user._id, conversationId: id },
     { $set: req.body, $setOnInsert: { userId: req.user._id, conversationId: id } },
-    { new: true, upsert: true },
+    { returnDocument: 'after', upsert: true },
   );
   return successResponse(res, pref, 'Conversation preference updated');
 });

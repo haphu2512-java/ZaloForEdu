@@ -191,7 +191,7 @@ const requestToJoin = asyncHandler(async (req, res) => {
   const joinRequest = await JoinRequest.findOneAndUpdate(
     { conversationId: id, userId: req.user._id },
     { status: 'pending', reason: reason?.trim() || '', processedBy: null, processedAt: null },
-    { new: true, upsert: true },
+    { returnDocument: 'after', upsert: true },
   );
 
   await joinRequest.populate('userId', 'username avatarUrl email');
@@ -363,7 +363,7 @@ const joinByInviteLink = asyncHandler(async (req, res) => {
     const joinRequest = await JoinRequest.findOneAndUpdate(
       { conversationId: conversation._id, userId: req.user._id },
       { status: 'pending', invitedBy: null, processedBy: null, processedAt: null },
-      { new: true, upsert: true },
+      { returnDocument: 'after', upsert: true },
     );
 
     return successResponse(res, { requiresApproval: true, joinRequest }, 'Join request sent, waiting for approval', 202);
