@@ -106,11 +106,6 @@ export const conversationService = {
     return res.data;
   },
 
-  transferGroupOwner: async (id, newOwnerId) => {
-    const res = await axios.put(`${API_URL}/conversations/${id}/owner`, { newOwnerId }, getAuthHeaders());
-    return res.data;
-  },
-
   leaveGroup: async (id) => {
     const res = await axios.post(`${API_URL}/conversations/${id}/leave`, {}, getAuthHeaders());
     return res.data;
