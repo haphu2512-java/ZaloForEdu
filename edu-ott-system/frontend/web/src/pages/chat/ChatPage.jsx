@@ -91,6 +91,7 @@ export default function ChatPage() {
   const navigate = useNavigate();
   const { roomId } = useParams();
   const [conversations, setConversations] = useState([]);
+  const [selfConversation, setSelfConversation] = useState(null);
   const [activeConversation, setActiveConversation] = useState(null);
 
   const [reminders, setReminders] = useState([]);
@@ -251,6 +252,21 @@ export default function ChatPage() {
 
   const token = localStorage.getItem("token");
 
+  const openSelfConversation = useCallback(async () => {
+    if (selfConversation) {
+      setActiveConversation(selfConversation);
+      navigate('/chat/' + selfConversation._id);
+      return;
+    }
+    try {
+      const res = await axios.post(`${API_BASE_URL}/conversations`, { type: 'direct', participantIds: [userId] }, { headers: { Authorization: `Bearer ${token}` } });
+      const conv = res.data.data || res.data;
+      setSelfConversation(conv);
+      setActiveConversation(conv);
+      navigate('/chat/' + conv._id);
+    } catch (err) { console.error('Create self conv:', err); }
+  }, [selfConversation, userId, token, navigate]);
+
   const scrollToBottom = () => { messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }); };
 
   const getOtherParticipant = useCallback((conv) => {
@@ -264,6 +280,7 @@ export default function ChatPage() {
 
   const getConversationName = useCallback((conv) => {
     if (!conv) return '';
+    if (conv.type === 'direct' && conv.participants?.length === 1) return 'Cloud của tôi';
     if (conv.type === 'group' || conv.roomModel === 'Group') return conv.name || 'Nhóm chat';
     const other = getOtherParticipant(conv);
     if (other && typeof other === 'object') return other.username || other.fullName || other.name || 'Người dùng';
@@ -272,6 +289,12 @@ export default function ChatPage() {
 
   const getConversationAvatar = useCallback((conv) => {
     if (!conv) return 'https://ui-avatars.com/api/?name=U&background=random';
+    if (conv.type === 'direct' && conv.participants?.length === 1) {
+      try {
+        const me = JSON.parse(localStorage.getItem("user") || "{}");
+        return me.avatarUrl || me.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(me.username || 'Me')}&background=0068FF&color=fff`;
+      } catch { return 'https://ui-avatars.com/api/?name=Me&background=0068FF&color=fff'; }
+    }
     if (conv.type === 'group' || conv.roomModel === 'Group') return conv.avatarUrl || conv.avatar || `https://ui-avatars.com/api/?name=${conv.name || 'G'}&background=random`;
     const other = getOtherParticipant(conv);
     let name = 'U';
@@ -287,6 +310,7 @@ export default function ChatPage() {
     if (!friends || friends.length === 0) return conversations;
     const validConvs = conversations.filter(c => {
       if (c.type === 'group' || c.roomModel === 'Group') return true;
+      if (c.type === 'direct' && c.participants?.length === 1) return true;
       return getOtherParticipant(c) !== null;
     });
 
@@ -345,6 +369,10 @@ export default function ChatPage() {
         friendConvs.push(conv);
         return;
       }
+      if (conv.type === 'direct' && conv.participants?.length === 1) {
+        friendConvs.push(conv);
+        return;
+      }
       const other = getOtherParticipant(conv);
       const otherId = other && typeof other === 'object' ? String(other._id || other.id) : null;
       const isOtherFriend = otherId && friendIds.has(otherId);
@@ -367,16 +395,22 @@ export default function ChatPage() {
   }, [mergedConversations, friendIds, getOtherParticipant, userId]);
 
   useEffect(() => {
-    if (roomId && mergedConversations.length > 0) {
+    if (!roomId) return;
+    if (selfConversation && String(selfConversation._id) === String(roomId)) {
+      if (!activeConversation || String(activeConversation._id) !== String(roomId)) {
+        setActiveConversation(selfConversation);
+      }
+      return;
+    }
+    if (mergedConversations.length > 0) {
       const targetRoom = mergedConversations.find(c => String(c._id) === String(roomId));
       if (targetRoom) {
-        // Cập nhật state activeConversation nếu id khác HOẶC tham chiếu bị thay đổi (do có dữ liệu mới từ fetch)
         if (!activeConversation || String(activeConversation._id) !== String(roomId) || targetRoom !== activeConversation) {
           setActiveConversation(targetRoom);
         }
       }
     }
-  }, [roomId, mergedConversations, activeConversation]);
+  }, [roomId, mergedConversations, selfConversation, activeConversation]);
   useEffect(() => {
     activeConvIdRef.current = activeConversation?._id;
     activeConversationRef.current = activeConversation;
@@ -386,9 +420,9 @@ export default function ChatPage() {
     try {
       const res = await axios.get(`${API_BASE_URL}/conversations`, { headers: { Authorization: `Bearer ${token}` } });
       const allConvs = res.data.data?.items || res.data.items || [];
-      // Lọc bỏ self-conversation (My Documents) khỏi danh sách chat
-      const filtered = allConvs.filter(c => !(c.type === 'direct' && c.participants?.length === 1));
-      setConversations(filtered);
+      const self = allConvs.find(c => c.type === 'direct' && c.participants?.length === 1);
+      setSelfConversation(self || null);
+      setConversations(allConvs);
     } catch (err) { console.error("Lỗi lấy danh sách:", err); }
   }, [token]);
 
@@ -466,6 +500,13 @@ export default function ChatPage() {
           </div>
         ), { position: 'bottom-right', duration: 4500, id: `notif_${latestMessage?._id}` });
       }
+
+      setSelfConversation(prev => {
+        if (prev && String(prev._id) === convIdStr) {
+          return { ...prev, latestMessage };
+        }
+        return prev;
+      });
 
       setConversations(prevConvs => {
         const index = prevConvs.findIndex(c => String(c._id) === convIdStr);
@@ -1191,9 +1232,16 @@ const handleJoinRequestProcessed = ({ conversationName, action }) => {
             const convName = getConversationName(conv);
             if (!convName) return null;
             const unread = conv.unreadCount || 0;
+            const isSelf = conv.type === 'direct' && conv.participants?.length === 1;
             return (
               <div key={conv._id} className={`chat-list-item ${isActive ? 'active' : ''}`} onClick={() => { setActiveConversation(conv); navigate('/chat/' + conv._id); }}>
-                <img className="cli-avatar" src={getConversationAvatar(conv)} alt="avt" />
+                {isSelf ? (
+                  <div style={{ width: 48, height: 48, borderRadius: '50%', background: 'linear-gradient(135deg, #0068FF, #00B4D8)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <FaCloud size={20} color="#fff" />
+                  </div>
+                ) : (
+                  <img className="cli-avatar" src={getConversationAvatar(conv)} alt="avt" />
+                )}
                 <div className="cli-info">
                   <div className="cli-top">
                     <span className="cli-name" style={{ fontWeight: unread > 0 ? 800 : 600, color: unread > 0 ? 'var(--z-text-primary)' : '' }}>{getConversationName(conv)}</span>
