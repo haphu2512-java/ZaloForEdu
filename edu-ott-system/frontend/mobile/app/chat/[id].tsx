@@ -5,6 +5,7 @@ import {
   TextInput,
   TouchableOpacity,
   FlatList,
+  ScrollView,
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
@@ -171,6 +172,15 @@ export default function ChatScreen() {
   const [mediaById, setMediaById] = useState<Record<string, MediaItem>>({});
   const [actionMenu, setActionMenu] = useState<{ visible: boolean; options: ActionMenuOption[] }>({ visible: false, options: [] });
   const [viewImageUrl, setViewImageUrl] = useState<string | null>(null);
+  const [reactionModal, setReactionModal] = useState<{
+    visible: boolean;
+    message: Message | null;
+    emojiFilter: string | null;
+  }>({
+    visible: false,
+    message: null,
+    emojiFilter: null,
+  });
 
   // Tránh mở Picker nhiều lần cùng lúc gây lỗi "picking in progress"
   const isPicking = useRef(false);
@@ -251,7 +261,7 @@ export default function ChatScreen() {
       const convRes = await getConversations(null, 100);
       const matched = (convRes.items || []).find((item) => (item._id || item.id) === conversationId) || null;
       setConversation(matched);
-      if (matched && matched.type === 'group') {
+      if (matched) {
         getPinnedMessages(conversationId).then(setPinnedItems).catch(console.error);
       }
     } catch (error) {
@@ -782,7 +792,6 @@ export default function ChatScreen() {
 
   const handleMessageLongPress = (msg: Message) => {
     const isMine = getMessageSenderId(msg) === currentUserId;
-    const isGroup = conversation?.type === 'group';
     const messageId = getMessageId(msg);
     const isPinned = pinnedItems.some((item) => getPinnedMessageId(item) === messageId);
     const buttons: ActionMenuOption[] = [{ text: 'Hủy', style: 'cancel', onPress: () => {} }];
@@ -817,7 +826,7 @@ export default function ChatScreen() {
       buttons.push({ text: '😊 Thả cảm xúc', onPress: () => handleReactToMessage(msg) });
       buttons.push({ text: '↗ Chuyển tiếp', onPress: () => openForwardModal(msg) });
     }
-    if (isGroup && !msg.isRecalled) {
+    if (!msg.isRecalled) {
       buttons.push({
         text: isPinned ? 'Bỏ ghim' : 'Ghim tin nhắn',
         onPress: async () => {
@@ -855,6 +864,37 @@ export default function ChatScreen() {
       : typingParticipants.length === 1
         ? `${typingParticipants[0]} đang nhập...`
         : `${typingParticipants[0]} và ${typingParticipants.length - 1} người khác đang nhập...`;
+
+  const getReactionUserInfo = useCallback((reaction: any) => {
+    const reactionUserId =
+      typeof reaction?.userId === 'string'
+        ? reaction.userId
+        : reaction?.userId?._id || reaction?.userId?.id || '';
+    const participant = conversation?.participants?.find((p) => (p._id || p.id || '') === reactionUserId);
+    const reactionUser = typeof reaction?.userId === 'object' ? reaction.userId : null;
+    const username = participant?.username || reactionUser?.username || 'Người dùng';
+
+    return {
+      userId: reactionUserId,
+      username,
+      avatarUrl:
+        participant?.avatarUrl ||
+        reactionUser?.avatarUrl ||
+        `https://ui-avatars.com/api/?name=${encodeURIComponent(username)}&background=2563EB&color=fff&size=100&bold=true`,
+    };
+  }, [conversation?.participants]);
+
+  const openReactionDetails = useCallback((message: Message, emoji?: string) => {
+    setReactionModal({
+      visible: true,
+      message,
+      emojiFilter: emoji || null,
+    });
+  }, []);
+
+  const closeReactionDetails = useCallback(() => {
+    setReactionModal({ visible: false, message: null, emojiFilter: null });
+  }, []);
 
   const renderMessage = ({ item }: { item: Message }) => {
     const isMine = getMessageSenderId(item) === currentUserId;
@@ -999,10 +1039,10 @@ export default function ChatScreen() {
                 ]}
               >
                 {reactionEntries.map(([emoji, count]) => (
-                  <View key={emoji} style={styles.reactionItem}>
+                  <TouchableOpacity key={emoji} style={styles.reactionItem} onPress={() => openReactionDetails(item, emoji)}>
                     <Text style={styles.reactionEmoji}>{emoji}</Text>
                     {count > 1 ? <Text style={[styles.reactionCount, { color: colors.muted }]}>{count}</Text> : null}
-                  </View>
+                  </TouchableOpacity>
                 ))}
               </View>
             )}
@@ -1066,7 +1106,7 @@ export default function ChatScreen() {
         </View>
       )}
 
-      {conversation?.type === 'group' && pinnedItems.length > 0 && (
+      {pinnedItems.length > 0 && (
         <PinnedBar
           pinnedItems={pinnedItems}
           colors={colors}
@@ -1258,6 +1298,75 @@ export default function ChatScreen() {
           </View>
         </TouchableOpacity>
       </Modal>
+
+      <Modal visible={reactionModal.visible} transparent animationType="slide" onRequestClose={closeReactionDetails}>
+        <View style={styles.reactionDetailOverlay}>
+          <View style={[styles.reactionDetailSheet, { backgroundColor: colors.surface }]}>
+            <View style={styles.reactionDetailHeader}>
+              <Text style={{ color: colors.text, fontSize: 28, fontWeight: '700' }}>Cảm xúc</Text>
+              <TouchableOpacity onPress={closeReactionDetails} style={styles.reactionCloseBtn}>
+                <Ionicons name="close" size={20} color={colors.text} />
+              </TouchableOpacity>
+            </View>
+
+            {reactionModal.message ? (
+              <>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.reactionFilterRow}>
+                  <TouchableOpacity
+                    onPress={() => setReactionModal((prev) => ({ ...prev, emojiFilter: null }))}
+                    style={[
+                      styles.reactionFilterChip,
+                      { backgroundColor: reactionModal.emojiFilter === null ? '#4B5563' : '#E5E7EB' },
+                    ]}
+                  >
+                    <Text style={{ color: reactionModal.emojiFilter === null ? '#fff' : '#111827', fontWeight: '700' }}>TẤT CẢ</Text>
+                  </TouchableOpacity>
+                  {Array.from(new Set((reactionModal.message.reactions || []).map((r: any) => r?.emoji).filter(Boolean))).map((emoji) => (
+                    <TouchableOpacity
+                      key={emoji}
+                      onPress={() => setReactionModal((prev) => ({ ...prev, emojiFilter: emoji }))}
+                      style={[
+                        styles.reactionFilterChip,
+                        { backgroundColor: reactionModal.emojiFilter === emoji ? '#DBEAFE' : '#F3F4F6' },
+                      ]}
+                    >
+                      <Text style={{ fontSize: 20 }}>{emoji}</Text>
+                      <Text style={{ color: colors.text, fontWeight: '700', marginLeft: 6 }}>
+                        {(reactionModal.message?.reactions || []).filter((r: any) => r?.emoji === emoji).length}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+
+                <FlatList
+                  data={(reactionModal.message.reactions || []).filter((reaction: any) => (
+                    reactionModal.emojiFilter ? reaction?.emoji === reactionModal.emojiFilter : true
+                  ))}
+                  keyExtractor={(item: any, index) => `${typeof item?.userId === 'string' ? item.userId : item?.userId?._id || item?.userId?.id || index}-${item?.emoji || ''}-${index}`}
+                  renderItem={({ item }) => {
+                    const info = getReactionUserInfo(item);
+                    return (
+                      <View style={styles.reactionUserRow}>
+                        <Image source={{ uri: info.avatarUrl }} style={styles.reactionAvatar} />
+                        <View style={{ flex: 1 }}>
+                          <Text style={{ color: colors.text, fontSize: 18, fontWeight: '700' }}>{info.username}</Text>
+                          <Text style={{ color: colors.muted, fontSize: 14 }}>Nhấn để gỡ</Text>
+                        </View>
+                        <Text style={{ fontSize: 36 }}>{item?.emoji || '🙂'}</Text>
+                      </View>
+                    );
+                  }}
+                  ListEmptyComponent={
+                    <View style={{ paddingVertical: 24, alignItems: 'center' }}>
+                      <Text style={{ color: colors.muted }}>Chưa có cảm xúc nào</Text>
+                    </View>
+                  }
+                />
+              </>
+            ) : null}
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -1312,4 +1421,40 @@ const styles = StyleSheet.create({
   actionMenuOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end', padding: 16 },
   actionMenuContainer: { borderRadius: 14, overflow: 'hidden', paddingBottom: Platform.OS === 'ios' ? 20 : 0 },
   actionMenuBtn: { paddingVertical: 16, alignItems: 'center', justifyContent: 'center' },
+  reactionDetailOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.45)' },
+  reactionDetailSheet: {
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    maxHeight: '62%',
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 20,
+  },
+  reactionDetailHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
+  reactionCloseBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(107,114,128,0.25)',
+  },
+  reactionFilterRow: { gap: 10, paddingVertical: 8, paddingBottom: 14 },
+  reactionFilterChip: {
+    minHeight: 38,
+    borderRadius: 19,
+    paddingHorizontal: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  reactionUserRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 11,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#E5E7EB',
+  },
+  reactionAvatar: { width: 44, height: 44, borderRadius: 22 },
 });

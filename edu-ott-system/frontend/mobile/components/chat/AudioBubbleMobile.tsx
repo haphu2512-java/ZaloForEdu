@@ -1,8 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, TouchableOpacity, ActivityIndicator, StyleSheet, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { Audio } from 'expo-av';
-import * as FileSystem from 'expo-file-system/legacy';
+import { createAudioPlayer, setAudioModeAsync } from 'expo-audio';
 
 interface AudioBubbleMobileProps {
   url: string;
@@ -10,196 +9,92 @@ interface AudioBubbleMobileProps {
 }
 
 export const AudioBubbleMobile: React.FC<AudioBubbleMobileProps> = ({ url, isMe }) => {
-  const [sound, setSound] = useState<Audio.Sound | null>(null);
+  const [player, setPlayer] = useState<any | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [position, setPosition] = useState(0);
   const [duration, setDuration] = useState(0);
-  const [cachedUri, setCachedUri] = useState<string | null>(null);
 
   useEffect(() => {
     return () => {
-      if (sound) {
-        sound.unloadAsync();
-      }
+      if (player) player.remove();
     };
-  }, [sound]);
+  }, [player]);
 
   useEffect(() => {
-    // Reset khi đổi source audio để không giữ state cũ
-    if (sound) {
-      void sound.unloadAsync();
-    }
-    setSound(null);
+    if (player) player.remove();
+    setPlayer(null);
     setIsPlaying(false);
     setIsLoading(false);
     setPosition(0);
     setDuration(0);
-    setCachedUri(null);
   }, [url]);
 
-  const onPlaybackStatusUpdate = (status: any) => {
-    if (status.isLoaded) {
-      setPosition(status.positionMillis);
-      setDuration(status.durationMillis || 0);
-      setIsPlaying(status.isPlaying);
+  const onPlaybackStatusUpdate = (status: any, activePlayer?: any) => {
+    if (status?.isLoaded) {
+      setPosition(Math.floor((status.currentTime || 0) * 1000));
+      setDuration(Math.floor((status.duration || 0) * 1000));
+      setIsPlaying(!!status.playing);
       if (status.didJustFinish) {
         setIsPlaying(false);
         setPosition(0);
-        sound?.setPositionAsync(0);
+        activePlayer?.seekTo?.(0)?.catch?.(() => null);
       }
-    } else if (status.error) {
-      // Handle playback errors that don't throw exceptions
+      return;
+    }
+
+    if (status?.error) {
       console.error('Playback status error:', status.error);
       setIsLoading(false);
       setIsPlaying(false);
-      Alert.alert('Không thể phát audio', 'File audio không tương thích với thiết bị.');
-    }
-  };
-
-  const withTimeout = async <T,>(promise: Promise<T>, timeoutMs: number, timeoutMessage: string): Promise<T> => {
-    let timer: ReturnType<typeof setTimeout> | null = null;
-    try {
-      const timeoutPromise = new Promise<T>((_, reject) => {
-        timer = setTimeout(() => reject(new Error(timeoutMessage)), timeoutMs);
-      });
-      return await Promise.race([promise, timeoutPromise]);
-    } finally {
-      if (timer) clearTimeout(timer);
+      Alert.alert('Khong the phat audio', 'File audio khong tuong thich voi thiet bi.');
     }
   };
 
   const togglePlayback = async () => {
     try {
-      if (sound) {
-        const status = await sound.getStatusAsync();
-        if (status.isLoaded) {
-          if (isPlaying) {
-            await sound.pauseAsync();
-          } else {
-            const nearEnd =
-              !!status.durationMillis &&
-              status.positionMillis >= status.durationMillis - 250;
-            if (nearEnd) {
-              await sound.setPositionAsync(0);
-              setPosition(0);
-            }
-            await sound.playAsync();
-          }
-        } else {
-          // Reset if sound is in invalid state
-          await sound.unloadAsync().catch(() => null);
-          setSound(null);
+      if (player) {
+        if (!player.isLoaded) {
+          player.remove();
+          setPlayer(null);
           setIsPlaying(false);
           setPosition(0);
           setDuration(0);
-        }
-      } else {
-        setIsLoading(true);
-
-        // Force audio to loudspeaker
-        await Audio.setAudioModeAsync({
-          allowsRecordingIOS: false,
-          playsInSilentModeIOS: true,
-          shouldDuckAndroid: true,
-          playThroughEarpieceAndroid: false,
-          staysActiveInBackground: false,
-        });
-
-        console.log('🎵 Attempting to load audio:', cachedUri || url);
-
-        let newSound: Audio.Sound | null = null;
-
-        try {
-          // Ưu tiên local cache để giảm lỗi timeout/metadata khi stream trên iOS
-          let localSource = cachedUri;
-          if (!localSource) {
-            console.log('⬇️ Downloading audio to cache before playback...');
-            const safeFile = encodeURIComponent(url.split('/').pop() || `voice-${Date.now()}.m4a`);
-            const localUri = `${FileSystem.cacheDirectory || ''}voice-${Date.now()}-${safeFile}`;
-            const downloaded = await withTimeout(
-              FileSystem.downloadAsync(url, localUri),
-              15000,
-              'DOWNLOAD_TIMEOUT'
-            );
-            localSource = downloaded.uri;
-            setCachedUri(downloaded.uri);
-          }
-
-          const local = await withTimeout(
-            Audio.Sound.createAsync(
-              { uri: localSource },
-              { shouldPlay: true },
-              onPlaybackStatusUpdate
-            ),
-            12000,
-            'LOAD_TIMEOUT'
-          );
-          newSound = local.sound;
-          console.log('✅ Audio loaded successfully (cached/local)');
-        } catch (localError) {
-          console.warn('⚠️ Local playback failed, fallback to stream', localError);
-          const remote = await withTimeout(
-            Audio.Sound.createAsync(
-              { uri: url },
-              { shouldPlay: true },
-              onPlaybackStatusUpdate
-            ),
-            12000,
-            'STREAM_LOAD_TIMEOUT'
-          );
-          newSound = remote.sound;
-          console.log('✅ Audio loaded successfully (stream fallback)');
+          return;
         }
 
-        if (!newSound) {
-          throw new Error('Không thể khởi tạo trình phát audio');
+        if (isPlaying) {
+          player.pause();
+          return;
         }
 
-        const initialStatus = await newSound.getStatusAsync();
-        if (initialStatus.isLoaded && initialStatus.durationMillis) {
-          setDuration(initialStatus.durationMillis);
+        const nearEnd = !!duration && position >= duration - 250;
+        if (nearEnd) {
+          await player.seekTo?.(0).catch?.(() => null);
+          setPosition(0);
         }
-
-        setSound(newSound);
-        setIsLoading(false);
+        player.play();
+        return;
       }
-    } catch (error: any) {
-      console.error('Lỗi khi phát âm thanh:', error);
-      console.error('Audio URL:', url);
-      console.error('Error details:', {
-        message: error.message,
-        code: error.code,
-        domain: error.domain,
-        nativeStackIOS: error.nativeStackIOS
+
+      setIsLoading(true);
+
+      await setAudioModeAsync({
+        allowsRecording: false,
+        playsInSilentMode: true,
+        shouldPlayInBackground: false,
       });
+
+      const newPlayer = createAudioPlayer({ uri: url }, { downloadFirst: true, updateInterval: 250 });
+      newPlayer.addListener('playbackStatusUpdate', (status: any) => onPlaybackStatusUpdate(status, newPlayer));
+      newPlayer.play();
+      setPlayer(newPlayer);
       setIsLoading(false);
-      
-      let msg = 'Không thể phát âm thanh này.';
-      let title = 'Không thể phát audio';
-      
-      // Kiểm tra lỗi format không được hỗ trợ
-      if (error.message?.includes('format is not supported') || 
-          error.message?.includes('-11828') ||
-          error.message?.includes('AVFoundationErrorDomain')) {
-        title = '⚠️ Format không tương thích';
-        msg = 'Tin nhắn audio này được ghi bằng định dạng không tương thích với iOS.\n\n' +
-              '🔍 Nguyên nhân có thể:\n' +
-              '• Ghi từ web với codec Opus (trong MP4)\n' +
-              '• Ghi từ Firefox (dùng WebM)\n' +
-              '• Codec không được iOS hỗ trợ\n\n' +
-              '✅ Giải pháp:\n' +
-              '• Yêu cầu người gửi dùng Chrome/Safari\n' +
-              '• Hoặc ghi âm từ thiết bị iOS/Android\n' +
-              '• Kiểm tra cài đặt trình duyệt';
-      } else if (error.message?.includes('DOWNLOAD_TIMEOUT') || error.message?.includes('LOAD_TIMEOUT') || error.message?.includes('STREAM_LOAD_TIMEOUT')) {
-        title = '⏱️ Tải audio quá lâu';
-        msg = 'Không thể tải file audio kịp thời. Vui lòng kiểm tra mạng hoặc thử lại sau.';
-      }
-      
-      Alert.alert(title, msg, [
-        { text: 'Đóng', style: 'cancel' }
-      ]);
+    } catch (error: any) {
+      console.error('Loi khi phat am thanh:', error);
+      setIsLoading(false);
+      setIsPlaying(false);
+      Alert.alert('Khong the phat audio', 'Khong the phat am thanh nay.');
     }
   };
 
@@ -214,18 +109,18 @@ export const AudioBubbleMobile: React.FC<AudioBubbleMobileProps> = ({ url, isMe 
 
   return (
     <View style={[styles.container, isMe ? styles.containerMe : styles.containerThem]}>
-      <TouchableOpacity 
-        onPress={togglePlayback} 
+      <TouchableOpacity
+        onPress={togglePlayback}
         style={[styles.playBtn, isMe ? styles.playBtnMe : styles.playBtnThem]}
         disabled={isLoading}
       >
         {isLoading ? (
-          <ActivityIndicator size="small" color={isMe ? "#0068FF" : "#fff"} />
+          <ActivityIndicator size="small" color={isMe ? '#0068FF' : '#fff'} />
         ) : (
-          <Ionicons 
-            name={isPlaying ? "pause" : "play"} 
-            size={20} 
-            color={isMe ? "#0068FF" : "#fff"} 
+          <Ionicons
+            name={isPlaying ? 'pause' : 'play'}
+            size={20}
+            color={isMe ? '#0068FF' : '#fff'}
             style={{ marginLeft: isPlaying ? 0 : 2 }}
           />
         )}
@@ -233,23 +128,24 @@ export const AudioBubbleMobile: React.FC<AudioBubbleMobileProps> = ({ url, isMe 
 
       <View style={styles.waveformContainer}>
         <View style={styles.waveformBg}>
-          <View style={[
-            styles.waveformProgress, 
-            { width: `${progress}%`, backgroundColor: isMe ? "rgba(255,255,255,0.4)" : "rgba(0,104,255,0.2)" }
-          ]} />
-          {/* Fake waveform bars */}
+          <View
+            style={[
+              styles.waveformProgress,
+              { width: `${progress}%`, backgroundColor: isMe ? 'rgba(255,255,255,0.4)' : 'rgba(0,104,255,0.2)' },
+            ]}
+          />
           <View style={styles.bars}>
             {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15].map((i) => (
-              <View 
-                key={i} 
+              <View
+                key={i}
                 style={[
-                  styles.bar, 
-                  { 
+                  styles.bar,
+                  {
                     height: 10 + Math.sin(i * 0.8) * 6,
-                    backgroundColor: isMe ? "#fff" : "#0068FF",
-                    opacity: i / 15 <= progress / 100 ? 1 : 0.4
-                  }
-                ]} 
+                    backgroundColor: isMe ? '#fff' : '#0068FF',
+                    opacity: i / 15 <= progress / 100 ? 1 : 0.4,
+                  },
+                ]}
               />
             ))}
           </View>
@@ -286,7 +182,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: "#000",
+    shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,
     shadowRadius: 1,
@@ -339,9 +235,9 @@ const styles = StyleSheet.create({
     minWidth: 32,
   },
   timeTextMe: {
-    color: '#fff',
+    color: '#DBEAFE',
   },
   timeTextThem: {
-    color: '#4B5563',
+    color: '#6B7280',
   },
 });

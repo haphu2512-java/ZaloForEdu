@@ -21,6 +21,7 @@ const ensureAdminOrOwner = (conversation, userId) => {
 };
 
 const ensureCanPin = (conversation, userId) => {
+  if (conversation.type !== 'group') return;
   const isOwner = toStr(conversation.ownerId || conversation.createdBy) === toStr(userId);
   const isAdmin = (conversation.adminIds || []).some((a) => toStr(a) === toStr(userId));
   if (!isOwner && !isAdmin) {

@@ -79,7 +79,6 @@ const updateUserById = asyncHandler(async (req, res) => {
       user.emailVerificationExpires = new Date(Date.now() + 10 * 60 * 1000);
 
       await sendVerificationOtp({ email: nextEmail, otp: user.emailVerificationToken });
-      await sendVerificationOtp({ email: nextEmail, otp: user.emailVerificationToken });
     } else if (!nextEmail) {
       user.email = null;
       user.isEmailVerified = false;

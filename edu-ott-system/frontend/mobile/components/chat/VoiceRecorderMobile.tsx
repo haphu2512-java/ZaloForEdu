@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Animated } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { Audio } from 'expo-av';
+import { AudioModule, RecordingPresets, requestRecordingPermissionsAsync, setAudioModeAsync } from 'expo-audio';
+import type { AudioRecorder } from 'expo-audio';
 
 interface VoiceRecorderMobileProps {
   onCancel: () => void;
@@ -14,7 +15,7 @@ export const VoiceRecorderMobile: React.FC<VoiceRecorderMobileProps> = ({ onCanc
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const visualizerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   // dùng ref để cleanup luôn trỏ đúng instance, tránh stale closure
-  const recordingRef = useRef<Audio.Recording | null>(null);
+  const recordingRef = useRef<AudioRecorder | null>(null);
 
   // Anim cho các cột visualizer
   const animValues = useRef(new Array(20).fill(0).map(() => new Animated.Value(4))).current;
@@ -25,7 +26,7 @@ export const VoiceRecorderMobile: React.FC<VoiceRecorderMobileProps> = ({ onCanc
       stopTimer();
       if (visualizerRef.current) clearInterval(visualizerRef.current);
       if (recordingRef.current) {
-        recordingRef.current.stopAndUnloadAsync().catch(() => null);
+        recordingRef.current.stop().catch(() => null);
       }
     };
   }, []);
@@ -45,24 +46,21 @@ export const VoiceRecorderMobile: React.FC<VoiceRecorderMobileProps> = ({ onCanc
 
   const startRecording = async () => {
     try {
-      const permission = await Audio.requestPermissionsAsync();
+      const permission = await requestRecordingPermissionsAsync();
       if (permission.status !== 'granted') {
         onCancel();
         return;
       }
 
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: true,
-        playsInSilentModeIOS: true,
-        shouldDuckAndroid: true,
-        playThroughEarpieceAndroid: false,
-        staysActiveInBackground: false,
+      await setAudioModeAsync({
+        allowsRecording: true,
+        playsInSilentMode: true,
+        shouldPlayInBackground: false,
       });
 
-      const { recording: newRecording } = await Audio.Recording.createAsync(
-        Audio.RecordingOptionsPresets.HIGH_QUALITY
-      );
-
+      const newRecording = new AudioModule.AudioRecorder(RecordingPresets.HIGH_QUALITY);
+      await newRecording.prepareToRecordAsync();
+      newRecording.record();
       recordingRef.current = newRecording;
       setIsRecording(true);
       startTimer();
@@ -88,8 +86,8 @@ export const VoiceRecorderMobile: React.FC<VoiceRecorderMobileProps> = ({ onCanc
     try {
       stopTimer();
       if (visualizerRef.current) clearInterval(visualizerRef.current);
-      await recordingRef.current.stopAndUnloadAsync();
-      const uri = recordingRef.current.getURI();
+      await recordingRef.current.stop();
+      const uri = recordingRef.current.uri;
       recordingRef.current = null;
       if (uri) {
         onSend(uri);
@@ -103,7 +101,7 @@ export const VoiceRecorderMobile: React.FC<VoiceRecorderMobileProps> = ({ onCanc
     stopTimer();
     if (visualizerRef.current) clearInterval(visualizerRef.current);
     if (recordingRef.current) {
-      await recordingRef.current.stopAndUnloadAsync().catch(() => null);
+      await recordingRef.current.stop().catch(() => null);
       recordingRef.current = null;
     }
     onCancel();
