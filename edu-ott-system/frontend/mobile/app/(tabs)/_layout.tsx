@@ -94,6 +94,20 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="mydocument"
+        options={{
+          title: 'My Document',
+          tabBarIcon: ({ color, focused }: { color: string; focused: boolean }) => (
+            <TabBarIcon name={focused ? 'cloud' : 'cloud-outline'} color={color} />
+          ),
+          headerRight: () => (
+            <View style={{ paddingRight: 16 }}>
+              <Ionicons name="information-circle-outline" size={22} color={headerIconColor} />
+            </View>
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="profile"
         options={{
           title: 'Cá nhân',

@@ -606,6 +606,45 @@ export default function ChatScreen() {
     }
   };
 
+  // ==================== CHỤP ẢNH ====================
+  const handleTakeImage = async () => {
+    if (isPicking.current) return;
+    isPicking.current = true;
+    setShowMediaMenu(false);
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    try {
+      const permission = await ImagePicker.requestCameraPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert('Lỗi', 'Bạn cần cấp quyền truy cập camera để chụp ảnh');
+        return;
+      }
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: 'Images' as any,
+        quality: 0.8,
+      });
+      if (result.canceled || !result.assets?.length) return;
+      setIsSending(true);
+      const asset = result.assets[0];
+      const ext = asset.uri.split('.').pop()?.toLowerCase() || 'jpg';
+      const mimeType = asset.mimeType || (ext === 'png' ? 'image/png' : 'image/jpeg');
+      const fileName = asset.fileName || `photo-${Date.now()}.${ext}`;
+      const uploaded = await uploadMediaForm({ uri: asset.uri, fileName, mimeType });
+      const mediaId = uploaded._id || uploaded.id;
+      if (!mediaId) throw new Error('Không upload được ảnh');
+      
+      setMediaById((prev) => ({ ...prev, [mediaId]: uploaded }));
+      const newMsg = await sendMessage({ conversationId, mediaIds: [mediaId], content: '' });
+      setMessages((prev) =>
+        prev.some((m) => getMessageId(m) === getMessageId(newMsg)) ? prev : [newMsg, ...prev]
+      );
+    } catch (err: any) {
+      Alert.alert('Lỗi', err.message || 'Không thể gửi ảnh');
+    } finally {
+      setIsSending(false);
+      isPicking.current = false;
+    }
+  };
+
   // ==================== CHỌN ẢNH ====================
   const handlePickImage = async () => {
     if (isPicking.current) return;
@@ -1011,11 +1050,24 @@ export default function ChatScreen() {
                         onPress={() => openAttachment(media)}
                         style={[styles.fileAttachment, { backgroundColor: isMine ? '#1D4ED8' : colors.border }]}
                       >
-                        <Ionicons name="document-attach-outline" size={18} color={isMine ? '#DBEAFE' : colors.text} />
-                        <Text numberOfLines={1} style={{ flex: 1, color: isMine ? '#DBEAFE' : colors.text, fontSize: 13, fontWeight: '600' }}>
-                          {fileName}
-                        </Text>
-                        {canOpen && <Ionicons name="download-outline" size={16} color={isMine ? '#DBEAFE' : colors.muted} />}
+                        <View style={{ width: 40, height: 40, borderRadius: 8, backgroundColor: isMine ? '#DBEAFE20' : colors.tint + '15', alignItems: 'center', justifyContent: 'center' }}>
+                           <Ionicons name="document-text" size={24} color={isMine ? '#DBEAFE' : colors.tint} />
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Text numberOfLines={2} style={{ color: isMine ? '#DBEAFE' : colors.text, fontSize: 14, fontWeight: '600' }}>
+                            {fileName}
+                          </Text>
+                          {media?.size ? (
+                            <Text style={{ color: isMine ? '#DBEAFE90' : colors.muted, fontSize: 11, marginTop: 2 }}>
+                              {media.size < 1024 * 1024 ? `${(media.size / 1024).toFixed(1)} KB` : `${(media.size / (1024 * 1024)).toFixed(1)} MB`} • {(media.fileName || '').split('.').pop()?.toUpperCase()}
+                            </Text>
+                          ) : (
+                            <Text style={{ color: isMine ? '#DBEAFE90' : colors.muted, fontSize: 11, marginTop: 2 }}>
+                               {(media?.fileName || '').split('.').pop()?.toUpperCase()}
+                            </Text>
+                          )}
+                        </View>
+                        {canOpen && <Ionicons name="download-outline" size={20} color={isMine ? '#DBEAFE' : colors.muted} />}
                       </TouchableOpacity>
                     );
                   })}
@@ -1209,11 +1261,17 @@ export default function ChatScreen() {
       <Modal visible={showMediaMenu} transparent animationType="slide" onRequestClose={() => setShowMediaMenu(false)}>
         <TouchableOpacity style={styles.mediaMenuOverlay} activeOpacity={1} onPress={() => setShowMediaMenu(false)}>
           <View style={[styles.mediaMenu, { backgroundColor: colors.surface }]}>
+            <TouchableOpacity style={styles.mediaMenuItem} onPress={handleTakeImage}>
+              <View style={[styles.mediaMenuIcon, { backgroundColor: '#FCE7F3' }]}>
+                <Ionicons name="camera" size={26} color="#DB2777" />
+              </View>
+              <Text style={{ color: colors.text, fontSize: 13, fontWeight: '600', marginTop: 4 }}>Máy ảnh</Text>
+            </TouchableOpacity>
             <TouchableOpacity style={styles.mediaMenuItem} onPress={handlePickImage}>
               <View style={[styles.mediaMenuIcon, { backgroundColor: '#EEF2FF' }]}>
                 <Ionicons name="image" size={26} color="#4F46E5" />
               </View>
-              <Text style={{ color: colors.text, fontSize: 13, fontWeight: '600', marginTop: 4 }}>Thư viện ảnh</Text>
+              <Text style={{ color: colors.text, fontSize: 13, fontWeight: '600', marginTop: 4 }}>Thư viện</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.mediaMenuItem} onPress={handleDocumentPick}>
               <View style={[styles.mediaMenuIcon, { backgroundColor: '#ECFDF5' }]}>

@@ -527,6 +527,7 @@ export default function ContactsScreen() {
     const uid = getUserId(item);
     const isBlocked = (user?.blockedUsers || []).includes(uid);
     const isRequestSent = sentFriendRequestIds.includes(uid);
+    const alreadyFriend = isFriend(uid);
     return (
       <View style={[styles.userRow, { backgroundColor: colors.surface }]}>
         <Image
@@ -540,32 +541,44 @@ export default function ContactsScreen() {
         <View style={{ flex: 1, backgroundColor: 'transparent' }}>
           <Text style={[styles.userName, { color: colors.text }]}>{item.username}</Text>
           <Text style={{ fontSize: 13, color: colors.muted }}>{item.email || item.phone || 'Người dùng'}</Text>
+          {!alreadyFriend && (
+            <Text style={{ fontSize: 11, color: colors.muted, fontStyle: 'italic', marginTop: 2 }}>Chưa kết bạn</Text>
+          )}
         </View>
-        {!isFriend(uid) ? (
-          <View style={{ gap: 8, backgroundColor: 'transparent' }}>
-            <TouchableOpacity
-              style={[styles.actionBtn, { backgroundColor: isRequestSent ? '#9CA3AF' : brand }]}
-              onPress={() => handleAddFriend(uid)}
-              disabled={isRequestSent}
-            >
-              <Text style={{ color: '#fff', fontWeight: '700', fontSize: 12 }}>
-                {isRequestSent ? 'Đã gửi' : 'Kết bạn'}
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.actionBtn, { backgroundColor: isBlocked ? '#16A34A' : '#DC2626' }]}
-              onPress={() => handleToggleBlock(uid)}
-            >
-              <Text style={{ color: '#fff', fontWeight: '700', fontSize: 12 }}>
-                {isBlocked ? 'Bỏ chặn' : 'Chặn'}
-              </Text>
-            </TouchableOpacity>
-          </View>
-        ) : (
-          <View style={[styles.badge, { backgroundColor: '#DCFCE7' }]}>
-            <Text style={{ color: '#166534', fontWeight: '700', fontSize: 12 }}>Bạn bè</Text>
-          </View>
-        )}
+        <View style={{ gap: 6, backgroundColor: 'transparent' }}>
+          {/* Nút Nhắn tin - luôn hiển thị cho mọi user (kể cả người lạ) */}
+          <TouchableOpacity
+            style={[styles.actionBtn, { backgroundColor: '#0EA5E9' }]}
+            onPress={() => handleStartChat(uid)}
+          >
+            <Text style={{ color: '#fff', fontWeight: '700', fontSize: 12 }}>Nhắn tin</Text>
+          </TouchableOpacity>
+          {!alreadyFriend ? (
+            <>
+              <TouchableOpacity
+                style={[styles.actionBtn, { backgroundColor: isRequestSent ? '#9CA3AF' : brand }]}
+                onPress={() => handleAddFriend(uid)}
+                disabled={isRequestSent}
+              >
+                <Text style={{ color: '#fff', fontWeight: '700', fontSize: 12 }}>
+                  {isRequestSent ? 'Đã gửi' : 'Kết bạn'}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.actionBtn, { backgroundColor: isBlocked ? '#16A34A' : '#DC2626' }]}
+                onPress={() => handleToggleBlock(uid)}
+              >
+                <Text style={{ color: '#fff', fontWeight: '700', fontSize: 12 }}>
+                  {isBlocked ? 'Bỏ chặn' : 'Chặn'}
+                </Text>
+              </TouchableOpacity>
+            </>
+          ) : (
+            <View style={[styles.badge, { backgroundColor: '#DCFCE7' }]}>
+              <Text style={{ color: '#166534', fontWeight: '700', fontSize: 12 }}>Bạn bè ✓</Text>
+            </View>
+          )}
+        </View>
       </View>
     );
   };
