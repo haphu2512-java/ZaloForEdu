@@ -36,6 +36,14 @@ const conversationPreferenceSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+    isPinned: {
+      type: Boolean,
+      default: false,
+    },
+    isMuted: {
+      type: Boolean,
+      default: false,
+    },
   },
   { timestamps: true },
 );

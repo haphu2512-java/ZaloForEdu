@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 
 const Message = require('../models/Message');
+const User = require('../models/User');
 const ConversationPreference = require('../models/ConversationPreference');
 const { createMessage, ensureConversationMember } = require('../services/messageService');
 const { decodeCursor, encodeCursor } = require('../utils/cursor');
@@ -26,6 +27,21 @@ const sendMessage = asyncHandler(async (req, res) => {
   if (!isOwner && !isAdmin) {
     if (conversation.settings?.canMembersSendMessages === false) {
       throw new ApiError(403, 'FORBIDDEN', 'Only admin/owner can send messages in this group');
+    }
+  }
+
+  // Nếu là chat 1-1, kiểm tra xem có ai bị block không
+  if (conversation.type === 'direct') {
+    const otherParticipantId = conversation.participants.find(p => toStr(p) !== toStr(req.user._id));
+    if (otherParticipantId) {
+      const currentUser = await User.findById(req.user._id);
+      const otherUser = await User.findById(otherParticipantId);
+      if (currentUser && currentUser.blockedUsers && currentUser.blockedUsers.some(id => toStr(id) === toStr(otherParticipantId))) {
+        throw new ApiError(403, 'FORBIDDEN', 'Bạn đã chặn người này');
+      }
+      if (otherUser && otherUser.blockedUsers && otherUser.blockedUsers.some(id => toStr(id) === toStr(req.user._id))) {
+        throw new ApiError(403, 'FORBIDDEN', 'Bạn đã bị người này chặn');
+      }
     }
   }
 
