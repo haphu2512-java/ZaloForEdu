@@ -15,13 +15,14 @@ const Tooltip = ({ text, children }) => {
       {children}
       {show && (
         <span style={{
-          position: 'absolute', bottom: '140%', left: '50%', transform: 'translateX(-50%)',
+          position: 'absolute', bottom: '130%', right: 0,
           background: 'rgba(30,30,30,0.92)', color: '#fff', fontSize: 12, borderRadius: 8,
-          padding: '7px 12px', whiteSpace: 'pre-wrap', width: 220, zIndex: 999,
-          boxShadow: '0 4px 12px rgba(0,0,0,0.3)', lineHeight: 1.5, pointerEvents: 'none',
+          padding: '8px 12px', whiteSpace: 'normal', width: 240, zIndex: 999,
+          boxShadow: '0 4px 16px rgba(0,0,0,0.3)', lineHeight: 1.6, pointerEvents: 'none',
+          wordBreak: 'break-word',
         }}>
           {text}
-          <span style={{ position: 'absolute', top: '100%', left: '50%', transform: 'translateX(-50%)', borderWidth: 5, borderStyle: 'solid', borderColor: 'rgba(30,30,30,0.92) transparent transparent transparent' }} />
+          <span style={{ position: 'absolute', top: '100%', right: 6, borderWidth: 5, borderStyle: 'solid', borderColor: 'rgba(30,30,30,0.92) transparent transparent transparent' }} />
         </span>
       )}
     </span>
