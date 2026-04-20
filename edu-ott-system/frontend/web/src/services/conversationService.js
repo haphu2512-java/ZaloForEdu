@@ -239,4 +239,16 @@ export const conversationService = {
     const res = await axios.put(`${API_URL}/conversations/${conversationId}/join-requests/${requestId}`, { action }, getAuthHeaders());
     return res.data;
   },
+  blockMember: async (conversationId, memberId) => {
+    const res = await axios.post(`${API_URL}/conversations/${conversationId}/block`, { memberId }, getAuthHeaders());
+    return res.data;
+  },
+  unblockMember: async (conversationId, memberId) => {
+    const res = await axios.delete(`${API_URL}/conversations/${conversationId}/block/${memberId}`, getAuthHeaders());
+    return res.data;
+  },
+  listBlockedMembers: async (conversationId) => {
+    const res = await axios.get(`${API_URL}/conversations/${conversationId}/blocked`, getAuthHeaders());
+    return res.data;
+  },
 };

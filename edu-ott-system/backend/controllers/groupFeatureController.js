@@ -396,6 +396,56 @@ const joinByInviteLink = asyncHandler(async (req, res) => {
   return successResponse(res, conversation, 'Joined group successfully');
 });
 
+// ==================== FEATURE 6: BLOCK MEMBERS (Chặn khỏi nhóm) ====================
+
+const blockMember = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const { memberId } = req.body;
+
+  const conversation = await Conversation.findById(id);
+  if (!conversation) throw new ApiError(404, 'CONVERSATION_NOT_FOUND', 'Conversation not found');
+  ensureAdminOrOwner(conversation, req.user._id);
+
+  const targetStr = toStr(memberId);
+  const ownerStr = toStr(conversation.ownerId || conversation.createdBy);
+  if (targetStr === ownerStr) throw new ApiError(403, 'FORBIDDEN', 'Cannot block the group owner');
+
+  conversation.participants = conversation.participants.filter(p => toStr(p) !== targetStr);
+  if (!conversation.blockedMembers) conversation.blockedMembers = [];
+  if (!conversation.blockedMembers.some(b => toStr(b) === targetStr)) {
+    conversation.blockedMembers.push(memberId);
+  }
+  await conversation.save();
+
+  socketService.emitToUser(targetStr, 'removed_from_group', { conversationId: id, reason: 'blocked' });
+  socketService.emitToConversation(id, 'member_blocked', { conversationId: id, memberId: targetStr });
+
+  return successResponse(res, {}, 'Member blocked');
+});
+
+const unblockMember = asyncHandler(async (req, res) => {
+  const { id, memberId } = req.params;
+
+  const conversation = await Conversation.findById(id);
+  if (!conversation) throw new ApiError(404, 'CONVERSATION_NOT_FOUND', 'Conversation not found');
+  ensureAdminOrOwner(conversation, req.user._id);
+
+  conversation.blockedMembers = (conversation.blockedMembers || []).filter(b => toStr(b) !== toStr(memberId));
+  await conversation.save();
+
+  return successResponse(res, {}, 'Member unblocked');
+});
+
+const listBlockedMembers = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+
+  const conversation = await Conversation.findById(id).populate('blockedMembers', 'username avatarUrl');
+  if (!conversation) throw new ApiError(404, 'CONVERSATION_NOT_FOUND', 'Conversation not found');
+  ensureAdminOrOwner(conversation, req.user._id);
+
+  return successResponse(res, conversation.blockedMembers || [], 'Blocked members fetched');
+});
+
 module.exports = {
   // Feature 2: Pinned items
   pinMessage,
@@ -411,4 +461,8 @@ module.exports = {
   resetInviteLink,
   previewGroupByInviteCode,
   joinByInviteLink,
+  // Feature 6: Block members
+  blockMember,
+  unblockMember,
+  listBlockedMembers,
 };

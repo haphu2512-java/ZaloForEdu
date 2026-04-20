@@ -1,10 +1,32 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { FaBell, FaThumbtack, FaUserPlus, FaUserSecret, FaArrowLeft, FaTrashAlt, FaSignOutAlt, FaLink, FaEllipsisH, FaChevronDown, FaChevronUp, FaCalendarAlt, FaUserTimes, FaKey, FaSync, FaPen, FaCheck, FaTimes } from 'react-icons/fa';
 import toast from 'react-hot-toast';
 import { conversationService } from '../../services/conversationService';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { getFileColor, getExt, formatBytes } from './chatUtils';
 import { toAbsoluteUrl } from './MessageBubble';
+
+// Tooltip component
+const Tooltip = ({ text, children }) => {
+  const [show, setShow] = useState(false);
+  return (
+    <span style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}
+      onMouseEnter={() => setShow(true)} onMouseLeave={() => setShow(false)}>
+      {children}
+      {show && (
+        <span style={{
+          position: 'absolute', bottom: '140%', left: '50%', transform: 'translateX(-50%)',
+          background: 'rgba(30,30,30,0.92)', color: '#fff', fontSize: 12, borderRadius: 8,
+          padding: '7px 12px', whiteSpace: 'pre-wrap', width: 220, zIndex: 999,
+          boxShadow: '0 4px 12px rgba(0,0,0,0.3)', lineHeight: 1.5, pointerEvents: 'none',
+        }}>
+          {text}
+          <span style={{ position: 'absolute', top: '100%', left: '50%', transform: 'translateX(-50%)', borderWidth: 5, borderStyle: 'solid', borderColor: 'rgba(30,30,30,0.92) transparent transparent transparent' }} />
+        </span>
+      )}
+    </span>
+  );
+};
 
 // Accordion component dùng React state thay vì DOM manipulation
 const Accordion = ({ title, defaultOpen = false, children }) => {
@@ -66,6 +88,14 @@ export const ChatRightPanel = ({
   const [editRemTime, setEditRemTime] = useState('');
   const [inviteLink, setInviteLink] = useState('');
   const [inviteCode, setInviteCode] = useState('');
+  const [blockedMembers, setBlockedMembers] = useState([]);
+
+  useEffect(() => {
+    if (rightPanelMode !== 'blocked' || !activeConversation) return;
+    conversationService.listBlockedMembers(activeConversation._id)
+      .then(res => setBlockedMembers(res.data || []))
+      .catch(() => setBlockedMembers([]));
+  }, [rightPanelMode, activeConversation?._id]);
 
   useEffect(() => {
     if (!pendingEditReminder) return;
@@ -375,54 +405,73 @@ export const ChatRightPanel = ({
                 <div style={{ height: 8, background: 'var(--z-bg-main)', borderTop: '1px solid var(--z-border)', borderBottom: '1px solid var(--z-border)', margin: '8px 0' }} />
 
                 {/* 2. Cài đặt duyệt / Toggles */}
-                <div className="crp-gm-switch" style={{ padding: '12px 16px', opacity: isPrivileged ? 1 : 0.6, pointerEvents: isPrivileged ? 'auto' : 'none' }}>
-                  <div style={{ flex: 1, fontSize: 15, color: isPrivileged ? 'var(--z-text-primary)' : 'var(--z-text-secondary)' }}>Chế độ phê duyệt thành viên mới</div>
-                  <div
-                    className={`crp-gm-switch-btn ${activeConversation?.settings?.isApprovalRequired ? 'active' : ''}`}
-                    onClick={() => { if(isPrivileged) handleUpdateGroupSettings({ isApprovalRequired: !activeConversation?.settings?.isApprovalRequired }); }}
-                  >
-                    <div className="crp-gm-switch-ball" />
-                  </div>
-                </div>
-
-                <div className="crp-gm-switch" style={{ padding: '12px 16px', opacity: isPrivileged ? 1 : 0.6, pointerEvents: isPrivileged ? 'auto' : 'none' }} onClick={(e) => isPrivileged && e.currentTarget.querySelector('.crp-gm-switch-btn').classList.toggle('active')}>
-                  <div style={{ flex: 1, fontSize: 15, color: isPrivileged ? 'var(--z-text-primary)' : 'var(--z-text-secondary)' }}>Đánh dấu tin nhắn từ trưởng/phó nhóm</div>
-                  <div className="crp-gm-switch-btn active"><div className="crp-gm-switch-ball" /></div>
-                </div>
-
-                <div className="crp-gm-switch" style={{ padding: '12px 16px', opacity: isPrivileged ? 1 : 0.6, pointerEvents: isPrivileged ? 'auto' : 'none' }} onClick={(e) => isPrivileged && e.currentTarget.querySelector('.crp-gm-switch-btn').classList.toggle('active')}>
-                  <div style={{ flex: 1, fontSize: 15, color: isPrivileged ? 'var(--z-text-primary)' : 'var(--z-text-secondary)' }}>Cho phép thành viên mới đọc tin nhắn gần nhất</div>
-                  <div className="crp-gm-switch-btn active"><div className="crp-gm-switch-ball" /></div>
-                </div>
-
-                <div className="crp-gm-switch" style={{ padding: '12px 16px', opacity: isPrivileged ? 1 : 0.6, pointerEvents: isPrivileged ? 'auto' : 'none' }} onClick={(e) => isPrivileged && e.currentTarget.querySelector('.crp-gm-switch-btn').classList.toggle('active')}>
-                  <div style={{ flex: 1, fontSize: 15, color: isPrivileged ? 'var(--z-text-primary)' : 'var(--z-text-secondary)' }}>Cho phép dùng link tham gia nhóm</div>
-                  <div className="crp-gm-switch-btn active"><div className="crp-gm-switch-ball" /></div>
-                </div>
-
-                {/* Link box */}
-                <div style={{ margin: '0 16px 16px', padding: '12px', background: 'var(--z-bg-main)', borderRadius: 8, opacity: isPrivileged ? 1 : 0.6, pointerEvents: isPrivileged ? 'auto' : 'none' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                    <div style={{ fontSize: 13, color: 'var(--z-primary)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
-                      {inviteLink || 'Đang tải link...'}
+                {[
+                  {
+                    label: 'Chế độ phê duyệt thành viên mới',
+                    key: 'isApprovalRequired',
+                    tooltip: 'Khi bật, thành viên mới phải được trưởng/phó nhóm duyệt mới được tham gia.',
+                  },
+                  {
+                    label: 'Đánh dấu tin nhắn từ trưởng/phó nhóm',
+                    key: 'markAdminMessages',
+                    tooltip: 'Khi bật, tin nhắn từ Trưởng/phó nhóm sẽ có ký hiệu chìa khóa.',
+                  },
+                  {
+                    label: 'Cho phép thành viên mới đọc tin nhắn gần nhất',
+                    key: 'allowNewMembersReadHistory',
+                    tooltip: 'Khi bật, thành viên mới sẽ xem được các tin nhắn trong nhóm trước khi họ tham gia.',
+                  },
+                  {
+                    label: 'Cho phép dùng link tham gia nhóm',
+                    key: 'allowInviteLink',
+                    tooltip: 'Khi bật, bất kỳ ai có link đều có thể yêu cầu tham gia nhóm.',
+                  },
+                ].map(({ label, key, tooltip }) => {
+                  const val = activeConversation?.settings?.[key];
+                  const isOn = key === 'isApprovalRequired' ? !!val : val !== false;
+                  return (
+                    <div key={key} className="crp-gm-switch" style={{ padding: '12px 16px', opacity: isPrivileged ? 1 : 0.6, pointerEvents: isPrivileged ? 'auto' : 'none' }}>
+                      <div style={{ flex: 1, fontSize: 15, color: isPrivileged ? 'var(--z-text-primary)' : 'var(--z-text-secondary)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                        {label}
+                        <Tooltip text={tooltip}>
+                          <span style={{ width: 16, height: 16, borderRadius: '50%', border: '1.5px solid var(--z-text-secondary)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: 'var(--z-text-secondary)', cursor: 'default', flexShrink: 0 }}>?</span>
+                        </Tooltip>
+                      </div>
+                      <div
+                        className={`crp-gm-switch-btn ${isOn ? 'active' : ''}`}
+                        onClick={() => { if (isPrivileged) handleUpdateGroupSettings({ [key]: !isOn }); }}
+                      >
+                        <div className="crp-gm-switch-ball" />
+                      </div>
                     </div>
-                    <div style={{ display: 'flex', gap: 12, color: 'var(--z-primary)', flexShrink: 0 }}>
-                      <FaLink size={14} style={{ cursor: 'pointer' }} title="Copy link" onClick={() => {
-                        if (inviteLink) { navigator.clipboard.writeText(inviteLink); toast.success('Đã copy link mời'); }
-                      }} />
-                      <FaSync size={14} style={{ cursor: 'pointer' }} title="Tạo link mới" onClick={async () => {
-                        if (!inviteCode) return;
-                        try {
-                          const res = await conversationService.resetInviteLink(inviteCode);
-                          const newCode = res.data.inviteCode;
-                          setInviteCode(newCode);
-                          setInviteLink(`${window.location.origin}/join/${newCode}`);
-                          toast.success('Đã tạo link mời mới');
-                        } catch { toast.error('Lỗi tạo link'); }
-                      }} />
+                  );
+                })}
+
+                {/* Link box - chỉ hiện khi allowInviteLink = true */}
+                {activeConversation?.settings?.allowInviteLink !== false && (
+                  <div style={{ margin: '0 16px 16px', padding: '12px', background: 'var(--z-bg-main)', borderRadius: 8, opacity: isPrivileged ? 1 : 0.6, pointerEvents: isPrivileged ? 'auto' : 'none' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                      <div style={{ fontSize: 13, color: 'var(--z-primary)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
+                        {inviteLink || 'Đang tải link...'}
+                      </div>
+                      <div style={{ display: 'flex', gap: 12, color: 'var(--z-primary)', flexShrink: 0 }}>
+                        <FaLink size={14} style={{ cursor: 'pointer' }} title="Copy link" onClick={() => {
+                          if (inviteLink) { navigator.clipboard.writeText(inviteLink); toast.success('Đã copy link mời'); }
+                        }} />
+                        <FaSync size={14} style={{ cursor: 'pointer' }} title="Tạo link mới" onClick={async () => {
+                          if (!inviteCode) return;
+                          try {
+                            const res = await conversationService.resetInviteLink(inviteCode);
+                            const newCode = res.data.inviteCode;
+                            setInviteCode(newCode);
+                            setInviteLink(`${window.location.origin}/join/${newCode}`);
+                            toast.success('Đã tạo link mời mới');
+                          } catch { toast.error('Lỗi tạo link'); }
+                        }} />
+                      </div>
                     </div>
                   </div>
-                </div>
+                )}
 
                 <div style={{ height: 8, background: 'var(--z-bg-main)', borderTop: '1px solid var(--z-border)', borderBottom: '1px solid var(--z-border)', margin: '8px 0' }} />
 
@@ -436,10 +485,12 @@ export const ChatRightPanel = ({
                     )}
                   </div>
                 )}
-                <div style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer' }}>
-                  <FaUserTimes size={18} color="var(--z-text-secondary)" />
-                  <span style={{ fontSize: 15, color: 'var(--z-text-primary)' }}>Chặn khỏi nhóm</span>
-                </div>
+                {isPrivileged && (
+                  <div style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer' }} onClick={() => setRightPanelMode('blocked')}>
+                    <FaUserTimes size={18} color="var(--z-text-secondary)" />
+                    <span style={{ fontSize: 15, color: 'var(--z-text-primary)' }}>Chặn khỏi nhóm</span>
+                  </div>
+                )}
                 <div style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer' }} onClick={() => setRightPanelMode('manage-roles')}>
                   <FaKey size={18} color="var(--z-text-secondary)" />
                   <span style={{ fontSize: 15, color: 'var(--z-text-primary)' }}>Trưởng & phó nhóm</span>
@@ -587,6 +638,72 @@ export const ChatRightPanel = ({
                         <FaTimes size={10} /> Từ chối
                       </button>
                     </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ) : rightPanelMode === 'blocked' ? (
+          <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+            <div style={{ display: 'flex', alignItems: 'center', padding: '16px', borderBottom: '1px solid var(--z-border)', cursor: 'pointer' }} onClick={() => setRightPanelMode('manage')}>
+              <FaArrowLeft size={16} color="var(--z-text-secondary)" style={{ marginRight: 12 }} />
+              <span style={{ fontSize: 16, fontWeight: 600, color: 'var(--z-text-primary)' }}>Chặn khỏi nhóm</span>
+            </div>
+            <div style={{ padding: '10px 16px', fontSize: 12, color: 'var(--z-text-secondary)', borderBottom: '1px solid var(--z-border)', background: 'var(--z-bg-main)' }}>
+              Những người đã bị chặn không thể tham gia lại nhóm, trừ khi được trưởng/phó nhóm bỏ chặn hoặc thêm lại.
+            </div>
+            {/* Chặn thành viên đang trong nhóm */}
+            <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--z-border)' }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--z-text-secondary)', marginBottom: 8 }}>Thêm vào danh sách chặn</div>
+              {(activeConversation?.participants || []).filter(p => {
+                const pid = String(p._id || p.id || p);
+                return pid !== myId && getMemberRole(p) !== 'owner';
+              }).map(p => {
+                const pid = String(p._id || p.id || p);
+                const isAlreadyBlocked = blockedMembers.some(b => String(b._id || b) === pid);
+                return (
+                  <div key={pid} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 0' }}>
+                    <img src={p.avatarUrl || 'https://i.pravatar.cc/150'} style={{ width: 36, height: 36, borderRadius: '50%', objectFit: 'cover' }} alt="" />
+                    <div style={{ flex: 1, fontSize: 13, fontWeight: 500 }}>{p.username || 'Thành viên'}</div>
+                    {!isAlreadyBlocked && (
+                      <button onClick={async () => {
+                        if (!window.confirm(`Chặn ${p.username || 'thành viên này'} khỏi nhóm?`)) return;
+                        try {
+                          await conversationService.blockMember(activeConversation._id, pid);
+                          toast.success('Đã chặn thành viên');
+                          fetchConversations();
+                          const res = await conversationService.listBlockedMembers(activeConversation._id);
+                          setBlockedMembers(res.data || []);
+                        } catch { toast.error('Lỗi chặn thành viên'); }
+                      }} style={{ padding: '4px 12px', borderRadius: 8, border: '1px solid #ef4444', background: 'transparent', color: '#ef4444', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                        Chặn
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+            {/* Danh sách đã bị chặn */}
+            <div style={{ flex: 1, overflowY: 'auto', padding: '12px 16px' }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--z-text-secondary)', marginBottom: 8 }}>Đã bị chặn ({blockedMembers.length})</div>
+              {blockedMembers.length === 0 ? (
+                <div style={{ textAlign: 'center', color: 'var(--z-text-muted)', fontSize: 13, padding: '20px 0' }}>Chưa có ai bị chặn</div>
+              ) : blockedMembers.map(u => {
+                const uid = String(u._id || u);
+                const name = u.username || 'Người dùng';
+                return (
+                  <div key={uid} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 0', borderBottom: '1px solid var(--z-border)' }}>
+                    <img src={u.avatarUrl || 'https://i.pravatar.cc/150'} style={{ width: 40, height: 40, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} alt="" />
+                    <div style={{ flex: 1, fontSize: 14, fontWeight: 500, color: 'var(--z-text-primary)' }}>{name}</div>
+                    <button onClick={async () => {
+                      try {
+                        await conversationService.unblockMember(activeConversation._id, uid);
+                        toast.success(`Đã bỏ chặn ${name}`);
+                        setBlockedMembers(prev => prev.filter(b => String(b._id || b) !== uid));
+                      } catch { toast.error('Lỗi bỏ chặn'); }
+                    }} style={{ padding: '5px 14px', borderRadius: 8, border: 'none', background: 'var(--z-bg-main)', color: 'var(--z-primary)', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                      Bỏ chặn
+                    </button>
                   </div>
                 );
               })}

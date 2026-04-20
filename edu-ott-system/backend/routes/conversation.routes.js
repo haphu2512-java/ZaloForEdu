@@ -387,6 +387,9 @@ const groupSettingsSchema = z.object({
   canMembersCreateReminders: z.boolean().optional(),
   canMembersCreatePolls: z.boolean().optional(),
   canMembersSendMessages: z.boolean().optional(),
+  markAdminMessages: z.boolean().optional(),
+  allowNewMembersReadHistory: z.boolean().optional(),
+  allowInviteLink: z.boolean().optional(),
 });
 const joinRequestBodySchema = z.object({
   reason: z.string().max(300).optional(),
@@ -455,6 +458,32 @@ router.post(
   auth,
   validate({ params: inviteCodeParamSchema }),
   groupFeatureController.resetInviteLink,
+);
+
+// ==================== FEATURE 6: BLOCK MEMBERS (Chặn khỏi nhóm) ====================
+const blockMemberBodySchema = z.object({ memberId: z.string().min(1) });
+const blockedMemberParamSchema = z.object({ id: z.string().min(1), memberId: z.string().min(1) });
+
+// POST /:id/block - Chặn thành viên
+router.post(
+  '/:id/block',
+  auth,
+  validate({ params: conversationIdParamSchema, body: blockMemberBodySchema }),
+  groupFeatureController.blockMember,
+);
+// DELETE /:id/block/:memberId - Bỏ chặn
+router.delete(
+  '/:id/block/:memberId',
+  auth,
+  validate({ params: blockedMemberParamSchema }),
+  groupFeatureController.unblockMember,
+);
+// GET /:id/blocked - Danh sách bị chặn
+router.get(
+  '/:id/blocked',
+  auth,
+  validate({ params: conversationIdParamSchema }),
+  groupFeatureController.listBlockedMembers,
 );
 
 module.exports = router;
