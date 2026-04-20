@@ -564,6 +564,22 @@ const handleJoinRequestProcessed = ({ conversationName, action }) => {
     socketService.on("join_request_received", handleJoinRequestReceived);
     socketService.on("join_request_processed", handleJoinRequestProcessed);
 
+    const handleReminderTriggered = ({ _id, title, participants }) => {
+      setReminders(prev => prev.map(r => r._id === _id ? { ...r, status: 'done' } : r));
+      const currentUserObj = JSON.parse(localStorage.getItem('user') || '{}');
+      const myId = String(currentUserObj._id || currentUserObj.id || '');
+      const isParticipant = (participants || []).some(p => String(p._id || p) === myId);
+      if (!isParticipant) return;
+      // Dùng browser Notification nếu được cấp quyền, fallback toast
+      const msg = `🔔 Nhắc hẹn: ${title}`;
+      if (Notification.permission === 'granted') {
+        new Notification('Nhắc hẹn', { body: title, icon: '/favicon.ico' });
+      } else {
+        toast(msg, { duration: 8000, icon: '🔔', style: { fontWeight: 600 } });
+      }
+    };
+    socketService.on("reminder_triggered", handleReminderTriggered);
+
     return () => {
       socketService.off("conversation_updated", handleConversationUpdated);
       socketService.off("conversation_settings_updated", handleSettingsUpdated);
@@ -575,6 +591,7 @@ const handleJoinRequestProcessed = ({ conversationName, action }) => {
       socketService.off("reminder_deleted", handleReminderDeleted);
       socketService.off("join_request_received", handleJoinRequestReceived);
       socketService.off("join_request_processed", handleJoinRequestProcessed);
+      socketService.off("reminder_triggered", handleReminderTriggered);
     };
   }, [token, userId, fetchConversationsData]);
 

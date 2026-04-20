@@ -16,6 +16,7 @@ const apiRoutes = require('./routes');
 const { closeRedis, initRedis } = require('./services/redisClient');
 const initSocket = require('./services/socketService');
 const { closeSocket } = initSocket;
+const { startReminderScheduler } = require('./services/reminderScheduler');
 const logger = require('./utils/logger');
 
 const createApp = () => {
@@ -106,6 +107,7 @@ const startServer = async () => {
     const ioInstance = initSocket(server);
     app.set('io', ioInstance);
     socketInitialized = true;
+    startReminderScheduler();
   }
 
   return new Promise((resolve) => {
