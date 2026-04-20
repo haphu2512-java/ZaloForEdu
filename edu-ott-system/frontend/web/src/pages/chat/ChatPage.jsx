@@ -23,6 +23,8 @@ import { conversationService } from "../../services/conversationService";
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api/v1";
 const API_ORIGIN = API_BASE_URL.replace(/\/api\/v1\/?$/, "");
 
+const DEFAULT_AVATAR = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' rx='20' fill='%23d8dadf'/%3E%3Ccircle cx='20' cy='15' r='7' fill='%23bcc0c4'/%3E%3Cpath d='M6 35 Q6 26 20 26 Q34 26 34 35' fill='%23bcc0c4'/%3E%3C/svg%3E";
+
 const formatChatTimestamp = (dateString) => {
   const d = new Date(dateString);
   const now = new Date();
@@ -288,22 +290,17 @@ export default function ChatPage() {
   }, [getOtherParticipant]);
 
   const getConversationAvatar = useCallback((conv) => {
-    if (!conv) return 'https://ui-avatars.com/api/?name=U&background=random';
+    if (!conv) return DEFAULT_AVATAR;
     if (conv.type === 'direct' && conv.participants?.length === 1) {
       try {
         const me = JSON.parse(localStorage.getItem("user") || "{}");
-        return me.avatarUrl || me.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(me.username || 'Me')}&background=0068FF&color=fff`;
-      } catch { return 'https://ui-avatars.com/api/?name=Me&background=0068FF&color=fff'; }
+        return me.avatarUrl || me.avatar || DEFAULT_AVATAR;
+      } catch { return DEFAULT_AVATAR; }
     }
-    if (conv.type === 'group' || conv.roomModel === 'Group') return conv.avatarUrl || conv.avatar || `https://ui-avatars.com/api/?name=${conv.name || 'G'}&background=random`;
+    if (conv.type === 'group' || conv.roomModel === 'Group') return conv.avatarUrl || conv.avatar || DEFAULT_AVATAR;
     const other = getOtherParticipant(conv);
-    let name = 'U';
-    let avatar = null;
-    if (other && typeof other === 'object') {
-      name = other.username || other.fullName || other.name || 'U';
-      avatar = other.avatarUrl || other.avatar;
-    }
-    return avatar || `https://ui-avatars.com/api/?name=${name}&background=random`;
+    if (other && typeof other === 'object') return other.avatarUrl || other.avatar || DEFAULT_AVATAR;
+    return DEFAULT_AVATAR;
   }, [getOtherParticipant]);
 
   const mergedConversations = useMemo(() => {
@@ -1104,7 +1101,8 @@ const handleJoinRequestProcessed = ({ conversationName, action }) => {
                   <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
                     {(rem.participants || []).map((p, i) => (
                       <div key={i} title={p.username || ''} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
-                        <img src={p.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(p.username || 'U')}&background=0068ff&color=fff&size=40`}
+                        <img src={p.avatarUrl || DEFAULT_AVATAR}
+                          onError={e => { e.currentTarget.src = DEFAULT_AVATAR; }}
                           style={{ width: 36, height: 36, borderRadius: '50%', objectFit: 'cover' }} alt="" />
                         <span style={{ fontSize: 10, color: 'var(--z-text-muted)', maxWidth: 44, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.username}</span>
                       </div>
@@ -1240,7 +1238,7 @@ const handleJoinRequestProcessed = ({ conversationName, action }) => {
                     <FaCloud size={20} color="#fff" />
                   </div>
                 ) : (
-                  <img className="cli-avatar" src={getConversationAvatar(conv)} alt="avt" />
+                  <img className="cli-avatar" src={getConversationAvatar(conv)} alt="avt" onError={e => { e.currentTarget.src = DEFAULT_AVATAR; }} />
                 )}
                 <div className="cli-info">
                   <div className="cli-top">

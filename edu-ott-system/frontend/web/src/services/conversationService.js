@@ -77,6 +77,11 @@ export const conversationService = {
     return conversationService.updateConversationPreference(conversationId, true);
   },
 
+  deleteConversation: async (conversationId) => {
+    const res = await axios.delete(`${API_URL}/conversations/${conversationId}`, getAuthHeaders());
+    return res.data;
+  },
+
   unarchiveConversation: async (conversationId) => {
     return conversationService.updateConversationPreference(conversationId, false);
   },
