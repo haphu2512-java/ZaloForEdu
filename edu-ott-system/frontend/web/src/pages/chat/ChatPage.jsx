@@ -14,6 +14,7 @@ import CreateGroupModal from "./Modals/CreateGroupModal";
 import { ChatHeader } from "./ChatHeader";
 import { MessageInput } from "./MessageInput";
 import { ChatRightPanel } from "./ChatRightPanel";
+import MyDocumentsPage from "../cloud/MyDocumentsPage";
 import { useTheme } from '../../contexts/ThemeContext';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { getCategory } from './chatUtils';
@@ -1257,8 +1258,10 @@ const handleJoinRequestProcessed = ({ conversationName, action }) => {
         </div>
       </aside>
 
-      {/* ── Ở GIỮA: CHAT KHU VỰC CHÍNH ── */}
-      {activeConversation ? (
+      {/* ── Cloud của tôi: dùng giao diện MyDocumentsPage ── */}
+      {activeConversation?.type === 'direct' && activeConversation?.participants?.length === 1 ? (
+        <MyDocumentsPage />
+      ) : activeConversation ? (
         <main className="chat-main">
           <ChatHeader
             room={{
@@ -1513,8 +1516,8 @@ const handleJoinRequestProcessed = ({ conversationName, action }) => {
         </main>
       )}
 
-      {/* ── BÊN PHẢI: RIGHT PANEL ── */}
-      {activeConversation && showRightPanel && (
+      {/* ── BÊN PHẢI: RIGHT PANEL (ẩn khi đang xem Cloud của tôi vì MyDocumentsPage có right panel riêng) ── */}
+      {activeConversation && showRightPanel && !(activeConversation.type === 'direct' && activeConversation.participants?.length === 1) && (
         <ChatRightPanel
           activeConversation={activeConversation}
           setActiveConversation={setActiveConversation}
