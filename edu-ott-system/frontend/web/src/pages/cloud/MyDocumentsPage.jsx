@@ -255,7 +255,7 @@ export default function MyDocumentsPage(){
 
   const handleReaction=async(msgId, emoji)=>{
     try{
-      await chatService.reactMessage?.(msgId, emoji);
+      await chatService.reactToMessage?.(msgId, emoji);
       setMessages(prev=>prev.map(m=>{
         if(m._id!==msgId)return m;
         const reactions=m.reactions||[];

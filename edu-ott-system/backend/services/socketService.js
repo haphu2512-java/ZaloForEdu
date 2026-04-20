@@ -23,6 +23,11 @@ const emitToConversation = (conversationId, event, payload) => {
   io.to(`conversation:${conversationId}`).emit(event, payload);
 };
 
+const emitToUser = (userId, event, payload) => {
+  if (!io) return;
+  io.to(`user:${userId}`).emit(event, payload);
+};
+
 const emitConversationUpdated = async (conversationId, payload) => {
   if (!io) return;
   const conversation = await Conversation.findById(conversationId).select('participants');
@@ -223,4 +228,5 @@ module.exports = initSocket;
 module.exports.emitToConversation = emitToConversation;
 module.exports.emitConversationUpdated = emitConversationUpdated;
 module.exports.emitMessageRecalled = emitMessageRecalled;
+module.exports.emitToUser = emitToUser;
 module.exports.closeSocket = closeSocket;

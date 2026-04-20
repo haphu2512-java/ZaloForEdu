@@ -79,7 +79,11 @@ const conversationSchema = new mongoose.Schema(
       canMembersCreateReminders: { type: Boolean, default: true },
       canMembersCreatePolls: { type: Boolean, default: true },
       canMembersSendMessages: { type: Boolean, default: true },
+      markAdminMessages: { type: Boolean, default: true },
+      allowNewMembersReadHistory: { type: Boolean, default: true },
+      allowInviteLink: { type: Boolean, default: true },
     },
+    blockedMembers: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
     // Feature 5: Invite link
     inviteCode: {
       type: String,

@@ -41,7 +41,7 @@
 
 .chat-page {
   display: flex;
-  height: 100vh;
+  height: 100%;
   width: 100%;
   background: var(--z-bg-main);
   color: var(--z-text-primary);
@@ -58,13 +58,13 @@
 
 /* ── SIDEBAR (TRÁI) ── */
 .room-sidebar {
-  width: 320px;
+  width: clamp(240px, 23vw, 320px);
   background: var(--z-bg-sidebar);
   border-right: 1px solid var(--z-border);
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
-  transition: all 0.3s;
+  transition: width 0.3s;
 }
 .rs-header { padding: 16px; display: flex; align-items: center; justify-content: space-between; }
 .rs-search-bar {
@@ -178,7 +178,7 @@
 @keyframes spin { to { transform: rotate(360deg); } }
 
 /* ── RIGHT PANEL (GIỐNG ZALO) ── */
-.chat-right-panel { width: 340px; background: var(--z-bg-sidebar); border-left: 1px solid var(--z-border); display: flex; flex-direction: column; flex-shrink: 0; overflow-y: auto; transition: all 0.3s; }
+.chat-right-panel { width: clamp(260px, 25vw, 340px); background: var(--z-bg-sidebar); border-left: 1px solid var(--z-border); display: flex; flex-direction: column; flex-shrink: 0; overflow-y: auto; transition: width 0.3s; }
 .crp-header { padding: 20px 16px 16px; display: flex; flex-direction: column; align-items: center; border-bottom: 1px solid var(--z-border); }
 .crp-avatar { width: 64px; height: 64px; border-radius: 50%; margin-bottom: 12px; object-fit: cover; }
 .crp-name { font-size: 16px; font-weight: 700; margin-bottom: 16px; color: var(--z-text-primary); display: flex; align-items: center; gap: 6px; text-align: center; }
@@ -411,4 +411,20 @@
   border: 1px solid var(--z-border);
   white-space: nowrap;
   user-select: none;
+}
+
+/* ── RESPONSIVE ── */
+@media (max-width: 1100px) {
+  .room-sidebar { width: clamp(220px, 22vw, 280px); }
+  .chat-right-panel { width: clamp(240px, 24vw, 300px); }
+}
+
+@media (max-width: 860px) {
+  .chat-right-panel { display: none; }
+  .room-sidebar { width: clamp(200px, 28vw, 260px); }
+}
+
+@media (max-width: 600px) {
+  .room-sidebar { width: 100%; border-right: none; }
+  .chat-main { display: none; }
 }

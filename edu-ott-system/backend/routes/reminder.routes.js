@@ -12,6 +12,11 @@ const createReminderSchema = z.object({
   remindAt: z.string().datetime(),
 });
 
+const updateReminderSchema = z.object({
+  title: z.string().min(1).max(200).optional(),
+  remindAt: z.string().datetime().optional(),
+});
+
 const reminderIdParamSchema = z.object({
   id: z.string().min(24).max(24),
 });
@@ -22,6 +27,9 @@ const conversationIdParamSchema = z.object({
 
 router.post('/', auth, validate({ body: createReminderSchema }), reminderController.createReminder);
 router.get('/conversation/:id', auth, validate({ params: conversationIdParamSchema }), reminderController.getConversationReminders);
+router.put('/:id', auth, validate({ params: reminderIdParamSchema, body: updateReminderSchema }), reminderController.updateReminder);
 router.delete('/:id', auth, validate({ params: reminderIdParamSchema }), reminderController.deleteReminder);
+router.post('/:id/join', auth, validate({ params: reminderIdParamSchema }), reminderController.joinReminder);
+router.post('/:id/decline', auth, validate({ params: reminderIdParamSchema }), reminderController.declineReminder);
 
 module.exports = router;

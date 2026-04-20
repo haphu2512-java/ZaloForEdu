@@ -1,4 +1,3 @@
-import api from "./authService";
 import axios from "axios";
 
 const API_URL = 'http://localhost:5000/api/v1';
@@ -78,6 +77,11 @@ export const conversationService = {
     return conversationService.updateConversationPreference(conversationId, true);
   },
 
+  deleteConversation: async (conversationId) => {
+    const res = await axios.delete(`${API_URL}/conversations/${conversationId}`, getAuthHeaders());
+    return res.data;
+  },
+
   unarchiveConversation: async (conversationId) => {
     return conversationService.updateConversationPreference(conversationId, false);
   },
@@ -103,11 +107,6 @@ export const conversationService = {
 
   removeGroupMember: async (id, memberId) => {
     const res = await axios.delete(`${API_URL}/conversations/${id}/members/${memberId}`, getAuthHeaders());
-    return res.data;
-  },
-
-  transferGroupOwner: async (id, newOwnerId) => {
-    const res = await axios.put(`${API_URL}/conversations/${id}/owner`, { newOwnerId }, getAuthHeaders());
     return res.data;
   },
 
@@ -223,6 +222,38 @@ export const conversationService = {
   },
   deleteReminder: async (id) => {
     const res = await axios.delete(`${API_URL}/reminders/${id}`, getAuthHeaders());
+    return res.data;
+  },
+  updateReminder: async (id, data) => {
+    const res = await axios.put(`${API_URL}/reminders/${id}`, data, getAuthHeaders());
+    return res.data;
+  },
+  joinReminder: async (id) => {
+    const res = await axios.post(`${API_URL}/reminders/${id}/join`, {}, getAuthHeaders());
+    return res.data;
+  },
+  declineReminder: async (id) => {
+    const res = await axios.post(`${API_URL}/reminders/${id}/decline`, {}, getAuthHeaders());
+    return res.data;
+  },
+  listJoinRequests: async (conversationId) => {
+    const res = await axios.get(`${API_URL}/conversations/${conversationId}/join-requests`, getAuthHeaders());
+    return res.data;
+  },
+  processJoinRequest: async (conversationId, requestId, action) => {
+    const res = await axios.put(`${API_URL}/conversations/${conversationId}/join-requests/${requestId}`, { action }, getAuthHeaders());
+    return res.data;
+  },
+  blockMember: async (conversationId, memberId) => {
+    const res = await axios.post(`${API_URL}/conversations/${conversationId}/block`, { memberId }, getAuthHeaders());
+    return res.data;
+  },
+  unblockMember: async (conversationId, memberId) => {
+    const res = await axios.delete(`${API_URL}/conversations/${conversationId}/block/${memberId}`, getAuthHeaders());
+    return res.data;
+  },
+  listBlockedMembers: async (conversationId) => {
+    const res = await axios.get(`${API_URL}/conversations/${conversationId}/blocked`, getAuthHeaders());
     return res.data;
   },
 };

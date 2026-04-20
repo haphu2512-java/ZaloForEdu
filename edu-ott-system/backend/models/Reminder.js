@@ -27,6 +27,8 @@ const reminderSchema = new mongoose.Schema(
       enum: ['pending', 'done', 'expired'],
       default: 'pending',
     },
+    participants: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+    declinedBy: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
   },
   { timestamps: true },
 );
