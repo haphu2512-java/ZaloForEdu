@@ -239,6 +239,7 @@ export default function ChatPage() {
   const messagesEndRef = useRef(null);
   const activeConvIdRef = useRef(null);
   const activeConversationRef = useRef(null);
+  const conversationsRef = useRef([]);
 
   const { friends, fetchFriends, fetchOutgoingRequests, fetchIncomingRequests } = useFriendStore();
 
@@ -412,6 +413,10 @@ export default function ChatPage() {
     activeConversationRef.current = activeConversation;
   }, [activeConversation]);
 
+  useEffect(() => {
+    conversationsRef.current = conversations;
+  }, [conversations]);
+
   const fetchConversationsData = useCallback(async () => {
     try {
       const res = await axios.get(`${API_BASE_URL}/conversations`, { headers: { Authorization: `Bearer ${token}` } });
@@ -490,6 +495,11 @@ export default function ChatPage() {
         socketService.socket?.emit("message_delivered", { messageId: latestMessage._id });
         socketService.socket?.emit("message_seen", { messageId: latestMessage._id });
       } else if (!isMyMessage && latestMessage?.type !== 'system' && latestMessage?.type !== 'system_reminder') {
+        // Kiểm tra tắt thông báo: nếu conversation đang bị mute thì bỏ qua
+        const convForNotif = conversationsRef.current.find(c => String(c._id) === convIdStr);
+        const mutedUntil = convForNotif?.preference?.mutedUntil;
+        if (mutedUntil && new Date(mutedUntil) > new Date()) return;
+
         const senderObj = latestMessage?.senderId;
         const senderName = senderObj?.username || senderObj?.fullName || 'Ai đó';
         const shortContent = latestMessage?.content || '[Hình ảnh/File đính kèm]';
@@ -962,14 +972,26 @@ const handleJoinRequestProcessed = ({ conversationName, action }) => {
     if (!activeConversation) return;
     try {
       let mutedUntil = null;
-      if (durationMinutes !== -1) {
-        mutedUntil = new Date(Date.now() + durationMinutes * 60 * 1000).toISOString();
+      if (durationMinutes === 0) {
+        mutedUntil = null; // Bật lại thông báo
+      } else if (durationMinutes === -1) {
+        mutedUntil = new Date(2099, 0, 1).toISOString(); // Mute mãi mãi
       } else {
-        mutedUntil = new Date(2099, 0, 1).toISOString(); // Mute forever
+        mutedUntil = new Date(Date.now() + durationMinutes * 60 * 1000).toISOString();
       }
       await conversationService.muteConversation(activeConversation._id, mutedUntil);
+      // Cập nhật local state ngay lập tức để conversationsRef có đúng giá trị
+      const convId = String(activeConversation._id);
+      setConversations(prev => prev.map(c =>
+        String(c._id) === convId
+          ? { ...c, preference: { ...(c.preference || {}), mutedUntil } }
+          : c
+      ));
+      setActiveConversation(prev => prev
+        ? { ...prev, preference: { ...(prev.preference || {}), mutedUntil } }
+        : prev
+      );
       toast.success(durationMinutes === 0 ? "Đã bật lại thông báo" : "Đã tắt thông báo");
-      fetchConversationsData();
     } catch (err) {
       toast.error("Lỗi cập nhật trạng thái thông báo");
     }
