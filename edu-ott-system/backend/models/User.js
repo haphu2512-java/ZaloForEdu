@@ -83,6 +83,26 @@ const userSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+    isPhoneVerified: {
+      type: Boolean,
+      default: false,
+    },
+    otpCode: {
+      type: String,
+      default: null,
+    },
+    otpExpires: {
+      type: Date,
+      default: null,
+    },
+    otpType: {
+      type: String,
+      default: null,
+    },
+    lastOtpSentAt: {
+      type: Date,
+      default: null,
+    },
     isActive: {
       type: Boolean,
       default: true,
