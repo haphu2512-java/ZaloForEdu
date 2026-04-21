@@ -188,7 +188,7 @@ export default function PollBubble({
                     <View key={opt._id || idx} style={[styles.detailOption, { borderColor: colors.border }]}> 
                       <Text style={{ color: colors.text, fontWeight: '700', marginBottom: 8 }}>{opt.text} ({voters.length})</Text>
                       {voters.length === 0 ? (
-                        <Text style={{ color: colors.muted, fontSize: 12 }}>Chua c� ai ch?n</Text>
+                        <Text style={{ color: colors.muted, fontSize: 12 }}>Chưa có ai chọn</Text>
                       ) : (
                         voters.map((v: any, i: number) => (
                           <View key={`${idx}-${i}-${getVoteUserId(v) || i}`} style={styles.voterRow}>

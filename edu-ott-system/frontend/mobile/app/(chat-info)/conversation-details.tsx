@@ -64,6 +64,7 @@ export default function ConversationDetailsScreen() {
   // Modals state
   const [addMembersVisible, setAddMembersVisible] = useState(false);
   const [selectedMembersToAdd, setSelectedMembersToAdd] = useState<string[]>([]);
+  const [membersVisible, setMembersVisible] = useState(false);
   const [editorVisible, setEditorVisible] = useState(false);
   const [editorTitle, setEditorTitle] = useState('');
   const [editorValue, setEditorValue] = useState('');
@@ -338,6 +339,52 @@ export default function ConversationDetailsScreen() {
           <Text style={[styles.mainTitle, { color: colors.text }]}>{title}</Text>
         </View>
 
+        {isGroup && (
+          <View style={[styles.quickActionsWrap, { backgroundColor: colors.surface }]}>
+            <TouchableOpacity style={styles.quickActionItem} onPress={() => router.push({ pathname: '/search-messages', params: { id: conversation._id } } as any)}>
+              <View style={styles.quickIconCircle}><Ionicons name="search" size={24} color={colors.text} /></View>
+              <Text style={[styles.quickActionLabel, { color: colors.text }]}>Tìm{'\n'}tin nhắn</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.quickActionItem}
+              onPress={() => {
+                if (!iAmAdmin) {
+                  Alert.alert('Thông báo', 'Chỉ quản trị viên mới có thể thêm thành viên');
+                  return;
+                }
+                setSelectedMembersToAdd([]);
+                setAddMembersVisible(true);
+              }}
+            >
+              <View style={styles.quickIconCircle}><Ionicons name="person-add" size={24} color={colors.text} /></View>
+              <Text style={[styles.quickActionLabel, { color: colors.text }]}>Thêm{'\n'}thành viên</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.quickActionItem} onPress={() => router.push({ pathname: '/pinned-messages', params: { id: conversation._id } } as any)}>
+              <View style={styles.quickIconCircle}><Ionicons name="pin-outline" size={24} color={colors.text} /></View>
+              <Text style={[styles.quickActionLabel, { color: colors.text }]}>Tin nhắn{'\n'}đã ghim</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.quickActionItem}
+              onPress={async () => {
+                try {
+                  const next = notificationMode === 'mute' ? 'all' : 'mute';
+                  setNotificationMode(next);
+                  await updateConversationPreference(conversation._id, { notificationMode: next });
+                  Alert.alert('Thành công', next === 'mute' ? 'Đã tắt thông báo' : 'Đã bật thông báo');
+                } catch (err: any) {
+                  Alert.alert('Lỗi', err.message || 'Không thể cập nhật thông báo');
+                }
+              }}
+            >
+              <View style={styles.quickIconCircle}><Ionicons name={notificationMode === 'mute' ? 'notifications-off-outline' : 'notifications-outline'} size={24} color={colors.text} /></View>
+              <Text style={[styles.quickActionLabel, { color: colors.text }]}>Tắt{'\n'}thông báo</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
         {!isGroup && (
           <View style={{ marginTop: 20 }}>
             <View style={[styles.section, { backgroundColor: colors.surface }]}>
@@ -532,8 +579,15 @@ export default function ConversationDetailsScreen() {
         )}
 
         <View style={[styles.section, { backgroundColor: colors.surface }]}>
-          <Text style={[styles.sectionTitle, { color: brand }]}>Thành viên ({conversation.participants?.length || 0})</Text>
-          {(conversation.participants || []).map(renderMember)}
+          <TouchableOpacity style={[styles.optionItem, { justifyContent: 'space-between' }]} onPress={() => setMembersVisible(true)}>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <Ionicons name="people-outline" size={24} color={colors.text} style={{ width: 30, marginRight: 15 }} />
+              <Text style={{ color: colors.text, fontSize: 16, fontWeight: '600' }}>
+                Xem thành viên ({conversation.participants?.length || 0})
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color={colors.muted} />
+          </TouchableOpacity>
         </View>
 
         {isGroup && (
@@ -595,6 +649,24 @@ export default function ConversationDetailsScreen() {
                 </TouchableOpacity>
               );
             })}
+          </ScrollView>
+        </View>
+      </Modal>
+
+      {/* Members Modal */}
+      <Modal visible={membersVisible} animationType="slide" onRequestClose={() => setMembersVisible(false)}>
+        <View style={[styles.fullModal, { backgroundColor: colors.background }]}>
+          <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
+            <TouchableOpacity onPress={() => setMembersVisible(false)}>
+              <Text style={{ color: brand, fontWeight: 'bold' }}>Đóng</Text>
+            </TouchableOpacity>
+            <Text style={{ fontSize: 18, fontWeight: 'bold', color: colors.text }}>
+              Thành viên ({conversation.participants?.length || 0})
+            </Text>
+            <View style={{ width: 30 }} />
+          </View>
+          <ScrollView>
+            {(conversation.participants || []).map(renderMember)}
           </ScrollView>
         </View>
       </Modal>
@@ -724,6 +796,24 @@ const styles = StyleSheet.create({
   headerProfile: { alignItems: 'center', paddingVertical: 24 },
   mainAvatar: { width: 100, height: 100, borderRadius: 50, marginBottom: 16 },
   mainTitle: { fontSize: 24, fontWeight: 'bold' },
+  quickActionsWrap: {
+    marginHorizontal: 12,
+    borderRadius: 14,
+    paddingVertical: 14,
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginBottom: 12,
+  },
+  quickActionItem: { alignItems: 'center', gap: 8, width: '24%' },
+  quickIconCircle: {
+    width: 54,
+    height: 54,
+    borderRadius: 27,
+    backgroundColor: '#F3F4F6',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  quickActionLabel: { fontSize: 12, fontWeight: '600', textAlign: 'center', lineHeight: 18 },
   actionGrid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 12, marginBottom: 20, gap: 8 },
   gridBtn: { width: '30%', alignItems: 'center', padding: 12, borderRadius: 16, elevation: 1, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 5 },
   iconCircle: { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center', marginBottom: 8 },
