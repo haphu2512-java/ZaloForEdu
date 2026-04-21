@@ -1,8 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Camera, Save, Mail, Phone, Sparkles, User, Image as ImageIcon, Lock, Bell, Shield, Info, Edit3, Eye, EyeOff, Users, Circle, Trash2, AlertTriangle, X } from 'lucide-react';
+import { Camera, Save, Mail, Phone, Sparkles, User, Image as ImageIcon, Lock, Bell, Shield, Info, Edit3, Eye, EyeOff, Users, Circle, Trash2, AlertTriangle, X, CheckCircle, ShieldAlert } from 'lucide-react';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { userService } from '../../services/userService'; 
 import { authService } from '../../services/authService'; 
+import axios from 'axios';
+
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api/v1';
 
 // Thuật toán kiểm tra độ mạnh mật khẩu chuẩn Regex (Hoa, thường, số, ký tự đặc biệt)
 const getStrength = (pw) => {
@@ -49,6 +52,14 @@ export default function ProfilePage() {
   const [deletePassword, setDeletePassword] = useState("");
   const [isDeleting, setIsDeleting] = useState(false);
 
+  // OTP verification modal state
+  const [otpModal, setOtpModal] = useState(null); // { type: 'phone'|'email', contact: string }
+  const [otpDigits, setOtpDigits] = useState(['','','','','','']);
+  const [otpError, setOtpError] = useState('');
+  const [otpVerifying, setOtpVerifying] = useState(false);
+  const [verifiedContacts, setVerifiedContacts] = useState({ email: true, phone: true });
+  const otpInputRefs = useRef([]);
+
   useEffect(() => {
     const fetchUserProfile = async () => {
       try {
@@ -73,6 +84,10 @@ export default function ProfilePage() {
             createdAt: joinDate,
             friends: userData.friends || [],
             isOnline: true
+          });
+          setVerifiedContacts({
+            email: userData.isEmailVerified !== false,
+            phone: userData.isPhoneVerified !== false,
           });
         }
       } catch (error) {
@@ -141,7 +156,11 @@ export default function ProfilePage() {
 
       const response = await userService.updateProfile(userId, updateData);
       
-      const updatedUser = response?.data?.user || response?.user || response?.data?.data?.user;
+      const resData = response?.data?.data || response?.data || response;
+      const updatedUser = resData?.user || resData;
+      const requiresPhoneVerification = resData?.requiresPhoneVerification;
+      const requiresEmailVerification = resData?.requiresEmailVerification;
+
       if (updatedUser) {
         setProfile((prev) => ({ 
           ...prev, 
@@ -150,16 +169,82 @@ export default function ProfilePage() {
           phone: updatedUser.phone || prev.phone,
           email: updatedUser.email !== undefined ? updatedUser.email : prev.email
         }));
+        setVerifiedContacts({
+          email: updatedUser.isEmailVerified !== false,
+          phone: updatedUser.isPhoneVerified !== false,
+        });
       }
       
       setAvatarFile(null);
-      alert('Cập nhật thông tin thành công!');
       setActiveTab('view_profile');
+
+      // Mở modal OTP nếu cần xác thực contact mới
+      if (requiresPhoneVerification && updateData.phone) {
+        setOtpDigits(['','','','','','']);
+        setOtpError('');
+        setOtpModal({ type: 'phone', contact: updateData.phone });
+      } else if (requiresEmailVerification && updateData.email) {
+        setOtpDigits(['','','','','','']);
+        setOtpError('');
+        setOtpModal({ type: 'email', contact: updateData.email });
+      } else {
+        alert('Cập nhật thông tin thành công!');
+      }
     } catch (error) {
       console.error('Lỗi cập nhật:', error);
       alert('Cập nhật thất bại, kiểm tra lại số điện thoại (nếu có thì phải đủ 8 số) nhé!');
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  // ── OTP verification handlers ──
+  const handleOtpDigitChange = (i, val) => {
+    if (!/^\d*$/.test(val)) return;
+    const v = val.slice(-1);
+    const next = [...otpDigits];
+    next[i] = v;
+    setOtpDigits(next);
+    setOtpError('');
+    if (v && i < 5) otpInputRefs.current[i + 1]?.focus();
+  };
+
+  const handleOtpKeyDown = (i, e) => {
+    if (e.key === 'Backspace' && !otpDigits[i] && i > 0) {
+      otpInputRefs.current[i - 1]?.focus();
+    }
+  };
+
+  const handleOtpPaste = (e) => {
+    const pasted = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6);
+    if (pasted.length === 6) {
+      setOtpDigits(pasted.split(''));
+      otpInputRefs.current[5]?.focus();
+    }
+    e.preventDefault();
+  };
+
+  const handleOtpSubmit = async () => {
+    const otp = otpDigits.join('');
+    if (otp.length < 6) { setOtpError('Vui lòng nhập đủ 6 chữ số'); return; }
+    const token = localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken');
+    try {
+      setOtpVerifying(true);
+      const payload = { token: otp };
+      if (otpModal.type === 'phone') payload.phone = otpModal.contact;
+      else payload.email = otpModal.contact;
+      await axios.post(`${API_BASE_URL}/auth/verify-otp`, payload, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      setVerifiedContacts(prev => ({ ...prev, [otpModal.type]: true }));
+      setOtpModal(null);
+      alert(`Xác thực ${otpModal.type === 'phone' ? 'số điện thoại' : 'email'} thành công! Bạn có thể đăng nhập bằng ${otpModal.type === 'phone' ? 'SĐT' : 'email'} này.`);
+    } catch (err) {
+      setOtpError(err.response?.data?.message || 'Mã OTP không đúng hoặc đã hết hạn');
+      setOtpDigits(['','','','','','']);
+      otpInputRefs.current[0]?.focus();
+    } finally {
+      setOtpVerifying(false);
     }
   };
 
@@ -327,16 +412,30 @@ export default function ProfilePage() {
                       </div>
                       <div style={styles.miniCard}>
                         <div style={styles.iconWrap}><Phone size={24} /></div>
-                        <div>
+                        <div style={{ flex: 1 }}>
                           <p style={styles.viewLabel}>Số điện thoại</p>
-                          <p style={styles.viewValue}>{profile.phone || 'Chưa cập nhật'}</p>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <p style={{ ...styles.viewValue, margin: 0 }}>{profile.phone || 'Chưa cập nhật'}</p>
+                            {profile.phone && (
+                              verifiedContacts.phone
+                                ? <span style={{ display:'flex', alignItems:'center', gap:3, fontSize:11, color:'#16a34a', fontWeight:600 }}><CheckCircle size={13}/> Đã xác thực</span>
+                                : <button onClick={() => { setOtpModal({ type:'phone', contact: profile.phone }); setOtpDigits(['','','','','','']); setOtpError(''); }} style={{ display:'flex', alignItems:'center', gap:3, fontSize:11, color:'#f59e0b', fontWeight:700, background:'#fef3c7', border:'1px solid #fde68a', borderRadius:6, padding:'2px 8px', cursor:'pointer' }}><ShieldAlert size={13}/> Xác thực ngay</button>
+                            )}
+                          </div>
                         </div>
                       </div>
                       <div style={styles.miniCard}>
                         <div style={styles.iconWrap}><Mail size={24} /></div>
-                        <div>
+                        <div style={{ flex: 1 }}>
                           <p style={styles.viewLabel}>Email</p>
-                          <p style={styles.viewValue}>{profile.email || 'Chưa cập nhật'}</p>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <p style={{ ...styles.viewValue, margin: 0 }}>{profile.email || 'Chưa cập nhật'}</p>
+                            {profile.email && (
+                              verifiedContacts.email
+                                ? <span style={{ display:'flex', alignItems:'center', gap:3, fontSize:11, color:'#16a34a', fontWeight:600 }}><CheckCircle size={13}/> Đã xác thực</span>
+                                : <button onClick={() => { setOtpModal({ type:'email', contact: profile.email }); setOtpDigits(['','','','','','']); setOtpError(''); }} style={{ display:'flex', alignItems:'center', gap:3, fontSize:11, color:'#f59e0b', fontWeight:700, background:'#fef3c7', border:'1px solid #fde68a', borderRadius:6, padding:'2px 8px', cursor:'pointer' }}><ShieldAlert size={13}/> Xác thực ngay</button>
+                            )}
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -553,6 +652,61 @@ export default function ProfilePage() {
               <button onClick={() => setShowDeleteModal(false)} style={styles.btnSecondary} disabled={isDeleting}>Hủy</button>
               <button onClick={handleDeleteAccount} style={styles.btnDanger} disabled={isDeleting}>
                 {isDeleting ? 'Đang xử lý...' : 'Xóa vĩnh viễn'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* ── OTP VERIFY MODAL ── */}
+      {otpModal && (
+        <div style={styles.modalOverlay}>
+          <div style={{ ...styles.modalContent, maxWidth: 400 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <h3 style={{ ...styles.modalTitle, color: '#4F46E5', margin: 0, fontSize: 18 }}>
+                <ShieldAlert size={22} style={{ marginRight: 8 }} />
+                Xác thực {otpModal.type === 'phone' ? 'Số điện thoại' : 'Email'}
+              </h3>
+              <button onClick={() => setOtpModal(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-tertiary)' }}>
+                <X size={20} />
+              </button>
+            </div>
+
+            <p style={{ ...styles.modalText, marginBottom: 20, fontSize: 14 }}>
+              Mã OTP đã được gửi đến <strong>{otpModal.contact}</strong>.
+              {otpModal.type === 'phone' && (
+                <span style={{ display: 'block', marginTop: 6, color: '#3b82f6', fontSize: 12 }}>
+                  💡 Xem mã OTP ở Terminal Backend (màn hình đang chạy server)
+                </span>
+              )}
+            </p>
+
+            {otpError && (
+              <div style={{ background: 'rgba(239,68,68,0.1)', borderLeft: '4px solid #ef4444', color: '#ef4444', padding: '10px 14px', borderRadius: '0 8px 8px 0', marginBottom: 16, fontSize: 13 }}>
+                {otpError}
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginBottom: 20 }} onPaste={handleOtpPaste}>
+              {otpDigits.map((d, i) => (
+                <input
+                  key={i}
+                  ref={el => otpInputRefs.current[i] = el}
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={1}
+                  value={d}
+                  onChange={e => handleOtpDigitChange(i, e.target.value)}
+                  onKeyDown={e => handleOtpKeyDown(i, e)}
+                  autoFocus={i === 0}
+                  style={{ width: 46, height: 56, textAlign: 'center', fontSize: 22, fontWeight: 700, borderRadius: 12, border: `1.5px solid ${otpError ? '#ef4444' : 'var(--border-color)'}`, background: 'var(--input-bg)', color: 'var(--text-primary)', outline: 'none', boxSizing: 'border-box' }}
+                />
+              ))}
+            </div>
+
+            <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
+              <button onClick={() => setOtpModal(null)} style={styles.btnSecondary} disabled={otpVerifying}>Hủy</button>
+              <button onClick={handleOtpSubmit} style={{ ...styles.btnPrimary, opacity: otpVerifying ? 0.7 : 1 }} disabled={otpVerifying}>
+                {otpVerifying ? 'Đang xác thực...' : 'Xác nhận'}
               </button>
             </div>
           </div>

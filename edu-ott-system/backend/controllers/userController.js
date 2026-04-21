@@ -1,9 +1,12 @@
+const crypto = require('node:crypto');
 const User = require('../models/User');
 const asyncHandler = require('../utils/asyncHandler');
 const ApiError = require('../utils/apiError');
 const { successResponse } = require('../utils/apiResponse');
 const { sendEmail } = require('../utils/email');
 const { getRedis, isRedisAvailable, keyWithPrefix } = require('../services/redisClient');
+
+const OTP_EXPIRE_MINUTES = 10;
 const createEmailOtp = () => String(Math.floor(100000 + Math.random() * 900000));
 
 const sendVerificationOtp = async ({ email, otp }) => {
@@ -11,8 +14,15 @@ const sendVerificationOtp = async ({ email, otp }) => {
     to: email,
     subject: 'Mã OTP xác thực email - Zalo Clone',
     text: `Mã OTP xác thực email của bạn là: ${otp}. Mã có hiệu lực trong 10 phút.`,
-    html: `<p>Mã OTP xác thực email của bạn là: <strong>${otp}</strong></p><p>Mã có hiệu lực trong 10 phút.</p>`,
+    html: `<p>Mã OTP xác thực email của bạn là: <strong>${otp}</strong></p><p>Mã có hiệu lực trong ${OTP_EXPIRE_MINUTES} phút.</p>`,
   });
+};
+
+const sendSmsOtpProfile = (phone, otp) => {
+  console.log(`\n══════════════════════════════════════
+[SMS] Mã OTP xác thực số ĐT ZaloApp: ${otp} (${OTP_EXPIRE_MINUTES} phút)
+Gửi tới: ${phone}
+══════════════════════════════════════\n`);
 };
 
 const getUserById = asyncHandler(async (req, res) => {
@@ -39,6 +49,9 @@ const updateUserById = asyncHandler(async (req, res) => {
   if (typeof updates.avatarUrl !== 'undefined') user.avatarUrl = updates.avatarUrl || null;
   if (updates.messagePrivacy) user.messagePrivacy = updates.messagePrivacy;
 
+  let requiresPhoneVerification = false;
+  let requiresEmailVerification = false;
+
   // Update phone
   if (typeof updates.phone !== 'undefined') {
     const nextPhone = updates.phone ? String(updates.phone).trim() : null;
@@ -54,11 +67,15 @@ const updateUserById = asyncHandler(async (req, res) => {
         throw new ApiError(409, 'PHONE_EXISTS', 'Số điện thoại đã được sử dụng bởi tài khoản khác');
       }
       user.phone = nextPhone;
-      // Phone added manually (not via OTP) → mark as unverified
-      // But if user already had phone verified, keep it
-      if (!user.isPhoneVerified) {
-        user.isPhoneVerified = false;
-      }
+      user.isPhoneVerified = false;
+      // Tạo OTP và gửi SMS
+      const otp = createEmailOtp();
+      user.otpCode = otp;
+      user.otpExpires = new Date(Date.now() + OTP_EXPIRE_MINUTES * 60 * 1000);
+      user.otpType = 'phone_verify';
+      user.lastOtpSentAt = new Date();
+      sendSmsOtpProfile(nextPhone, otp);
+      requiresPhoneVerification = true;
     } else if (!nextPhone) {
       user.phone = null;
       user.isPhoneVerified = false;
@@ -77,9 +94,10 @@ const updateUserById = asyncHandler(async (req, res) => {
       user.email = nextEmail;
       user.isEmailVerified = false;
       user.emailVerificationToken = createEmailOtp();
-      user.emailVerificationExpires = new Date(Date.now() + 10 * 60 * 1000);
+      user.emailVerificationExpires = new Date(Date.now() + OTP_EXPIRE_MINUTES * 60 * 1000);
 
       await sendVerificationOtp({ email: nextEmail, otp: user.emailVerificationToken });
+      requiresEmailVerification = true;
     } else if (!nextEmail) {
       user.email = null;
       user.isEmailVerified = false;
@@ -90,7 +108,11 @@ const updateUserById = asyncHandler(async (req, res) => {
 
   await user.save();
   const safeUser = await User.findById(user._id).select('-passwordHash -tokenVersion');
-  return successResponse(res, safeUser, 'User updated');
+  return successResponse(res, {
+    user: safeUser,
+    requiresPhoneVerification,
+    requiresEmailVerification,
+  }, 'User updated');
 });
 
 const deleteUserById = asyncHandler(async (req, res) => {
