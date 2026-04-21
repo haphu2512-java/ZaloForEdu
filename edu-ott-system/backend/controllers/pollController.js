@@ -78,6 +78,21 @@ const createPoll = asyncHandler(async (req, res) => {
     latestMessage: message,
   });
 
+  // Thông báo hệ thống tạo bình chọn
+  const senderName = req.user.fullName || req.user.username;
+  const sysMsg2 = await Message.create({
+    conversationId,
+    senderId: req.user._id,
+    content: `${senderName} đã tạo cuộc bình chọn: "${question}"`,
+    type: 'system',
+    pollId: poll._id
+  });
+  await sysMsg2.populate('senderId', 'username avatarUrl fullName');
+  await socketService.emitConversationUpdated(conversationId, {
+    conversationId,
+    latestMessage: sysMsg2
+  });
+
   return successResponse(res, poll, 'Poll created', 201);
 });
 
@@ -148,6 +163,25 @@ const votePoll = asyncHandler(async (req, res) => {
 
   await poll.save();
   await poll.populate('createdBy', 'username avatarUrl');
+  // Populate votes để FE hiển thị avatar người bình chọn
+  await poll.populate('options.votes', 'username avatarUrl');
+
+  // Thông báo hệ thống khi tham gia bình chọn
+  const senderName = req.user.fullName || req.user.username;
+  const sysMsg = await Message.create({
+    conversationId: poll.conversationId,
+    senderId: req.user._id,
+    content: `${senderName} đã tham gia bình chọn: "${poll.question}"`,
+    type: 'system',
+    pollId: poll._id
+  });
+  await sysMsg.populate('senderId', 'username avatarUrl fullName');
+  await socketService.emitConversationUpdated(poll.conversationId.toString(), {
+    conversationId: poll.conversationId,
+    latestMessage: sysMsg
+  });
+
+  await socketService.emitPollUpdated(poll.conversationId.toString(), poll);
 
   return successResponse(res, poll, 'Vote submitted');
 });

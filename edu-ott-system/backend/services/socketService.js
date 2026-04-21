@@ -46,6 +46,24 @@ const emitMessageRecalled = async (conversationId, payload) => {
   });
 };
 
+const emitPinnedItemsUpdated = async (conversationId, payload) => {
+  if (!io) return;
+  const conversation = await Conversation.findById(conversationId).select('participants');
+  if (!conversation) return;
+  conversation.participants.forEach((participantId) => {
+    io.to(`user:${participantId.toString()}`).emit('pinned_items_updated', payload);
+  });
+};
+
+const emitPollUpdated = async (conversationId, payload) => {
+  if (!io) return;
+  const conversation = await Conversation.findById(conversationId).select('participants');
+  if (!conversation) return;
+  conversation.participants.forEach((participantId) => {
+    io.to(`user:${participantId.toString()}`).emit('poll_updated', payload);
+  });
+};
+
 const closeSocket = async () => {
   if (!io) return;
   await new Promise((resolve) => {
@@ -228,5 +246,7 @@ module.exports = initSocket;
 module.exports.emitToConversation = emitToConversation;
 module.exports.emitConversationUpdated = emitConversationUpdated;
 module.exports.emitMessageRecalled = emitMessageRecalled;
+module.exports.emitPinnedItemsUpdated = emitPinnedItemsUpdated;
+module.exports.emitPollUpdated = emitPollUpdated;
 module.exports.emitToUser = emitToUser;
 module.exports.closeSocket = closeSocket;

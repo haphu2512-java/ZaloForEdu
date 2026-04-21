@@ -42,8 +42,21 @@ export const ChatHeader = ({ room, onCall, onVideo, onInfo }) => {
 
   const isOnline = room.isOnline;
   const isClass = room.type?.toLowerCase() === 'class' || room.roomModel === 'Class';
+  const isGroup = room.type === 'group' || isClass;
   const isStranger = room.isStranger && room.type === 'direct';
   const alreadySentRequest = isStranger && (hasOutgoingRequest || friendRequestSent);
+
+  const formatLastSeen = (lastSeen) => {
+    if (!lastSeen) return 'Ngoại tuyến';
+    const diff = Date.now() - new Date(lastSeen).getTime();
+    const mins = Math.floor(diff / 60000);
+    if (mins < 2) return 'Vừa truy cập';
+    if (mins < 60) return `Truy cập ${mins} phút trước`;
+    const hours = Math.floor(mins / 60);
+    if (hours < 24) return `Truy cập ${hours} giờ trước`;
+    const days = Math.floor(hours / 24);
+    return `Truy cập ${days} ngày trước`;
+  };
 
   const handleSendFriendRequest = async () => {
     try {
@@ -177,13 +190,19 @@ export const ChatHeader = ({ room, onCall, onVideo, onInfo }) => {
           </div>
 
           <div className={`text-sm ${subTextColor}`}>
-            {isClass ? (
+            {isGroup ? (
               <span className="flex items-center gap-1.5 mt-0.5">
                 <FaUsers size={12} />
-                {room.memberCount ? `${room.memberCount} thành viên` : 'Đang hoạt động'}
+                {room.memberCount
+                  ? `${room.memberCount} thành viên`
+                  : room.participants?.length
+                    ? `${room.participants.length} thành viên`
+                    : 'Nhóm'}
               </span>
             ) : isOnline ? (
               <span className="text-green-500 font-medium mt-0.5 inline-block">Đang trực tuyến</span>
+            ) : room.lastSeen ? (
+              <span className="mt-0.5 inline-block">{formatLastSeen(room.lastSeen)}</span>
             ) : (
               <span className="mt-0.5 inline-block">Ngoại tuyến</span>
             )}

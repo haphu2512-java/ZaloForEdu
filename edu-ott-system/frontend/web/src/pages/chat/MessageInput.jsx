@@ -1,8 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { FaSpinner, FaPaperPlane, FaThumbsUp, FaSmile, FaMicrophone } from 'react-icons/fa';
+import { FaSpinner, FaPaperPlane, FaThumbsUp, FaSmile, FaMicrophone, FaPoll } from 'react-icons/fa';
 import { VoiceRecorder } from '../../components/shared/VoiceRecorder';
 
-export const MessageInput = ({ theme, placeholder, onSend, onSendLike, onUploadFiles }) => {
+export const MessageInput = ({ theme, placeholder, onSend, onSendLike, onUploadFiles, onShowPoll }) => {
   const [text, setText] = useState('');
   const [showEmoji, setShowEmoji] = useState(false);
   const [isSending, setIsSending] = useState(false);
@@ -82,6 +82,9 @@ export const MessageInput = ({ theme, placeholder, onSend, onSendLike, onUploadF
         </button>
         <button type="button" className="mdc-tool-btn" title="Gửi ghi âm" onClick={() => setShowRecorder(true)}>
           <FaMicrophone size={16} />
+        </button>
+        <button type="button" className="mdc-tool-btn" title="Tạo bình chọn" onClick={onShowPoll}>
+          <FaPoll size={18} />
         </button>
 
         {/* Bảng chọn Emoji */}

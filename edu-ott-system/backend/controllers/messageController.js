@@ -124,8 +124,12 @@ const listMessagesByConversation = asyncHandler(async (req, res) => {
     .populate('forwardFrom')
     .populate({
       path: 'pollId',
-      populate: { path: 'createdBy', select: 'username avatarUrl' }
-    });
+      populate: [
+        { path: 'createdBy', select: 'username avatarUrl' },
+        { path: 'options.votes', select: 'username avatarUrl' }
+      ]
+    })
+    .populate('reminderId', 'title remindAt participants declinedBy createdBy');
 
   let nextCursor = null;
   let finalItems = messages;

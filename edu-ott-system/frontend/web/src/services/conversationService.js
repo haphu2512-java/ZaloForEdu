@@ -256,4 +256,8 @@ export const conversationService = {
     const res = await axios.get(`${API_URL}/conversations/${conversationId}/blocked`, getAuthHeaders());
     return res.data;
   },
+  updateNickname: async (id, memberId, nickname) => {
+    const res = await axios.put(`${API_URL}/conversations/${id}/nicknames/${memberId}`, { nickname }, getAuthHeaders());
+    return res.data;
+  },
 };
