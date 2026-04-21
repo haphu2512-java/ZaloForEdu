@@ -165,6 +165,7 @@ export async function updateConversationPreference(
     isDeleted?: boolean;
     isPinned?: boolean;
     isMuted?: boolean;
+    notificationMode?: 'all' | 'mention_only' | 'mute';
   },
 ): Promise<any> {
   const res = await fetchAPI(`${CONVERSATIONS_ENDPOINT}/${conversationId}/preferences`, {

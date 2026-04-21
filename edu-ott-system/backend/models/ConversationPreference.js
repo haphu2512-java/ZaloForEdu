@@ -44,6 +44,12 @@ const conversationPreferenceSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    // Chế độ thông báo: all, mention_only, mute
+    notificationMode: {
+      type: String,
+      enum: ['all', 'mention_only', 'mute'],
+      default: 'all',
+    },
   },
   { timestamps: true },
 );

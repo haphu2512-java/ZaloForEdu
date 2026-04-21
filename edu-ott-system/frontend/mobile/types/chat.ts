@@ -56,7 +56,19 @@ export interface Conversation {
     isDeleted?: boolean;
     isPinned?: boolean;
     isMuted?: boolean;
+    notificationMode?: 'all' | 'mention_only' | 'mute';
   } | null;
+  settings?: {
+    isApprovalRequired: boolean;
+    canMembersUpdateInfo: boolean;
+    canMembersPin: boolean;
+    canMembersCreateReminders: boolean;
+    canMembersCreatePolls: boolean;
+    canMembersSendMessages: boolean;
+    markAdminMessages: boolean;
+    allowNewMembersReadHistory: boolean;
+    allowInviteLink: boolean;
+  };
   lastMessageAt?: string | null;
   createdAt: string;
   updatedAt: string;

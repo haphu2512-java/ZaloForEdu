@@ -69,7 +69,7 @@ const pinMessage = asyncHandler(async (req, res) => {
   });
   await conversation.save();
   await conversation.populate([
-    { 
+    {
       path: 'pinnedItems.messageId',
       populate: { path: 'senderId', select: 'username avatarUrl' }
     },
@@ -104,13 +104,13 @@ const unpinMessage = asyncHandler(async (req, res) => {
 
   await conversation.save();
   await conversation.populate([
-    { 
+    {
       path: 'pinnedItems.messageId',
       populate: { path: 'senderId', select: 'username avatarUrl' }
     },
     { path: 'pinnedItems.pinnedBy', select: 'username avatarUrl' }
   ]);
-  
+
   socketService.emitToConversation(id, 'pinned_items_updated', conversation.pinnedItems);
 
   return successResponse(res, conversation.pinnedItems, 'Message unpinned');
@@ -158,6 +158,7 @@ const updateGroupSettings = asyncHandler(async (req, res) => {
   if (typeof canMembersCreateReminders === 'boolean') updates.canMembersCreateReminders = canMembersCreateReminders;
   if (typeof canMembersCreatePolls === 'boolean') updates.canMembersCreatePolls = canMembersCreatePolls;
   if (typeof canMembersSendMessages === 'boolean') updates.canMembersSendMessages = canMembersSendMessages;
+  if (typeof req.body.markAdminMessages === 'boolean') updates.markAdminMessages = req.body.markAdminMessages;
 
   conversation.settings = { ...conversation.settings, ...updates };
   await conversation.save();
