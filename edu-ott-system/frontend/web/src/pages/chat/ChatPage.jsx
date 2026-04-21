@@ -11,6 +11,7 @@ import { MessageBubble } from "./MessageBubble";
 import { ShareMessageModal } from "./Modals/ShareMessageModal";
 import AddFriendModal from "./Modals/AddFriendModal";
 import CreateGroupModal from "./Modals/CreateGroupModal";
+import TransferOwnerModal from "./Modals/TransferOwnerModal";
 import { ChatHeader } from "./ChatHeader";
 import { MessageInput } from "./MessageInput";
 import { ChatRightPanel } from "./ChatRightPanel";
@@ -230,6 +231,8 @@ export default function ChatPage() {
   const [justSentRequestTo, setJustSentRequestTo] = useState(null); // track optimistic state
   const [showAddFriendModal, setShowAddFriendModal] = useState(false);
   const [showCreateGroupModal, setShowCreateGroupModal] = useState(false);
+  const [showTransferOwnerModal, setShowTransferOwnerModal] = useState(false);
+  const [transferOwnerLoading, setTransferOwnerLoading] = useState(false);
 
   const pageRef = useRef(null);
   const messagesEndRef = useRef(null);
@@ -991,16 +994,38 @@ const handleJoinRequestProcessed = ({ conversationName, action }) => {
 
   const handleLeaveGroup = async () => {
     if (!activeConversation) return;
-    if (window.confirm(`Bạn có chắc chắn muốn rời khỏi nhóm ${getConversationName(activeConversation)} không?`)) {
-      try {
-        await conversationService.leaveGroup(activeConversation._id);
-        toast.success("Đã rời nhóm thành công");
-        setActiveConversation(null);
-        navigate('/chat');
-        fetchConversationsData();
-      } catch (err) {
-        toast.error(err.response?.data?.message || "Lỗi khi rời nhóm");
-      }
+    const isOwner = String(activeConversation.ownerId?._id || activeConversation.ownerId) === String(userId);
+    if (isOwner) {
+      setShowTransferOwnerModal(true);
+      return;
+    }
+    if (!window.confirm(`Bạn có chắc chắn muốn rời khỏi nhóm ${getConversationName(activeConversation)} không?`)) return;
+    try {
+      await conversationService.leaveGroup(activeConversation._id);
+      toast.success("Đã rời nhóm thành công");
+      setActiveConversation(null);
+      navigate('/chat');
+      fetchConversationsData();
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Lỗi khi rời nhóm");
+    }
+  };
+
+  const handleTransferOwnerAndLeave = async (newOwnerId) => {
+    if (!activeConversation) return;
+    setTransferOwnerLoading(true);
+    try {
+      await conversationService.transferGroupOwner(activeConversation._id, newOwnerId);
+      await conversationService.leaveGroup(activeConversation._id);
+      toast.success("Đã nhường quyền và rời nhóm thành công");
+      setShowTransferOwnerModal(false);
+      setActiveConversation(null);
+      navigate('/chat');
+      fetchConversationsData();
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Lỗi khi nhường quyền trưởng nhóm");
+    } finally {
+      setTransferOwnerLoading(false);
     }
   };
   const executeForward = async (friend) => {
@@ -1159,6 +1184,17 @@ const handleJoinRequestProcessed = ({ conversationName, action }) => {
           fetchConversationsData();
           setActiveConversation(newConv);
         }}
+      />
+
+      <TransferOwnerModal
+        isOpen={showTransferOwnerModal}
+        onClose={() => setShowTransferOwnerModal(false)}
+        members={(activeConversation?.participants || [])
+          .filter(p => String(p._id || p) !== String(userId))
+          .map(p => p._id ? p : { _id: p })}
+        adminIds={activeConversation?.adminIds || []}
+        loading={transferOwnerLoading}
+        onConfirm={handleTransferOwnerAndLeave}
       />
 
       {isDragging && (
