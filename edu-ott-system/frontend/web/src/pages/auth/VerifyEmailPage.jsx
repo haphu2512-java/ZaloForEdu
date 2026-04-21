@@ -149,10 +149,15 @@ export default function VerifyOtpPage() {
         </div>
 
         {success ? (
-          <div style={{ textAlign: "center", padding: "20px 0" }}>
-            <FaCheckCircle size={48} color="#22c55e" style={{ marginBottom: 12 }} />
-            <p className="auth-step-title">Xác thực thành công!</p>
-            <p className="auth-step-sub">Đang chuyển hướng đến đăng nhập...</p>
+          <div className="otp-success">
+            <div className="otp-success-icon">
+              <FaCheckCircle size={52} color="#22c55e" />
+            </div>
+            <p className="otp-success-title">Xác thực thành công!</p>
+            <p className="otp-success-sub">Đang chuyển hướng đến đăng nhập...</p>
+            <div className="otp-success-loader">
+              <div className="otp-success-bar" />
+            </div>
           </div>
         ) : (
           <>
