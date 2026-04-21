@@ -81,13 +81,13 @@ export const ChatRightPanel = ({
   pinnedMessages = [],
   onUnpin,
   onJump,
+  polls = [],
+  loadingPolls = false,
 }) => {
   const { t } = useLanguage();
 
   // Local states
   const [rightPanelMode, setRightPanelMode] = useState('default');
-  const [polls, setPolls] = useState([]);
-  const [loadingPolls, setLoadingPolls] = useState(false);
   const [showMuteModal, setShowMuteModal] = useState(false);
   const [isGroupNameEditing, setIsGroupNameEditing] = useState(false);
   const [editGroupName, setEditGroupName] = useState('');
@@ -146,17 +146,6 @@ export const ChatRightPanel = ({
       .catch(() => { });
   }, [activeConversation?._id]);
   
-  useEffect(() => {
-    if (activeConversation?._id && (activeConversation.type === 'group' || activeConversation.roomModel === 'Group')) {
-      setLoadingPolls(true);
-      pollService.getPolls(activeConversation._id, 10)
-        .then(res => {
-          setPolls(res.data?.items || res.items || []);
-        })
-        .catch(err => console.error("Lỗi lấy bình chọn:", err))
-        .finally(() => setLoadingPolls(false));
-    }
-  }, [activeConversation?._id]);
 
   const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
   const myId = currentUser._id || currentUser.id;
@@ -412,13 +401,23 @@ export const ChatRightPanel = ({
                     ) : (
                       polls.map((poll, idx) => (
                         <div key={poll._id || `poll-${idx}`} style={{ padding: '8px 0', borderBottom: '1px solid var(--z-border)', cursor: 'pointer' }} onClick={() => {
-                          toast.info(`Bình chọn: ${poll.question}`);
+                          if (poll.messageId) {
+                            onJump && onJump(poll.messageId?._id || poll.messageId);
+                          } else {
+                            toast.info(`Bình chọn: ${poll.question}`);
+                          }
                         }}>
                           <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--z-text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                             {poll.question}
                           </div>
                           <div style={{ fontSize: 11, color: 'var(--z-text-secondary)', marginTop: 2 }}>
-                            {poll.options?.length} lựa chọn • {poll.voters?.length || 0} lượt bình chọn
+                            {poll.options?.length} lựa chọn • {(() => {
+                              const uniqueVoters = new Set();
+                              poll.options?.forEach(opt => {
+                                opt.votes?.forEach(vId => uniqueVoters.add(String(vId._id || vId)));
+                              });
+                              return uniqueVoters.size;
+                            })()} lượt bình chọn
                           </div>
                         </div>
                       ))

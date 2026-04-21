@@ -41,17 +41,32 @@ export const MessageBubble = ({
   onDelete,
   onForward,
   onReply,
-  onPin,        // ← (messageId) => void
-  isPinned,     // ← boolean: tin nhắn đã ghim?
-  onUnpin,      // ← (messageId) => void
-  onPollVoted,  // ← (updatedPoll) => void
-  userId,       // ← ID người dùng hiện tại (dùng cho PollMessage)
+  onPin,
+  isPinned,
+  onUnpin,
+  onPollVoted,
+  userId,
+  isGroup = false,
 }) => {
   const sender = message.senderId || message.sender || message.actualSender;
 
-  const { _id, content, type, status, isEdited, isRecalled, replyTo, createdAt, reactions } = message;
+  const { _id, content, type, status, isEdited, isRecalled, replyTo, createdAt, reactions, mentions, mentionAll } = message;
+
+  // Highlight mentions function
+  const renderContentWithMentions = (text) => {
+    if (!text) return '';
+    // Tách văn bản dựa trên @username hoặc @all
+    const parts = text.split(/(@\S+)/g);
+    return parts.map((part, i) => {
+      if (part.startsWith('@')) {
+        return <span key={i} style={{ color: isMe ? '#E0F2FE' : '#0084FF', fontWeight: 600 }}>{part}</span>;
+      }
+      return part;
+    });
+  };
 
   const [isHovered, setIsHovered] = useState(false);
+  // ... (rest of state and hooks)
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [pinLoading, setPinLoading] = useState(false);
@@ -79,8 +94,6 @@ export const MessageBubble = ({
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
-
-
 
   if (type === 'system') {
     return <div style={{ textAlign: 'center', margin: '16px 0', fontSize: '12px', color: '#8A8D91' }}><span>{content}</span></div>;
@@ -182,11 +195,18 @@ export const MessageBubble = ({
                         style={{ borderLeft: `3px solid ${isMe ? '#FFFFFF' : '#0084FF'}`, paddingLeft: '8px', marginBottom: '8px', opacity: 0.85, background: isMe ? 'rgba(0,0,0,0.1)' : '#F0F2F5', padding: '6px', borderRadius: '4px', cursor: 'pointer' }}
                         onClick={handleJumpToReply}
                       >
-                        <div style={{ fontSize: '11px', fontWeight: 'bold', color: isMe ? '#fff' : '#050505' }}>{replyTo.sender?.fullName || replyTo.sender?.username || 'Người dùng'}</div>
-                        <div style={{ fontSize: '13px', color: isMe ? '#fff' : '#050505', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '230px' }}>{replyTo.content || '[Hình ảnh/File]'}</div>
+                        {/* Quote sender logic: In group, show name. In 1-1, just show content */}
+                        {isGroup && (
+                          <div style={{ fontSize: '11px', fontWeight: 'bold', color: isMe ? '#fff' : '#050505', marginBottom: 2 }}>
+                            {replyTo.senderId?.fullName || replyTo.senderId?.username || 'Người dùng'}
+                          </div>
+                        )}
+                        <div style={{ fontSize: '13px', color: isMe ? '#fff' : '#050505', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '230px' }}>
+                          {replyTo.content || '[Hình ảnh/File]'}
+                        </div>
                       </div>
                     )}
-                    {content && <span>{renderContent(content)}</span>}
+                    {content && <span>{renderContentWithMentions(content)}</span>}
                   </div>
                 )}
 
@@ -261,12 +281,33 @@ export const MessageBubble = ({
             )}
 
             {!isRecalled && reactions?.length > 0 && (
-              <div style={{ position: 'absolute', bottom: '-12px', right: isMe ? '8px' : 'auto', left: isMe ? 'auto' : '8px', display: 'flex', background: '#FFFFFF', padding: '2px 6px', borderRadius: '12px', boxShadow: '0 2px 4px rgba(0,0,0,0.15)', gap: '2px', zIndex: 2, border: '1px solid #E5E7EB', color: '#111827' }}>
+              <div style={{ 
+                position: 'absolute', 
+                bottom: '-14px', 
+                right: isMe ? '4px' : 'auto', 
+                left: isMe ? 'auto' : '4px', 
+                display: 'flex', 
+                alignItems: 'center',
+                background: 'var(--z-bg-sidebar)', 
+                padding: '2px 6px', 
+                borderRadius: '12px', 
+                boxShadow: '0 2px 5px rgba(0,0,0,0.12)', 
+                gap: '2px', 
+                zIndex: 10, 
+                border: '1px solid var(--z-border)', 
+                color: 'var(--z-text-primary)',
+                fontSize: '11px'
+              }}>
                 {reactions.slice(0, 3).map((r, i) => (
-                  <div key={i} style={{ fontSize: '12px', display: 'flex', alignItems: 'center' }}>
-                    {r.emoji} {reactions.length > 1 && <span style={{ color: '#65676B', fontSize: '10px', marginLeft: '3px', fontWeight: 'bold' }}>{reactions.length}</span>}
+                  <div key={i} style={{ display: 'flex', alignItems: 'center' }}>
+                    {r.emoji}
                   </div>
                 ))}
+                {reactions.length > 0 && (
+                  <span style={{ color: 'var(--z-text-secondary)', fontSize: '10px', marginLeft: '2px', fontWeight: '700' }}>
+                    {reactions.length}
+                  </span>
+                )}
               </div>
             )}
           </div>
