@@ -135,7 +135,12 @@ export const ChatRightPanel = ({
   const isMuted = mutedUntil && new Date(mutedUntil) > new Date();
 
   const openMuteModal = () => {
-    setMuteOption(isMuted ? 0 : 60);
+    if (isMuted) {
+      // Đang mute → bật lại thông báo ngay, không cần modal
+      handleMute(0);
+      return;
+    }
+    setMuteOption(60);
     setShowMuteModal(true);
   };
   const canEditGroupInfo = isPrivileged || activeConversation?.settings?.canMembersUpdateInfo !== false;
@@ -872,7 +877,6 @@ export const ChatRightPanel = ({
                 { label: 'Trong 4 giờ', val: 240 },
                 { label: 'Trong 8 giờ', val: 480 },
                 { label: 'Cho đến khi mở lại', val: -1 },
-                { label: '🔔 Bật lại thông báo', val: 0 },
               ].map(opt => (
                 <label key={opt.val} className="mute-opt">
                   <input type="radio" name="mute_duration" checked={muteOption === opt.val} onChange={() => setMuteOption(opt.val)} />
