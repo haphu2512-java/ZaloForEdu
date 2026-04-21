@@ -20,28 +20,33 @@ export default function UserProfileModal({ isOpen, onClose, user, status: initia
   const [actionLoading, setActionLoading] = useState(null);
   const [chatLoading, setChatLoading] = useState(false);
 
-  // Sync status từ store mỗi khi modal mở — tránh state bị reset về "none"
+  // Khi modal mở: fetch fresh data từ server để đảm bảo status luôn đúng
+  useEffect(() => {
+    if (!isOpen || !user) return;
+    // Fetch song song, không block render
+    Promise.all([fetchFriends(), fetchOutgoingRequests(), fetchIncomingRequests()]).catch(() => {});
+  }, [isOpen, user?._id, user?.id]);
+
+  // Sync status từ store mỗi khi store thay đổi (sau khi fetch xong)
   useEffect(() => {
     if (!isOpen || !user) return;
     const uid = String(user._id || user.id);
 
-    // Kiểm tra đã là bạn bè chưa
     const isFriend = friends?.some(f => String(f._id || f.id || f) === uid);
     if (isFriend) { setStatus("friend"); return; }
 
-    // Kiểm tra đã gửi lời mời chưa
     const hasOutgoing = outgoingRequests?.some(
       r => String(r.toUserId?._id || r.toUserId || "") === uid
     );
     if (hasOutgoing) { setStatus("outgoing"); return; }
 
-    // Kiểm tra có lời mời đến không
     const hasIncoming = incomingRequests?.some(
       r => String(r.fromUserId?._id || r.fromUserId || "") === uid
     );
     if (hasIncoming) { setStatus("incoming"); return; }
 
-    // Không có quan hệ
+    // Chỉ reset về none nếu store đã có dữ liệu (không phải đang loading)
+    // Tránh flash khi store chưa load xong lần đầu
     setStatus(initialStatus || "none");
   }, [isOpen, user?._id, user?.id, outgoingRequests, incomingRequests, friends]);
 
