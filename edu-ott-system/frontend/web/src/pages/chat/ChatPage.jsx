@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import axios from "axios";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
-import { FaSearch, FaUsers, FaCloud, FaSpinner, FaUserSecret, FaArrowLeft, FaUserPlus, FaCheck, FaTimes } from "react-icons/fa";
+import { FaSearch, FaUsers, FaCloud, FaSpinner, FaUserSecret, FaArrowLeft, FaUserPlus, FaCheck, FaTimes, FaLock, FaGlobe, FaUserFriends, FaInbox, FaShieldAlt } from "react-icons/fa";
 import toast from "react-hot-toast";
 
 import { uploadFile } from "../../services/mediaService";
@@ -234,6 +234,8 @@ export default function ChatPage() {
   const [showCreateGroupModal, setShowCreateGroupModal] = useState(false);
   const [showTransferOwnerModal, setShowTransferOwnerModal] = useState(false);
   const [transferOwnerLoading, setTransferOwnerLoading] = useState(false);
+  const [showPrivacyModal, setShowPrivacyModal] = useState(false);
+  const [messagePrivacy, setMessagePrivacy] = useState(() => localStorage.getItem('messagePrivacy') || 'everyone');
 
   const pageRef = useRef(null);
   const messagesEndRef = useRef(null);
@@ -260,6 +262,16 @@ export default function ChatPage() {
   }, []);
 
   const token = localStorage.getItem("token");
+
+  // Load messagePrivacy từ backend (sau khi userId và token đã sẵn sàng)
+  useEffect(() => {
+    if (!userId || !token) return;
+    axios.get(`${API_BASE_URL}/users/${userId}`, { headers: { Authorization: `Bearer ${token}` } })
+      .then(res => {
+        const p = res.data?.data?.messagePrivacy || res.data?.messagePrivacy;
+        if (p) { setMessagePrivacy(p); localStorage.setItem('messagePrivacy', p); }
+      }).catch(() => {});
+  }, [userId, token]);
 
   const openSelfConversation = useCallback(async () => {
     if (selfConversation) {
@@ -346,8 +358,18 @@ export default function ChatPage() {
       return timeB - timeA;
     });
 
-    if (!searchQuery.trim()) return convs;
-    return convs.filter(conv => getConversationName(conv).toLowerCase().includes(searchQuery.toLowerCase()));
+    // Deduplicate: chỉ giữ 1 self-conversation (Cloud của tôi)
+    let selfSeen = false;
+    const deduped = convs.filter(c => {
+      if (c.type === 'direct' && c.participants?.length === 1) {
+        if (selfSeen) return false;
+        selfSeen = true;
+      }
+      return true;
+    });
+
+    if (!searchQuery.trim()) return deduped;
+    return deduped.filter(conv => getConversationName(conv).toLowerCase().includes(searchQuery.toLowerCase()));
   }, [conversations, friends, searchQuery, userId, getConversationName, getOtherParticipant]);
   // Phân loại: bạn bè vs người lạ
   const friendIds = useMemo(() => new Set(friends.map(f => String(f._id || f.id))), [friends]);
@@ -393,21 +415,34 @@ export default function ChatPage() {
     return { friendConvs, strangerConvs };
   }, [mergedConversations, friendIds, getOtherParticipant, userId]);
 
+  // Khi navigate từ UserProfileModal với conversation đã populated, inject vào state
+  useEffect(() => {
+    const incoming = location.state?.newConversation;
+    if (!incoming) return;
+    const convId = String(incoming._id);
+    setConversations(prev => {
+      const idx = prev.findIndex(c => String(c._id) === convId);
+      if (idx === -1) return [incoming, ...prev];
+      const updated = [...prev];
+      updated[idx] = { ...prev[idx], ...incoming };
+      return updated;
+    });
+    window.history.replaceState({}, '');
+  }, [location.state]);
+
   useEffect(() => {
     if (!roomId) return;
     if (selfConversation && String(selfConversation._id) === String(roomId)) {
-      if (!activeConversation || String(activeConversation._id) !== String(roomId)) {
+      if (String(activeConvIdRef.current) !== String(roomId)) {
         setActiveConversation(selfConversation);
       }
       return;
     }
     const targetRoom = mergedConversations.find(c => String(c._id) === String(roomId));
-    if (targetRoom) {
-      if (!activeConversation || String(activeConversation._id) !== String(roomId) || targetRoom !== activeConversation) {
-        setActiveConversation(targetRoom);
-      }
+    if (targetRoom && String(activeConvIdRef.current) !== String(roomId)) {
+      setActiveConversation(targetRoom);
     }
-  }, [roomId, mergedConversations, selfConversation, activeConversation]);
+  }, [roomId, mergedConversations, selfConversation]);
   useEffect(() => {
     activeConvIdRef.current = activeConversation?._id;
     activeConversationRef.current = activeConversation;
@@ -435,8 +470,6 @@ export default function ChatPage() {
       if (prev.find(c => String(c._id) === String(conv._id))) return prev;
       return [conv, ...prev];
     });
-    // Re-fetch to get fully-populated participant data
-    fetchConversationsData();
   }, [location.state]);
 
   // ==================== KHỞI TẠO SOCKET ====================
@@ -469,6 +502,7 @@ export default function ChatPage() {
         const msgIdStr = String(latestMessage?._id || latestMessage?.id);
         const normalizedMsg = {
           ...latestMessage,
+          _id: msgIdStr, // normalize to string to prevent dedup mismatch
           mediaIds: (latestMessage.mediaIds || []).map(media =>
             typeof media === 'object' && media.url && !/^https?:\/\//i.test(media.url)
               ? { ...media, url: `${API_ORIGIN}${media.url}` }
@@ -504,14 +538,19 @@ export default function ChatPage() {
         const senderName = senderObj?.username || senderObj?.fullName || 'Ai đó';
         const shortContent = latestMessage?.content || '[Hình ảnh/File đính kèm]';
         const avatarSrc = senderObj?.avatarUrl || senderObj?.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(senderName)}&background=0068FF&color=fff`;
-        toast.custom((t) => (
+        const isGroup = convForNotif?.type === 'group' || convForNotif?.roomModel === 'Group';
+        const groupName = isGroup ? (convForNotif?.name || 'Nhóm') : null;
+        toast.custom((toastObj) => (
           <div
-            className={`push-notif-card ${t.visible ? 'entering' : 'leaving'}`}
-            onClick={() => toast.dismiss(t.id)}
+            className={`push-notif-card ${toastObj.visible ? 'entering' : 'leaving'}`}
+            onClick={() => { toast.dismiss(toastObj.id); navigate(`/chat/${convIdStr}`); }}
+            style={{ cursor: 'pointer' }}
           >
             <img src={avatarSrc} alt="" className="push-notif-avatar" />
             <div className="push-notif-body">
-              <div className="push-notif-sender">{senderName}</div>
+              <div className="push-notif-sender">
+                {`${senderName} đã gửi tới ${groupName || 'bạn'}`}
+              </div>
               <div className="push-notif-content">{shortContent}</div>
             </div>
             <span className="push-notif-close">✕</span>
@@ -1062,6 +1101,7 @@ const handleJoinRequestProcessed = ({ conversationName, action }) => {
     }
   };
   const executeForward = async (friend) => {
+    if (!msgToShare) { toast.error("Không có tin nhắn để chuyển tiếp"); return; }
     try {
       const targetId = friend._id || friend.id;
       let targetConvId = null;
@@ -1155,7 +1195,7 @@ const handleJoinRequestProcessed = ({ conversationName, action }) => {
                 {(rem.participants || []).length > 0 && (
                   <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
                     {(rem.participants || []).map((p, i) => (
-                      <div key={i} title={p.username || ''} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+                      <div key={String(p._id || p.id || i)} title={p.username || ''} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
                         <img src={p.avatarUrl || DEFAULT_AVATAR}
                           onError={e => { e.currentTarget.src = DEFAULT_AVATAR; }}
                           style={{ width: 36, height: 36, borderRadius: '50%', objectFit: 'cover' }} alt="" />
@@ -1369,14 +1409,31 @@ const handleJoinRequestProcessed = ({ conversationName, action }) => {
                 return fromId === otherId;
               });
 
-              if (hasOutgoing) return (
-                <div style={{ position: 'sticky', top: 0, zIndex: 10, padding: '12px 20px', background: 'rgba(0,104,255,0.06)', borderBottom: '1px solid var(--z-border)', display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, backdropFilter: 'blur(8px)' }}>
-                  <FaUserPlus size={14} color="var(--z-primary)" style={{ flexShrink: 0 }} />
-                  <span style={{ color: 'var(--z-text-secondary)' }}>
-                    Đang chờ <strong style={{ color: 'var(--z-text-primary)' }}>{otherName}</strong> đồng ý kết bạn
-                  </span>
-                </div>
-              );
+              if (hasOutgoing) {
+                const outgoingReq = outgoingRequests.find(r => String(r.toUserId?._id || r.toUserId || '') === otherId);
+                return (
+                  <div style={{ position: 'sticky', top: 0, zIndex: 10, padding: '12px 20px', background: 'rgba(0,104,255,0.06)', borderBottom: '1px solid var(--z-border)', display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, backdropFilter: 'blur(8px)' }}>
+                    <FaUserPlus size={14} color="var(--z-primary)" style={{ flexShrink: 0 }} />
+                    <span style={{ flex: 1, color: 'var(--z-text-secondary)' }}>
+                      Đã gửi lời mời kết bạn tới <strong style={{ color: 'var(--z-text-primary)' }}>{otherName}</strong>
+                    </span>
+                    <button
+                      onClick={async () => {
+                        try {
+                          const { friendService } = await import('../../services/friendService');
+                          const reqId = outgoingReq ? String(outgoingReq._id || outgoingReq.id) : null;
+                          if (reqId) await friendService.cancelFriendRequest(reqId);
+                          setJustSentRequestTo(null);
+                          fetchOutgoingRequests();
+                        } catch { toast.error('Không thể hủy lời mời'); }
+                      }}
+                      style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 14px', borderRadius: 8, border: '1px solid var(--z-border)', background: 'transparent', color: 'var(--z-text-secondary)', cursor: 'pointer', fontWeight: 600, fontSize: 13, flexShrink: 0 }}
+                    >
+                      <FaTimes size={11} />Hủy lời mời
+                    </button>
+                  </div>
+                );
+              }
 
               if (incomingReq) return (
                 <div style={{ position: 'sticky', top: 0, zIndex: 10, padding: '12px 20px', background: 'rgba(0,104,255,0.06)', borderBottom: '1px solid var(--z-border)', display: 'flex', alignItems: 'center', gap: 12, backdropFilter: 'blur(8px)' }}>
@@ -1510,7 +1567,7 @@ const handleJoinRequestProcessed = ({ conversationName, action }) => {
                     }
                     const isMe = getSenderIdStr(item) === String(userId);
                     return (
-                      <React.Fragment key={item._id}>
+                      <React.Fragment key={String(item._id || item.id)}>
                         {showDate && <div className="msg-date-divider"><span>{formatDateDivider(item.createdAt)}</span></div>}
                         {item.type === 'system' ? (
                           <div style={{ display: 'flex', justifyContent: 'center', margin: '4px 0' }}>
@@ -1567,11 +1624,33 @@ const handleJoinRequestProcessed = ({ conversationName, action }) => {
               );
             }
 
+            // Banner khi privacy liên quan đến người lạ
+            const otherForPrivacy = !isGroupConv ? getOtherParticipant(activeConversation) : null;
+            const otherIdForPrivacy = otherForPrivacy && typeof otherForPrivacy === 'object' ? String(otherForPrivacy._id || otherForPrivacy.id) : null;
+            const isStrangerChat = otherIdForPrivacy && !friendIds.has(otherIdForPrivacy);
+            const otherNameForPrivacy = otherForPrivacy && typeof otherForPrivacy === 'object' ? (otherForPrivacy.username || otherForPrivacy.fullName || 'Người này') : 'Người này';
+            const otherPrivacy = otherForPrivacy?.messagePrivacy;
+
+            // Chỉ chặn khi ĐỐI PHƯƠNG set friends-only → họ không nhận tin từ người lạ (mình)
+            const blockedByTheirPrivacy = isStrangerChat && otherPrivacy === 'friends';
+
+            if (blockedByTheirPrivacy) {
+              return (
+                <div style={{ padding: '14px 20px', background: 'var(--z-bg-sidebar)', borderTop: '1px solid var(--z-border)', display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <FaShieldAlt size={18} color="#f59e0b" style={{ flexShrink: 0 }} />
+                  <div style={{ flex: 1, fontSize: 13, color: 'var(--z-text-secondary)', lineHeight: 1.5 }}>
+                    Bạn và <strong style={{ color: 'var(--z-text-primary)' }}>{otherNameForPrivacy}</strong> không phải bạn bè. <strong style={{ color: 'var(--z-text-primary)' }}>{otherNameForPrivacy}</strong> chỉ nhận tin từ bạn bè. Kết bạn để có thể nhắn tin.
+                  </div>
+                </div>
+              );
+            }
+
+            const convName = getConversationName(activeConversation) || 'cuộc trò chuyện';
             return (
               <MessageInput
                 key={activeConversation._id}
                 theme={appliedTheme}
-                placeholder={`Nhập @, tin nhắn tới ${getConversationName(activeConversation)}`}
+                placeholder={`Nhập @, tin nhắn tới ${convName}`}
                 onSend={handleSendText}
                 onSendLike={handleSendLike}
                 onUploadFiles={handleUploadFilesFromInput}
@@ -1617,55 +1696,124 @@ const handleJoinRequestProcessed = ({ conversationName, action }) => {
       {/* ── PANEL: Tin nhắn từ người lạ ── */}
       {showStrangerPanel && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 1000, display: 'flex' }}>
-          {/* Overlay */}
-          <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.3)' }} onClick={() => setShowStrangerPanel(false)} />
-          {/* Panel */}
-          <div style={{ position: 'relative', width: 360, height: '100%', background: 'var(--z-bg-sidebar)', display: 'flex', flexDirection: 'column', boxShadow: '4px 0 20px rgba(0,0,0,0.2)' }}>
+          <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.35)' }} onClick={() => setShowStrangerPanel(false)} />
+          <div style={{ position: 'relative', width: 360, height: '100%', background: 'var(--z-bg-sidebar)', display: 'flex', flexDirection: 'column', boxShadow: '6px 0 24px rgba(0,0,0,0.18)' }}>
             {/* Header */}
-            <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--z-border)', display: 'flex', alignItems: 'center', gap: 12 }}>
-              <button onClick={() => setShowStrangerPanel(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--z-text-primary)', padding: 4 }}>
-                <FaArrowLeft size={16} />
+            <div style={{ padding: '14px 18px', borderBottom: '1px solid var(--z-border)', display: 'flex', alignItems: 'center', gap: 10, background: 'var(--z-bg-sidebar)' }}>
+              <button onClick={() => setShowStrangerPanel(false)} style={{ width: 32, height: 32, borderRadius: '50%', border: 'none', background: 'var(--z-bg-hover)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--z-text-primary)', flexShrink: 0 }}>
+                <FaArrowLeft size={14} />
               </button>
-              <span style={{ fontWeight: 700, fontSize: 16, color: 'var(--z-text-primary)' }}>Tin nhắn từ người lạ</span>
+              <span style={{ fontWeight: 700, fontSize: 15, color: 'var(--z-text-primary)', flex: 1 }}>Tin nhắn từ người lạ</span>
+              <span style={{ fontSize: 12, color: 'var(--z-text-muted)', background: 'var(--z-bg-hover)', borderRadius: 10, padding: '2px 8px' }}>{strangerConvs.length}</span>
             </div>
-            {/* Notice */}
-            <div style={{ padding: '10px 16px', fontSize: 12, color: 'var(--z-text-secondary)', borderBottom: '1px solid var(--z-border)' }}>
-              Người lạ có thể nhắn tin cho bạn.{' '}
-              <span style={{ color: 'var(--z-primary)', cursor: 'pointer' }}>Cài đặt quyền riêng tư</span>
+            {/* Privacy notice */}
+            <div style={{ margin: '10px 14px', padding: '10px 14px', background: messagePrivacy === 'friends' ? 'rgba(239,68,68,0.07)' : 'rgba(0,104,255,0.06)', borderRadius: 10, border: `1px solid ${messagePrivacy === 'friends' ? 'rgba(239,68,68,0.2)' : 'rgba(0,104,255,0.15)'}` }}>
+              <div style={{ fontSize: 12.5, color: 'var(--z-text-secondary)', lineHeight: 1.5, display: 'flex', alignItems: 'center', gap: 6 }}>
+                {messagePrivacy === 'friends'
+                  ? <><FaLock size={11} color="#ef4444" /><span>Chỉ bạn bè mới có thể nhắn tin cho bạn.</span></>
+                  : <><FaGlobe size={11} color="var(--z-primary)" /><span>Mọi người có thể nhắn tin cho bạn.</span></>}
+              </div>
+              <span
+                onClick={() => setShowPrivacyModal(true)}
+                style={{ fontSize: 12, color: 'var(--z-primary)', cursor: 'pointer', fontWeight: 600, display: 'inline-block', marginTop: 4 }}
+              >
+                Cài đặt quyền riêng tư →
+              </span>
             </div>
             {/* List */}
             <div style={{ flex: 1, overflowY: 'auto' }}>
               {strangerConvs.map(conv => {
                 const unread = conv.unreadCount || 0;
+                const lastMsgTime = conv.latestMessage ? formatChatTimestamp(conv.latestMessage.createdAt) : '';
+                const lastContent = conv.latestMessage?.isRecalled ? 'Tin nhắn đã thu hồi' : (conv.latestMessage?.content || (conv.latestMessage ? '[Hình ảnh/File]' : 'Chưa có tin nhắn'));
                 return (
                   <div
-                    key={conv._id}
-                    style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', cursor: 'pointer', borderBottom: '1px solid var(--z-border)' }}
+                    key={String(conv._id)}
+                    style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 16px', cursor: 'pointer', transition: 'background 0.15s', borderBottom: '1px solid var(--z-border)' }}
                     onClick={() => { setActiveConversation(conv); navigate('/chat/' + conv._id); setShowStrangerPanel(false); }}
                     onMouseEnter={e => e.currentTarget.style.background = 'var(--z-bg-hover)'}
                     onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                   >
-                    <img src={getConversationAvatar(conv)} alt="" style={{ width: 44, height: 44, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
+                    <div style={{ position: 'relative', flexShrink: 0 }}>
+                      <img src={getConversationAvatar(conv)} alt="" style={{ width: 46, height: 46, borderRadius: '50%', objectFit: 'cover', display: 'block' }} onError={e => { e.target.src = DEFAULT_AVATAR; }} />
+                      {unread > 0 && (
+                        <div style={{ position: 'absolute', top: -2, right: -2, background: '#ef4444', color: '#fff', borderRadius: 10, minWidth: 18, height: 18, fontSize: 10, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 4px', border: '2px solid var(--z-bg-sidebar)' }}>{unread > 99 ? '99+' : unread}</div>
+                      )}
+                    </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ fontWeight: 700, fontSize: 14, color: 'var(--z-text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{getConversationName(conv)}</span>
-                        <span style={{ fontSize: 11, color: 'var(--z-text-muted)', flexShrink: 0, marginLeft: 8 }}>
-                          {conv.latestMessage ? formatChatTimestamp(conv.latestMessage.createdAt) : ''}
-                        </span>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3 }}>
+                        <span style={{ fontWeight: unread > 0 ? 700 : 600, fontSize: 13.5, color: 'var(--z-text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 180 }}>{getConversationName(conv)}</span>
+                        <span style={{ fontSize: 11, color: unread > 0 ? 'var(--z-primary)' : 'var(--z-text-muted)', flexShrink: 0, marginLeft: 6 }}>{lastMsgTime}</span>
                       </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 2 }}>
-                        <span style={{ fontSize: 12, color: 'var(--z-text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {conv.latestMessage?.content || '[Hình ảnh/File]'}
-                        </span>
-                        {unread > 0 && <div style={{ background: '#ef4444', color: '#fff', borderRadius: 10, padding: '1px 6px', fontSize: 11, flexShrink: 0 }}>{unread}</div>}
-                      </div>
+                      <span style={{ fontSize: 12, color: unread > 0 ? 'var(--z-text-secondary)' : 'var(--z-text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block', fontWeight: unread > 0 ? 600 : 400 }}>
+                        {lastContent}
+                      </span>
                     </div>
                   </div>
                 );
               })}
               {strangerConvs.length === 0 && (
-                <div style={{ textAlign: 'center', padding: 40, color: 'var(--z-text-muted)', fontSize: 13 }}>Không có tin nhắn từ người lạ</div>
+                <div style={{ textAlign: 'center', padding: '48px 24px', color: 'var(--z-text-muted)' }}>
+                  <FaInbox size={36} style={{ marginBottom: 12, color: 'var(--z-border)' }} />
+                  <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4, color: 'var(--z-text-secondary)' }}>Không có tin nhắn từ người lạ</div>
+                  <div style={{ fontSize: 12 }}>Hộp thư của bạn đang sạch sẽ!</div>
+                </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── MODAL: Cài đặt quyền riêng tư ── */}
+      {showPrivacyModal && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 10001, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setShowPrivacyModal(false)}>
+          <div style={{ background: 'var(--z-bg-sidebar)', borderRadius: 14, width: 400, maxWidth: '92vw', boxShadow: '0 20px 60px rgba(0,0,0,0.25)', overflow: 'hidden' }} onClick={e => e.stopPropagation()}>
+            {/* Header */}
+            <div style={{ padding: '18px 20px 14px', borderBottom: '1px solid var(--z-border)' }}>
+              <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--z-text-primary)', marginBottom: 4 }}>Ai được nhắn tin cho bạn?</div>
+              <div style={{ fontSize: 12.5, color: 'var(--z-text-secondary)', lineHeight: 1.5 }}>Chọn ai có thể gửi tin nhắn đến bạn</div>
+            </div>
+            {/* Options */}
+            <div style={{ padding: '8px 0' }}>
+              {[
+                { value: 'everyone', label: 'Mọi người', desc: 'Tất cả mọi người đều có thể nhắn tin cho bạn', Icon: FaGlobe, iconColor: 'var(--z-primary)' },
+                { value: 'friends', label: 'Bạn bè', desc: 'Chỉ bạn bè mới có thể nhắn tin cho bạn', Icon: FaUserFriends, iconColor: '#16a34a' },
+              ].map(opt => (
+                <div
+                  key={opt.value}
+                  onClick={() => setMessagePrivacy(opt.value)}
+                  style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '13px 20px', cursor: 'pointer', background: messagePrivacy === opt.value ? 'rgba(0,104,255,0.06)' : 'transparent', transition: 'background 0.15s' }}
+                  onMouseEnter={e => { if (messagePrivacy !== opt.value) e.currentTarget.style.background = 'var(--z-bg-hover)'; }}
+                  onMouseLeave={e => { if (messagePrivacy !== opt.value) e.currentTarget.style.background = 'transparent'; }}
+                >
+                  <div style={{ width: 40, height: 40, borderRadius: '50%', background: messagePrivacy === opt.value ? opt.iconColor + '18' : 'var(--z-bg-hover)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <opt.Icon size={18} color={messagePrivacy === opt.value ? opt.iconColor : 'var(--z-text-secondary)'} />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--z-text-primary)' }}>{opt.label}</div>
+                    <div style={{ fontSize: 12, color: 'var(--z-text-secondary)', marginTop: 2 }}>{opt.desc}</div>
+                  </div>
+                  <div style={{ width: 20, height: 20, borderRadius: '50%', border: `2px solid ${messagePrivacy === opt.value ? 'var(--z-primary)' : 'var(--z-border)'}`, background: messagePrivacy === opt.value ? 'var(--z-primary)' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'all 0.15s' }}>
+                    {messagePrivacy === opt.value && <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#fff' }} />}
+                  </div>
+                </div>
+              ))}
+            </div>
+            {/* Footer */}
+            <div style={{ padding: '12px 20px', borderTop: '1px solid var(--z-border)', display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+              <button onClick={() => setShowPrivacyModal(false)} style={{ padding: '8px 20px', borderRadius: 8, border: '1px solid var(--z-border)', background: 'transparent', color: 'var(--z-text-secondary)', cursor: 'pointer', fontWeight: 600, fontSize: 13.5 }}>Hủy</button>
+              <button
+                onClick={async () => {
+                  localStorage.setItem('messagePrivacy', messagePrivacy);
+                  try {
+                    await axios.put(`${API_BASE_URL}/users/${userId}`, { messagePrivacy }, { headers: { Authorization: `Bearer ${token}` } });
+                  } catch (e) { /* localStorage fallback is enough for UI */ }
+                  setShowPrivacyModal(false);
+                }}
+                style={{ padding: '8px 22px', borderRadius: 8, border: 'none', background: 'var(--z-primary)', color: '#fff', cursor: 'pointer', fontWeight: 600, fontSize: 13.5 }}
+              >
+                Lưu
+              </button>
             </div>
           </div>
         </div>

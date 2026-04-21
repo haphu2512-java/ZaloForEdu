@@ -159,7 +159,7 @@ export const ChatRightPanel = ({
 
   return (
     <>
-      <aside className="chat-right-panel" style={{ width: 320, background: 'var(--z-bg-sidebar)', borderLeft: '1px solid var(--z-border)', display: 'flex', flexDirection: 'column' }}>
+      <aside className="chat-right-panel" style={{ background: 'var(--z-bg-sidebar)', borderLeft: '1px solid var(--z-border)', display: 'flex', flexDirection: 'column' }}>
         {rightPanelMode === 'default' ? (
           <>
             {/* HEADER */}

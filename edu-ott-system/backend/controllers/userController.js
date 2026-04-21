@@ -37,6 +37,7 @@ const updateUserById = asyncHandler(async (req, res) => {
   if (typeof updates.username === 'string') user.username = updates.username.trim();
   if (typeof updates.phone !== 'undefined') user.phone = updates.phone || null;
   if (typeof updates.avatarUrl !== 'undefined') user.avatarUrl = updates.avatarUrl || null;
+  if (updates.messagePrivacy) user.messagePrivacy = updates.messagePrivacy;
 
   // Update phone
   if (typeof updates.phone !== 'undefined') {

@@ -63,6 +63,11 @@ const userSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+    messagePrivacy: {
+      type: String,
+      enum: ['everyone', 'friends'],
+      default: 'everyone',
+    },
     isEmailVerified: {
       type: Boolean,
       default: false,

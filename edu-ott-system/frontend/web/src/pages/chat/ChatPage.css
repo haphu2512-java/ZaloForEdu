@@ -89,7 +89,7 @@
 }
 
 /* ── MAIN CHAT AREA (GIỮA) ── */
-.chat-main { flex: 1; display: flex; flex-direction: column; background: var(--z-bg-main); position: relative; }
+.chat-main { flex: 1; min-width: 0; display: flex; flex-direction: column; background: var(--z-bg-main); position: relative; overflow: hidden; }
 .chat-header {
   height: 64px; padding: 0 20px; background: var(--z-bg-sidebar);
   border-bottom: 1px solid var(--z-border); display: flex; align-items: center; justify-content: space-between;
