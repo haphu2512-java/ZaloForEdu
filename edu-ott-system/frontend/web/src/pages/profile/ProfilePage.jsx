@@ -248,6 +248,24 @@ export default function ProfilePage() {
     }
   };
 
+  // Mở modal + tự gửi OTP mới (dùng khi click "Xác thực ngay" từ view)
+  const openOtpModal = async (type, contact) => {
+    setOtpDigits(['','','','','','']);
+    setOtpError('');
+    setOtpModal({ type, contact });
+    const token = localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken');
+    try {
+      const payload = type === 'phone' ? { phone: contact } : { email: contact };
+      await axios.post(`${API_BASE_URL}/auth/resend-otp`, payload, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+    } catch (err) {
+      // Nếu OTP cũ còn hạn cooldown → báo lỗi nhẹ, không đóng modal
+      const msg = err.response?.data?.message || '';
+      if (msg) setOtpError(msg);
+    }
+  };
+
   const submitPasswordChange = async () => {
     if (!passwordForm.oldPassword || !passwordForm.newPassword || !passwordForm.confirmPassword) {
       return alert("Vui lòng điền đầy đủ thông tin mật khẩu!");
@@ -419,7 +437,7 @@ export default function ProfilePage() {
                             {profile.phone && (
                               verifiedContacts.phone
                                 ? <span style={{ display:'flex', alignItems:'center', gap:3, fontSize:11, color:'#16a34a', fontWeight:600 }}><CheckCircle size={13}/> Đã xác thực</span>
-                                : <button onClick={() => { setOtpModal({ type:'phone', contact: profile.phone }); setOtpDigits(['','','','','','']); setOtpError(''); }} style={{ display:'flex', alignItems:'center', gap:3, fontSize:11, color:'#f59e0b', fontWeight:700, background:'#fef3c7', border:'1px solid #fde68a', borderRadius:6, padding:'2px 8px', cursor:'pointer' }}><ShieldAlert size={13}/> Xác thực ngay</button>
+                                : <button onClick={() => openOtpModal('phone', profile.phone)} style={{ display:'flex', alignItems:'center', gap:3, fontSize:11, color:'#f59e0b', fontWeight:700, background:'#fef3c7', border:'1px solid #fde68a', borderRadius:6, padding:'2px 8px', cursor:'pointer' }}><ShieldAlert size={13}/> Xác thực ngay</button>
                             )}
                           </div>
                         </div>
@@ -433,7 +451,7 @@ export default function ProfilePage() {
                             {profile.email && (
                               verifiedContacts.email
                                 ? <span style={{ display:'flex', alignItems:'center', gap:3, fontSize:11, color:'#16a34a', fontWeight:600 }}><CheckCircle size={13}/> Đã xác thực</span>
-                                : <button onClick={() => { setOtpModal({ type:'email', contact: profile.email }); setOtpDigits(['','','','','','']); setOtpError(''); }} style={{ display:'flex', alignItems:'center', gap:3, fontSize:11, color:'#f59e0b', fontWeight:700, background:'#fef3c7', border:'1px solid #fde68a', borderRadius:6, padding:'2px 8px', cursor:'pointer' }}><ShieldAlert size={13}/> Xác thực ngay</button>
+                                : <button onClick={() => openOtpModal('email', profile.email)} style={{ display:'flex', alignItems:'center', gap:3, fontSize:11, color:'#f59e0b', fontWeight:700, background:'#fef3c7', border:'1px solid #fde68a', borderRadius:6, padding:'2px 8px', cursor:'pointer' }}><ShieldAlert size={13}/> Xác thực ngay</button>
                             )}
                           </div>
                         </div>
