@@ -18,6 +18,7 @@ const sendMessage = asyncHandler(async (req, res) => {
   }
 
   const Conversation = require('../models/Conversation');
+  const User = require('../models/User');
   const conversation = await Conversation.findById(conversationId);
   if (!conversation) throw new ApiError(404, 'CONVERSATION_NOT_FOUND', 'Conversation not found');
 
@@ -26,6 +27,24 @@ const sendMessage = asyncHandler(async (req, res) => {
   if (!isOwner && !isAdmin) {
     if (conversation.settings?.canMembersSendMessages === false) {
       throw new ApiError(403, 'FORBIDDEN', 'Only admin/owner can send messages in this group');
+    }
+  }
+
+  // Enforce messagePrivacy cho direct conversation
+  if (conversation.type === 'direct' && conversation.participants.length === 2) {
+    const otherParticipantId = conversation.participants.find(
+      (p) => toStr(p) !== toStr(req.user._id)
+    );
+    if (otherParticipantId) {
+      const otherUser = await User.findById(otherParticipantId).select('messagePrivacy friends');
+      if (otherUser?.messagePrivacy === 'friends') {
+        const isFriend = (otherUser.friends || []).some(
+          (f) => toStr(f) === toStr(req.user._id)
+        );
+        if (!isFriend) {
+          throw new ApiError(403, 'PRIVACY_RESTRICTED', 'Người dùng này chỉ nhận tin nhắn từ bạn bè');
+        }
+      }
     }
   }
 

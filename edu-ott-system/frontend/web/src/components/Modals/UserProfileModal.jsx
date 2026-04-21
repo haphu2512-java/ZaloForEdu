@@ -37,6 +37,7 @@ export default function UserProfileModal({ isOpen, onClose, user, status: initia
   const handleChat = async () => {
     setChatLoading(true);
     try {
+      // Kiểm tra conversation đã tồn tại chưa
       const res = await api.post("/conversations", {
         type: "direct",
         participantIds: [uid],

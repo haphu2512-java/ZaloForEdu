@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import {
   FaComments,
@@ -18,11 +18,15 @@ import {
   FaDatabase,
   FaGlobe,
   FaQuestionCircle,
+  FaUserFriends,
+  FaLock,
+  FaCommentSlash,
 } from "react-icons/fa";
 import { useAuthStore } from "../../store/authStore";
 import { useTheme } from "../../contexts/ThemeContext";
 import { useLanguage } from "../../contexts/LanguageContext";
 import { useNotificationStore } from "../../store/notificationStore";
+import { userService } from "../../services/userService";
 import NotificationsPanel from "../../pages/notifications/NotificationsPanel";
 import { socketService } from "../../services/socketService"; // Thêm import socketService
 import IncomingCallModal from '../../pages/chat/Modals/IncomingCallModal';
@@ -53,11 +57,54 @@ function getAvatarColor(name = "") {
 function SettingsModal({ onClose }) {
   const { themeMode, setThemeMode } = useTheme();
   const { language, changeLanguage, t } = useLanguage();
+  const { user } = useAuthStore();
   const [activeTab, setActiveTab] = useState("general");
   const [notifications, setNotifications] = useState(true);
 
+  // messagePrivacy state — load từ localStorage trước, sync backend sau
+  const [messagePrivacy, setMessagePrivacyState] = useState(
+    () => localStorage.getItem("messagePrivacy") || "everyone"
+  );
+  const [privacySaving, setPrivacySaving] = useState(false);
+  const [privacySaved, setPrivacySaved] = useState(false);
+
+  useEffect(() => {
+    const userId = user?._id || user?.id;
+    if (!userId) return;
+    userService.updateProfile(userId, {}).then?.(() => {}).catch?.(() => {});
+    // Lấy giá trị thật từ backend
+    const token = localStorage.getItem("token");
+    if (!token) return;
+    fetch(`${import.meta.env.VITE_API_URL || "http://localhost:5000/api/v1"}/users/${userId}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((r) => r.json())
+      .then((res) => {
+        const p = res?.data?.messagePrivacy || res?.messagePrivacy;
+        if (p) { setMessagePrivacyState(p); localStorage.setItem("messagePrivacy", p); }
+      })
+      .catch(() => {});
+  }, [user?._id]);
+
+  const handleSavePrivacy = useCallback(async (value) => {
+    const userId = user?._id || user?.id;
+    if (!userId) return;
+    setPrivacySaving(true);
+    try {
+      await userService.updateProfile(userId, { messagePrivacy: value });
+      localStorage.setItem("messagePrivacy", value);
+      setPrivacySaved(true);
+      setTimeout(() => setPrivacySaved(false), 2000);
+    } catch (e) {
+      console.error("Lỗi lưu privacy:", e);
+    } finally {
+      setPrivacySaving(false);
+    }
+  }, [user?._id]);
+
   const SETTING_TABS = [
     { id: "general",  label: t("tabGeneral"),  icon: FaCog },
+    { id: "messaging", label: "Tin nhắn",      icon: FaCommentSlash },
     { id: "security", label: t("tabSecurity"), icon: FaShieldAlt },
     { id: "data",     label: t("tabData"),     icon: FaDatabase },
     { id: "language", label: t("tabLanguage"), icon: FaGlobe },
@@ -159,6 +206,106 @@ function SettingsModal({ onClose }) {
                       <option value="vi">🇻🇳 Tiếng Việt</option>
                       <option value="en">🇬🇧 English</option>
                     </select>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {activeTab === "messaging" && (
+              <div className="sm-section-list">
+                <div className="sm-section">
+                  <h3 style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <FaUserFriends size={16} /> Ai được nhắn tin cho bạn?
+                  </h3>
+                  <p className="sm-desc" style={{ marginBottom: 16 }}>
+                    Kiểm soát ai có thể gửi tin nhắn đến bạn. Người không được phép sẽ thấy thông báo khi cố nhắn tin.
+                  </p>
+
+                  {[
+                    {
+                      value: "everyone",
+                      label: "Mọi người",
+                      desc: "Tất cả mọi người đều có thể nhắn tin cho bạn",
+                      icon: FaGlobe,
+                      color: "#0068FF",
+                    },
+                    {
+                      value: "friends",
+                      label: "Chỉ bạn bè",
+                      desc: "Chỉ những người trong danh sách bạn bè mới có thể nhắn tin",
+                      icon: FaUserFriends,
+                      color: "#16a34a",
+                    },
+                  ].map((opt) => {
+                    const isSelected = messagePrivacy === opt.value;
+                    return (
+                      <div
+                        key={opt.value}
+                        onClick={() => {
+                          setMessagePrivacyState(opt.value);
+                          handleSavePrivacy(opt.value);
+                        }}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 14,
+                          padding: "14px 16px",
+                          borderRadius: 10,
+                          border: `1.5px solid ${isSelected ? opt.color : "var(--border-color)"}`,
+                          background: isSelected ? `${opt.color}0d` : "var(--bg-secondary)",
+                          cursor: "pointer",
+                          marginBottom: 10,
+                          transition: "all 0.15s",
+                        }}
+                      >
+                        <div
+                          style={{
+                            width: 38,
+                            height: 38,
+                            borderRadius: "50%",
+                            background: isSelected ? `${opt.color}22` : "var(--bg-primary)",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            flexShrink: 0,
+                          }}
+                        >
+                          <opt.icon size={17} color={isSelected ? opt.color : "var(--text-secondary)"} />
+                        </div>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontWeight: 600, fontSize: 14, color: "var(--text-primary)" }}>{opt.label}</div>
+                          <div style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 2 }}>{opt.desc}</div>
+                        </div>
+                        <div
+                          style={{
+                            width: 20,
+                            height: 20,
+                            borderRadius: "50%",
+                            border: `2px solid ${isSelected ? opt.color : "var(--border-color)"}`,
+                            background: isSelected ? opt.color : "transparent",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            flexShrink: 0,
+                            transition: "all 0.15s",
+                          }}
+                        >
+                          {isSelected && <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#fff" }} />}
+                        </div>
+                      </div>
+                    );
+                  })}
+
+                  {/* Status feedback */}
+                  <div style={{ marginTop: 8, fontSize: 12, color: privacySaved ? "#16a34a" : "var(--text-secondary)", minHeight: 18, display: "flex", alignItems: "center", gap: 6 }}>
+                    {privacySaving && <><FaCog size={11} style={{ animation: "spin 1s linear infinite" }} /> Đang lưu...</>}
+                    {privacySaved && !privacySaving && <><FaCheck size={11} /> Đã lưu</>}
+                    {!privacySaving && !privacySaved && messagePrivacy === "friends" && (
+                      <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                        <FaLock size={11} color="#ef4444" />
+                        <span style={{ color: "#ef4444" }}>Chỉ bạn bè mới nhắn được cho bạn</span>
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>

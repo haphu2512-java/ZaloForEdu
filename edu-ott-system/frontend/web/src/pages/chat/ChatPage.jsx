@@ -395,14 +395,24 @@ export default function ChatPage() {
         return;
       }
       const other = getOtherParticipant(conv);
-      const otherId = other && typeof other === 'object' ? String(other._id || other.id) : null;
-      const isOtherFriend = otherId && friendIds.has(otherId);
+      const otherId = other
+        ? typeof other === 'object'
+          ? String(other._id || other.id || '')
+          : String(other)
+        : null;
+      const isOtherFriend = !!otherId && friendIds.has(otherId);
 
       if (isOtherFriend) {
         friendConvs.push(conv);
       } else {
+        // Conversation chưa có tin nhắn nào → không hiện trong stranger panel
+        const hasMessages = !!conv.latestMessage;
+        if (!hasMessages) {
+          friendConvs.push(conv);
+          return;
+        }
         // Phân loại dựa vào người gửi tin nhắn đầu tiên
-        const firstSenderId = String(conv.firstSenderId?._id || conv.firstSenderId || conv.createdBy?._id || conv.createdBy || '');
+        const firstSenderId = String(conv.firstSenderId?._id || conv.firstSenderId || '');
         const myId = String(userId || '');
         const iSentFirst = !firstSenderId || firstSenderId === myId;
         if (iSentFirst) {
@@ -447,6 +457,21 @@ export default function ChatPage() {
     activeConvIdRef.current = activeConversation?._id;
     activeConversationRef.current = activeConversation;
   }, [activeConversation]);
+
+  // Cleanup: ẩn conversation rỗng khỏi sidebar khi user chuyển sang conversation khác
+  const prevActiveConvRef = useRef(null);
+  useEffect(() => {
+    const prev = prevActiveConvRef.current;
+    prevActiveConvRef.current = activeConversation;
+
+    if (!prev || prev.isMock) return;
+    const isSelf = prev.type === 'direct' && prev.participants?.length === 1;
+    if (isSelf) return;
+    // Nếu conversation cũ không có tin nhắn → xóa khỏi local state
+    if (!prev.latestMessage) {
+      setConversations(c => c.filter(x => String(x._id) !== String(prev._id)));
+    }
+  }, [activeConversation?._id]);
 
   useEffect(() => {
     conversationsRef.current = conversations;
@@ -734,6 +759,44 @@ const handleJoinRequestProcessed = ({ conversationName, action }) => {
     socketService.socket?.emit("join_conversation", { conversationId: activeConversation._id });
 
   }, [activeConversation?._id, token]);
+
+  // Enrich participants với messagePrivacy nếu chưa có (conversation cũ / mới tạo)
+  useEffect(() => {
+    if (!activeConversation || activeConversation.isMock) return;
+    const participants = activeConversation.participants || [];
+    const needsEnrich = participants.some(p =>
+      typeof p === 'object' && p !== null && p.messagePrivacy === undefined
+    );
+    if (!needsEnrich) return;
+
+    const enrichParticipants = async () => {
+      try {
+        const enriched = await Promise.all(
+          participants.map(async (p) => {
+            if (typeof p !== 'object' || p === null || p.messagePrivacy !== undefined) return p;
+            const pid = p._id || p.id;
+            if (!pid) return p;
+            try {
+              const res = await axios.get(`${API_BASE_URL}/users/${pid}`, {
+                headers: { Authorization: `Bearer ${token}` },
+              });
+              const userData = res.data?.data || res.data;
+              return { ...p, messagePrivacy: userData?.messagePrivacy || 'everyone' };
+            } catch {
+              return { ...p, messagePrivacy: 'everyone' };
+            }
+          })
+        );
+        setActiveConversation(prev =>
+          prev && String(prev._id) === String(activeConversation._id)
+            ? { ...prev, participants: enriched }
+            : prev
+        );
+      } catch { /* ignore */ }
+    };
+
+    enrichParticipants();
+  }, [activeConversation?._id]);
 
   useEffect(() => { scrollToBottom(); }, [messages, uploads]);
 
@@ -1337,6 +1400,8 @@ const handleJoinRequestProcessed = ({ conversationName, action }) => {
             if (!convName) return null;
             const unread = conv.unreadCount || 0;
             const isSelf = conv.type === 'direct' && conv.participants?.length === 1;
+            // Ẩn conversation rỗng (chưa có tin nhắn) trừ khi đang active hoặc là self-conv/mock
+            if (!isSelf && !conv.isMock && !conv.latestMessage && !isActive) return null;
             return (
               <div key={conv._id} className={`chat-list-item ${isActive ? 'active' : ''}`} onClick={() => { setActiveConversation(conv); navigate('/chat/' + conv._id); }}>
                 {isSelf ? (
@@ -1626,12 +1691,21 @@ const handleJoinRequestProcessed = ({ conversationName, action }) => {
 
             // Banner khi privacy liên quan đến người lạ
             const otherForPrivacy = !isGroupConv ? getOtherParticipant(activeConversation) : null;
-            const otherIdForPrivacy = otherForPrivacy && typeof otherForPrivacy === 'object' ? String(otherForPrivacy._id || otherForPrivacy.id) : null;
-            const isStrangerChat = otherIdForPrivacy && !friendIds.has(otherIdForPrivacy);
-            const otherNameForPrivacy = otherForPrivacy && typeof otherForPrivacy === 'object' ? (otherForPrivacy.username || otherForPrivacy.fullName || 'Người này') : 'Người này';
-            const otherPrivacy = otherForPrivacy?.messagePrivacy;
+            const otherIdForPrivacy = otherForPrivacy
+              ? typeof otherForPrivacy === 'object'
+                ? String(otherForPrivacy._id || otherForPrivacy.id || '')
+                : String(otherForPrivacy)
+              : null;
+            const isStrangerChat = !!otherIdForPrivacy && !friendIds.has(otherIdForPrivacy);
+            const otherNameForPrivacy = otherForPrivacy && typeof otherForPrivacy === 'object'
+              ? (otherForPrivacy.username || otherForPrivacy.fullName || 'Người này')
+              : 'Người này';
+            const otherPrivacy = otherForPrivacy && typeof otherForPrivacy === 'object'
+              ? otherForPrivacy.messagePrivacy
+              : undefined;
 
             // Chỉ chặn khi ĐỐI PHƯƠNG set friends-only → họ không nhận tin từ người lạ (mình)
+            // otherPrivacy undefined = chưa populate → mặc định 'everyone', không chặn
             const blockedByTheirPrivacy = isStrangerChat && otherPrivacy === 'friends';
 
             if (blockedByTheirPrivacy) {

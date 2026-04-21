@@ -648,3 +648,7 @@
   margin-left: 4px;
 }
 .mib-close:hover { color: white; }
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
