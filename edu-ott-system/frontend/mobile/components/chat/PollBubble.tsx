@@ -69,11 +69,11 @@ export default function PollBubble({
 
   const handleVote = useCallback(async (idx: number) => {
     if (poll.isClosed) {
-      Alert.alert('ThÙng b·o', 'BÏnh ch?n n‡y d„ k?t th˙c');
+      Alert.alert('ThÔøΩng bÔøΩo', 'BÔøΩnh ch?n nÔøΩy dÔøΩ k?t thÔøΩc');
       return;
     }
     if (poll.expiredAt && new Date(poll.expiredAt) < new Date()) {
-      Alert.alert('ThÙng b·o', 'BÏnh ch?n n‡y d„ h?t h?n');
+      Alert.alert('ThÔøΩng bÔøΩo', 'BÔøΩnh ch?n nÔøΩy dÔøΩ h?t h?n');
       return;
     }
 
@@ -93,7 +93,7 @@ export default function PollBubble({
       setPoll(updated);
       onPollUpdated?.(updated);
     } catch (err: any) {
-      Alert.alert('L?i', err.message || 'KhÙng th? g?i bÏnh ch?n');
+      Alert.alert('L?i', err.message || 'KhÔøΩng th? g?i bÔøΩnh ch?n');
     } finally {
       setVoting(false);
     }
@@ -115,9 +115,9 @@ export default function PollBubble({
       >
         <View style={styles.header}>
           <Ionicons name="bar-chart" size={18} color={brand} />
-          <Text style={[styles.typeLabel, { color: brand }]}>BÏnh ch?n</Text>
+          <Text style={[styles.typeLabel, { color: brand }]}>B√¨nh ch·ªçn</Text>
           {poll.isAnonymous && <Ionicons name="eye-off" size={14} color={colors.muted} style={{ marginLeft: 4 }} />}
-          {isClosed && <Text style={styles.closedText}>–√ K?T TH⁄C</Text>}
+          {isClosed && <Text style={styles.closedText}>ƒê√£ K·∫æT TH√öC</Text>}
         </View>
 
         <Text style={[styles.question, { color: colors.text }]}>{poll.question}</Text>
@@ -150,7 +150,7 @@ export default function PollBubble({
                     {isVoted ? <Ionicons name="checkmark" size={12} color="#fff" /> : null}
                   </View>
                   <Text style={[styles.optionText, { color: colors.text }]} numberOfLines={2}>{opt.text}</Text>
-                  <Text style={[styles.optionStats, { color: isVoted ? brand : colors.muted }]}>{count} ï {percent}%</Text>
+                  <Text style={[styles.optionStats, { color: isVoted ? brand : colors.muted }]}>{count} l∆∞·ª£t {percent}%</Text>
                 </View>
               </TouchableOpacity>
             );
@@ -158,12 +158,12 @@ export default function PollBubble({
         </View>
 
         <View style={styles.footer}>
-          <Text style={{ color: colors.muted, fontSize: 12 }}>{totalVotes} lu?t bÏnh ch?n</Text>
+          <Text style={{ color: colors.muted, fontSize: 12 }}>{totalVotes} l∆∞·ª£t b√¨nh ch·ªçn</Text>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
             {voting ? <ActivityIndicator size="small" color={brand} /> : null}
             {!poll.isAnonymous && totalVotes > 0 ? (
               <TouchableOpacity onPress={() => setDetailVisible(true)}>
-                <Text style={{ color: brand, fontSize: 12, fontWeight: '700' }}>Xem chi ti?t</Text>
+                <Text style={{ color: brand, fontSize: 12, fontWeight: '700' }}>Xem chi ti·∫øt</Text>
               </TouchableOpacity>
             ) : null}
           </View>
@@ -175,7 +175,7 @@ export default function PollBubble({
           <View style={styles.modalOverlay}>
             <View style={[styles.modalCard, { backgroundColor: colors.surface }]}> 
               <View style={styles.modalHeader}>
-                <Text style={{ fontSize: 17, fontWeight: '700', color: colors.text }}>Chi ti?t bÏnh ch?n</Text>
+                <Text style={{ fontSize: 17, fontWeight: '700', color: colors.text }}>Chi ti·∫øt b√¨nh ch·ªçn</Text>
                 <TouchableOpacity onPress={() => setDetailVisible(false)}>
                   <Ionicons name="close" size={22} color={colors.text} />
                 </TouchableOpacity>
@@ -188,7 +188,7 @@ export default function PollBubble({
                     <View key={opt._id || idx} style={[styles.detailOption, { borderColor: colors.border }]}> 
                       <Text style={{ color: colors.text, fontWeight: '700', marginBottom: 8 }}>{opt.text} ({voters.length})</Text>
                       {voters.length === 0 ? (
-                        <Text style={{ color: colors.muted, fontSize: 12 }}>Chua cÛ ai ch?n</Text>
+                        <Text style={{ color: colors.muted, fontSize: 12 }}>Chua cÔøΩ ai ch?n</Text>
                       ) : (
                         voters.map((v: any, i: number) => (
                           <View key={`${idx}-${i}-${getVoteUserId(v) || i}`} style={styles.voterRow}>
