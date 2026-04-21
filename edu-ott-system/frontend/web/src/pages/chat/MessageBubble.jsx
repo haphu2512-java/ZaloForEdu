@@ -5,8 +5,11 @@ import {
 } from 'react-icons/fa';
 import { getExt, getCategory, getFileColor, formatBytes } from './chatUtils';
 import { AudioBubble } from '../../components/shared/AudioBubble';
+import PollMessage from './PollMessage';
+import { conversationService } from '../../services/conversationService';
+import toast from 'react-hot-toast';
 
-const API_ORIGIN = (import.meta.env.VITE_API_URL || 'http://localhost:5000/api/v1').replace(/\/api\/v1$/, '');
+const API_ORIGIN = (import.meta.env.VITE_API_URL || 'http://localhost:5000/api/v1').replace(/\/api\/v1\/?$/, '');
 
 /** Convert URL tương đối /uploads/... → URL tuyệt đối (giống mobile toAbsoluteMediaUrl) */
 export function toAbsoluteUrl(url) {
@@ -24,11 +27,16 @@ export const MessageBubble = ({
   onRecall, 
   onDelete, 
   onForward, 
-  onReply 
+  onReply,
+  conversationId,
+  isPinned,
+  onPin,
+  onUnpin
 }) => {
   const sender = message.senderId || message.sender || message.actualSender;
 
-  const { _id, content, type, status, isEdited, isRecalled, replyTo, createdAt, reactions } = message;
+  const { _id, content, type, status, isEdited, isRecalled, replyTo, createdAt, reactions, pollId } = message;
+  const currentUserId = JSON.parse(localStorage.getItem('user') || '{}')._id;
   
   const [isHovered, setIsHovered] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
@@ -62,10 +70,6 @@ export const MessageBubble = ({
   if (type === 'system') {
     return <div style={{ textAlign: 'center', margin: '16px 0', fontSize: '12px', color: '#8A8D91' }}><span>{content}</span></div>;
   }
-
-  const bubbleStyle = isMe 
-    ? { backgroundColor: '#0084FF', color: '#FFFFFF', borderRadius: '18px 18px 4px 18px', padding: '10px 14px', position: 'relative' } 
-    : { backgroundColor: '#FFFFFF', color: '#050505', borderRadius: '18px 18px 18px 4px', padding: '10px 14px', position: 'relative', border: '1px solid #E5E7EB' };
 
   // Tách riêng Ảnh/Video và File Document
   const isImageOrVideo = (att) => {
@@ -129,6 +133,12 @@ export const MessageBubble = ({
                     )}
 
                     {content && <span>{content}</span>}
+                  </div>
+                )}
+
+                {pollId && (
+                  <div style={{ marginTop: '8px' }}>
+                    <PollMessage poll={pollId} userId={currentUserId} />
                   </div>
                 )}
 
@@ -234,8 +244,15 @@ export const MessageBubble = ({
                   <div className="mdc-mm-item" onClick={() => { onForward?.(message); setShowMoreMenu(false); }}>
                     <FaShare size={13} color="#65676B" /> Chuyển tiếp
                   </div>
-                  <div className="mdc-mm-item" onClick={() => { setShowMoreMenu(false); }}>
-                    <FaThumbtack size={13} color="#F59E0B" /> Ghim tin nhắn
+                  <div className="mdc-mm-item" onClick={() => { 
+                    if (isPinned) {
+                      onUnpin?.(_id);
+                    } else {
+                      onPin?.(_id);
+                    }
+                    setShowMoreMenu(false);
+                  }}>
+                    <FaThumbtack size={13} color="#65676B" /> {isPinned ? 'Bỏ ghim' : 'Ghim tin nhắn'}
                   </div>
                   {isMe && (
                     <div className="mdc-mm-item" onClick={() => { onRecall?.(_id); setShowMoreMenu(false); }}>

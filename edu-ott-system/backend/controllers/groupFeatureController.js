@@ -51,9 +51,8 @@ const pinMessage = asyncHandler(async (req, res) => {
     throw new ApiError(404, 'MESSAGE_NOT_FOUND', 'Message does not belong to this conversation');
   }
 
-  // Kiểm tra đã ghim chưa
-  const alreadyPinned = (conversation.pinnedItems || []).some(
-    (item) => toStr(item.messageId) === toStr(messageId),
+  const alreadyPinned = (conversation.pinnedItems || []).some(item =>
+    (item.messageId._id || item.messageId).toString() === messageId.toString()
   );
   if (alreadyPinned) throw new ApiError(400, 'ALREADY_PINNED', 'Message is already pinned');
 
@@ -69,14 +68,35 @@ const pinMessage = asyncHandler(async (req, res) => {
   });
   await conversation.save();
   await conversation.populate([
-    { 
+    {
       path: 'pinnedItems.messageId',
       populate: { path: 'senderId', select: 'username avatarUrl' }
     },
     { path: 'pinnedItems.pinnedBy', select: 'username avatarUrl' }
   ]);
 
-  socketService.emitToConversation(id, 'pinned_items_updated', conversation.pinnedItems);
+  await socketService.emitPinnedItemsUpdated(id, {
+    conversationId: id,
+    pinnedItems: conversation.pinnedItems
+  });
+
+  // Thông báo hệ thống
+  const senderName = req.user.fullName || req.user.username;
+  const shortContent = message.content
+    ? (message.content.length > 50 ? message.content.substring(0, 50) + '...' : message.content)
+    : '[Hình ảnh/File]';
+
+  const pinSysMsg = await Message.create({
+    conversationId: id,
+    senderId: req.user._id,
+    content: `${senderName} đã ghim tin nhắn: "${shortContent}"`,
+    type: 'system'
+  });
+  await pinSysMsg.populate('senderId', 'username avatarUrl fullName');
+  await socketService.emitConversationUpdated(id, {
+    conversationId: id,
+    latestMessage: pinSysMsg
+  });
 
   return successResponse(res, conversation.pinnedItems, 'Message pinned');
 });
@@ -93,25 +113,47 @@ const unpinMessage = asyncHandler(async (req, res) => {
   ensureGroupMember(conversation, req.user._id);
   ensureCanPin(conversation, req.user._id);
 
-  const prevLen = (conversation.pinnedItems || []).length;
+  const initialCount = (conversation.pinnedItems || []).length;
+  // Cho phép xóa bằng cả messageId hoặc pinId (ID của entry trong mảng pinnedItems)
   conversation.pinnedItems = (conversation.pinnedItems || []).filter(
-    (item) => toStr(item.messageId) !== messageId,
+    (item) => {
+      const itemMsgId = (item.messageId._id || item.messageId).toString();
+      const itemPinId = item._id.toString();
+      return itemMsgId !== messageId.toString() && itemPinId !== messageId.toString();
+    }
   );
 
-  if (conversation.pinnedItems.length === prevLen) {
+  if (conversation.pinnedItems.length === initialCount) {
     throw new ApiError(404, 'NOT_PINNED', 'This message is not pinned');
   }
 
   await conversation.save();
   await conversation.populate([
-    { 
+    {
       path: 'pinnedItems.messageId',
       populate: { path: 'senderId', select: 'username avatarUrl' }
     },
     { path: 'pinnedItems.pinnedBy', select: 'username avatarUrl' }
   ]);
-  
-  socketService.emitToConversation(id, 'pinned_items_updated', conversation.pinnedItems);
+
+  await socketService.emitPinnedItemsUpdated(id, {
+    conversationId: id,
+    pinnedItems: conversation.pinnedItems
+  });
+
+  // Thông báo hệ thống khi bỏ ghim
+  const senderName = req.user.fullName || req.user.username;
+  const unpinSysMsg = await Message.create({
+    conversationId: id,
+    senderId: req.user._id,
+    content: `${senderName} đã bỏ ghim tin nhắn.`,
+    type: 'system'
+  });
+  await unpinSysMsg.populate('senderId', 'username avatarUrl fullName');
+  await socketService.emitConversationUpdated(id, {
+    conversationId: id,
+    latestMessage: unpinSysMsg
+  });
 
   return successResponse(res, conversation.pinnedItems, 'Message unpinned');
 });

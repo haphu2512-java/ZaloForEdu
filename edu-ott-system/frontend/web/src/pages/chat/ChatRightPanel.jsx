@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import { FaBell, FaThumbtack, FaUserPlus, FaUserSecret, FaArrowLeft, FaTrashAlt, FaSignOutAlt, FaLink, FaEllipsisH, FaChevronDown, FaChevronUp, FaCalendarAlt, FaUserTimes, FaKey, FaSync, FaPen, FaCheck, FaTimes } from 'react-icons/fa';
+import { FaBell, FaThumbtack, FaUserPlus, FaUserSecret, FaArrowLeft, FaTrashAlt, FaSignOutAlt, FaLink, FaEllipsisH, FaChevronDown, FaChevronUp, FaCalendarAlt, FaUserTimes, FaKey, FaSync, FaPen, FaCheck, FaTimes, FaPoll } from 'react-icons/fa';
 import toast from 'react-hot-toast';
 import { conversationService } from '../../services/conversationService';
+import { pollService } from '../../services/pollService';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { getFileColor, getExt, formatBytes } from './chatUtils';
 import { toAbsoluteUrl } from './MessageBubble';
@@ -71,11 +72,17 @@ export const ChatRightPanel = ({
   handleProcessJoinRequest,
   pendingEditReminder,
   onPendingEditConsumed,
+  onShowAddMember,
+  onShowPoll,
+  pinnedMessages = [],
+  setPinnedMessages,
 }) => {
   const { t } = useLanguage();
 
   // Local states
   const [rightPanelMode, setRightPanelMode] = useState('default');
+  const [polls, setPolls] = useState([]);
+  const [loadingPolls, setLoadingPolls] = useState(false);
   const [showMuteModal, setShowMuteModal] = useState(false);
   const [isGroupNameEditing, setIsGroupNameEditing] = useState(false);
   const [editGroupName, setEditGroupName] = useState('');
@@ -121,6 +128,18 @@ export const ChatRightPanel = ({
         setInviteLink(`${origin}/join/${data.inviteCode}`);
       })
       .catch(() => {});
+  }, [activeConversation?._id]);
+  
+  useEffect(() => {
+    if (activeConversation?._id && (activeConversation.type === 'group' || activeConversation.roomModel === 'Group')) {
+      setLoadingPolls(true);
+      pollService.getPolls(activeConversation._id, 10)
+        .then(res => {
+          setPolls(res.data?.items || res.items || []);
+        })
+        .catch(err => console.error("Lỗi lấy bình chọn:", err))
+        .finally(() => setLoadingPolls(false));
+    }
   }, [activeConversation?._id]);
 
   const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
@@ -204,7 +223,7 @@ export const ChatRightPanel = ({
                   </>
                 ) : (
                   <>
-                    <div className="crp-action-btn" style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, cursor: 'pointer', color: 'var(--z-text-primary)' }} onClick={() => toast('Chức năng thêm thành viên')}>
+                    <div className="crp-action-btn" style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, cursor: 'pointer', color: 'var(--z-text-primary)' }} onClick={onShowAddMember}>
                       <div className="crp-action-icon" style={{ background: 'var(--z-bg-main)', width: 36, height: 36, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><FaUserPlus size={16} /></div>
                       <span style={{ fontSize: 12 }}>Thêm TV</span>
                     </div>
@@ -251,6 +270,19 @@ export const ChatRightPanel = ({
                           )}
                           {showMemberActionId === keyStr && (
                             <div style={{ position: 'absolute', right: 0, top: '100%', background: 'var(--z-bg-sidebar)', border: '1px solid var(--z-border)', borderRadius: 6, zIndex: 10, boxShadow: '0 4px 12px rgba(0,0,0,0.15)', padding: '4px 0', width: 160 }}>
+                              <div className="m-action-item" onClick={async () => {
+                                const newNickname = prompt('Nhập biệt danh mới cho ' + displayName, activeConversation.nicknames?.[keyStr] || '');
+                                if (newNickname !== null) {
+                                  try {
+                                    await conversationService.updateNickname(activeConversation._id, keyStr, newNickname);
+                                    toast.success('Đã cập nhật biệt danh');
+                                    fetchConversations();
+                                  } catch (err) {
+                                    toast.error('Lỗi khi cập nhật biệt danh');
+                                  }
+                                }
+                                setShowMemberActionId(null);
+                              }}>🖊️ Đổi biệt danh</div>
                               {isOwner && role === 'member' && (
                                 <div className="m-action-item" onClick={() => { handleGroupAction('promote', keyStr); setShowMemberActionId(null); }}>⭐ Lên Phó nhóm</div>
                               )}
@@ -305,6 +337,78 @@ export const ChatRightPanel = ({
               )}
 
               {/* ẢNH / VIDEO */}
+              {/* GHIM & GHI CHÚ */}
+              <Accordion title={<span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><FaThumbtack size={13} /> Tin nhắn đã ghim</span>} defaultOpen={false}>
+                <div style={{ padding: '8px 16px' }}>
+                  {pinnedMessages.length === 0 ? (
+                    <div style={{ fontSize: 12, color: 'var(--z-text-muted)', textAlign: 'center', padding: '12px 0' }}>Chưa có tin nhắn ghim nào</div>
+                  ) : (
+                    pinnedMessages.map((pin, idx) => (
+                      <div key={pin._id || idx} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '8px 0', borderBottom: '1px solid var(--z-border)' }}>
+                        <FaThumbtack size={10} color="#F59E0B" style={{ marginTop: 4, flexShrink: 0 }} />
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 13, color: 'var(--z-text-primary)', wordBreak: 'break-word', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {pin.messageId?.content || '[Hình ảnh/File]'}
+                          </div>
+                          <div style={{ fontSize: 11, color: 'var(--z-text-muted)', marginTop: 2 }}>
+                            {new Date(pin.pinnedAt || pin.createdAt).toLocaleDateString('vi-VN')}
+                          </div>
+                        </div>
+                        <button title="Bỏ ghim" style={{ border: 'none', background: 'none', color: '#ef4444', cursor: 'pointer', padding: '2px', flexShrink: 0 }}
+                          onClick={async () => {
+                            if (window.confirm('Bỏ ghim tin nhắn này?')) {
+                              try {
+                                const msgId = pin.messageId?._id || pin.messageId;
+                                await conversationService.unpinMessage(activeConversation._id, msgId);
+                                if (setPinnedMessages) {
+                                    setPinnedMessages(prev => prev.filter(p => (p.messageId?._id || p.messageId) !== msgId));
+                                }
+                                toast.success('Đã bỏ ghim');
+                              } catch (err) {
+                                toast.error('Lỗi bỏ ghim');
+                              }
+                            }
+                          }}>
+                          <FaTimes size={11} />
+                        </button>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </Accordion>
+
+              {/* BÌNH CHỌN */}
+              {isGroup && (
+                <Accordion title={<span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><FaPoll size={13} /> Bình chọn</span>} defaultOpen={false}>
+                  <div style={{ padding: '8px 16px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
+                      <button
+                        style={{ border: 'none', background: 'var(--z-primary)', color: 'white', fontSize: 11, cursor: 'pointer', padding: '4px 10px', borderRadius: 12 }}
+                        onClick={onShowPoll}
+                      >+ Tạo mới</button>
+                    </div>
+                    {loadingPolls ? (
+                      <div style={{ fontSize: 12, color: 'var(--z-text-muted)', textAlign: 'center', padding: '12px 0' }}>Đang tải...</div>
+                    ) : polls.length === 0 ? (
+                      <div style={{ fontSize: 12, color: 'var(--z-text-muted)', textAlign: 'center', padding: '12px 0' }}>Chưa có bình chọn nào</div>
+                    ) : (
+                      polls.map((poll, idx) => (
+                        <div key={poll._id || `poll-${idx}`} style={{ padding: '8px 0', borderBottom: '1px solid var(--z-border)', cursor: 'pointer' }} onClick={() => {
+                          toast.info(`Bình chọn: ${poll.question}`);
+                        }}>
+                          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--z-text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {poll.question}
+                          </div>
+                          <div style={{ fontSize: 11, color: 'var(--z-text-secondary)', marginTop: 2 }}>
+                            {poll.options?.length} lựa chọn • {poll.voters?.length || 0} lượt bình chọn
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </Accordion>
+              )}
+
               <Accordion title={t('imageVideo') || 'Ảnh/Video'}>
                 <div style={{ padding: '8px 16px' }}>
                   {imgFiles.length > 0 ? (
