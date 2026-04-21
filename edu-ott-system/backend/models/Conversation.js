@@ -4,9 +4,14 @@ const conversationSchema = new mongoose.Schema(
   {
     type: {
       type: String,
-      enum: ['direct', 'group'],
+      enum: ['direct', 'group', 'community'],
       default: 'direct',
       required: true,
+    },
+    privacy: {
+      type: String,
+      enum: ['public', 'private'],
+      default: 'private',
     },
     name: {
       type: String,
@@ -74,6 +79,7 @@ const conversationSchema = new mongoose.Schema(
     // Feature 4: Join approval (Duyệt thành viên)
     settings: {
       isApprovalRequired: { type: Boolean, default: false },
+      joinMode: { type: String, enum: ['invite', 'approval'], default: 'invite' },
       canMembersUpdateInfo: { type: Boolean, default: true },
       canMembersPin: { type: Boolean, default: true },
       canMembersCreateReminders: { type: Boolean, default: true },
@@ -90,6 +96,12 @@ const conversationSchema = new mongoose.Schema(
       default: null,
       index: true,
       sparse: true,
+    },
+    messageHistoryLimitPerChannel: {
+      type: Number,
+      default: 2000,
+      min: 100,
+      max: 10000,
     },
   },
   { timestamps: true },

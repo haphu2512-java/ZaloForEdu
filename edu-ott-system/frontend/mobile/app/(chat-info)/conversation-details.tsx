@@ -14,6 +14,7 @@ import {
   Switch,
   Clipboard,
   Share,
+  Linking,
 } from 'react-native';
 import { useLocalSearchParams, useRouter, Stack, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -26,6 +27,7 @@ import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
 import {
   getConversations,
+  getMessages,
   updateGroupName,
   addGroupMembers,
   removeGroupMember,
@@ -78,8 +80,23 @@ export default function ConversationDetailsScreen() {
   const [onlyAdminChat, setOnlyAdminChat] = useState(false);
   const [markAdminMessages, setMarkAdminMessages] = useState(false);
   const [notificationMode, setNotificationMode] = useState<'all' | 'mention_only' | 'mute'>('all');
+  const [sharedMedia, setSharedMedia] = useState<any[]>([]);
+  const [sharedFiles, setSharedFiles] = useState<any[]>([]);
+  const [sharedLinks, setSharedLinks] = useState<string[]>([]);
+  const [sharedLoading, setSharedLoading] = useState(false);
 
   const currentUserId = user?.id || '';
+  const linkRegex = /(mobileapp:\/\/[^\s]+|https?:\/\/[^\s]+)/gi;
+
+  const isImageMedia = (mimeType?: string, fileName?: string) => {
+    if (mimeType?.startsWith('image/')) return true;
+    return /\.(jpg|jpeg|png|gif|webp|bmp)$/i.test(fileName || '');
+  };
+
+  const isFileMedia = (mimeType?: string, fileName?: string) => {
+    if (!mimeType && !fileName) return false;
+    return !isImageMedia(mimeType, fileName);
+  };
 
   const loadData = useCallback(async () => {
     if (!id) return;
@@ -100,8 +117,32 @@ export default function ConversationDetailsScreen() {
       if (matched?.preference?.notificationMode) {
         setNotificationMode(matched.preference.notificationMode);
       }
+
+      setSharedLoading(true);
+      const msgRes = await getMessages({ conversationId: String(id), limit: 80 });
+      const medias: any[] = [];
+      const files: any[] = [];
+      const links = new Set<string>();
+
+      (msgRes?.items || []).forEach((m: any) => {
+        const content = m?.content || '';
+        const foundLinks = content.match(linkRegex);
+        if (foundLinks?.length) foundLinks.forEach((l: string) => links.add(l));
+
+        (m?.mediaIds || []).forEach((media: any) => {
+          if (!media || typeof media === 'string') return;
+          if (isImageMedia(media.mimeType, media.fileName)) medias.push(media);
+          else if (isFileMedia(media.mimeType, media.fileName)) files.push(media);
+        });
+      });
+
+      setSharedMedia(medias.slice(0, 8));
+      setSharedFiles(files.slice(0, 8));
+      setSharedLinks(Array.from(links).slice(0, 8));
     } catch (error: any) {
       console.log('Failed to load conversation details', error.message);
+    } finally {
+      setSharedLoading(false);
     }
   }, [id]);
 
@@ -382,6 +423,52 @@ export default function ConversationDetailsScreen() {
               <View style={styles.quickIconCircle}><Ionicons name={notificationMode === 'mute' ? 'notifications-off-outline' : 'notifications-outline'} size={24} color={colors.text} /></View>
               <Text style={[styles.quickActionLabel, { color: colors.text }]}>Tắt{'\n'}thông báo</Text>
             </TouchableOpacity>
+          </View>
+        )}
+
+        {isGroup && (
+          <View style={[styles.section, { backgroundColor: colors.surface, marginTop: 8 }]}>
+            <TouchableOpacity style={[styles.optionItem, { justifyContent: 'space-between' }]}>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <Ionicons name="folder-open-outline" size={22} color={colors.text} style={{ width: 30, marginRight: 10 }} />
+                <Text style={{ color: colors.text, fontSize: 16, fontWeight: '600' }}>Ảnh, file, link</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color={colors.muted} />
+            </TouchableOpacity>
+
+            {sharedLoading ? (
+              <ActivityIndicator size="small" color={brand} style={{ marginVertical: 10 }} />
+            ) : (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.sharedRow}>
+                {sharedMedia.map((media: any) => (
+                  <TouchableOpacity key={media._id || media.id || media.url} onPress={() => media.url && Linking.openURL(media.url)}>
+                    <Image source={{ uri: media.url }} style={styles.sharedThumb} />
+                  </TouchableOpacity>
+                ))}
+
+                {sharedFiles.map((file: any) => (
+                  <TouchableOpacity key={file._id || file.id || file.fileName} style={[styles.sharedFileCard, { borderColor: colors.border }]} onPress={() => file.url && Linking.openURL(file.url)}>
+                    <Ionicons name="document-attach-outline" size={20} color={colors.text} />
+                    <Text numberOfLines={2} style={{ color: colors.text, fontSize: 12, marginTop: 4 }}>
+                      {file.fileName || 'File'}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+
+                {sharedLinks.map((link) => (
+                  <TouchableOpacity key={link} style={[styles.sharedFileCard, { borderColor: colors.border }]} onPress={() => Linking.openURL(link)}>
+                    <Ionicons name="link-outline" size={20} color={colors.text} />
+                    <Text numberOfLines={2} style={{ color: colors.text, fontSize: 12, marginTop: 4 }}>
+                      {link}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+
+                {sharedMedia.length === 0 && sharedFiles.length === 0 && sharedLinks.length === 0 && (
+                  <Text style={{ color: colors.muted, paddingVertical: 12 }}>Chưa có ảnh, file hoặc link</Text>
+                )}
+              </ScrollView>
+            )}
           </View>
         )}
 
@@ -836,4 +923,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 12,
   },
+  sharedRow: { paddingBottom: 8, gap: 10 },
+  sharedThumb: { width: 88, height: 88, borderRadius: 10, backgroundColor: '#E5E7EB' },
+  sharedFileCard: { width: 120, height: 88, borderRadius: 10, borderWidth: 1, padding: 8, justifyContent: 'center' },
 });

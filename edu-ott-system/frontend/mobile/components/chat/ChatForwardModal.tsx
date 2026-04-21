@@ -1,5 +1,5 @@
-import React from 'react';
-import { Modal, SafeAreaView, View, TouchableOpacity, Text, FlatList, StyleSheet } from 'react-native';
+import { Modal, View, TouchableOpacity, Text, FlatList, StyleSheet } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import type { Conversation } from '@/types/chat';
 
 type ChatForwardModalProps = {
