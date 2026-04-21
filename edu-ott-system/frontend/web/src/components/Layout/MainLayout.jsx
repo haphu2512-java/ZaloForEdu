@@ -411,10 +411,33 @@ export default function MainLayout() {
   const menuRef = useRef(null);
   const { unreadCount, fetchUnreadCount } = useNotificationStore();
 
-  // Banner: nhắc user bổ sung thông tin còn thiếu
+  // Modal nhắc bổ sung thông tin — chỉ hiện 1 lần mỗi session đăng nhập
   const missingPhone = user && !user.phone;
   const missingEmail = user && !user.email;
-  const [showBanner, setShowBanner] = useState(true);
+  const DISMISSED_KEY = `profile_hint_dismissed_${user?._id || user?.id}`;
+  const [showProfileHint, setShowProfileHint] = useState(false);
+
+  useEffect(() => {
+    if (!user) return;
+    if (!(missingPhone || missingEmail)) return;
+    const alreadyDismissed = localStorage.getItem(DISMISSED_KEY);
+    if (!alreadyDismissed) {
+      // trì hoãn 1.2s sau khi login để tránh hiện ngay lập tức
+      const t = setTimeout(() => setShowProfileHint(true), 1200);
+      return () => clearTimeout(t);
+    }
+  }, [user?._id]);
+
+  const handleDismissHint = () => {
+    localStorage.setItem(DISMISSED_KEY, '1');
+    setShowProfileHint(false);
+  };
+
+  const handleGoToProfile = () => {
+    localStorage.setItem(DISMISSED_KEY, '1');
+    setShowProfileHint(false);
+    navigate('/profile');
+  };
 
   useEffect(() => {
     socketService.connect(); // Đảm bảo socket connected khi vào app
@@ -511,20 +534,73 @@ export default function MainLayout() {
 
   return (
     <div className="main-layout">
-      {/* ── MISSING INFO BANNER ── */}
-      {showBanner && (missingPhone || missingEmail) && (
-        <div className="missing-info-banner">
-          <span>
-            {missingPhone && missingEmail
-              ? "⚠️ Tài khoản chưa có email và số điện thoại — bạn bè sẽ không tìm thấy bạn."
-              : missingPhone
-              ? "📱 Thêm số điện thoại để bạn bè dễ tìm thấy bạn hơn."
-              : "📧 Thêm email để bảo mật tài khoản và khôi phục mật khẩu."}
-          </span>
-          <button className="mib-action" onClick={() => { navigate("/profile"); setShowBanner(false); }}>
-            Cập nhật ngay
-          </button>
-          <button className="mib-close" onClick={() => setShowBanner(false)}>✕</button>
+      {/* ── PROFILE HINT MODAL (hiện 1 lần sau khi login) ── */}
+      {showProfileHint && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 9998,
+          background: 'rgba(0,0,0,0.45)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          animation: 'fadeIn 0.25s ease',
+        }} onClick={handleDismissHint}>
+          <div style={{
+            background: 'var(--bg-primary)',
+            borderRadius: 20,
+            padding: '32px 36px',
+            maxWidth: 420, width: '90%',
+            boxShadow: '0 20px 60px rgba(0,0,0,0.25)',
+            position: 'relative',
+            animation: 'slideUp 0.3s cubic-bezier(0.34,1.56,0.64,1)',
+          }} onClick={e => e.stopPropagation()}>
+            {/* Close */}
+            <button onClick={handleDismissHint} style={{
+              position: 'absolute', top: 16, right: 16,
+              background: 'var(--bg-secondary)', border: 'none',
+              borderRadius: '50%', width: 32, height: 32,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 16,
+            }}>✕</button>
+
+            {/* Icon */}
+            <div style={{ fontSize: 48, marginBottom: 16, textAlign: 'center' }}>
+              {missingPhone && missingEmail ? '⚠️' : missingPhone ? '📱' : '📧'}
+            </div>
+
+            {/* Title */}
+            <h3 style={{ margin: '0 0 10px', fontSize: 20, fontWeight: 700, color: 'var(--text-primary)', textAlign: 'center' }}>
+              Bổ sung thông tin tài khoản
+            </h3>
+
+            {/* Desc */}
+            <p style={{ margin: '0 0 24px', fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.6, textAlign: 'center' }}>
+              {missingPhone && missingEmail
+                ? 'Tài khoản chưa có email lẫn số điện thoại. Bạn bè sẽ không tìm thấy bạn và bạn không thể khôi phục mật khẩu.'
+                : missingPhone
+                ? 'Thêm số điện thoại để bạn bè có thể tìm thấy bạn và đăng nhập bằng SĐT.'
+                : 'Thêm email để bảo mật tài khoản và dễ dàng khôi phục mật khẩu.'}
+            </p>
+
+            {/* Buttons */}
+            <div style={{ display: 'flex', gap: 12 }}>
+              <button onClick={handleDismissHint} style={{
+                flex: 1, padding: '12px', borderRadius: 12,
+                border: '1.5px solid var(--border-color)',
+                background: 'var(--bg-secondary)', color: 'var(--text-secondary)',
+                fontWeight: 600, fontSize: 14, cursor: 'pointer',
+              }}>Để sau</button>
+              <button onClick={handleGoToProfile} style={{
+                flex: 2, padding: '12px', borderRadius: 12,
+                border: 'none',
+                background: 'linear-gradient(135deg, var(--primary-color), #6366f1)',
+                color: '#fff', fontWeight: 700, fontSize: 14, cursor: 'pointer',
+                boxShadow: '0 4px 12px rgba(0,104,255,0.3)',
+              }}>Cập nhật ngay →</button>
+            </div>
+
+            {/* Never show again */}
+            <p style={{ textAlign: 'center', marginTop: 14, fontSize: 12, color: 'var(--text-tertiary)' }}>
+              Thông báo này sẽ không hiện lại sau khi bạn tắt.
+            </p>
+          </div>
         </div>
       )}
       {/* ── SIDEBAR ── */}
