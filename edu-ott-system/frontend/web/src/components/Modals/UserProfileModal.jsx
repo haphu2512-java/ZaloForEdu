@@ -79,9 +79,20 @@ export default function UserProfileModal({ isOpen, onClose, user, status: initia
   const handleSendRequest = async () => {
     setActionLoading("add");
     try {
-      await friendService.sendFriendRequest(uid);
+      const res = await friendService.sendFriendRequest(uid);
       setStatus("outgoing");
-      fetchOutgoingRequests();
+
+      // Optimistic update: thêm vào store ngay lập tức (không chờ fetch)
+      const newReq = res?.data?.data || res?.data || { _id: Date.now(), toUserId: { _id: uid } };
+      useFriendStore.setState(prev => ({
+        outgoingRequests: [
+          ...prev.outgoingRequests.filter(
+            r => String(r.toUserId?._id || r.toUserId || "") !== uid
+          ),
+          newReq,
+        ],
+      }));
+      fetchOutgoingRequests(); // background refresh để lấy real data
       onStatusChange?.("outgoing");
     } catch (e) {
       const code = e?.response?.data?.error?.code;
