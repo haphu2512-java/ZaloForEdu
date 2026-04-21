@@ -65,6 +65,7 @@ class SocketService {
   }
 
   on(event, callback) {
+    console.log(`[SocketService] Registering listener for event: ${event}`);
     if (this.socket) {
       this.socket.on(event, callback);
     } else {

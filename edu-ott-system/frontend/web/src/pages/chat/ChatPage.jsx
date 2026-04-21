@@ -102,6 +102,7 @@ export default function ChatPage() {
 
   const [reminders, setReminders] = useState([]);
   const [joinRequests, setJoinRequests] = useState([]);
+  const [triggeredReminder, setTriggeredReminder] = useState(null);
 
   useEffect(() => {
     if (activeConversation && activeConversation.type === 'group') {
@@ -687,13 +688,23 @@ const handleJoinRequestProcessed = ({ conversationName, action }) => {
     socketService.on("join_request_received", handleJoinRequestReceived);
     socketService.on("join_request_processed", handleJoinRequestProcessed);
 
-    const handleReminderTriggered = ({ _id, title, participants }) => {
+    const handleReminderTriggered = ({ _id, title, participants, conversationId }) => {
       setReminders(prev => prev.map(r => r._id === _id ? { ...r, status: 'done' } : r));
+      
+      // Chỉ hiển thị cho người đã tham gia
       const currentUserObj = JSON.parse(localStorage.getItem('user') || '{}');
       const myId = String(currentUserObj._id || currentUserObj.id || '');
       const isParticipant = (participants || []).some(p => String(p._id || p) === myId);
-      if (!isParticipant) return;
-      // Dùng browser Notification nếu được cấp quyền, fallback toast
+      
+      if (!isParticipant) {
+        // Không phải participant, không hiện thông báo
+        return;
+      }
+      
+      // Hiển thị popup
+      setTriggeredReminder({ _id, title, participants, conversationId });
+      
+      // Browser notification
       const msg = `🔔 Nhắc hẹn: ${title}`;
       if (Notification.permission === 'granted') {
         new Notification('Nhắc hẹn', { body: title, icon: '/favicon.ico' });
@@ -1403,7 +1414,7 @@ const handleJoinRequestProcessed = ({ conversationName, action }) => {
             // Ẩn conversation rỗng (chưa có tin nhắn) trừ khi đang active hoặc là self-conv/mock
             if (!isSelf && !conv.isMock && !conv.latestMessage && !isActive) return null;
             return (
-              <div key={conv._id} className={`chat-list-item ${isActive ? 'active' : ''}`} onClick={() => { setActiveConversation(conv); navigate('/chat/' + conv._id); }}>
+              <div key={String(conv._id)} className={`chat-list-item ${isActive ? 'active' : ''}`} onClick={() => { setActiveConversation(conv); navigate('/chat/' + conv._id); }}>
                 {isSelf ? (
                   <div style={{ width: 48, height: 48, borderRadius: '50%', background: 'linear-gradient(135deg, #0068FF, #00B4D8)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                     <FaCloud size={20} color="#fff" />
@@ -1722,7 +1733,7 @@ const handleJoinRequestProcessed = ({ conversationName, action }) => {
             const convName = getConversationName(activeConversation) || 'cuộc trò chuyện';
             return (
               <MessageInput
-                key={activeConversation._id}
+                key={String(activeConversation._id)}
                 theme={appliedTheme}
                 placeholder={`Nhập @, tin nhắn tới ${convName}`}
                 onSend={handleSendText}
@@ -1888,6 +1899,43 @@ const handleJoinRequestProcessed = ({ conversationName, action }) => {
               >
                 Lưu
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Triggered Reminder Popup */}
+      {triggeredReminder && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 3000, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.5)' }} onClick={() => setTriggeredReminder(null)}>
+          <div style={{ background: 'var(--z-bg-sidebar)', borderRadius: 16, width: 460, maxWidth: '94vw', boxShadow: '0 8px 40px rgba(0,0,0,0.3)', overflow: 'hidden' }} onClick={e => e.stopPropagation()}>
+            <div style={{ padding: '24px', textAlign: 'center' }}>
+              <div style={{ fontSize: 48, marginBottom: 16 }}>🔔</div>
+              <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--z-text-primary)', marginBottom: 8 }}>
+                {triggeredReminder.title}
+              </div>
+              <div style={{ fontSize: 14, color: 'var(--z-text-secondary)', marginBottom: 20 }}>
+                {triggeredReminder.participants?.length || 0} người tham gia
+              </div>
+              <div style={{ display: 'flex', gap: 10 }}>
+                <button 
+                  onClick={() => setTriggeredReminder(null)} 
+                  style={{ flex: 1, padding: '12px', borderRadius: 10, border: '1px solid var(--z-border)', background: 'transparent', color: 'var(--z-text-primary)', fontSize: 15, fontWeight: 600, cursor: 'pointer' }}
+                >
+                  Từ chối
+                </button>
+                <button 
+                  onClick={() => {
+                    setTriggeredReminder(null);
+                    // Navigate to conversation if not already there
+                    if (activeConversation?._id !== triggeredReminder.conversationId) {
+                      navigate(`/chat/${triggeredReminder.conversationId}`);
+                    }
+                  }} 
+                  style={{ flex: 1, padding: '12px', borderRadius: 10, border: 'none', background: 'var(--z-primary)', color: 'white', fontSize: 15, fontWeight: 600, cursor: 'pointer' }}
+                >
+                  Tham gia
+                </button>
+              </div>
             </div>
           </div>
         </div>

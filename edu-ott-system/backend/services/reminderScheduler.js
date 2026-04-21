@@ -9,23 +9,37 @@ const EXPIRE_AFTER_DAYS = 30;
 const triggerDueReminders = async () => {
   try {
     const now = new Date();
+    logger.info(`[ReminderScheduler] Checking reminders at ${now.toISOString()}`);
+    
     const due = await Reminder.find({
       remindAt: { $lte: now },
       status: 'pending',
     }).populate('createdBy', 'username avatarUrl').populate('participants', 'username avatarUrl');
 
     for (const reminder of due) {
+      logger.info(`[ReminderScheduler] Triggering reminder: ${reminder.title} (${reminder._id}) scheduled for ${reminder.remindAt.toISOString()}`);
+      
       reminder.status = 'done';
       await reminder.save();
 
-      emitToConversation(reminder.conversationId.toString(), 'reminder_triggered', {
+      const payload = {
         _id: reminder._id,
         title: reminder.title,
         remindAt: reminder.remindAt,
         conversationId: reminder.conversationId,
         participants: reminder.participants,
         createdBy: reminder.createdBy,
+      };
+      
+      // Chỉ emit đến những người đã tham gia (participants)
+      const { emitToUser } = require('./socketService');
+      reminder.participants.forEach((participant) => {
+        const participantId = participant._id || participant;
+        emitToUser(participantId.toString(), 'reminder_triggered', payload);
+        logger.info(`[ReminderScheduler] Sent notification to participant: ${participantId}`);
       });
+      
+      logger.info(`[ReminderScheduler] Notified ${reminder.participants.length} participant(s)`);
     }
 
     if (due.length > 0) {
@@ -61,6 +75,9 @@ const startReminderScheduler = () => {
   // Mỗi ngày 00:05
   cron.schedule('5 0 * * *', cleanupOldReminders);
   logger.info('[ReminderScheduler] Started');
+  
+  // Chạy ngay lần đầu để test
+  triggerDueReminders();
 };
 
-module.exports = { startReminderScheduler };
+module.exports = { startReminderScheduler, triggerDueReminders };

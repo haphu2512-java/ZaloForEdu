@@ -831,11 +831,23 @@ export const ChatRightPanel = ({
                       <button key={opt.label}
                         style={{ padding: '6px 14px', fontSize: 13, border: `1.5px solid ${isActive ? 'var(--z-primary)' : 'var(--z-border)'}`, borderRadius: 20, cursor: 'pointer', background: isActive ? 'rgba(0,104,255,0.08)' : 'transparent', color: isActive ? 'var(--z-primary)' : 'var(--z-text-primary)', fontWeight: isActive ? 600 : 400, transition: 'all .15s' }}
                         onClick={() => {
-                          if (opt.special === 'custom') return; // do nothing — user edits datetime input
-                          let d = new Date();
-                          if (opt.special === 'tomorrow9') { d.setDate(d.getDate() + 1); d.setHours(9, 0, 0, 0); }
-                          else d = new Date(d.getTime() + opt.mins * 60000);
-                          setTime(d.toISOString().slice(0, 16));
+                          if (opt.special === 'custom') return;
+                          const now = new Date();
+                          let d;
+                          if (opt.special === 'tomorrow9') { 
+                            d = new Date(now);
+                            d.setDate(d.getDate() + 1); 
+                            d.setHours(9, 0, 0, 0); 
+                          } else {
+                            d = new Date(now.getTime() + opt.mins * 60000);
+                          }
+                          // Format to local datetime-local format (YYYY-MM-DDTHH:mm)
+                          const year = d.getFullYear();
+                          const month = String(d.getMonth() + 1).padStart(2, '0');
+                          const day = String(d.getDate()).padStart(2, '0');
+                          const hours = String(d.getHours()).padStart(2, '0');
+                          const minutes = String(d.getMinutes()).padStart(2, '0');
+                          setTime(`${year}-${month}-${day}T${hours}:${minutes}`);
                         }}>
                         {opt.label}
                       </button>

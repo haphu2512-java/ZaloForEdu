@@ -39,12 +39,15 @@ const createReminder = asyncHandler(async (req, res) => {
   ensureMember(conversation, req.user._id);
   ensureCanCreateReminders(conversation, req.user._id);
 
+  const logger = require('../utils/logger');
+  logger.info(`[Reminder] Creating reminder: ${title}, remindAt: ${remindAt}, parsed: ${new Date(remindAt).toISOString()}`);
+
   const reminder = await Reminder.create({
     conversationId,
     title,
     remindAt,
     createdBy: req.user._id,
-    participants: [req.user._id],
+    participants: [], // Không tự động thêm người tạo
   });
 
   await reminder.populate('createdBy', 'username avatarUrl');
