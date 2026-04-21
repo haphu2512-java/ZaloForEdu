@@ -490,7 +490,14 @@ export default function ChatScreen() {
         setTypingUserIds((prev) => prev.filter((id) => id !== payload.userId));
       };
 
-      const onPinnedItemsUpdated = (items: any[]) => setPinnedItems(items);
+      const onPinnedItemsUpdated = (payload: any) => {
+        // Hỗ trợ cả payload cũ (array) và payload mới { conversationId, pinnedItems }
+        if (Array.isArray(payload)) {
+          setPinnedItems(payload);
+        } else if (payload && payload.conversationId === conversationId) {
+          setPinnedItems(payload.pinnedItems || []);
+        }
+      };
 
       const onMessageReacted = (payload: { messageId: string; reactions: any[] }) => {
         setMessages((prev) =>
@@ -1035,6 +1042,16 @@ export default function ChatScreen() {
       return acc;
     }, {} as Record<string, number>);
     const reactionEntries = Object.entries(groupedReactions);
+
+    if (item.type === 'system') {
+      return (
+        <View style={{ alignItems: 'center', marginVertical: 8, paddingHorizontal: 20 }}>
+          <View style={{ backgroundColor: colorScheme === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)', paddingHorizontal: 12, paddingVertical: 4, borderRadius: 12 }}>
+            <Text style={{ fontSize: 12, color: colors.muted, fontStyle: 'italic', textAlign: 'center' }}>{item.content}</Text>
+          </View>
+        </View>
+      );
+    }
 
     if (item.isRecalled) {
       return (
