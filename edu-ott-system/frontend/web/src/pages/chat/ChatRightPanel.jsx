@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { FaBell, FaThumbtack, FaUserPlus, FaUserSecret, FaArrowLeft, FaTrashAlt, FaSignOutAlt, FaLink, FaEllipsisH, FaChevronDown, FaChevronUp, FaCalendarAlt, FaUserTimes, FaKey, FaSync, FaPen, FaCheck, FaTimes } from 'react-icons/fa';
+import { FaBell, FaBellSlash, FaThumbtack, FaUserPlus, FaUserSecret, FaArrowLeft, FaTrashAlt, FaSignOutAlt, FaLink, FaEllipsisH, FaChevronDown, FaChevronUp, FaCalendarAlt, FaUserTimes, FaKey, FaSync, FaPen, FaCheck, FaTimes } from 'react-icons/fa';
 import toast from 'react-hot-toast';
 import { conversationService } from '../../services/conversationService';
 import { useLanguage } from '../../contexts/LanguageContext';
@@ -130,6 +130,14 @@ export const ChatRightPanel = ({
   const isAdmin = activeConversation?.adminIds?.some(aid => (aid._id || aid) === myId) || isOwner;
   const isPrivileged = isOwner || isAdmin;
   const isGroup = activeConversation?.type === 'group' || activeConversation?.roomModel === 'Group';
+
+  const mutedUntil = activeConversation?.preference?.mutedUntil;
+  const isMuted = mutedUntil && new Date(mutedUntil) > new Date();
+
+  const openMuteModal = () => {
+    setMuteOption(isMuted ? 0 : 60);
+    setShowMuteModal(true);
+  };
   const canEditGroupInfo = isPrivileged || activeConversation?.settings?.canMembersUpdateInfo !== false;
 
   const getMemberRole = (member) => {
@@ -186,9 +194,11 @@ export const ChatRightPanel = ({
 
               {/* ACTION BUTTONS */}
               <div className="crp-actions" style={{ display: 'flex', justifyContent: 'center', gap: 16, marginTop: 16, width: '100%' }}>
-                <div className="crp-action-btn" style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, cursor: 'pointer', color: 'var(--z-text-primary)' }} onClick={() => setShowMuteModal(true)}>
-                  <div className="crp-action-icon" style={{ background: 'var(--z-bg-main)', width: 36, height: 36, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><FaBell size={16} /></div>
-                  <span style={{ fontSize: 12 }}>Tắt TB</span>
+                <div className="crp-action-btn" style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, cursor: 'pointer', color: isMuted ? 'var(--z-primary)' : 'var(--z-text-primary)' }} onClick={openMuteModal}>
+                  <div className="crp-action-icon" style={{ background: isMuted ? 'var(--z-primary-light, #e8f0fe)' : 'var(--z-bg-main)', width: 36, height: 36, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    {isMuted ? <FaBellSlash size={16} color="var(--z-primary)" /> : <FaBell size={16} />}
+                  </div>
+                  <span style={{ fontSize: 12 }}>{isMuted ? 'Bật TB' : 'Tắt TB'}</span>
                 </div>
 
                 {!isGroup ? (
