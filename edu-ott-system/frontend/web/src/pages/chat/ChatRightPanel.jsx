@@ -71,6 +71,7 @@ export const ChatRightPanel = ({
   handleProcessJoinRequest,
   pendingEditReminder,
   onPendingEditConsumed,
+  onShowReminderList = () => {},
 }) => {
   const { t } = useLanguage();
 
@@ -287,35 +288,43 @@ export const ChatRightPanel = ({
               {isGroup && (
                 <Accordion title={<span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><FaCalendarAlt size={13} /> Danh sách nhắc hẹn</span>} defaultOpen={false}>
                   <div style={{ padding: '8px 16px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
-                      <button
-                        style={{ border: 'none', background: 'var(--z-primary)', color: 'white', fontSize: 11, cursor: 'pointer', padding: '4px 10px', borderRadius: 12 }}
-                        onClick={() => { setRemTitle(''); setRemTime(''); setShowAddReminder(true); }}
-                      >+ Tạo mới</button>
-                    </div>
-                    {reminders.length === 0 ? (
-                      <div style={{ fontSize: 12, color: 'var(--z-text-muted)', textAlign: 'center', padding: '12px 0' }}>Chưa có nhắc hẹn nào</div>
-                    ) : (
-                      reminders.map((rem, idx) => (
-                        <div key={rem._id || `rem-${idx}`} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '8px 0', borderBottom: '1px solid var(--z-border)' }}>
-                          <FaCalendarAlt size={12} color="var(--z-primary)" style={{ marginTop: 3, flexShrink: 0 }} />
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--z-text-primary)', wordBreak: 'break-word' }}>{rem.title}</div>
-                            <div style={{ fontSize: 11, color: 'var(--z-primary)', marginTop: 2 }}>{new Date(rem.remindAt).toLocaleString('vi-VN')}</div>
-                            <div style={{ fontSize: 11, color: 'var(--z-text-muted)' }}>{(rem.participants||[]).length} người tham gia</div>
-                            {rem.status === 'expired' && <div style={{ fontSize: 10, color: '#ef4444' }}>Đã hết hạn</div>}
-                          </div>
-                          <button title="Sửa" style={{ border: 'none', background: 'none', color: 'var(--z-primary)', cursor: 'pointer', padding: '2px', flexShrink: 0 }}
-                            onClick={() => { setEditingReminder(rem); setEditRemTitle(rem.title); setEditRemTime(new Date(rem.remindAt).toISOString().slice(0, 16)); }}>
-                            <FaPen size={10} />
-                          </button>
-                          <button title="Xóa" style={{ border: 'none', background: 'none', color: '#ef4444', cursor: 'pointer', padding: '2px', flexShrink: 0 }}
-                            onClick={() => { if (window.confirm(`Hủy nhắc hẹn "${rem.title}"?`)) handleDeleteReminder(rem._id); }}>
-                            <FaTrashAlt size={11} />
-                          </button>
-                        </div>
-                      ))
-                    )}
+                    <button
+                      onClick={onShowReminderList}
+                      style={{ 
+                        width: '100%', 
+                        padding: '10px 14px', 
+                        borderRadius: 8, 
+                        border: '1px solid var(--z-border)', 
+                        background: 'var(--z-bg-main)', 
+                        color: 'var(--z-text-primary)', 
+                        fontSize: 13, 
+                        fontWeight: 600, 
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: 8,
+                        marginBottom: 12
+                      }}
+                    >
+                      <FaCalendarAlt size={14} />
+                      Xem tất cả nhắc hẹn ({reminders.length})
+                    </button>
+                    <button
+                      data-create-reminder
+                      style={{ 
+                        width: '100%',
+                        border: 'none', 
+                        background: 'var(--z-primary)', 
+                        color: 'white', 
+                        fontSize: 13, 
+                        cursor: 'pointer', 
+                        padding: '10px 14px', 
+                        borderRadius: 8,
+                        fontWeight: 600
+                      }}
+                      onClick={() => { setRemTitle(''); setRemTime(''); setShowAddReminder(true); }}
+                    >+ Tạo mới</button>
                   </div>
                 </Accordion>
               )}

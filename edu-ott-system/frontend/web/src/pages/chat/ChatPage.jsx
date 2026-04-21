@@ -15,6 +15,7 @@ import TransferOwnerModal from "./Modals/TransferOwnerModal";
 import { ChatHeader } from "./ChatHeader";
 import { MessageInput } from "./MessageInput";
 import { ChatRightPanel } from "./ChatRightPanel";
+import { ReminderListPage } from "./ReminderListPage";
 import MyDocumentsPage from "../cloud/MyDocumentsPage";
 import { useTheme } from '../../contexts/ThemeContext';
 import { useLanguage } from '../../contexts/LanguageContext';
@@ -179,6 +180,7 @@ export default function ChatPage() {
 
   const [reminderDetailId, setReminderDetailId] = useState(null);
   const [pendingEditReminder, setPendingEditReminder] = useState(null);
+  const [showReminderListPage, setShowReminderListPage] = useState(false);
 
   const handleJoinReminder = async (reminderId) => {
     try {
@@ -1749,8 +1751,30 @@ const handleJoinRequestProcessed = ({ conversationName, action }) => {
         </main>
       )}
 
-      {/* ── BÊN PHẢI: RIGHT PANEL (ẩn khi đang xem Cloud của tôi vì MyDocumentsPage có right panel riêng) ── */}
-      {activeConversation && showRightPanel && !(activeConversation.type === 'direct' && activeConversation.participants?.length === 1) && (
+      {/* ── BÊN PHẢI: RIGHT PANEL hoặc REMINDER LIST PAGE ── */}
+      {showReminderListPage && activeConversation ? (
+        <div style={{ width: 380, borderLeft: '1px solid var(--z-border)', flexShrink: 0 }}>
+          <ReminderListPage
+            conversationId={activeConversation._id}
+            conversationName={getConversationName(activeConversation)}
+            onBack={() => setShowReminderListPage(false)}
+            onCreateNew={() => {
+              setShowReminderListPage(false);
+              // Trigger create reminder in right panel
+              setTimeout(() => {
+                const createBtn = document.querySelector('[data-create-reminder]');
+                if (createBtn) createBtn.click();
+              }, 100);
+            }}
+            onEdit={(reminder) => {
+              setShowReminderListPage(false);
+              setPendingEditReminder(reminder);
+            }}
+            onDelete={handleDeleteReminder}
+            userId={userId}
+          />
+        </div>
+      ) : activeConversation && showRightPanel && !(activeConversation.type === 'direct' && activeConversation.participants?.length === 1) && (
         <ChatRightPanel
           activeConversation={activeConversation}
           setActiveConversation={setActiveConversation}
@@ -1775,6 +1799,7 @@ const handleJoinRequestProcessed = ({ conversationName, action }) => {
           handleProcessJoinRequest={handleProcessJoinRequest}
           pendingEditReminder={pendingEditReminder}
           onPendingEditConsumed={() => setPendingEditReminder(null)}
+          onShowReminderList={() => setShowReminderListPage(true)}
         />
       )}
 
