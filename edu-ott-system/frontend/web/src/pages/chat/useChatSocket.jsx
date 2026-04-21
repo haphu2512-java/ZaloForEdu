@@ -19,6 +19,7 @@ export const useChatSocket = ({
   setPinnedMessages,
   setReminders,
   setJoinRequests,
+  setPolls,
   fetchConversationsData,
   fetchIncomingRequests,
   fetchFriends,
@@ -217,6 +218,15 @@ export const useChatSocket = ({
         }
         return m;
       }));
+      if (setPolls) {
+        setPolls(prev => prev.map(p => String(p._id) === String(updatedPoll._id) ? updatedPoll : p));
+      }
+      // Hiển thị thông báo khi có người bình chọn (tránh hiện nếu chính mình vừa vote - giả định backend gộp nốt)
+      toast.success(`Có người vừa bình chọn: ${updatedPoll.question}`, {
+        icon: '📊',
+        id: `poll_${updatedPoll._id}`,
+        duration: 3000
+      });
     };
 
     // ── Pinned items updated (MỚI) ──

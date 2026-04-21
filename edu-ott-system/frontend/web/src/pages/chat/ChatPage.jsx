@@ -111,16 +111,32 @@ export default function ChatPage() {
 
   const [reminders, setReminders] = useState([]);
   const [joinRequests, setJoinRequests] = useState([]);
+  const [polls, setPolls] = useState([]);
+  const [loadingPolls, setLoadingPolls] = useState(false);
 
   useEffect(() => {
     if (activeConversation && activeConversation.type === 'group') {
       fetchReminders(activeConversation._id);
       fetchJoinRequests(activeConversation._id);
+      fetchPolls(activeConversation._id);
     } else {
       setReminders([]);
       setJoinRequests([]);
+      setPolls([]);
     }
   }, [activeConversation?._id]);
+
+  const fetchPolls = async (convId) => {
+    setLoadingPolls(true);
+    try {
+      const res = await pollService.getPolls(convId, 10);
+      setPolls(res.data?.items || res.items || []);
+    } catch (err) {
+      console.error("Lỗi lấy danh sách bình chọn:", err);
+    } finally {
+      setLoadingPolls(false);
+    }
+  };
 
   const fetchReminders = async (convId) => {
     try {
@@ -479,7 +495,7 @@ export default function ChatPage() {
     token, userId,
     activeConvIdRef, activeConversationRef,
     setMessages, setConversations, setActiveConversation, setSelfConversation,
-    setPinnedMessages, setReminders, setJoinRequests,
+    setPinnedMessages, setReminders, setJoinRequests, setPolls,
     fetchConversationsData, fetchIncomingRequests, fetchFriends, fetchOutgoingRequests,
     toast,
   });
@@ -858,6 +874,7 @@ export default function ChatPage() {
     try {
       await pollService.createPoll({ ...pollData, conversationId: activeConversation._id });
       toast.success("📊 Đã tạo bình chọn");
+      fetchPolls(activeConversation._id);
       setShowCreatePollModal(false);
     } catch (err) {
       toast.error(err.response?.data?.message || "Lỗi tạo bình chọn");
@@ -872,6 +889,7 @@ export default function ChatPage() {
       }
       return m;
     }));
+    setPolls(prev => prev.map(p => String(p._id) === String(updatedPoll._id) ? updatedPoll : p));
   };
 
   // ── Ghim / bỏ ghim hội thoại — lưu DB qua ConversationPreference ──
@@ -1560,12 +1578,21 @@ export default function ChatPage() {
                       <React.Fragment key={item._id}>
                         {showDate && <div className="msg-date-divider"><span>{formatDateDivider(item.createdAt)}</span></div>}
                         {item.type === 'system' ? (
-                          <div style={{ display: 'flex', justifyContent: 'center', margin: '4px 0' }}>
-                            <span style={{ fontSize: 12, color: 'var(--z-text-muted)', background: 'var(--z-bg-main)', padding: '3px 10px', borderRadius: 10 }}>
+                          <div style={{ display: 'flex', justifyContent: 'center', margin: '8px 0' }}>
+                            <span style={{ 
+                              fontSize: 12, 
+                              color: 'var(--z-text-muted)', 
+                              background: 'var(--z-bg-main)', 
+                              padding: '4px 14px', 
+                              borderRadius: 12,
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 6
+                            }}>
                               {item.content}
                               {item.content?.includes('ghim') && pinnedMessages.length > 0 && (
                                 <span
-                                  style={{ color: 'var(--z-primary)', cursor: 'pointer', fontWeight: 600, marginLeft: 6 }}
+                                  style={{ color: 'var(--z-primary)', cursor: 'pointer', fontWeight: 700 }}
                                   onClick={() => jumpToMessage(pinnedMessages[pinnedMessages.length - 1]?.messageId?._id || pinnedMessages[pinnedMessages.length - 1]?.messageId)}
                                 >
                                   Xem
@@ -1574,11 +1601,27 @@ export default function ChatPage() {
                             </span>
                           </div>
                         ) : item.type === 'system_reminder' ? (
-                          <div style={{ display: 'flex', justifyContent: 'center', margin: '4px 0' }}>
-                            <span style={{ fontSize: 12, color: 'var(--z-text-muted)', background: 'var(--z-bg-main)', padding: '4px 12px', borderRadius: 10, display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap', justifyContent: 'center' }}>
+                          <div style={{ display: 'flex', justifyContent: 'center', margin: '8px 0' }}>
+                            <span style={{ 
+                              fontSize: 12, 
+                              color: 'var(--z-text-muted)', 
+                              background: 'var(--z-bg-main)', 
+                              padding: '5px 14px', 
+                              borderRadius: 12, 
+                              display: 'inline-flex', 
+                              alignItems: 'center', 
+                              gap: 6, 
+                              maxWidth: '85%',
+                              textAlign: 'center'
+                            }}>
                               🔔 {item.content}
                               {(item.reminderId || item.reminderId?._id) && (
-                                <span style={{ color: 'var(--z-primary)', cursor: 'pointer', fontWeight: 600, marginLeft: 2 }} onClick={() => setReminderDetailId(String(item.reminderId?._id || item.reminderId))}>Xem</span>
+                                <span 
+                                  style={{ color: 'var(--z-primary)', cursor: 'pointer', fontWeight: 700 }} 
+                                  onClick={() => setReminderDetailId(String(item.reminderId?._id || item.reminderId))}
+                                >
+                                  Xem
+                                </span>
                               )}
                             </span>
                           </div>
@@ -1642,6 +1685,7 @@ export default function ChatPage() {
                 members={activeConversation.participants || []}
                 replyTo={replyToMessage}
                 onCancelReply={() => setReplyToMessage(null)}
+                isGroup={isGroupConv}
               />
             );
           })()}
@@ -1671,6 +1715,8 @@ export default function ChatPage() {
           handleMute={handleMute}
           handleGroupAction={handleGroupAction}
           reminders={reminders}
+          polls={polls}
+          loadingPolls={loadingPolls}
           handleCreateReminder={handleCreateReminder}
           handleUpdateReminder={handleUpdateReminder}
           handleDeleteReminder={handleDeleteReminder}
@@ -1756,6 +1802,7 @@ export default function ChatPage() {
           isOpen={showCreatePollModal}
           onClose={() => setShowCreatePollModal(false)}
           conversationId={activeConversation?._id}
+          onCreated={() => fetchPolls(activeConversation?._id)}
         />
       )}
       {showAddMemberModal && (

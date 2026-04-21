@@ -268,12 +268,33 @@ export const MessageBubble = ({
             )}
 
             {!isRecalled && reactions?.length > 0 && (
-              <div style={{ position: 'absolute', bottom: '-12px', right: isMe ? '8px' : 'auto', left: isMe ? 'auto' : '8px', display: 'flex', background: '#FFFFFF', padding: '2px 6px', borderRadius: '12px', boxShadow: '0 2px 4px rgba(0,0,0,0.15)', gap: '2px', zIndex: 2, border: '1px solid #E5E7EB', color: '#111827' }}>
+              <div style={{ 
+                position: 'absolute', 
+                bottom: '-14px', 
+                right: isMe ? '4px' : 'auto', 
+                left: isMe ? 'auto' : '4px', 
+                display: 'flex', 
+                alignItems: 'center',
+                background: 'var(--z-bg-sidebar)', 
+                padding: '2px 6px', 
+                borderRadius: '12px', 
+                boxShadow: '0 2px 5px rgba(0,0,0,0.12)', 
+                gap: '2px', 
+                zIndex: 10, 
+                border: '1px solid var(--z-border)', 
+                color: 'var(--z-text-primary)',
+                fontSize: '11px'
+              }}>
                 {reactions.slice(0, 3).map((r, i) => (
-                  <div key={i} style={{ fontSize: '12px', display: 'flex', alignItems: 'center' }}>
-                    {r.emoji} {reactions.length > 1 && <span style={{ color: '#65676B', fontSize: '10px', marginLeft: '3px', fontWeight: 'bold' }}>{reactions.length}</span>}
+                  <div key={i} style={{ display: 'flex', alignItems: 'center' }}>
+                    {r.emoji}
                   </div>
                 ))}
+                {reactions.length > 0 && (
+                  <span style={{ color: 'var(--z-text-secondary)', fontSize: '10px', marginLeft: '2px', fontWeight: '700' }}>
+                    {reactions.length}
+                  </span>
+                )}
               </div>
             )}
           </div>

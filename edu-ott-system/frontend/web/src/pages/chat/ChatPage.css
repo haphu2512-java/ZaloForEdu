@@ -513,15 +513,27 @@
 
 .mdc-msg-emoji-tray {
   position: absolute;
-  bottom: calc(100% + 5px);
+  bottom: calc(100% + 8px);
   background: var(--z-bg-sidebar);
   border: 1px solid var(--z-border);
-  border-radius: 20px;
-  padding: 6px 12px;
+  border-radius: 24px;
+  padding: 8px 12px;
   display: flex;
-  gap: 8px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  z-index: 20;
+  gap: 12px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  z-index: 100;
+  align-items: center;
+  justify-content: center;
+  min-width: max-content;
+}
+
+.mdc-msg-emoji-tray span {
+  font-size: 20px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  user-select: none;
 }
 
 .mdc-msg-menu {

@@ -1,7 +1,18 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { FaSpinner, FaPaperPlane, FaThumbsUp, FaSmile, FaMicrophone, FaPoll } from 'react-icons/fa';
 
-export const MessageInput = ({ theme, placeholder, onSend, onSendLike, onUploadFiles, onShowPoll, members = [], replyTo = null, onCancelReply }) => {
+export const MessageInput = ({ 
+  theme, 
+  placeholder, 
+  onSend, 
+  onSendLike, 
+  onUploadFiles, 
+  onShowPoll, 
+  members = [], 
+  replyTo = null, 
+  onCancelReply,
+  isGroup = false
+}) => {
   const [text, setText] = useState('');
   const [showEmoji, setShowEmoji] = useState(false);
   const [isSending, setIsSending] = useState(false);
@@ -16,12 +27,12 @@ export const MessageInput = ({ theme, placeholder, onSend, onSendLike, onUploadF
   const emojiRef = useRef(null);
 
   // Filter members based on mentionQuery
-  const filteredMembers = mentionQuery === null ? [] : 
+  const filteredMembers = mentionQuery === null ? [] :
     [{ _id: 'all', username: 'all', fullName: 'Tất cả mọi người' }, ...members]
-    .filter(m => 
-      m.username?.toLowerCase().includes(mentionQuery.toLowerCase()) || 
-      m.fullName?.toLowerCase().includes(mentionQuery.toLowerCase())
-    ).slice(0, 8);
+      .filter(m =>
+        m.username?.toLowerCase().includes(mentionQuery.toLowerCase()) ||
+        m.fullName?.toLowerCase().includes(mentionQuery.toLowerCase())
+      ).slice(0, 8);
 
   const handleTextChange = (e) => {
     const val = e.target.value;
@@ -45,10 +56,10 @@ export const MessageInput = ({ theme, placeholder, onSend, onSendLike, onUploadF
     const cursorPos = inputRef.current.selectionStart;
     const textBeforeCursor = text.substring(0, cursorPos);
     const textAfterCursor = text.substring(cursorPos);
-    
+
     const words = textBeforeCursor.split(/\s/);
     words[words.length - 1] = `@${member.username || 'all'} `;
-    
+
     const newText = words.join(' ') + textAfterCursor;
     setText(newText);
     setMentionQuery(null);
@@ -134,7 +145,7 @@ export const MessageInput = ({ theme, placeholder, onSend, onSendLike, onUploadF
               {replyTo.content || '[Hình ảnh/Tệp]'}
             </div>
           </div>
-          <button 
+          <button
             onClick={onCancelReply}
             style={{ background: 'var(--z-bg-hover)', border: 'none', borderRadius: '50%', width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'var(--z-text-secondary)' }}
           >
@@ -148,14 +159,14 @@ export const MessageInput = ({ theme, placeholder, onSend, onSendLike, onUploadF
         <div style={{ position: 'absolute', bottom: '100%', left: 16, width: 280, background: 'var(--z-bg-sidebar)', border: '1px solid var(--z-border)', borderRadius: 8, boxShadow: '0 -4px 12px rgba(0,0,0,0.1)', zIndex: 100, overflow: 'hidden' }}>
           <div style={{ padding: '8px 12px', fontSize: 12, color: 'var(--z-text-muted)', borderBottom: '1px solid var(--z-border)', background: 'var(--z-bg-main)' }}>Nhắc tên thành viên</div>
           {filteredMembers.map((m, idx) => (
-            <div 
-              key={m._id} 
+            <div
+              key={m._id}
               onClick={() => insertMention(m)}
               onMouseEnter={() => setMentionIndex(idx)}
               style={{ padding: '8px 12px', display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', background: idx === mentionIndex ? 'var(--z-bg-hover)' : 'transparent' }}
             >
               <div style={{ width: 28, height: 28, borderRadius: '50%', background: m._id === 'all' ? 'var(--z-primary)' : '#ccc', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, flexShrink: 0 }}>
-                {m._id === 'all' ? '@' : (m.avatarUrl ? <img src={m.avatarUrl} style={{width:'100%',height:'100%',borderRadius:'50%',objectFit:'cover'}} /> : (m.fullName?.[0] || m.username?.[0]))}
+                {m._id === 'all' ? '@' : (m.avatarUrl ? <img src={m.avatarUrl} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} /> : (m.fullName?.[0] || m.username?.[0]))}
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--z-text-primary)' }}>{m.fullName || m.username}</div>
@@ -166,34 +177,36 @@ export const MessageInput = ({ theme, placeholder, onSend, onSendLike, onUploadF
         </div>
       )}
 
-      <input ref={imageRef} type="file" accept="image/*" multiple style={{display:"none"}} onChange={handleFiles}/>
-      <input ref={videoRef} type="file" accept="video/*" multiple style={{display:"none"}} onChange={handleFiles}/>
-      <input ref={fileRef} type="file" multiple style={{display:"none"}} onChange={handleFiles} accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip,.rar,.7z"/>
-      <input ref={folderRef} type="file" webkitdirectory="true" multiple style={{display:"none"}} onChange={handleFiles} />
+      <input ref={imageRef} type="file" accept="image/*" multiple style={{ display: "none" }} onChange={handleFiles} />
+      <input ref={videoRef} type="file" accept="video/*" multiple style={{ display: "none" }} onChange={handleFiles} />
+      <input ref={fileRef} type="file" multiple style={{ display: "none" }} onChange={handleFiles} accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip,.rar,.7z" />
+      <input ref={folderRef} type="file" webkitdirectory="true" multiple style={{ display: "none" }} onChange={handleFiles} />
 
       <div className="mdc-toolbar" style={{ position: 'relative' }}>
         <button type="button" className="mdc-tool-btn" title="Sticker/Emoji" onClick={() => setShowEmoji(!showEmoji)}>
           <FaSmile size={18} />
         </button>
         <button type="button" className="mdc-tool-btn" title="Gửi ảnh" onClick={() => imageRef.current?.click()}>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8.5" cy="8.5" r="1.5" /><polyline points="21 15 16 10 5 21" /></svg>
         </button>
         <button type="button" className="mdc-tool-btn" title="Đính kèm file" onClick={() => fileRef.current?.click()}>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" /></svg>
         </button>
         <button type="button" className="mdc-tool-btn" title="Gửi video" onClick={() => videoRef.current?.click()}>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="23 7 16 12 23 17 23 7" /><rect x="1" y="5" width="15" height="14" rx="2" /></svg>
         </button>
-        <button type="button" className="mdc-tool-btn" title="Tạo bình chọn" onClick={onShowPoll}>
-          <FaPoll size={18} />
-        </button>
+        {isGroup && (
+          <button type="button" className="mdc-tool-btn" title="Tạo bình chọn" onClick={onShowPoll}>
+            <FaPoll size={18} />
+          </button>
+        )}
 
         {showEmoji && (
           <div ref={emojiRef} style={{ position: 'absolute', bottom: '100%', left: '10px', marginBottom: '10px', zIndex: 50, background: theme === 'dark' ? '#242526' : '#fff', border: '1px solid var(--border-color, #E5E7EB)', padding: '8px 12px', borderRadius: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', display: 'flex', gap: '12px' }}>
             {['😀', '😂', '❤️', '👍', '😢', '🙏'].map(e => (
-              <span 
-                key={e} 
-                style={{ fontSize: '18px', cursor: 'pointer', transition: 'transform 0.1s' }} 
+              <span
+                key={e}
+                style={{ fontSize: '18px', cursor: 'pointer', transition: 'transform 0.1s' }}
                 onMouseEnter={(ev) => ev.currentTarget.style.transform = 'scale(1.2)'}
                 onMouseLeave={(ev) => ev.currentTarget.style.transform = 'scale(1)'}
                 onClick={() => { setText(prev => prev + e); setShowEmoji(false); }}
@@ -207,17 +220,17 @@ export const MessageInput = ({ theme, placeholder, onSend, onSendLike, onUploadF
 
       <div className="mdc-input-row">
         <div className="mdc-input-wrap">
-          <input 
+          <input
             ref={inputRef}
             className="mdc-input"
-            placeholder={placeholder} 
+            placeholder={placeholder}
             value={text}
             onChange={handleTextChange}
             onKeyDown={handleKeyDown}
             autoFocus
           />
         </div>
-        
+
         {text.trim() ? (
           <button className="mdc-send-btn" onClick={handleSend} disabled={isSending}>
             {isSending ? <FaSpinner className="animate-spin" /> : <FaPaperPlane size={15} />}
