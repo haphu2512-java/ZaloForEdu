@@ -141,6 +141,17 @@ const listConversations = asyncHandler(async (req, res) => {
     preference: prefMap.get(toStr(conversation._id)) || null,
   }));
 
+  // ── Ghim hội thoại: sort pinned lên đầu, giữ nguyên thứ tự thời gian bên trong ──
+  itemsWithPrefs.sort((a, b) => {
+    const aPinned = a.preference?.isPinned ? 1 : 0;
+    const bPinned = b.preference?.isPinned ? 1 : 0;
+    if (bPinned !== aPinned) return bPinned - aPinned;
+    // Cùng trạng thái ghim → giữ thứ tự thời gian gốc (lastMessageAt desc)
+    const timeA = a.lastMessageAt ? new Date(a.lastMessageAt).getTime() : 0;
+    const timeB = b.lastMessageAt ? new Date(b.lastMessageAt).getTime() : 0;
+    return timeB - timeA;
+  });
+
   return successResponse(
     res,
     {
@@ -231,8 +242,18 @@ const removeGroupMember = asyncHandler(async (req, res) => {
     throw new ApiError(404, 'MEMBER_NOT_FOUND', 'User is not in this group');
   }
 
-  if (toStr(getOwnerId(conversation)) === memberId) {
+  const ownerId = toStr(getOwnerId(conversation));
+  if (ownerId === memberId) {
     throw new ApiError(400, 'INVALID_ACTION', 'Cannot remove group owner');
+  }
+
+  // Phân quyền nâng cao:
+  const isOwner = toStr(req.user._id) === ownerId;
+  const isTargetAdmin = (conversation.adminIds || []).some((adminId) => toStr(adminId) === memberId);
+
+  // Nếu không phải là Trưởng nhóm, mà muốn xóa một Phó nhóm -> Từ chối
+  if (!isOwner && isTargetAdmin) {
+    throw new ApiError(403, 'FORBIDDEN', 'Only group owner can remove other admins');
   }
 
   conversation.participants = conversation.participants.filter((participantId) => toStr(participantId) !== memberId);
@@ -431,9 +452,16 @@ const updateConversationPreference = asyncHandler(async (req, res) => {
     throw new ApiError(404, 'CONVERSATION_NOT_FOUND', 'Conversation not found');
   }
   ensureGroupMember(conversation, req.user._id);
+
+  // Tự động set/xoá pinnedAt khi toggle isPinned
+  const updateData = { ...req.body };
+  if (typeof updateData.isPinned === 'boolean') {
+    updateData.pinnedAt = updateData.isPinned ? new Date() : null;
+  }
+
   const pref = await ConversationPreference.findOneAndUpdate(
     { userId: req.user._id, conversationId: id },
-    { $set: req.body, $setOnInsert: { userId: req.user._id, conversationId: id } },
+    { $set: updateData, $setOnInsert: { userId: req.user._id, conversationId: id } },
     { returnDocument: 'after', upsert: true },
   );
   return successResponse(res, pref, 'Conversation preference updated');

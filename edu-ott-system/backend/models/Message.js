@@ -67,6 +67,18 @@ const messageSchema = new mongoose.Schema(
       ref: 'Reminder',
       default: null,
     },
+    // @Mention: danh sách user được nhắc đến
+    mentions: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+      },
+    ],
+    // @all: nhắc tất cả thành viên
+    mentionAll: {
+      type: Boolean,
+      default: false,
+    },
     deletedBy: [
       {
         type: mongoose.Schema.Types.ObjectId,

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect, Stack, useRouter } from 'expo-router';
 import {
   FlatList,
   View,
@@ -11,15 +11,16 @@ import {
   TouchableOpacity,
   TouchableWithoutFeedback,
   ScrollView,
+  StatusBar,
 } from 'react-native';
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 import { getConversations } from '@/utils/messageService';
 import { connectSocket } from '@/utils/socketService';
 import { useAuth } from '@/context/auth';
 import Colors from '@/constants/Colors';
 import { useColorScheme } from '@/components/useColorScheme';
 import type { Conversation } from '@/types/chat';
-import { useRouter } from 'expo-router';
 import { Alert } from 'react-native';
 import { updateConversationPreference, pinConversation, muteConversation, reportConversation } from '@/utils/messageService';
 import { blockOrUnblockUser } from '@/utils/userService';
@@ -71,12 +72,6 @@ function getSenderName(sender: any): string | undefined {
   return sender.username;
 }
 
-const TABS: { key: FilterTab; label: string; icon: any }[] = [
-  { key: 'all', label: 'Tất cả', icon: 'chatbubbles-outline' },
-  { key: 'work', label: 'Công việc', icon: 'briefcase-outline' },
-  { key: 'family', label: 'Gia đình', icon: 'home-outline' },
-];
-
 export default function MessagesScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const colors = Colors[colorScheme === 'dark' ? 'dark' : 'light'];
@@ -87,7 +82,6 @@ export default function MessagesScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null);
-  const [activeTab, setActiveTab] = useState<FilterTab>('all');
 
   const loadConversations = useCallback(async () => {
     try {
@@ -181,19 +175,7 @@ export default function MessagesScreen() {
   const handleAction = async (actionType: string, item: Conversation) => {
     closeActionSheet();
     try {
-      if (actionType === 'work') {
-        await updateConversationPreference(item._id, { category: 'work' });
-        await loadConversations();
-        Alert.alert('✅', 'Đã phân loại Công việc');
-      } else if (actionType === 'family') {
-        await updateConversationPreference(item._id, { category: 'family' });
-        await loadConversations();
-        Alert.alert('✅', 'Đã phân loại Gia đình');
-      } else if (actionType === 'primary') {
-        await updateConversationPreference(item._id, { category: 'primary' });
-        await loadConversations();
-        Alert.alert('✅', 'Đã chuyển về Tất cả');
-      } else if (actionType === 'archive') {
+      if (actionType === 'archive') {
         await updateConversationPreference(item._id, { isHidden: true });
         await loadConversations();
         Alert.alert('Đã lưu trữ', 'Xem lại trong Cá nhân > Tin nhắn lưu trữ');
@@ -229,32 +211,25 @@ export default function MessagesScreen() {
     }
   };
 
-  // Filter conversations based on active tab and sort them with pinned on top
-  const filteredConversations = useMemo(() => {
-    return [...conversations.filter((conv) => {
-      if (activeTab === 'all') return true;
-      return conv.preference?.category === activeTab;
-    })].sort((a, b) => {
+  const currentUserFriends = useMemo(() => (user?.friends || []).map((f: any) => typeof f === 'string' ? f : f._id || f.id), [user]);
+
+  const strangerConversations = useMemo(() => conversations.filter(conv => {
+    if (conv.type === 'group') return false;
+    const other = conv.participants?.find((p) => (p._id || p.id || '') !== (user?.id || ''));
+    if (!other) return false;
+    const targetId = other._id || other.id || '';
+    return !currentUserFriends.includes(targetId);
+  }), [conversations, user, currentUserFriends]);
+
+  const sortedConversations = useMemo(() => {
+    return [...strangerConversations].sort((a, b) => {
       if (a.preference?.isPinned && !b.preference?.isPinned) return -1;
       if (!a.preference?.isPinned && b.preference?.isPinned) return 1;
       const timeA = new Date(a.latestMessage?.createdAt || a.lastMessageAt || 0).getTime();
       const timeB = new Date(b.latestMessage?.createdAt || b.lastMessageAt || 0).getTime();
       return timeB - timeA;
     });
-  }, [conversations, activeTab]);
-
-  // Calculate Strangers vs Normal
-  const currentUserFriends = useMemo(() => (user?.friends || []).map((f: any) => typeof f === 'string' ? f : f._id || f.id), [user]);
-  
-  const strangerConversations = useMemo(() => filteredConversations.filter(conv => {
-    if (conv.type === 'group') return false;
-    const other = conv.participants?.find((p) => (p._id || p.id || '') !== (user?.id || ''));
-    if (!other) return false;
-    const targetId = other._id || other.id || '';
-    return !currentUserFriends.includes(targetId);
-  }), [filteredConversations, user?.id, currentUserFriends]);
-
-  const normalConversations = useMemo(() => filteredConversations.filter(c => !strangerConversations.includes(c)), [filteredConversations, strangerConversations]);
+  }, [strangerConversations]);
 
   const renderItem = ({ item }: { item: Conversation }) => {
     const currentUserId = user?.id || '';
@@ -268,20 +243,16 @@ export default function MessagesScreen() {
     const otherUser = !isGroup ? item.participants?.find((p) => (p._id || p.id || '') !== (user?.id || '')) : null;
     const isOnline = otherUser?.isOnline;
 
-    // Check if the latest message is unread by the current user
     let isUnread = false;
     if (latestMsg) {
       const msgSenderId = typeof latestMsg.senderId === 'string' ? latestMsg.senderId : (latestMsg.senderId as any)?._id || (latestMsg.senderId as any)?.id;
       if (msgSenderId && msgSenderId !== currentUserId) {
-        const seenByList = (latestMsg.seenBy || []).map((u: any) => typeof u === 'string' ? u : (u as any)?._id || (u as any)?.id);
+        const seenByList = (latestMsg.seenBy || []).map((u: any) => typeof u === 'string' ? u : u._id || u.id);
         if (!seenByList.includes(currentUserId)) {
           isUnread = true;
         }
       }
     }
-
-    // Category badge color
-    const catColor = item.preference?.category === 'work' ? '#F59E0B' : item.preference?.category === 'family' ? '#10B981' : null;
 
     return (
       <ChatListItem
@@ -304,14 +275,9 @@ export default function MessagesScreen() {
   const renderEmpty = () => (
     <View style={styles.emptyContainer}>
       <View style={[styles.emptyIcon, { backgroundColor: colors.tint + '15' }]}>
-        <Ionicons name={activeTab === 'all' ? 'chatbubbles-outline' : activeTab === 'work' ? 'briefcase-outline' : 'home-outline'} size={48} color={colors.tint} />
+        <Ionicons name="person-add-outline" size={48} color={colors.tint} />
       </View>
-      <Text style={[styles.emptyTitle, { color: colors.text }]}>
-        {activeTab === 'all' ? 'Chưa có cuộc trò chuyện' : `Không có tin nhắn ${activeTab === 'work' ? 'Công việc' : 'Gia đình'}`}
-      </Text>
-      <Text style={[styles.emptySubtitle, { color: colors.muted }]}>
-        {activeTab === 'all' ? 'Hãy thêm bạn bè để bắt đầu trò chuyện' : 'Nhấn giữ vào tin nhắn để phân loại'}
-      </Text>
+      <Text style={[styles.emptyTitle, { color: colors.text }]}>Không có tin nhắn từ người lạ</Text>
     </View>
   );
 
@@ -324,58 +290,27 @@ export default function MessagesScreen() {
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
-      {/* Category Filter Tabs */}
-      <View style={[styles.tabBar, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
-        {TABS.map((tab) => {
-          const isActive = activeTab === tab.key;
-          const count = tab.key === 'all'
-            ? conversations.length
-            : conversations.filter((c) => c.preference?.category === tab.key).length;
-          return (
-            <TouchableOpacity
-              key={tab.key}
-              style={[styles.tabBtn, isActive && { borderBottomColor: colors.tint, borderBottomWidth: 2 }]}
-              onPress={() => setActiveTab(tab.key)}
-            >
-              <Ionicons name={tab.icon} size={16} color={isActive ? colors.tint : colors.muted} />
-              <Text style={[styles.tabLabel, { color: isActive ? colors.tint : colors.muted }]}>{tab.label}</Text>
-              {count > 0 && (
-                <View style={[styles.tabBadge, { backgroundColor: isActive ? colors.tint : colors.muted }]}>
-                  <Text style={{ color: '#fff', fontSize: 10, fontWeight: '700' }}>{count}</Text>
-                </View>
-              )}
-            </TouchableOpacity>
-          );
-        })}
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.surface }]} edges={['top', 'left', 'right']}>
+      <Stack.Screen options={{ headerShown: false }} />
+      <StatusBar barStyle={colorScheme === 'dark' ? 'light-content' : 'dark-content'} backgroundColor={colors.surface} />
+      <View style={{ flexDirection: 'row', alignItems: 'center', padding: 16, backgroundColor: colors.surface, borderBottomWidth: 1, borderBottomColor: colors.border }}>
+        <TouchableOpacity onPress={() => router.back()} style={{ marginRight: 16 }}>
+          <Ionicons name="arrow-back" size={24} color={colors.text} />
+        </TouchableOpacity>
+        <Text style={{ fontSize: 18, fontWeight: 'bold', color: colors.text }}>Tin nhắn từ người lạ</Text>
       </View>
 
       <FlatList
-        data={normalConversations}
+        data={sortedConversations}
         keyExtractor={(item) => item._id}
         renderItem={renderItem}
         ListEmptyComponent={renderEmpty}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.tint} />}
-        contentContainerStyle={filteredConversations.length === 0 ? { flex: 1 } : undefined}
+        contentContainerStyle={sortedConversations.length === 0 ? { flex: 1 } : undefined}
         showsVerticalScrollIndicator={false}
         ItemSeparatorComponent={() => <View style={{ height: 1, backgroundColor: colors.border, marginLeft: 76 }} />}
-        ListHeaderComponent={strangerConversations.length > 0 && activeTab === 'all' ? (
-          <TouchableOpacity onPress={() => router.push('/strangers')} style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, backgroundColor: colors.surface, borderBottomWidth: 1, borderBottomColor: colors.border }}>
-            <View style={{ width: 48, height: 48, borderRadius: 24, backgroundColor: '#0068FF', alignItems: 'center', justifyContent: 'center', marginRight: 14 }}>
-              <MaterialCommunityIcons name="incognito" size={28} color="#fff" />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={{ fontSize: 16, fontWeight: '500', color: colors.text }}>Tin nhắn từ người lạ</Text>
-              <Text style={{ fontSize: 14, color: colors.muted, marginTop: 2 }}>Gửi từ người chưa có trong danh bạ</Text>
-            </View>
-            {strangerConversations.some(c => c.latestMessage && c.latestMessage.senderId !== user?.id && !c.latestMessage.seenBy?.some((s: any) => (s._id || s.id || s) === user?.id)) && (
-              <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#EF4444', marginLeft: 8 }} />
-            )}
-          </TouchableOpacity>
-        ) : null}
       />
 
-      {/* Action Sheet Modal */}
       <Modal
         visible={!!selectedConversation}
         transparent={true}
@@ -485,7 +420,7 @@ export default function MessagesScreen() {
           </View>
         </TouchableWithoutFeedback>
       </Modal>
-    </View>
+    </SafeAreaView>
   );
 }
 

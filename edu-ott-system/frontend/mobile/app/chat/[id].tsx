@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
   View,
   Text,
@@ -35,6 +35,7 @@ import {
 import { API_BASE_URL } from '../../utils/api';
 import { getPinnedMessages, pinMessage, unpinMessage } from '../../utils/groupFeatureService';
 import { getMediaById, uploadMediaForm } from '../../utils/mediaService';
+import { getBlockedUsers, blockOrUnblockUser } from '@/utils/userService';
 import {
   connectSocket,
   joinConversation,
@@ -158,6 +159,9 @@ export default function ChatScreen() {
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [isFetchingMore, setIsFetchingMore] = useState(false);
   const [isSocketReady, setIsSocketReady] = useState(false);
+  const [isBlockedByMe, setIsBlockedByMe] = useState(false);
+  const [isBlockedByThem, setIsBlockedByThem] = useState(false);
+  const [unblockLoading, setUnblockLoading] = useState(false);
   const [showEmojiPanel, setShowEmojiPanel] = useState(false);
   const [showMediaMenu, setShowMediaMenu] = useState(false);
   const [showVoiceRecorder, setShowVoiceRecorder] = useState(false);
@@ -263,6 +267,14 @@ export default function ChatScreen() {
       setConversation(matched);
       if (matched) {
         getPinnedMessages(conversationId).then(setPinnedItems).catch(console.error);
+        if (matched.type !== 'group') {
+          const other = matched.participants?.find((p) => (p._id || p.id || '') !== currentUserId);
+          if (other) {
+            const blockedList = await getBlockedUsers();
+            const targetId = other._id || other.id || '';
+            setIsBlockedByMe(blockedList.some((u: any) => (u._id || u.id || '') === targetId));
+          }
+        }
       }
     } catch (error) {
       console.log('Error loading messages', error);
@@ -275,6 +287,26 @@ export default function ChatScreen() {
   useEffect(() => {
     loadInitialMessages();
   }, [loadInitialMessages]);
+
+  const [mentionQuery, setMentionQuery] = useState<string | null>(null);
+
+  const filteredMembers = useMemo(() => {
+    if (mentionQuery === null || !conversation?.participants) return [];
+    const q = mentionQuery.toLowerCase();
+    const membersList = conversation.participants.filter(p => (p._id || p.id) !== currentUserId);
+    const mentions = membersList.filter(p => p.username?.toLowerCase().includes(q));
+    if ('all'.includes(q)) {
+      mentions.unshift({ _id: 'all', id: 'all', username: 'all', avatarUrl: '' } as any);
+    }
+    return mentions;
+  }, [mentionQuery, conversation?.participants, currentUserId]);
+
+  const handleMentionSelect = useCallback((username: string) => {
+    if (mentionQuery === null) return;
+    const regex = new RegExp(`@${mentionQuery}$`);
+    setInputText((prev) => prev.replace(regex, `@${username} `));
+    setMentionQuery(null);
+  }, [mentionQuery]);
 
   // ==================== HELPERS ====================
   const getNormalizedUserIds = useCallback((ids: any[] = []): string[] => (
@@ -295,6 +327,15 @@ export default function ChatScreen() {
 
   const handleInputChange = useCallback((text: string) => {
     setInputText(text);
+
+    // Mention logic
+    const lastWordMatch = text.match(/@([\w\._]*)$/);
+    if (lastWordMatch && conversation?.type === 'group') {
+      setMentionQuery(lastWordMatch[1]);
+    } else {
+      setMentionQuery(null);
+    }
+
     if (!isSocketReady) return;
     if (!text.trim()) {
       stopTypingWithEmit();
@@ -308,7 +349,7 @@ export default function ChatScreen() {
     typingStopTimeoutRef.current = setTimeout(() => {
       stopTypingWithEmit();
     }, 1500);
-  }, [conversationId, isSocketReady, stopTypingWithEmit]);
+  }, [conversationId, isSocketReady, stopTypingWithEmit, conversation?.type]);
 
   // ==================== ĐÁNH DẤU ĐÃ XEM (chống vòng lặp) ====================
   useEffect(() => {
@@ -420,10 +461,10 @@ export default function ChatScreen() {
           prev.map((m) =>
             getMessageId(m) === payload.messageId
               ? {
-                  ...m,
-                  seenBy: Array.from(new Set([...(m.seenBy || []), payload.userId])),
-                  deliveredTo: Array.from(new Set([...(m.deliveredTo || []), payload.userId])),
-                }
+                ...m,
+                seenBy: Array.from(new Set([...(m.seenBy || []), payload.userId])),
+                deliveredTo: Array.from(new Set([...(m.deliveredTo || []), payload.userId])),
+              }
               : m
           )
         );
@@ -449,7 +490,14 @@ export default function ChatScreen() {
         setTypingUserIds((prev) => prev.filter((id) => id !== payload.userId));
       };
 
-      const onPinnedItemsUpdated = (items: any[]) => setPinnedItems(items);
+      const onPinnedItemsUpdated = (payload: any) => {
+        // Hỗ trợ cả payload cũ (array) và payload mới { conversationId, pinnedItems }
+        if (Array.isArray(payload)) {
+          setPinnedItems(payload);
+        } else if (payload && payload.conversationId === conversationId) {
+          setPinnedItems(payload.pinnedItems || []);
+        }
+      };
 
       const onMessageReacted = (payload: { messageId: string; reactions: any[] }) => {
         setMessages((prev) =>
@@ -631,7 +679,7 @@ export default function ChatScreen() {
       const uploaded = await uploadMediaForm({ uri: asset.uri, fileName, mimeType });
       const mediaId = uploaded._id || uploaded.id;
       if (!mediaId) throw new Error('Không upload được ảnh');
-      
+
       setMediaById((prev) => ({ ...prev, [mediaId]: uploaded }));
       const newMsg = await sendMessage({ conversationId, mediaIds: [mediaId], content: '' });
       setMessages((prev) =>
@@ -819,6 +867,20 @@ export default function ChatScreen() {
     router.push({ pathname: '/conversation-details', params: { id: conversationId } });
   };
 
+  const friendIds = (user?.friends || []).map((f: any) => typeof f === 'string' ? f : f._id || f.id);
+  const isStranger = conversation?.type === 'direct' && otherParticipant && !friendIds.includes(otherParticipant._id || otherParticipant.id || '');
+
+  const handleSendFriendRequest = async () => {
+    if (!otherParticipant) return;
+    try {
+      const { sendFriendRequest } = require('../../utils/friendService');
+      await sendFriendRequest({ toUserId: otherParticipant._id || otherParticipant.id || '' });
+      Alert.alert('✅', 'Đã gửi lời mời kết bạn');
+    } catch (error: any) {
+      Alert.alert('Lỗi', error.message || 'Không thể gửi kết bạn');
+    }
+  };
+
   const handleVoiceCall = () => Alert.alert('Thông báo', 'Tính năng gọi thoại sẽ sớm được cập nhật');
   const handleVideoCall = () => Alert.alert('Thông báo', 'Tính năng gọi video sẽ sớm được cập nhật');
 
@@ -831,14 +893,23 @@ export default function ChatScreen() {
 
   const handleMessageLongPress = (msg: Message) => {
     const isMine = getMessageSenderId(msg) === currentUserId;
+
+    // Kiểm tra quyền Admin/Owner
+    const isGroup = conversation?.type === 'group';
+    const ownerId = typeof conversation?.ownerId === 'string' ? conversation.ownerId : (conversation?.ownerId as any)?._id;
+    const adminIds = (conversation?.adminIds || []).map((admin: any) => typeof admin === 'string' ? admin : admin?._id);
+    const iAmOwner = ownerId === currentUserId;
+    const iAmAdmin = iAmOwner || adminIds.includes(currentUserId);
+    const canRecall = isMine || (isGroup && iAmAdmin);
+
     const messageId = getMessageId(msg);
     const isPinned = pinnedItems.some((item) => getPinnedMessageId(item) === messageId);
-    const buttons: ActionMenuOption[] = [{ text: 'Hủy', style: 'cancel', onPress: () => {} }];
+    const buttons: ActionMenuOption[] = [{ text: 'Hủy', style: 'cancel', onPress: () => { } }];
 
     if (!msg.isRecalled) {
       buttons.push({ text: '↩ Trả lời', onPress: () => setReplyTo(msg) });
     }
-    if (isMine && !msg.isRecalled) {
+    if (canRecall && !msg.isRecalled) {
       buttons.push({
         text: '↩ Thu hồi',
         onPress: async () => {
@@ -884,7 +955,22 @@ export default function ChatScreen() {
     setActionMenu({ visible: true, options: buttons });
   };
 
-  // ==================== RENDER ====================
+  const handleUnblock = async () => {
+    if (!otherParticipant) return;
+    setUnblockLoading(true);
+    try {
+      const targetId = otherParticipant._id || otherParticipant.id || '';
+      await blockOrUnblockUser(targetId);
+      setIsBlockedByMe(false);
+      Alert.alert('✅', 'Đã bỏ chặn người dùng');
+    } catch (e: any) {
+      Alert.alert('Lỗi', e.message || 'Không thể bỏ chặn');
+    } finally {
+      setUnblockLoading(false);
+    }
+  };
+
+  // ==================== RENDERS THE ATTACHMENT BOX ====================
   const renderMessageStatus = (item: Message) => {
     if ((item.status as any) === 'sending') return <Ionicons name="time-outline" size={11} color="rgba(255,255,255,0.6)" />;
     const seenBy = getNormalizedUserIds(item.seenBy || []).filter((id) => id !== currentUserId);
@@ -936,10 +1022,18 @@ export default function ChatScreen() {
   }, []);
 
   const renderMessage = ({ item }: { item: Message }) => {
-    const isMine = getMessageSenderId(item) === currentUserId;
-    const senderName = typeof item.senderId === 'string' ? '' : item.senderId?.username || '';
-    const senderAvatarUrl = typeof item.senderId === 'string' ? null : item.senderId?.avatarUrl;
+    const senderId = getMessageSenderId(item);
+    const isMine = senderId === currentUserId;
+    const senderObj = typeof item.senderId === 'string' ? null : item.senderId;
+    const senderName = senderObj?.username || '';
+    const senderAvatarUrl = senderObj?.avatarUrl;
     const isSendingMsg = (item.status as any) === 'sending';
+
+    // Cần kiểm tra xem senderId có nằm trong adminIds hoặc ownerId của conversation không
+    const isGroup = conversation?.type === 'group';
+    const ownerId = typeof conversation?.ownerId === 'string' ? conversation.ownerId : (conversation?.ownerId as any)?._id;
+    const adminIds = (conversation?.adminIds || []).map((admin: any) => typeof admin === 'string' ? admin : admin?._id);
+    const isSenderAdmin = adminIds.includes(senderId) || ownerId === senderId;
 
     const groupedReactions = (item.reactions || []).reduce((acc, reaction: any) => {
       const emoji = reaction?.emoji;
@@ -948,6 +1042,16 @@ export default function ChatScreen() {
       return acc;
     }, {} as Record<string, number>);
     const reactionEntries = Object.entries(groupedReactions);
+
+    if (item.type === 'system') {
+      return (
+        <View style={{ alignItems: 'center', marginVertical: 8, paddingHorizontal: 20 }}>
+          <View style={{ backgroundColor: colorScheme === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)', paddingHorizontal: 12, paddingVertical: 4, borderRadius: 12 }}>
+            <Text style={{ fontSize: 12, color: colors.muted, fontStyle: 'italic', textAlign: 'center' }}>{item.content}</Text>
+          </View>
+        </View>
+      );
+    }
 
     if (item.isRecalled) {
       return (
@@ -981,7 +1085,7 @@ export default function ChatScreen() {
         style={[
           styles.bubbleWrapper,
           isMine ? styles.myWrapper : styles.theirWrapper,
-          isSendingMsg && { opacity: 0.7 }, // Tin nhắn tạm hiện mờ hơn
+          isSendingMsg && { opacity: 0.7 },
         ]}
       >
         {!isMine && (
@@ -992,7 +1096,14 @@ export default function ChatScreen() {
         )}
         <View style={{ flex: 1, alignItems: isMine ? 'flex-end' : 'flex-start', maxWidth: '80%' }}>
           {!isMine && conversation?.type === 'group' && senderName ? (
-            <Text style={{ fontSize: 11, color: colors.tint, fontWeight: '600', marginBottom: 2, marginLeft: 4 }}>{senderName}</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 2 }}>
+              <Text style={{ fontSize: 11, color: colors.tint, fontWeight: '600', marginLeft: 4 }}>{senderName}</Text>
+              {conversation?.settings?.markAdminMessages && isSenderAdmin && (
+                <View style={{ backgroundColor: '#FCD34D', paddingHorizontal: 4, paddingVertical: 1, borderRadius: 4, marginLeft: 6 }}>
+                  <Text style={{ fontSize: 8, color: '#92400E', fontWeight: 'bold' }}>AD</Text>
+                </View>
+              )}
+            </View>
           ) : null}
 
           <View style={[styles.bubbleContainer, reactionEntries.length > 0 && styles.bubbleContainerWithReaction]}>
@@ -1003,7 +1114,7 @@ export default function ChatScreen() {
                     {typeof (replyMsg as any).senderId === 'object' ? (replyMsg as any).senderId?.username : 'Tin nhắn'}
                   </Text>
                   <Text style={{ color: isMine ? 'rgba(255,255,255,0.7)' : colors.muted, fontSize: 12 }} numberOfLines={2}>
-                    {(replyMsg as any).content || 'File đính kèm...'}
+                    {(replyMsg as any).content || 'Tệp đính kèm...'}
                   </Text>
                 </View>
               )}
@@ -1013,7 +1124,18 @@ export default function ChatScreen() {
               )}
 
               {item.content ? (
-                <Text style={{ color: isMine ? '#fff' : colors.text, fontSize: 16, lineHeight: 22 }}>{item.content}</Text>
+                <Text style={{ color: isMine ? '#fff' : colors.text, fontSize: 16, lineHeight: 22 }}>
+                  {item.content.split(/(@[\w\._]*)/g).map((part, index) => {
+                    if (part.startsWith('@')) {
+                      return (
+                        <Text key={index} style={{ fontWeight: 'bold', color: isMine ? '#DBEAFE' : '#0068FF' }}>
+                          {part}
+                        </Text>
+                      );
+                    }
+                    return <Text key={index}>{part}</Text>;
+                  })}
+                </Text>
               ) : null}
 
               {!!item.mediaIds?.length && (
@@ -1023,13 +1145,13 @@ export default function ChatScreen() {
                     const rawMedia = typeof mediaItem === 'string' ? mediaById[mediaId] : mediaItem;
                     const media = rawMedia ? { ...rawMedia, url: toAbsoluteMediaUrl(rawMedia.url) } : null;
                     const isImage = isImageAttachment(media);
-                    const isAudio = isAudioAttachment(media);
+                    const isAudio = isImage ? false : isAudioAttachment(media);
                     const fileName = media?.fileName || `Tệp đính kèm ${idx + 1}`;
                     const canOpen = !!media?.url;
 
                     if (isImage && media?.url) {
                       return (
-                        <TouchableOpacity key={`${mediaId}-${idx}`} onPress={() => setViewImageUrl(media.url)} activeOpacity={0.9}>
+                        <TouchableOpacity key={`${mediaId}-${idx}`} onPress={() => setViewImageUrl(media.url || null)} activeOpacity={0.9}>
                           <Image source={{ uri: media.url }} style={styles.inlineImage} resizeMode="cover" />
                         </TouchableOpacity>
                       );
@@ -1048,26 +1170,28 @@ export default function ChatScreen() {
                         key={`${mediaId}-${idx}`}
                         disabled={!canOpen}
                         onPress={() => openAttachment(media)}
-                        style={[styles.fileAttachment, { backgroundColor: isMine ? '#1D4ED8' : colors.border }]}
+                        style={[
+                          styles.fileAttachment,
+                          {
+                            backgroundColor: isMine ? '#E0E7FF' : colors.surface,
+                            borderColor: isMine ? '#C7D2FE' : colors.border,
+                            borderWidth: 1
+                          }
+                        ]}
                       >
-                        <View style={{ width: 40, height: 40, borderRadius: 8, backgroundColor: isMine ? '#DBEAFE20' : colors.tint + '15', alignItems: 'center', justifyContent: 'center' }}>
-                           <Ionicons name="document-text" size={24} color={isMine ? '#DBEAFE' : colors.tint} />
+                        <View style={{ width: 44, height: 44, borderRadius: 10, backgroundColor: isMine ? '#4F46E5' : '#E5E7EB', alignItems: 'center', justifyContent: 'center', marginRight: 10 }}>
+                          <Ionicons name="document" size={24} color={isMine ? '#fff' : '#6B7280'} />
                         </View>
-                        <View style={{ flex: 1 }}>
-                          <Text numberOfLines={2} style={{ color: isMine ? '#DBEAFE' : colors.text, fontSize: 14, fontWeight: '600' }}>
+                        <View style={{ flex: 1, marginRight: 8 }}>
+                          <Text numberOfLines={1} ellipsizeMode="tail" style={{ color: isMine ? '#1E1B4B' : colors.text, fontSize: 14, fontWeight: '600' }}>
                             {fileName}
                           </Text>
-                          {media?.size ? (
-                            <Text style={{ color: isMine ? '#DBEAFE90' : colors.muted, fontSize: 11, marginTop: 2 }}>
-                              {media.size < 1024 * 1024 ? `${(media.size / 1024).toFixed(1)} KB` : `${(media.size / (1024 * 1024)).toFixed(1)} MB`} • {(media.fileName || '').split('.').pop()?.toUpperCase()}
-                            </Text>
-                          ) : (
-                            <Text style={{ color: isMine ? '#DBEAFE90' : colors.muted, fontSize: 11, marginTop: 2 }}>
-                               {(media?.fileName || '').split('.').pop()?.toUpperCase()}
-                            </Text>
-                          )}
+                          <Text style={{ color: isMine ? '#4338CA' : colors.muted, fontSize: 11, marginTop: 2 }}>
+                            {media?.size ? (media.size < 1024 * 1024 ? `${(media.size / 1024).toFixed(1)} KB` : `${(media.size / (1024 * 1024)).toFixed(1)} MB`) : 'FILE'}
+                            {' • '}{(media?.fileName || '').split('.').pop()?.toUpperCase() || 'DAT'}
+                          </Text>
                         </View>
-                        {canOpen && <Ionicons name="download-outline" size={20} color={isMine ? '#DBEAFE' : colors.muted} />}
+                        {canOpen && <Ionicons name="cloud-download-outline" size={20} color={isMine ? '#4F46E5' : colors.muted} />}
                       </TouchableOpacity>
                     );
                   })}
@@ -1167,6 +1291,19 @@ export default function ChatScreen() {
         />
       )}
 
+      {isStranger && !isBlockedByMe && (
+        <View style={{ backgroundColor: '#F0F5FF', padding: 12, margin: 16, borderRadius: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', zIndex: 10 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+            <Ionicons name="person-add" size={18} color="#0068FF" />
+            <Text style={{ marginLeft: 8, color: '#4B5563', fontSize: 13, flex: 1 }}>Bạn và <Text style={{ fontWeight: 'bold' }}>{otherParticipant?.username || 'người này'}</Text> chưa kết bạn</Text>
+          </View>
+          <TouchableOpacity onPress={handleSendFriendRequest} style={{ borderWidth: 1, borderColor: '#0068FF', borderRadius: 20, paddingHorizontal: 12, paddingVertical: 6, flexDirection: 'row', alignItems: 'center', marginLeft: 8, backgroundColor: '#fff' }}>
+            <Ionicons name="person-add" size={14} color="#0068FF" />
+            <Text style={{ marginLeft: 4, color: '#0068FF', fontWeight: '600', fontSize: 13 }}>Gửi kết bạn</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
       <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding" keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}>
         <FlatList
           data={messages}
@@ -1195,6 +1332,33 @@ export default function ChatScreen() {
           </View>
         )}
 
+        {mentionQuery !== null && filteredMembers.length > 0 && (
+          <View style={{ maxHeight: 150, backgroundColor: colors.surface, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border }}>
+            <FlatList
+              data={filteredMembers}
+              keyExtractor={(item: any) => typeof item === 'string' ? item : (item.id || item._id)}
+              keyboardShouldPersistTaps="handled"
+              renderItem={({ item }: any) => (
+                <TouchableOpacity
+                  style={{ flexDirection: 'row', alignItems: 'center', padding: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border }}
+                  onPress={() => handleMentionSelect(item.username)}
+                >
+                  {item.id === 'all' || item._id === 'all' ? (
+                    <View style={{ width: 30, height: 30, borderRadius: 15, backgroundColor: '#0068FF', alignItems: 'center', justifyContent: 'center', marginRight: 10 }}>
+                      <Ionicons name="people" size={18} color="#fff" />
+                    </View>
+                  ) : (
+                    <Image source={{ uri: item.avatarUrl || `https://ui-avatars.com/api/?name=${item.username}&background=0068FF&color=fff` }} style={{ width: 30, height: 30, borderRadius: 15, marginRight: 10 }} />
+                  )}
+                  <Text style={{ color: colors.text, fontSize: 16, fontWeight: '500' }}>
+                    {item.id === 'all' || item._id === 'all' ? 'Tất cả mọi người (@all)' : item.username}
+                  </Text>
+                </TouchableOpacity>
+              )}
+            />
+          </View>
+        )}
+
         {replyTo && (
           <View style={[styles.replyPreview, { backgroundColor: colors.surface, borderTopColor: colors.border }]}>
             <View style={[styles.replyPreviewBar, { backgroundColor: colors.tint }]} />
@@ -1210,7 +1374,14 @@ export default function ChatScreen() {
           </View>
         )}
 
-        {showVoiceRecorder ? (
+        {isBlockedByMe ? (
+          <View style={[styles.inputBar, { borderTopColor: colors.border, backgroundColor: colors.surface, paddingBottom: Math.max(12, insets.bottom), alignItems: 'center', justifyContent: 'center', paddingVertical: 12, flexDirection: 'column' }]}>
+            <Text style={{ color: colors.muted, marginBottom: 8 }}>Bạn đã chặn người dùng này</Text>
+            <TouchableOpacity onPress={handleUnblock} disabled={unblockLoading} style={{ backgroundColor: '#DBEAFE', paddingHorizontal: 20, paddingVertical: 8, borderRadius: 20 }}>
+              {unblockLoading ? <ActivityIndicator size="small" color={colors.tint} /> : <Text style={{ color: colors.tint, fontWeight: 'bold' }}>BỎ CHẶN</Text>}
+            </TouchableOpacity>
+          </View>
+        ) : showVoiceRecorder ? (
           <View style={[styles.voiceRecorderWrap, { borderTopColor: colors.border, backgroundColor: colors.surface, paddingBottom: Math.max(12, insets.bottom) }]}>
             <VoiceRecorderMobile
               onCancel={() => setShowVoiceRecorder(false)}
@@ -1218,42 +1389,42 @@ export default function ChatScreen() {
             />
           </View>
         ) : (
-        <View style={[styles.inputBar, { borderTopColor: colors.border, backgroundColor: colors.surface, paddingBottom: Math.max(12, insets.bottom) }]}>
-          <TouchableOpacity onPress={() => setShowEmojiPanel((prev) => !prev)} style={styles.iconBtn}>
-            <Ionicons name={showEmojiPanel ? 'happy' : 'happy-outline'} size={24} color={showEmojiPanel ? colors.tint : colors.muted} />
-          </TouchableOpacity>
-
-          <TouchableOpacity onPress={() => setShowMediaMenu(true)} style={styles.iconBtn}>
-            <Ionicons name="add-circle-outline" size={26} color={colors.muted} />
-          </TouchableOpacity>
-
-          <TextInput
-            style={[styles.textInput, { backgroundColor: colors.background, borderColor: colors.border, color: colors.text }]}
-            placeholder="Nhắn tin..."
-            placeholderTextColor={colors.muted}
-            value={inputText}
-            onChangeText={handleInputChange}
-            multiline
-            onBlur={stopTypingWithEmit}
-          />
-
-          <TouchableOpacity
-            onPress={handleSendText}
-            disabled={isSending || inputText.trim().length === 0}
-            style={[styles.sendBtn, { backgroundColor: inputText.trim().length > 0 ? '#0068FF' : '#D1D5DB' }]}
-          >
-            <Ionicons name="send" size={18} color="#fff" style={{ marginLeft: 3 }} />
-          </TouchableOpacity>
-          {inputText.trim().length === 0 && (
-            <TouchableOpacity
-              onPress={() => setShowVoiceRecorder(true)}
-              disabled={isSending}
-              style={styles.iconBtn}
-            >
-              <Ionicons name="mic-outline" size={24} color={colors.muted} />
+          <View style={[styles.inputBar, { borderTopColor: colors.border, backgroundColor: colors.surface, paddingBottom: Math.max(12, insets.bottom) }]}>
+            <TouchableOpacity onPress={() => setShowEmojiPanel((prev) => !prev)} style={styles.iconBtn}>
+              <Ionicons name={showEmojiPanel ? 'happy' : 'happy-outline'} size={24} color={showEmojiPanel ? colors.tint : colors.muted} />
             </TouchableOpacity>
-          )}
-        </View>
+
+            <TouchableOpacity onPress={() => setShowMediaMenu(true)} style={styles.iconBtn}>
+              <Ionicons name="add-circle-outline" size={26} color={colors.muted} />
+            </TouchableOpacity>
+
+            <TextInput
+              style={[styles.textInput, { backgroundColor: colors.background, borderColor: colors.border, color: colors.text }]}
+              placeholder="Nhắn tin..."
+              placeholderTextColor={colors.muted}
+              value={inputText}
+              onChangeText={handleInputChange}
+              multiline
+              onBlur={stopTypingWithEmit}
+            />
+
+            <TouchableOpacity
+              onPress={handleSendText}
+              disabled={isSending || inputText.trim().length === 0}
+              style={[styles.sendBtn, { backgroundColor: inputText.trim().length > 0 ? '#0068FF' : '#D1D5DB' }]}
+            >
+              <Ionicons name="send" size={18} color="#fff" style={{ marginLeft: 3 }} />
+            </TouchableOpacity>
+            {inputText.trim().length === 0 && (
+              <TouchableOpacity
+                onPress={() => setShowVoiceRecorder(true)}
+                disabled={isSending}
+                style={styles.iconBtn}
+              >
+                <Ionicons name="mic-outline" size={24} color={colors.muted} />
+              </TouchableOpacity>
+            )}
+          </View>
         )}
       </KeyboardAvoidingView>
 
@@ -1461,7 +1632,7 @@ const styles = StyleSheet.create({
   msgMeta: { flexDirection: 'row', alignItems: 'center', marginTop: 4, gap: 2 },
   inlineImage: { width: 200, height: 160, borderRadius: 12 },
   audioAttachment: { maxWidth: 260 },
-  fileAttachment: { flexDirection: 'row', alignItems: 'center', gap: 8, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 8 },
+  fileAttachment: { flexDirection: 'row', alignItems: 'center', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10, minWidth: 240, maxWidth: 260 },
   replyPreview: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 8, borderTopWidth: 1, gap: 8 },
   replyPreviewBar: { width: 3, height: '100%', borderRadius: 2, minHeight: 30 },
   inputBar: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingTop: 10, borderTopWidth: StyleSheet.hairlineWidth, gap: 6 },

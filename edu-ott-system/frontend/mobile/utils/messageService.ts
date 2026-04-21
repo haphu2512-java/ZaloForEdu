@@ -163,11 +163,42 @@ export async function updateConversationPreference(
     nickname?: string | null;
     isHidden?: boolean;
     isDeleted?: boolean;
+    isPinned?: boolean;
+    isMuted?: boolean;
+    notificationMode?: 'all' | 'mention_only' | 'mute';
   },
 ): Promise<any> {
   const res = await fetchAPI(`${CONVERSATIONS_ENDPOINT}/${conversationId}/preferences`, {
     method: 'PUT',
     body: JSON.stringify(payload),
+  });
+  return res.data;
+}
+
+/**
+ * Ghim/bỏ ghim cuộc trò chuyện
+ * PUT /conversations/:id/preferences { isPinned: true/false }
+ */
+export async function pinConversation(conversationId: string, isPinned: boolean): Promise<any> {
+  return updateConversationPreference(conversationId, { isPinned });
+}
+
+/**
+ * Tắt/bật thông báo cuộc trò chuyện
+ * PUT /conversations/:id/preferences { isMuted: true/false }
+ */
+export async function muteConversation(conversationId: string, isMuted: boolean): Promise<any> {
+  return updateConversationPreference(conversationId, { isMuted });
+}
+
+/**
+ * Báo cáo cuộc trò chuyện
+ * POST /conversations/:id/report { reason }
+ */
+export async function reportConversation(conversationId: string, reason: string): Promise<any> {
+  const res = await fetchAPI(`${CONVERSATIONS_ENDPOINT}/${conversationId}/report`, {
+    method: 'POST',
+    body: JSON.stringify({ reason }),
   });
   return res.data;
 }

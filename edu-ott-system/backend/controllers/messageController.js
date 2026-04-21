@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 
 const Message = require('../models/Message');
+const User = require('../models/User');
 const ConversationPreference = require('../models/ConversationPreference');
 const { createMessage, ensureConversationMember } = require('../services/messageService');
 const { decodeCursor, encodeCursor } = require('../utils/cursor');
@@ -26,6 +27,30 @@ const sendMessage = asyncHandler(async (req, res) => {
   if (!isOwner && !isAdmin) {
     if (conversation.settings?.canMembersSendMessages === false) {
       throw new ApiError(403, 'FORBIDDEN', 'Only admin/owner can send messages in this group');
+    }
+  }
+
+  // Nếu là chat nhóm, kiểm tra quyền gửi tin nhắn
+  if (conversation.type === 'group') {
+    const isAdmin = (conversation.adminIds || []).some(id => toStr(id) === toStr(req.user._id));
+    const isOwner = toStr(conversation.ownerId || conversation.createdBy) === toStr(req.user._id);
+    if (conversation.settings?.canMembersSendMessages === false && !isAdmin && !isOwner) {
+      throw new ApiError(403, 'FORBIDDEN', 'Chỉ Admin mới có quyền gửi tin nhắn trong nhóm này');
+    }
+  }
+
+  // Nếu là chat 1-1, kiểm tra xem có ai bị block không
+  if (conversation.type === 'direct') {
+    const otherParticipantId = conversation.participants.find(p => toStr(p) !== toStr(req.user._id));
+    if (otherParticipantId) {
+      const currentUser = await User.findById(req.user._id);
+      const otherUser = await User.findById(otherParticipantId);
+      if (currentUser && currentUser.blockedUsers && currentUser.blockedUsers.some(id => toStr(id) === toStr(otherParticipantId))) {
+        throw new ApiError(403, 'FORBIDDEN', 'Bạn đã chặn người này');
+      }
+      if (otherUser && otherUser.blockedUsers && otherUser.blockedUsers.some(id => toStr(id) === toStr(req.user._id))) {
+        throw new ApiError(403, 'FORBIDDEN', 'Bạn đã bị người này chặn');
+      }
     }
   }
 
@@ -173,8 +198,21 @@ const recallMessage = asyncHandler(async (req, res) => {
     throw new ApiError(404, 'MESSAGE_NOT_FOUND', 'Message not found');
   }
 
-  if (!message.senderId.equals(req.user._id)) {
-    throw new ApiError(403, 'FORBIDDEN', 'Only sender can recall this message');
+  const isSender = message.senderId.equals(req.user._id);
+
+  // Nếu không phải người gửi → kiểm tra quyền Admin/Owner trong nhóm
+  if (!isSender) {
+    const Conversation = require('../models/Conversation');
+    const conversation = await Conversation.findById(message.conversationId);
+    if (!conversation || conversation.type !== 'group') {
+      throw new ApiError(403, 'FORBIDDEN', 'Only sender can recall this message');
+    }
+    const ownerId = (conversation.ownerId || conversation.createdBy)?.toString();
+    const isOwner = ownerId === toStr(req.user._id);
+    const isAdmin = (conversation.adminIds || []).some((a) => toStr(a) === toStr(req.user._id));
+    if (!isOwner && !isAdmin) {
+      throw new ApiError(403, 'FORBIDDEN', 'Only sender or group admin can recall this message');
+    }
   }
 
   message.isRecalled = true;

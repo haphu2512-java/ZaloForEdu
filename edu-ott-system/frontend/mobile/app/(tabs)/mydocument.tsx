@@ -27,6 +27,9 @@ import * as ImagePicker from 'expo-image-picker';
 import { uploadMediaForm, getMediaById } from '@/utils/mediaService';
 import type { Conversation, Message, MediaItem } from '@/types/chat';
 
+import { AudioBubbleMobile } from '@/components/chat/AudioBubbleMobile';
+import { VoiceRecorderMobile } from '@/components/chat/VoiceRecorderMobile';
+
 /** Format bytes → human-readable string */
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -66,6 +69,13 @@ function isImageAttachment(media?: MediaItem | null): boolean {
   return getMimeTypeFromFileName(media.fileName).startsWith('image/');
 }
 
+function isAudioAttachment(media?: MediaItem | null): boolean {
+  if (!media) return false;
+  if (media.mimeType?.startsWith('audio/')) return true;
+  const fileName = (media.fileName || '').toLowerCase();
+  return /\.(mp3|m4a|aac|wav|ogg|opus|webm)$/i.test(fileName);
+}
+
 type ActionMenuOption = {
   text: string;
   onPress: () => void;
@@ -94,6 +104,7 @@ export default function MyDocumentScreen() {
   const [forwardSource, setForwardSource] = useState<Message | null>(null);
   const [conversationsList, setConversationsList] = useState<Conversation[]>([]);
   const [isForwarding, setIsForwarding] = useState(false);
+  const [showVoiceRecorder, setShowVoiceRecorder] = useState(false);
 
   // ── Lấy hoặc tạo self-conversation ──────────────────────────
   const getOrCreateSelfConv = useCallback(async (): Promise<Conversation | null> => {
@@ -104,8 +115,8 @@ export default function MyDocumentScreen() {
       );
       if (existing) return existing;
 
-      // Tạo mới self-conversation (participantIds = [] → backend sẽ thêm chỉ myId)
-      const created = await createConversation({ type: 'direct', participantIds: [] });
+      // Tạo mới self-conversation (participantIds = [user.id])
+      const created = await createConversation({ type: 'direct', participantIds: [user?.id || ''] });
       return created;
     } catch (e: any) {
       console.log('[MyDoc] getOrCreateSelfConv error:', e.message);
@@ -209,6 +220,45 @@ export default function MyDocumentScreen() {
       })();
     }
   }, [messages.length]);
+
+  // ── Gửi tin nhắn giọng nói ────────────────────────────────────────
+  const handleSendVoice = async (uri: string) => {
+    if (!uri || !selfConv?._id || sending) return;
+    setShowVoiceRecorder(false);
+    setSending(true);
+
+    try {
+      const ext = uri.split('.').pop()?.toLowerCase() || 'm4a';
+      const fileName = `voice-${Date.now()}.${ext}`;
+      
+      const mimeType = ext === 'm4a' ? 'audio/mp4' : 
+                       ext === 'mp3' ? 'audio/mpeg' : 
+                       ext === 'wav' ? 'audio/wav' : 
+                       ext === 'aac' ? 'audio/aac' : 
+                       ext === 'webm' ? 'audio/webm' : 'audio/mp4';
+
+      const uploaded = await uploadMediaForm({ uri, fileName, mimeType });
+      const mediaId = uploaded?._id || uploaded?.id;
+
+      if (!mediaId) throw new Error('Upload ghi âm không thành công');
+
+      setMediaById((prev) => ({ ...prev, [mediaId]: uploaded as MediaItem }));
+      const msg = await sendMessage({
+        conversationId: selfConv._id,
+        content: '',
+        mediaIds: [mediaId],
+      });
+      setMessages((prev) => {
+        const alreadyIn = prev.some((m) => m._id === msg._id);
+        return alreadyIn ? prev : [...prev, msg];
+      });
+      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
+    } catch (e: any) {
+      Alert.alert('Lỗi', e.message || 'Không thể gửi ghi âm');
+    } finally {
+      setSending(false);
+    }
+  };
 
   // ── Gửi tin nhắn text ────────────────────────────────────────
   const handleSend = async () => {
@@ -393,8 +443,13 @@ export default function MyDocumentScreen() {
                 const rawMedia = typeof mediaItem === 'string' ? mediaById[mediaId] : mediaItem;
                 const media = rawMedia ? { ...rawMedia, url: toAbsoluteMediaUrl(rawMedia.url) } : null;
                 const isImage = isImageAttachment(media);
+                const isAudio = isAudioAttachment(media);
                 const fileName = media?.fileName || `Tệp đính kèm ${idx + 1}`;
                 const canOpen = !!media?.url;
+
+                if (isAudio && media?.url) {
+                  return <AudioBubbleMobile key={`${mediaId}-${idx}`} url={media.url} isMe={true} />;
+                }
 
                 if (isImage && media?.url) {
                   return (
@@ -409,20 +464,24 @@ export default function MyDocumentScreen() {
                     key={`${mediaId}-${idx}`}
                     disabled={!canOpen}
                     onPress={() => openAttachment(media)}
-                    style={{ flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: colors.background, padding: 8, borderRadius: 10 }}
+                    style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: colors.background, padding: 8, borderRadius: 10, width: 230 }}
                   >
-                    <View style={[styles.fileIconWrap, { backgroundColor: colors.tint + '20', width: 36, height: 36 }]}>
+                    <View style={[styles.fileIconWrap, { backgroundColor: colors.tint + '20', width: 36, height: 36, marginRight: 8 }]}>
                       <Ionicons name="document-text" size={20} color={colors.tint} />
                     </View>
-                    <View style={{ flex: 1 }}>
-                      <Text numberOfLines={2} style={{ color: colors.text, fontSize: 13, fontWeight: '600' }}>{fileName}</Text>
-                      {media?.size && (
+                    <View style={{ width: 140, justifyContent: 'center' }}>
+                      <Text numberOfLines={1} ellipsizeMode="middle" style={{ color: colors.text, fontSize: 13, fontWeight: '600' }}>{fileName}</Text>
+                      {media?.size ? (
                         <Text style={{ color: colors.muted, fontSize: 11, marginTop: 2 }}>
                           {media.size < 1024 * 1024 ? `${(media.size / 1024).toFixed(1)} KB` : `${(media.size / (1024 * 1024)).toFixed(1)} MB`} • {(media.fileName || '').split('.').pop()?.toUpperCase()}
                         </Text>
+                      ) : (
+                        <Text style={{ color: colors.muted, fontSize: 11, marginTop: 2 }}>
+                           {(media?.fileName || '').split('.').pop()?.toUpperCase() || 'FILE'}
+                        </Text>
                       )}
                     </View>
-                    {canOpen && <Ionicons name="download-outline" size={18} color={colors.muted} />}
+                    {canOpen && <Ionicons name="download-outline" size={20} color={colors.muted} style={{ marginLeft: 'auto' }} />}
                   </TouchableOpacity>
                 );
               })}
@@ -485,59 +544,69 @@ export default function MyDocumentScreen() {
       />
 
       {/* ── Input bar ────────────────────────────── */}
-      <View style={[styles.inputBar, { backgroundColor: colors.surface, borderTopColor: colors.border }]}>
-        <TouchableOpacity
-          style={[styles.attachBtn]}
-          onPress={handleTakeImage}
-          disabled={uploading}
-        >
-          {uploading ? (
-            <ActivityIndicator size="small" color={colors.tint} />
-          ) : (
-            <Ionicons name="camera-outline" size={26} color={colors.muted} />
-          )}
-        </TouchableOpacity>
+      {showVoiceRecorder ? (
+        <View style={[{ paddingHorizontal: 12, paddingVertical: 10, backgroundColor: colors.surface, borderTopColor: colors.border, borderTopWidth: StyleSheet.hairlineWidth }]}>
+          <VoiceRecorderMobile
+            onCancel={() => setShowVoiceRecorder(false)}
+            onSend={handleSendVoice}
+          />
+        </View>
+      ) : (
+        <View style={[styles.inputBar, { backgroundColor: colors.surface, borderTopColor: colors.border }]}>
+          <TouchableOpacity
+            style={[styles.attachBtn]}
+            onPress={handleTakeImage}
+            disabled={uploading || sending}
+          >
+            {uploading ? (
+              <ActivityIndicator size="small" color={colors.tint} />
+            ) : (
+              <Ionicons name="camera-outline" size={26} color={colors.muted} />
+            )}
+          </TouchableOpacity>
 
-        <TouchableOpacity
-          style={[styles.attachBtn]}
-          onPress={handlePickDocument}
-          disabled={uploading}
-        >
-          <Ionicons name="add-circle-outline" size={26} color={colors.muted} />
-        </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.attachBtn]}
+            onPress={handlePickDocument}
+            disabled={uploading || sending}
+          >
+            <Ionicons name="add-circle-outline" size={26} color={colors.muted} />
+          </TouchableOpacity>
 
-        <TextInput
-          style={[
-            styles.input,
-            {
-              backgroundColor: colorScheme === 'dark' ? colors.background : '#F1F5F9',
-              color: colors.text,
-            },
-          ]}
-          placeholder="Nhập ghi chú..."
-          placeholderTextColor={colors.muted}
-          value={textInput}
-          onChangeText={setTextInput}
-          multiline
-          maxLength={4000}
-          onSubmitEditing={handleSend}
-        />
+          <TextInput
+            style={[
+              styles.input,
+              {
+                backgroundColor: colorScheme === 'dark' ? colors.background : '#F1F5F9',
+                color: colors.text,
+              },
+            ]}
+            placeholder="Nhập ghi chú..."
+            placeholderTextColor={colors.muted}
+            value={textInput}
+            onChangeText={setTextInput}
+            multiline
+            maxLength={4000}
+            onSubmitEditing={handleSend}
+            editable={!sending && !uploading}
+          />
 
-        <TouchableOpacity
-          style={[
-            styles.sendBtn,
-            { backgroundColor: textInput.trim() ? colors.tint : colors.muted + '40' },
-          ]}
-          onPress={handleSend}
-          disabled={!textInput.trim() || sending}
-        >
-          {sending ? (
-            <ActivityIndicator size="small" color="#fff" />
-          ) : (
-            <Ionicons name="send" size={18} color={textInput.trim() ? '#fff' : colors.muted} />
-          )}
-        </TouchableOpacity>
-      </View>
+          <TouchableOpacity
+            style={[
+              styles.sendBtn,
+              { backgroundColor: textInput.trim() ? colors.tint : colors.muted + '20' },
+            ]}
+            onPress={textInput.trim() ? handleSend : () => setShowVoiceRecorder(true)}
+            disabled={sending || uploading}
+          >
+            {sending ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <Ionicons name={textInput.trim() ? "send" : "mic"} size={18} color={textInput.trim() ? '#fff' : colors.muted} />
+            )}
+          </TouchableOpacity>
+        </View>
+      )}
       {/* Modal xem ảnh */}
       <Modal visible={!!viewImageUrl} transparent animationType="fade" onRequestClose={() => setViewImageUrl(null)}>
         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.95)', justifyContent: 'center', alignItems: 'center' }}>

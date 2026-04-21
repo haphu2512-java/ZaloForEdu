@@ -200,6 +200,7 @@ const updateGroupSettings = asyncHandler(async (req, res) => {
   if (typeof canMembersCreateReminders === 'boolean') updates.canMembersCreateReminders = canMembersCreateReminders;
   if (typeof canMembersCreatePolls === 'boolean') updates.canMembersCreatePolls = canMembersCreatePolls;
   if (typeof canMembersSendMessages === 'boolean') updates.canMembersSendMessages = canMembersSendMessages;
+  if (typeof req.body.markAdminMessages === 'boolean') updates.markAdminMessages = req.body.markAdminMessages;
 
   conversation.settings = { ...conversation.settings, ...updates };
   await conversation.save();

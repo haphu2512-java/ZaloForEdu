@@ -45,6 +45,9 @@ const updateConversationPreferenceSchema = z.object({
   isHidden: z.boolean().optional(),
   isDeleted: z.boolean().optional(),
   mutedUntil: z.string().datetime().nullable().optional(),
+  isPinned: z.boolean().optional(),
+  isMuted: z.boolean().optional(),
+  notificationMode: z.enum(['all', 'mention_only', 'mute']).optional(),
 });
 
 const conversationPaginationQuerySchema = z.object({
