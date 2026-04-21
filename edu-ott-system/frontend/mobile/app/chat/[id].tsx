@@ -143,6 +143,16 @@ function isAudioAttachment(media?: MediaItem | null): boolean {
   return /\.(mp3|m4a|aac|wav|ogg|opus|webm)$/i.test(fileName);
 }
 
+function isValidObjectId(value?: string): boolean {
+  return !!value && /^[a-fA-F0-9]{24}$/.test(value);
+}
+
+function extractMediaId(mediaItem: any): string {
+  if (!mediaItem) return '';
+  if (typeof mediaItem === 'string') return mediaItem;
+  return mediaItem._id || mediaItem.id || '';
+}
+
 export default function ChatScreen() {
   const { id: conversationId } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
@@ -808,6 +818,30 @@ export default function ChatScreen() {
       Alert.alert('Lỗi', 'Không thể mở tệp trên thiết bị này');
     }
   }, []);
+  const handleInlineLinkPress = useCallback(async (url: string) => {
+    try {
+      const inviteQuery = url.match(/^mobileapp:\/\/join-group\?code=([^&\s]+)/i);
+      if (inviteQuery?.[1]) {
+        router.push((`/join-group?code=${decodeURIComponent(inviteQuery[1])}`) as any);
+        return;
+      }
+
+      const invitePath = url.match(/^mobileapp:\/\/join\/([^?\s]+)/i);
+      if (invitePath?.[1]) {
+        router.push((`/join-group?code=${decodeURIComponent(invitePath[1])}`) as any);
+        return;
+      }
+
+      const canOpen = await Linking.canOpenURL(url);
+      if (!canOpen) {
+        Alert.alert('Lỗi', 'Không mở được liên kết');
+        return;
+      }
+      await Linking.openURL(url);
+    } catch {
+      Alert.alert('Lỗi', 'Không mở được liên kết');
+    }
+  }, [router]);
 
   const openForwardModal = async (msg: Message) => {
     try {
@@ -829,8 +863,8 @@ export default function ChatScreen() {
       await sendMessage({
         conversationId: targetConversationId,
         content: fallbackContent || 'Tin nhắn được chuyển tiếp',
-        mediaIds: forwardSource.mediaIds || [],
-        forwardFrom: getMessageId(forwardSource),
+        mediaIds: (forwardSource.mediaIds || []).map((mediaItem: any) => extractMediaId(mediaItem)).filter((id: string) => isValidObjectId(id)),
+        ...(isValidObjectId(getMessageId(forwardSource)) ? { forwardFrom: getMessageId(forwardSource) } : {}),
       });
       setForwardModalVisible(false);
       setForwardSource(null);
@@ -1125,7 +1159,21 @@ export default function ChatScreen() {
 
               {item.content ? (
                 <Text style={{ color: isMine ? '#fff' : colors.text, fontSize: 16, lineHeight: 22 }}>
-                  {item.content.split(/(@[\w\._]*)/g).map((part, index) => {
+                  {item.content.split(/(mobileapp:\/\/[^\s]+|https?:\/\/[^\s]+|@[\w\._]*)/g).map((part, index) => {
+                    if (!part) return null;
+
+                    if (/^(mobileapp:\/\/[^\s]+|https?:\/\/[^\s]+)$/i.test(part)) {
+                      return (
+                        <Text
+                          key={index}
+                          style={{ fontWeight: '700', textDecorationLine: 'underline', color: isMine ? '#DBEAFE' : '#2563EB' }}
+                          onPress={() => handleInlineLinkPress(part)}
+                        >
+                          {part}
+                        </Text>
+                      );
+                    }
+
                     if (part.startsWith('@')) {
                       return (
                         <Text key={index} style={{ fontWeight: 'bold', color: isMine ? '#DBEAFE' : '#0068FF' }}>
@@ -1687,3 +1735,7 @@ const styles = StyleSheet.create({
   },
   reactionAvatar: { width: 44, height: 44, borderRadius: 22 },
 });
+
+
+
+

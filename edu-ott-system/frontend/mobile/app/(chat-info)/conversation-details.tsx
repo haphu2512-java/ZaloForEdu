@@ -18,6 +18,7 @@ import {
 import { useLocalSearchParams, useRouter, Stack, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
+import Constants from 'expo-constants';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useAuth } from '@/context/auth';
@@ -490,7 +491,8 @@ export default function ConversationDetailsScreen() {
                 try {
                   setInviteLoading(true);
                   const res = await getInviteLink(conversation._id);
-                  setInviteLink(res.inviteLink);
+                  const scheme = Constants.expoConfig?.scheme || 'mobileapp';
+                  setInviteLink(`${scheme}://join-group?code=${encodeURIComponent(res.inviteCode)}`);
                   setQrModalVisible(true);
                 } catch (err: any) {
                   Alert.alert('Lỗi', err.message);

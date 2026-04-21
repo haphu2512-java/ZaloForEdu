@@ -1,10 +1,12 @@
 const Conversation = require('../models/Conversation');
 const ConversationPreference = require('../models/ConversationPreference');
 const Message = require('../models/Message');
+const User = require('../models/User');
 const asyncHandler = require('../utils/asyncHandler');
 const ApiError = require('../utils/apiError');
 const { successResponse } = require('../utils/apiResponse');
 const { encodeCursor, decodeCursor } = require('../utils/cursor');
+const socketService = require('../services/socketService');
 
 const toStr = (id) => id?.toString();
 const getOwnerId = (conversation) => conversation.ownerId || conversation.createdBy;
@@ -49,6 +51,21 @@ const ensureCanUpdateGroupInfo = (conversation, userId) => {
       throw new ApiError(403, 'FORBIDDEN', 'Only owner/admin can update group info');
     }
   }
+};
+
+const emitGroupSystemMessage = async ({ conversationId, senderId, content }) => {
+  const sysMsg = await Message.create({
+    conversationId,
+    senderId,
+    content,
+    type: 'system',
+  });
+  await sysMsg.populate('senderId', 'username avatarUrl fullName');
+  socketService.emitToConversation(conversationId.toString(), 'new_message', sysMsg);
+  await socketService.emitConversationUpdated(conversationId.toString(), {
+    conversationId,
+    latestMessage: sysMsg,
+  });
 };
 
 const listConversations = asyncHandler(async (req, res) => {
@@ -209,6 +226,12 @@ const updateGroupName = asyncHandler(async (req, res) => {
 
   conversation.name = name.trim();
   await conversation.save();
+  const senderName = req.user.fullName || req.user.username;
+  await emitGroupSystemMessage({
+    conversationId: conversation._id,
+    senderId: req.user._id,
+    content: `${senderName} đã đổi tên nhóm thành "${conversation.name}"`,
+  });
   return successResponse(res, conversation, 'Group name updated');
 });
 
@@ -228,6 +251,21 @@ const addGroupMembers = asyncHandler(async (req, res) => {
 
   conversation.participants.push(...validMemberIds);
   await conversation.save();
+
+  const addedUsers = await User.find({ _id: { $in: validMemberIds } }).select('fullName username');
+  const addedNames = addedUsers
+    .map((u) => u.fullName || u.username)
+    .filter(Boolean);
+  const senderName = req.user.fullName || req.user.username;
+  const addedText = addedNames.length > 0
+    ? addedNames.join(', ')
+    : `${validMemberIds.length} thành viên`;
+  await emitGroupSystemMessage({
+    conversationId: conversation._id,
+    senderId: req.user._id,
+    content: `${senderName} đã thêm ${addedText} vào nhóm`,
+  });
+
   return successResponse(res, conversation, 'Members added to group');
 });
 
@@ -259,6 +297,16 @@ const removeGroupMember = asyncHandler(async (req, res) => {
   conversation.participants = conversation.participants.filter((participantId) => toStr(participantId) !== memberId);
   conversation.adminIds = (conversation.adminIds || []).filter((adminId) => toStr(adminId) !== memberId);
   await conversation.save();
+
+  const removedUser = await User.findById(memberId).select('fullName username');
+  const removedName = removedUser?.fullName || removedUser?.username || 'một thành viên';
+  const senderName = req.user.fullName || req.user.username;
+  await emitGroupSystemMessage({
+    conversationId: conversation._id,
+    senderId: req.user._id,
+    content: `${senderName} đã mời ${removedName} ra khỏi nhóm`,
+  });
+
   return successResponse(res, conversation, 'Member removed from group');
 });
 
@@ -280,6 +328,16 @@ const promoteGroupAdmin = asyncHandler(async (req, res) => {
   adminSet.add(memberId);
   conversation.adminIds = [...adminSet];
   await conversation.save();
+
+  const targetUser = await User.findById(memberId).select('fullName username');
+  const targetName = targetUser?.fullName || targetUser?.username || 'một thành viên';
+  const senderName = req.user.fullName || req.user.username;
+  await emitGroupSystemMessage({
+    conversationId: conversation._id,
+    senderId: req.user._id,
+    content: `${senderName} đã cấp quyền phó nhóm cho ${targetName}`,
+  });
+
   return successResponse(res, conversation, 'Member promoted to admin');
 });
 
@@ -295,6 +353,16 @@ const demoteGroupAdmin = asyncHandler(async (req, res) => {
 
   conversation.adminIds = (conversation.adminIds || []).filter((adminId) => toStr(adminId) !== memberId);
   await conversation.save();
+
+  const targetUser = await User.findById(memberId).select('fullName username');
+  const targetName = targetUser?.fullName || targetUser?.username || 'một thành viên';
+  const senderName = req.user.fullName || req.user.username;
+  await emitGroupSystemMessage({
+    conversationId: conversation._id,
+    senderId: req.user._id,
+    content: `${senderName} đã gỡ quyền phó nhóm của ${targetName}`,
+  });
+
   return successResponse(res, conversation, 'Admin role removed');
 });
 
@@ -319,6 +387,16 @@ const transferGroupOwner = asyncHandler(async (req, res) => {
   conversation.adminIds = [...adminSet];
 
   await conversation.save();
+
+  const newOwner = await User.findById(newOwnerId).select('fullName username');
+  const newOwnerName = newOwner?.fullName || newOwner?.username || 'một thành viên';
+  const senderName = req.user.fullName || req.user.username;
+  await emitGroupSystemMessage({
+    conversationId: conversation._id,
+    senderId: req.user._id,
+    content: `${senderName} đã chuyển quyền trưởng nhóm cho ${newOwnerName}`,
+  });
+
   return successResponse(res, conversation, 'Group ownership transferred');
 });
 
@@ -336,6 +414,14 @@ const leaveGroup = asyncHandler(async (req, res) => {
   conversation.participants = conversation.participants.filter((participantId) => toStr(participantId) !== userId);
   conversation.adminIds = (conversation.adminIds || []).filter((adminId) => toStr(adminId) !== userId);
   await conversation.save();
+
+  const senderName = req.user.fullName || req.user.username;
+  await emitGroupSystemMessage({
+    conversationId: conversation._id,
+    senderId: req.user._id,
+    content: `${senderName} đã rời nhóm`,
+  });
+
   return successResponse(res, conversation, 'Left group successfully');
 });
 
@@ -363,6 +449,14 @@ const updateGroupAvatar = asyncHandler(async (req, res) => {
   ensureCanUpdateGroupInfo(conversation, req.user._id);
   conversation.avatarUrl = avatarUrl;
   await conversation.save();
+
+  const senderName = req.user.fullName || req.user.username;
+  await emitGroupSystemMessage({
+    conversationId: conversation._id,
+    senderId: req.user._id,
+    content: `${senderName} đã cập nhật ảnh đại diện nhóm`,
+  });
+
   return successResponse(res, conversation, 'Group avatar updated');
 });
 
@@ -380,6 +474,16 @@ const updateGroupNickname = asyncHandler(async (req, res) => {
 
   conversation.nicknames.set(memberId, nickname.trim());
   await conversation.save();
+
+  const targetUser = await User.findById(memberId).select('fullName username');
+  const targetName = targetUser?.fullName || targetUser?.username || 'một thành viên';
+  const senderName = req.user.fullName || req.user.username;
+  await emitGroupSystemMessage({
+    conversationId: conversation._id,
+    senderId: req.user._id,
+    content: `${senderName} đã đổi biệt danh của ${targetName}`,
+  });
+
   return successResponse(res, conversation, 'Group nickname updated');
 });
 

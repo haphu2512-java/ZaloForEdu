@@ -2,6 +2,7 @@ const crypto = require('crypto');
 const Conversation = require('../models/Conversation');
 const JoinRequest = require('../models/JoinRequest');
 const Message = require('../models/Message');
+const User = require('../models/User');
 const asyncHandler = require('../utils/asyncHandler');
 const ApiError = require('../utils/apiError');
 const { successResponse } = require('../utils/apiResponse');
@@ -29,6 +30,21 @@ const ensureCanPin = (conversation, userId) => {
       throw new ApiError(403, 'FORBIDDEN', 'Only admin/owner can pin messages');
     }
   }
+};
+
+const emitGroupSystemMessage = async ({ conversationId, senderId, content }) => {
+  const sysMsg = await Message.create({
+    conversationId,
+    senderId,
+    content,
+    type: 'system',
+  });
+  await sysMsg.populate('senderId', 'username avatarUrl fullName');
+  socketService.emitToConversation(conversationId.toString(), 'new_message', sysMsg);
+  await socketService.emitConversationUpdated(conversationId.toString(), {
+    conversationId,
+    latestMessage: sysMsg,
+  });
 };
 
 // ==================== FEATURE 2: PINNED ITEMS (Bảng tin) ====================
@@ -93,6 +109,7 @@ const pinMessage = asyncHandler(async (req, res) => {
     type: 'system'
   });
   await pinSysMsg.populate('senderId', 'username avatarUrl fullName');
+  socketService.emitToConversation(id, 'new_message', pinSysMsg);
   await socketService.emitConversationUpdated(id, {
     conversationId: id,
     latestMessage: pinSysMsg
@@ -150,6 +167,7 @@ const unpinMessage = asyncHandler(async (req, res) => {
     type: 'system'
   });
   await unpinSysMsg.populate('senderId', 'username avatarUrl fullName');
+  socketService.emitToConversation(id, 'new_message', unpinSysMsg);
   await socketService.emitConversationUpdated(id, {
     conversationId: id,
     latestMessage: unpinSysMsg
@@ -206,6 +224,12 @@ const updateGroupSettings = asyncHandler(async (req, res) => {
   await conversation.save();
 
   socketService.emitToConversation(id, 'conversation_settings_updated', conversation.settings);
+  const senderName = req.user.fullName || req.user.username;
+  await emitGroupSystemMessage({
+    conversationId: conversation._id,
+    senderId: req.user._id,
+    content: `${senderName} đã cập nhật cài đặt nhóm`,
+  });
 
   return successResponse(res, conversation.settings, 'Group settings updated');
 });
@@ -318,6 +342,16 @@ const processJoinRequest = asyncHandler(async (req, res) => {
     conversationId: id,
     conversationName: conversation.name,
     action,
+  });
+
+  const senderName = req.user.fullName || req.user.username;
+  const requesterName = joinRequest.userId?.fullName || joinRequest.userId?.username || 'một thành viên';
+  await emitGroupSystemMessage({
+    conversationId: conversation._id,
+    senderId: req.user._id,
+    content: action === 'approve'
+      ? `${senderName} đã duyệt ${requesterName} vào nhóm`
+      : `${senderName} đã từ chối yêu cầu tham gia của ${requesterName}`,
   });
 
   return successResponse(res, joinRequest, `Join request ${action}d`);
@@ -437,6 +471,13 @@ const joinByInviteLink = asyncHandler(async (req, res) => {
   conversation.participants.push(req.user._id);
   await conversation.save();
 
+  const senderName = req.user.fullName || req.user.username;
+  await emitGroupSystemMessage({
+    conversationId: conversation._id,
+    senderId: req.user._id,
+    content: `${senderName} đã tham gia nhóm qua link mời`,
+  });
+
   return successResponse(res, conversation, 'Joined group successfully');
 });
 
@@ -463,6 +504,14 @@ const blockMember = asyncHandler(async (req, res) => {
 
   socketService.emitToUser(targetStr, 'removed_from_group', { conversationId: id, reason: 'blocked' });
   socketService.emitToConversation(id, 'member_blocked', { conversationId: id, memberId: targetStr });
+  const targetUser = await User.findById(memberId).select('fullName username');
+  const targetName = targetUser?.fullName || targetUser?.username || 'một thành viên';
+  const senderName = req.user.fullName || req.user.username;
+  await emitGroupSystemMessage({
+    conversationId: conversation._id,
+    senderId: req.user._id,
+    content: `${senderName} đã chặn và mời ${targetName} khỏi nhóm`,
+  });
 
   return successResponse(res, {}, 'Member blocked');
 });
@@ -476,6 +525,14 @@ const unblockMember = asyncHandler(async (req, res) => {
 
   conversation.blockedMembers = (conversation.blockedMembers || []).filter(b => toStr(b) !== toStr(memberId));
   await conversation.save();
+  const targetUser = await User.findById(memberId).select('fullName username');
+  const targetName = targetUser?.fullName || targetUser?.username || 'một thành viên';
+  const senderName = req.user.fullName || req.user.username;
+  await emitGroupSystemMessage({
+    conversationId: conversation._id,
+    senderId: req.user._id,
+    content: `${senderName} đã bỏ chặn ${targetName}`,
+  });
 
   return successResponse(res, {}, 'Member unblocked');
 });

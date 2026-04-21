@@ -17,6 +17,7 @@ export default function LoginPage() {
   const [fieldErrors, setFieldErrors] = useState({});
   const [mounted, setMounted] = useState(false);
   const sessionExpired = searchParams.get("reason") === "session_expired";
+  const redirectTo = searchParams.get("redirect");
 
   useEffect(() => {
     const t = setTimeout(() => setMounted(true), 60);
@@ -66,6 +67,10 @@ export default function LoginPage() {
         
     const result = await login(payload);
     if (result.success) {
+      if (redirectTo && result.role !== "admin") {
+        navigate(redirectTo);
+        return;
+      }
       navigate(result.role === "admin" ? "/admin" : "/chat");
     }
   };
