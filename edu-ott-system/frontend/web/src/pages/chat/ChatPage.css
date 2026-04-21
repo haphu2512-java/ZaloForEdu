@@ -1343,17 +1343,66 @@
   }
 }
 
-.highlight-msg {
-  animation: highlight-pulse 2s ease-out;
+/* ── GHIM HỘI THOẠI (Pin Conversation) ── */
+
+/* Hiện nút ghim khi hover vào item */
+.chat-list-item:hover .pin-conv-btn {
+  opacity: 1 !important;
 }
 
-@keyframes highlight-pulse {
-  0% {
-    background-color: rgba(0, 104, 255, 0.3);
-    box-shadow: 0 0 0 10px rgba(0, 104, 255, 0.1);
-  }
-  100% {
-    background-color: transparent;
-    box-shadow: none;
-  }
-}
+/* Khi đã ghim: thu nhỏ cli-time để không đè lên nút ghim */
+
+/* Viền trái vàng cho conversation đã ghim */
+.chat-list-item.pinned-conv {
+  border-left: 3px solid #F59E0B;
+  padding-left: calc(var(--chat-list-item-px, 12px) - 3px);
+  background: linear-gradient(90deg, rgba(245, 158, 11, 0.06) 0%, transparent 60%);
+}
+
+.chat-list-item.pinned-conv.active {
+  background: linear-gradient(90deg, rgba(245, 158, 11, 0.12) 0%, rgba(0, 104, 255, 0.08) 100%);
+}
+
+/* Divider "Đã ghim" */
+.pin-section-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px 4px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #F59E0B;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  user-select: none;
+}
+
+.pin-section-divider {
+  height: 1px;
+  background: linear-gradient(90deg, rgba(245, 158, 11, 0.3), transparent);
+  margin: 0 14px 2px;
+}
+
+/* ── Context Menu Button (nút ··· / 📌) ── */
+
+/* Mặc định: ẩn với tất cả */
+.conv-ctx-btn {
+  opacity: 0;
+}
+
+/* Hover vào item → hiện nút */
+.chat-list-item:hover .conv-ctx-btn {
+  opacity: 1 !important;
+}
+
+/* Đã ghim → luôn hiện dù không hover */
+.conv-ctx-btn.pinned {
+  opacity: 1;
+}
+
+/* Hover: ẩn cli-time để nút không bị đè */
+.chat-list-item:hover .cli-time {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s;
+}

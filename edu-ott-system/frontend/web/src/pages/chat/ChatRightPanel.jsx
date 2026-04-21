@@ -1,11 +1,14 @@
 import { useState, useEffect } from 'react';
-import { FaBell, FaThumbtack, FaUserPlus, FaUserSecret, FaArrowLeft, FaTrashAlt, FaSignOutAlt, FaLink, FaEllipsisH, FaChevronDown, FaChevronUp, FaCalendarAlt, FaUserTimes, FaKey, FaSync, FaPen, FaCheck, FaTimes, FaPoll } from 'react-icons/fa';
+import { FaBell, FaThumbtack, FaUserPlus, FaUserSecret, FaArrowLeft, FaTrashAlt, FaSignOutAlt, FaLink, FaEllipsisH, FaChevronDown, FaChevronUp, FaCalendarAlt, FaUserTimes, FaKey, FaSync, FaPen, FaCheck, FaTimes, FaFlag, FaTag } from 'react-icons/fa';
 import toast from 'react-hot-toast';
 import { conversationService } from '../../services/conversationService';
 import { pollService } from '../../services/pollService';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { getFileColor, getExt, formatBytes } from './chatUtils';
 import { toAbsoluteUrl } from './MessageBubble';
+import PinnedMessagesPanel from './Modals/PinnedMessagesPanel';
+import ReportUserModal from './Modals/ReportUserModal';
+import ClassifyConversationModal from './Modals/ClassifyConversationModal';
 
 // Tooltip component
 const Tooltip = ({ text, children }) => {
@@ -97,6 +100,16 @@ export const ChatRightPanel = ({
   const [inviteLink, setInviteLink] = useState('');
   const [inviteCode, setInviteCode] = useState('');
   const [blockedMembers, setBlockedMembers] = useState([]);
+  // ── Tính năng mới ──
+  const [showPinnedPanel, setShowPinnedPanel] = useState(false);
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [showClassifyModal, setShowClassifyModal] = useState(false);
+  const [convCategory, setConvCategory] = useState('primary');
+
+  // Sync category từ preference khi đổi conversation
+  useEffect(() => {
+    setConvCategory(activeConversation?.preference?.category || 'primary');
+  }, [activeConversation?._id, activeConversation?.preference?.category]);
 
   useEffect(() => {
     if (rightPanelMode !== 'blocked' || !activeConversation) return;
@@ -127,7 +140,7 @@ export const ChatRightPanel = ({
         const origin = window.location.origin;
         setInviteLink(`${origin}/join/${data.inviteCode}`);
       })
-      .catch(() => {});
+      .catch(() => { });
   }, [activeConversation?._id]);
   
   useEffect(() => {
@@ -198,7 +211,7 @@ export const ChatRightPanel = ({
                 )}
                 {isGroup && !isGroupNameEditing && canEditGroupInfo && (
                   <div style={{ cursor: 'pointer', color: 'var(--z-text-secondary)', padding: '2px' }} onClick={() => { setEditGroupName(activeConversation.name || ''); setIsGroupNameEditing(true); }}>
-                    <svg width="14" height="14" fill="currentColor" viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
+                    <svg width="14" height="14" fill="currentColor" viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z" /></svg>
                   </div>
                 )}
               </div>
@@ -318,7 +331,7 @@ export const ChatRightPanel = ({
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--z-text-primary)', wordBreak: 'break-word' }}>{rem.title}</div>
                             <div style={{ fontSize: 11, color: 'var(--z-primary)', marginTop: 2 }}>{new Date(rem.remindAt).toLocaleString('vi-VN')}</div>
-                            <div style={{ fontSize: 11, color: 'var(--z-text-muted)' }}>{(rem.participants||[]).length} người tham gia</div>
+                            <div style={{ fontSize: 11, color: 'var(--z-text-muted)' }}>{(rem.participants || []).length} người tham gia</div>
                             {rem.status === 'expired' && <div style={{ fontSize: 10, color: '#ef4444' }}>Đã hết hạn</div>}
                           </div>
                           <button title="Sửa" style={{ border: 'none', background: 'none', color: 'var(--z-primary)', cursor: 'pointer', padding: '2px', flexShrink: 0 }}
@@ -475,16 +488,16 @@ export const ChatRightPanel = ({
                 {/* BANNER CHO NON-ADMIN */}
                 {!isPrivileged && (
                   <div style={{ padding: '12px', background: '#f3f4f6', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, color: '#1f2937', fontSize: 13, fontWeight: 500 }}>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zM9 6c0-1.66 1.34-3 3-3s3 1.34 3 3v2H9V6zm9 14H6V10h12v10zm-6-3c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2z"/></svg>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zM9 6c0-1.66 1.34-3 3-3s3 1.34 3 3v2H9V6zm9 14H6V10h12v10zm-6-3c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2z" /></svg>
                     Tính năng chỉ dành cho quản trị viên
                   </div>
                 )}
-                
+
                 {/* 1. Quyền của thành viên (Checkboxes) */}
                 <div style={{ padding: '16px 16px 8px', fontSize: 14, fontWeight: 600, color: isPrivileged ? 'var(--z-text-primary)' : 'var(--z-text-secondary)' }}>
                   Cho phép các thành viên trong nhóm:
                 </div>
-                
+
                 {[
                   { text: 'Thay đổi tên & ảnh đại diện của nhóm', key: 'canMembersUpdateInfo' },
                   { text: 'Ghim tin nhắn, ghi chú, bình chọn lên đầu hội thoại', key: 'canMembersPin' },
@@ -500,8 +513,8 @@ export const ChatRightPanel = ({
                     }}>
                       <span style={{ fontSize: 15, color: 'var(--z-text-primary)' /* Zalo uses primary text for these */, flex: 1, paddingRight: 16 }}>{item.text}</span>
                       <svg width="20" height="20" viewBox="0 0 20 20" fill="none" style={{ color: isChecked ? (isPrivileged ? 'var(--z-primary)' : '#c8cdd4') : '#ccc', flexShrink: 0 }}>
-                        <rect width="20" height="20" rx="4" fill="currentColor"/>
-                        {isChecked && <path d="M14 8l-5 5-2-2" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>}
+                        <rect width="20" height="20" rx="4" fill="currentColor" />
+                        {isChecked && <path d="M14 8l-5 5-2-2" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />}
                       </svg>
                     </div>
                   );
@@ -816,9 +829,62 @@ export const ChatRightPanel = ({
           </div>
         ) : null}
 
-        {/* NÚT CUỐI - Xóa lịch sử hoặc Rời nhóm */}
+        {/* NÚT CUỐI - Xóa lịch sử hoặc Rời nhóm + Tính năng mới */}
         {rightPanelMode === 'default' && (
-          <div style={{ padding: '16px', borderTop: '1px solid var(--z-border)' }}>
+          <div style={{ padding: '12px 16px', borderTop: '1px solid var(--z-border)', display: 'flex', flexDirection: 'column', gap: 8 }}>
+
+            {/* Nút xem tin nhắn đã ghim */}
+            <button
+              onClick={() => setShowPinnedPanel(true)}
+              style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 10, border: '1px solid var(--z-border)', background: 'var(--z-bg-main)', color: 'var(--z-text-primary)', cursor: 'pointer', fontSize: 14, fontWeight: 500 }}
+            >
+              <FaThumbtack size={14} color="#F59E0B" />
+              Tin nhắn đã ghim
+            </button>
+
+            {/* Nút phân loại hội thoại */}
+            <button
+              onClick={() => setShowClassifyModal(true)}
+              style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 10, border: '1px solid var(--z-border)', background: 'var(--z-bg-main)', color: 'var(--z-text-primary)', cursor: 'pointer', fontSize: 14, fontWeight: 500 }}
+            >
+              <FaTag size={14} color="#6366f1" />
+              Phân loại: {(() => {
+                const cats = { primary: 'Chính', work: 'Công việc', family: 'Gia đình', other: 'Khác' };
+                return cats[convCategory] || 'Chính';
+              })()}
+            </button>
+
+            {/* Nút báo cáo (chỉ hiện với hội thoại 1-1) */}
+            {!isGroup && (() => {
+              const otherParticipant = (activeConversation?.participants || []).find(p => {
+                const pid = String(p._id || p.id || p);
+                return pid !== myId;
+              });
+              if (!otherParticipant) return null;
+              const targetId = String(otherParticipant._id || otherParticipant.id || otherParticipant);
+              const targetName = otherParticipant.username || otherParticipant.fullName || 'người dùng này';
+              return (
+                <>
+                  <button
+                    onClick={() => setShowReportModal(true)}
+                    style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 10, border: '1px solid #fee2e2', background: '#fff5f5', color: '#ef4444', cursor: 'pointer', fontSize: 14, fontWeight: 500 }}
+                  >
+                    <FaFlag size={14} />
+                    Báo cáo tài khoản
+                  </button>
+                  {/* Modal báo cáo — phải đặt NGOÀI button, không được lồng bên trong */}
+                  {showReportModal && (
+                    <ReportUserModal
+                      targetUserId={targetId}
+                      targetUserName={targetName}
+                      onClose={() => setShowReportModal(false)}
+                    />
+                  )}
+                </>
+              );
+            })()}
+
+            {/* Nút xóa hoặc rời nhóm */}
             {!isGroup ? (
               <div className="crp-gm-button danger" style={{ marginTop: 0 }} onClick={handleDeleteConversation}>
                 <FaTrashAlt size={14} /> Xóa lịch sử trò chuyện
@@ -954,6 +1020,43 @@ export const ChatRightPanel = ({
           </div>
         );
       })()}
+
+      {/* ── SLIDE-OVER: TIN NHẮN ĐÃ GHIM ── */}
+      {showPinnedPanel && activeConversation && (() => {
+        const isOwnerStr = activeConversation?.ownerId?._id || activeConversation?.ownerId || activeConversation?.createdBy;
+        const isOwnerLocal = isOwnerStr && String(isOwnerStr) === String(myId);
+        const isAdminLocal = activeConversation?.adminIds?.some(aid => String(aid._id || aid) === String(myId)) || isOwnerLocal;
+        const canPinLocal = activeConversation?.settings?.canMembersPin !== false;
+        return (
+          <div
+            style={{ position: 'fixed', inset: 0, zIndex: 3000, display: 'flex', justifyContent: 'flex-end' }}
+            onClick={(e) => { if (e.target === e.currentTarget) setShowPinnedPanel(false); }}
+          >
+            <div style={{ width: 360, background: 'var(--z-bg-sidebar)', height: '100%', boxShadow: '-4px 0 24px rgba(0,0,0,0.18)', display: 'flex', flexDirection: 'column' }}>
+              <PinnedMessagesPanel
+                conversationId={activeConversation._id}
+                isPrivileged={isOwnerLocal || isAdminLocal}
+                canPin={canPinLocal}
+                onClose={() => setShowPinnedPanel(false)}
+                onJumpToMessage={(msgId) => {
+                  const el = document.getElementById(`msg-${msgId}`);
+                  if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); el.classList.add('highlight-msg'); setTimeout(() => el.classList.remove('highlight-msg'), 1500); }
+                }}
+              />
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ── MODAL PHÂN LOẠI HỘI THOẠI ── */}
+      {showClassifyModal && activeConversation && (
+        <ClassifyConversationModal
+          conversationId={activeConversation._id}
+          currentCategory={convCategory}
+          onClose={() => setShowClassifyModal(false)}
+          onUpdated={(newCat) => setConvCategory(newCat)}
+        />
+      )}
 
       {/* MODAL TẮT THÔNG BÁO */}
       {showMuteModal && (
