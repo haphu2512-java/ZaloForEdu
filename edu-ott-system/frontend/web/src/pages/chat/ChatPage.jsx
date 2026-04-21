@@ -107,6 +107,7 @@ export default function ChatPage() {
   const [conversations, setConversations] = useState([]);
   const [selfConversation, setSelfConversation] = useState(null);
   const [activeConversation, setActiveConversation] = useState(null);
+  const [replyToMessage, setReplyToMessage] = useState(null);
 
   const [reminders, setReminders] = useState([]);
   const [joinRequests, setJoinRequests] = useState([]);
@@ -578,6 +579,19 @@ export default function ChatPage() {
     return currentConvId;
   };
 
+  const resolveReply = (msg, existingMsgs) => {
+    if (!msg || !msg.replyTo) return msg;
+    if (typeof msg.replyTo === 'object' && msg.replyTo.content) return msg;
+    
+    const replyId = String(msg.replyTo._id || msg.replyTo);
+    const originalMsg = existingMsgs.find(m => String(m._id || m.id) === replyId);
+    
+    if (originalMsg) {
+      return { ...msg, replyTo: originalMsg };
+    }
+    return msg;
+  };
+
   // ==================== TƯƠNG TÁC ====================
   const handleSendText = async (content) => {
     if (!activeConversation || !content.trim()) return;
@@ -597,9 +611,14 @@ export default function ChatPage() {
     try {
       const currentConvId = await ensureRealConversation();
       const res = await axios.post(`${API_BASE_URL}/messages/send`,
-        { content: content, conversationId: currentConvId },
+        { 
+          content: content, 
+          conversationId: currentConvId,
+          replyTo: replyToMessage?._id
+        },
         { headers: { Authorization: `Bearer ${token}` } }
       );
+      setReplyToMessage(null);
 
       const realMsg = res.data.data || res.data;
       const realMsgId = String(realMsg._id || realMsg.id);
@@ -607,20 +626,26 @@ export default function ChatPage() {
       // Cập nhật tin nhắn tạm bằng tin nhắn thật từ server
       // Nếu socket đã replace temp trước → realMsg đã có trong list, chỉ ensure không bị trùng
       setMessages(prev => {
-        // Kiểm tra realMsg đã có chưa (socket có thể đã add vào rồi)
-        if (prev.some(m => !String(m._id || m.id).startsWith('temp-') && String(m._id || m.id) === realMsgId)) {
-          // Đã có, chỉ xóa temp nếu còn sót
-          return prev.filter(m => m._id !== tempId);
-        }
-        // Chưa có → replace temp bằng real
-        return prev.map(m => m._id === tempId ? {
+        const normalizedMsg = {
           ...realMsg,
           mediaIds: (realMsg.mediaIds || []).map(media =>
             typeof media === 'object' && media.url && !/^https?:\/\//i.test(media.url)
               ? { ...media, url: `${API_ORIGIN}${media.url}` }
               : media
           )
-        } : m);
+        };
+        const resolvedMsg = resolveReply(normalizedMsg, prev);
+
+        if (prev.some(m => !String(m._id || m.id).startsWith('temp-') && String(m._id || m.id) === realMsgId)) {
+          return prev.filter(m => m._id !== tempId);
+        }
+        const tempIdx = prev.findIndex(m => m._id === tempId);
+        if (tempIdx !== -1) {
+          const arr = [...prev];
+          arr[tempIdx] = resolvedMsg;
+          return arr;
+        }
+        return [...prev, resolvedMsg];
       });
 
     } catch (err) {
@@ -947,7 +972,10 @@ export default function ChatPage() {
   const handleDeleteConversationCtx = useCallback(async (conv) => {
     if (!window.confirm(`Xóa lịch sử trò chuyện với "${getConversationName(conv)}"?`)) return;
     try {
-      await conversationService.archiveConversation(conv._id);
+      await conversationService.updateConversationPreference(conv._id, {
+        isHidden: true,
+        clearHistoryAt: new Date().toISOString()
+      });
       setConversations(prev => prev.filter(c => String(c._id) !== String(conv._id)));
       if (String(activeConversation?._id) === String(conv._id)) {
         setActiveConversation(null);
@@ -1536,8 +1564,8 @@ export default function ChatPage() {
                             <span style={{ fontSize: 12, color: 'var(--z-text-muted)', background: 'var(--z-bg-main)', padding: '3px 10px', borderRadius: 10 }}>
                               {item.content}
                               {item.content?.includes('ghim') && pinnedMessages.length > 0 && (
-                                <span 
-                                  style={{ color: 'var(--z-primary)', cursor: 'pointer', fontWeight: 600, marginLeft: 6 }} 
+                                <span
+                                  style={{ color: 'var(--z-primary)', cursor: 'pointer', fontWeight: 600, marginLeft: 6 }}
                                   onClick={() => jumpToMessage(pinnedMessages[pinnedMessages.length - 1]?.messageId?._id || pinnedMessages[pinnedMessages.length - 1]?.messageId)}
                                 >
                                   Xem
@@ -1555,20 +1583,21 @@ export default function ChatPage() {
                             </span>
                           </div>
                         ) : (
-                          <MessageBubble
-                            message={item}
-                            isMe={isMe}
-                            onReaction={handleReaction}
-                            onRecall={handleRecall}
-                            onDelete={handleDelete}
-                            onForward={openShareModal}
-                            onReply={(msg) => console.log('Trả lời:', msg)}
-                            onPin={handlePinMessage}
-                            onUnpin={handleUnpinMessage}
-                            isPinned={pinnedMsgIds.has(String(item._id || item.id))}
-                            onPollVoted={handlePollVoted}
-                            userId={userId}
-                          />
+                           <MessageBubble
+                             message={item}
+                             isMe={isMe}
+                             onReaction={handleReaction}
+                             onRecall={handleRecall}
+                             onDelete={handleDelete}
+                             onForward={openShareModal}
+                             onReply={setReplyToMessage}
+                             onPin={handlePinMessage}
+                             onUnpin={handleUnpinMessage}
+                             isPinned={pinnedMsgIds.has(String(item._id || item.id))}
+                             onPollVoted={handlePollVoted}
+                             userId={userId}
+                             isGroup={activeConversation.type === 'group'}
+                           />
                         )}
                       </React.Fragment>
                     );
@@ -1610,6 +1639,9 @@ export default function ChatPage() {
                 onSendLike={handleSendLike}
                 onUploadFiles={handleUploadFilesFromInput}
                 onShowPoll={() => setShowCreatePollModal(true)}
+                members={activeConversation.participants || []}
+                replyTo={replyToMessage}
+                onCancelReply={() => setReplyToMessage(null)}
               />
             );
           })()}
@@ -1710,67 +1742,67 @@ export default function ChatPage() {
           </div>
         </div>
       )}
-    {/* ── MODALS GHIM & BÌNH CHỌN ── */}
-    {showPinLimitModal && (
-      <PinLimitModal
-        isOpen={showPinLimitModal}
-        onClose={() => setShowPinLimitModal(false)}
-        onReplace={handleForcePin}
-        currentPins={pinnedMessages}
-      />
-    )}
-    {showCreatePollModal && (
-      <CreatePollModal
-        isOpen={showCreatePollModal}
-        onClose={() => setShowCreatePollModal(false)}
-        conversationId={activeConversation?._id}
-      />
-    )}
-    {showAddMemberModal && (
-      <AddMemberModal
-        isOpen={showAddMemberModal}
-        onClose={() => setShowAddMemberModal(false)}
-        activeConversation={activeConversation}
-        friends={friends}
-        onAdded={fetchConversationsData}
-      />
-    )}
-    {showUnpinConfirmModal && (
-      <UnpinConfirmModal
-        isOpen={showUnpinConfirmModal}
-        onClose={() => setShowUnpinConfirmModal(false)}
-        onConfirm={() => {
-          if (unpinTargetId) handleUnpinMessage(unpinTargetId);
-        }}
-      />
-    )}
+      {/* ── MODALS GHIM & BÌNH CHỌN ── */}
+      {showPinLimitModal && (
+        <PinLimitModal
+          isOpen={showPinLimitModal}
+          onClose={() => setShowPinLimitModal(false)}
+          onReplace={handleForcePin}
+          currentPins={pinnedMessages}
+        />
+      )}
+      {showCreatePollModal && (
+        <CreatePollModal
+          isOpen={showCreatePollModal}
+          onClose={() => setShowCreatePollModal(false)}
+          conversationId={activeConversation?._id}
+        />
+      )}
+      {showAddMemberModal && (
+        <AddMemberModal
+          isOpen={showAddMemberModal}
+          onClose={() => setShowAddMemberModal(false)}
+          activeConversation={activeConversation}
+          friends={friends}
+          onAdded={fetchConversationsData}
+        />
+      )}
+      {showUnpinConfirmModal && (
+        <UnpinConfirmModal
+          isOpen={showUnpinConfirmModal}
+          onClose={() => setShowUnpinConfirmModal(false)}
+          onConfirm={() => {
+            if (unpinTargetId) handleUnpinMessage(unpinTargetId);
+          }}
+        />
+      )}
 
-    {/* ── CONTEXT MENU & REPORT ── */}
-    {ctxMenu && (
-      <ConversationContextMenu
-        conv={ctxMenu.conv}
-        position={{ x: ctxMenu.x, y: ctxMenu.y }}
-        onClose={() => setCtxMenu(null)}
-        onPin={(conv) => handlePinConversation(conv)}
-        onClassify={handleClassifyConversation}
-        onHide={handleHideConversation}
-        onDelete={handleDeleteConversationCtx}
-        onReport={(conv) => {
-          const other = getOtherParticipant(conv);
-          if (other) setReportTarget({ id: String(other._id || other.id), name: other.username || other.fullName || 'người dùng' });
-          setCtxMenu(null);
-        }}
-        myId={userId}
-      />
-    )}
+      {/* ── CONTEXT MENU & REPORT ── */}
+      {ctxMenu && (
+        <ConversationContextMenu
+          conv={ctxMenu.conv}
+          position={{ x: ctxMenu.x, y: ctxMenu.y }}
+          onClose={() => setCtxMenu(null)}
+          onPin={(conv) => handlePinConversation(conv)}
+          onClassify={handleClassifyConversation}
+          onHide={handleHideConversation}
+          onDelete={handleDeleteConversationCtx}
+          onReport={(conv) => {
+            const other = getOtherParticipant(conv);
+            if (other) setReportTarget({ id: String(other._id || other.id), name: other.username || other.fullName || 'người dùng' });
+            setCtxMenu(null);
+          }}
+          myId={userId}
+        />
+      )}
 
-    {reportTarget && (
-      <ReportUserModal
-        targetUserId={reportTarget.id}
-        targetUserName={reportTarget.name}
-        onClose={() => setReportTarget(null)}
-      />
-    )}
+      {reportTarget && (
+        <ReportUserModal
+          targetUserId={reportTarget.id}
+          targetUserName={reportTarget.name}
+          onClose={() => setReportTarget(null)}
+        />
+      )}
 
     </div>
   );

@@ -61,28 +61,49 @@ export const useChatSocket = ({
           )
         };
 
+        const resolveReply = (msg, existingMsgs) => {
+          if (!msg || !msg.replyTo) return msg;
+          if (typeof msg.replyTo === 'object' && msg.replyTo.content) return msg;
+
+          const replyId = String(msg.replyTo._id || msg.replyTo);
+          const originalMsg = existingMsgs.find(m => String(m._id || m.id) === replyId);
+
+          if (originalMsg) {
+            return { ...msg, replyTo: originalMsg };
+          }
+          return msg;
+        };
+
         setMessages(prev => {
+          const resolvedMsg = resolveReply(normalizedMsg, prev);
           if (prev.some(m => !String(m._id || m.id).startsWith('temp-') && String(m._id || m.id) === msgIdStr)) return prev;
           const tempIdx = prev.findIndex(m =>
             String(m._id || m.id).startsWith('temp-') &&
-            (m.content || '').trim() === (normalizedMsg.content || '').trim()
+            (m.content || '').trim() === (resolvedMsg.content || '').trim()
           );
-          if (tempIdx !== -1) { const arr = [...prev]; arr[tempIdx] = normalizedMsg; return arr; }
-          return [...prev, normalizedMsg];
+          if (tempIdx !== -1) { const arr = [...prev]; arr[tempIdx] = resolvedMsg; return arr; }
+          return [...prev, resolvedMsg];
         });
 
         socketService.socket?.emit("message_delivered", { messageId: latestMessage._id });
         socketService.socket?.emit("message_seen", { messageId: latestMessage._id });
       } else if (!isMyMessage && latestMessage?.type !== 'system' && latestMessage?.type !== 'system_reminder') {
+        const isMentioned = latestMessage?.mentionAll ||
+          (latestMessage?.mentions || []).some(m => String(m._id || m) === String(userId));
+
         const senderObj = latestMessage?.senderId;
         const senderName = senderObj?.username || senderObj?.fullName || 'Ai đó';
         const shortContent = latestMessage?.content || '[Hình ảnh/File đính kèm]';
         const avatarSrc = senderObj?.avatarUrl || senderObj?.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(senderName)}&background=0068FF&color=fff`;
+
         toast.custom((t) => (
-          <div className={`push-notif-card ${t.visible ? 'entering' : 'leaving'}`} onClick={() => toast.dismiss(t.id)}>
+          <div className={`push-notif-card ${t.visible ? 'entering' : 'leaving'} ${isMentioned ? 'mentioned' : ''}`} onClick={() => toast.dismiss(t.id)}>
             <img src={avatarSrc} alt="" className="push-notif-avatar" />
             <div className="push-notif-body">
-              <div className="push-notif-sender">{senderName}</div>
+              <div className="push-notif-sender">
+                {senderName}
+                {isMentioned && <span className="mention-badge">@ Nhắc đến bạn</span>}
+              </div>
               <div className="push-notif-content">{shortContent}</div>
             </div>
             <span className="push-notif-close">✕</span>
