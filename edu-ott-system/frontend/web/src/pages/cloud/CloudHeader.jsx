@@ -24,7 +24,7 @@ export const CloudHeader = ({ searchQuery, setSearchQuery, onInfo, currentFilter
               { k: 'other', l: t('noteTab') },
             ].map(tab => (
               <button
-                key={tab}
+                key={tab.k}
                 onClick={() => onFilterChange(tab.k)}
                 style={{
                   padding: '4px 12px',

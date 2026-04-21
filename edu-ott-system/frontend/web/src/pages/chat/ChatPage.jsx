@@ -431,6 +431,7 @@ export default function ChatPage() {
     [outgoingRequests]
   );
 
+  const activeIdStr = String(activeConversation?._id || '');
   const { friendConvs, strangerConvs } = useMemo(() => {
     const friendConvs = [];
     const strangerConvs = [];
@@ -454,10 +455,12 @@ export default function ChatPage() {
       if (isOtherFriend) {
         friendConvs.push(conv);
       } else {
-        // Conversation chưa có tin nhắn nào → không hiện trong stranger panel
+        // Conversation chưa có tin nhắn nào → không hiện trong stranger panel và ĐẦY ĐỦ ẩn khỏi sidebar NẾU không đang được active
         const hasMessages = !!conv.latestMessage;
         if (!hasMessages) {
-          friendConvs.push(conv);
+          if (String(conv._id) === activeIdStr) {
+            friendConvs.push(conv);
+          }
           return;
         }
         // Phân loại dựa vào người gửi tin nhắn đầu tiên
@@ -472,7 +475,7 @@ export default function ChatPage() {
       }
     });
     return { friendConvs, strangerConvs };
-  }, [mergedConversations, friendIds, getOtherParticipant, userId]);
+  }, [mergedConversations, friendIds, getOtherParticipant, userId, activeIdStr]);
 
   // Khi navigate từ UserProfileModal với conversation đã populated, inject vào state
   useEffect(() => {
@@ -952,23 +955,17 @@ const handleJoinRequestProcessed = ({ conversationName, action }) => {
       const realMsg = res.data.data || res.data;
       const realMsgId = String(realMsg._id || realMsg.id);
 
-      // Cập nhật tin nhắn tạm bằng tin nhắn thật từ server
-      // Nếu socket đã replace temp trước → realMsg đã có trong list, chỉ ensure không bị trùng
       setMessages(prev => {
-        // Kiểm tra realMsg đã có chưa (socket có thể đã add vào rồi)
-        if (prev.some(m => !String(m._id || m.id).startsWith('temp-') && String(m._id || m.id) === realMsgId)) {
-          // Đã có, chỉ xóa temp nếu còn sót
-          return prev.filter(m => m._id !== tempId);
-        }
-        // Chưa có → replace temp bằng real
-        return prev.map(m => m._id === tempId ? {
+        // Aggressively deduplicate: remove the temp message and any existing real message (e.g., from socket)
+        const filtered = prev.filter(m => String(m._id || m.id) !== tempId && String(m._id || m.id) !== realMsgId);
+        return [...filtered, {
           ...realMsg,
           mediaIds: (realMsg.mediaIds || []).map(media =>
             typeof media === 'object' && media.url && !/^https?:\/\//i.test(media.url)
               ? { ...media, url: `${API_ORIGIN}${media.url}` }
               : media
           )
-        } : m);
+        }];
       });
 
     } catch (err) {
@@ -1000,7 +997,12 @@ const handleJoinRequestProcessed = ({ conversationName, action }) => {
       );
 
       const realMsg = res.data.data || res.data;
-      setMessages(prev => prev.map(m => m._id === tempId ? realMsg : m));
+      const realMsgId = String(realMsg._id || realMsg.id);
+      
+      setMessages(prev => {
+        const filtered = prev.filter(m => String(m._id || m.id) !== tempId && String(m._id || m.id) !== realMsgId);
+        return [...filtered, realMsg];
+      });
 
     } catch (err) {
       console.error("Lỗi gửi Like", err);

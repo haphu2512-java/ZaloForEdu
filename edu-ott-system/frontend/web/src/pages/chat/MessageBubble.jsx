@@ -20,6 +20,19 @@ export function toAbsoluteUrl(url) {
 
 const EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '😡'];
 
+// Render URLs as clickable links
+const renderContent = (text) => {
+  if (!text) return null;
+  const urlRegex = /(https?:\/\/[^\s]+)/g;
+  const parts = text.split(urlRegex);
+  return parts.map((part, i) => {
+    if (part.match(urlRegex)) {
+      return <a key={i} href={part} target="_blank" rel="noopener noreferrer" style={{color: '#0084FF', textDecoration: 'underline'}} onClick={e => e.stopPropagation()}>{part}</a>;
+    }
+    return <span key={i}>{part}</span>;
+  });
+};
+
 export const MessageBubble = ({
   message,
   isMe,
@@ -173,7 +186,7 @@ export const MessageBubble = ({
                         <div style={{ fontSize: '13px', color: isMe ? '#fff' : '#050505', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '230px' }}>{replyTo.content || '[Hình ảnh/File]'}</div>
                       </div>
                     )}
-                    {content && <span>{content}</span>}
+                    {content && <span>{renderContent(content)}</span>}
                   </div>
                 )}
 

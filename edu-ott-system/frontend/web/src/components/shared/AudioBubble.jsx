@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { FaPlay, FaPause } from 'react-icons/fa';
+import './AudioBubble.css';
 
 export function AudioBubble({ url }) {
   const [isPlaying, setIsPlaying] = useState(false);
