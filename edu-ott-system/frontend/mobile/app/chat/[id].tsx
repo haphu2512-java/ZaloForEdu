@@ -35,6 +35,7 @@ import {
 import { API_BASE_URL } from '../../utils/api';
 import { getPinnedMessages, pinMessage, unpinMessage } from '../../utils/groupFeatureService';
 import { getMediaById, uploadMediaForm } from '../../utils/mediaService';
+import { getBlockedUsers, blockOrUnblockUser } from '@/utils/userService';
 import {
   connectSocket,
   joinConversation,
@@ -158,6 +159,9 @@ export default function ChatScreen() {
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [isFetchingMore, setIsFetchingMore] = useState(false);
   const [isSocketReady, setIsSocketReady] = useState(false);
+  const [isBlockedByMe, setIsBlockedByMe] = useState(false);
+  const [isBlockedByThem, setIsBlockedByThem] = useState(false);
+  const [unblockLoading, setUnblockLoading] = useState(false);
   const [showEmojiPanel, setShowEmojiPanel] = useState(false);
   const [showMediaMenu, setShowMediaMenu] = useState(false);
   const [showVoiceRecorder, setShowVoiceRecorder] = useState(false);
@@ -263,6 +267,14 @@ export default function ChatScreen() {
       setConversation(matched);
       if (matched) {
         getPinnedMessages(conversationId).then(setPinnedItems).catch(console.error);
+        if (matched.type !== 'group') {
+           const other = matched.participants?.find((p) => (p._id || p.id || '') !== currentUserId);
+           if (other) {
+             const blockedList = await getBlockedUsers();
+             const targetId = other._id || other.id || '';
+             setIsBlockedByMe(blockedList.some((u: any) => (u._id || u.id || '') === targetId));
+           }
+        }
       }
     } catch (error) {
       console.log('Error loading messages', error);
@@ -819,6 +831,20 @@ export default function ChatScreen() {
     router.push({ pathname: '/conversation-details', params: { id: conversationId } });
   };
 
+  const friendIds = (user?.friends || []).map((f: any) => typeof f === 'string' ? f : f._id || f.id);
+  const isStranger = conversation?.type === 'direct' && otherParticipant && !friendIds.includes(otherParticipant._id || otherParticipant.id || '');
+
+  const handleSendFriendRequest = async () => {
+    if (!otherParticipant) return;
+    try {
+      const { sendFriendRequest } = require('../../utils/friendService');
+      await sendFriendRequest({ toUserId: otherParticipant._id || otherParticipant.id || '' });
+      Alert.alert('✅', 'Đã gửi lời mời kết bạn');
+    } catch (error: any) {
+      Alert.alert('Lỗi', error.message || 'Không thể gửi kết bạn');
+    }
+  };
+
   const handleVoiceCall = () => Alert.alert('Thông báo', 'Tính năng gọi thoại sẽ sớm được cập nhật');
   const handleVideoCall = () => Alert.alert('Thông báo', 'Tính năng gọi video sẽ sớm được cập nhật');
 
@@ -884,7 +910,22 @@ export default function ChatScreen() {
     setActionMenu({ visible: true, options: buttons });
   };
 
-  // ==================== RENDER ====================
+  const handleUnblock = async () => {
+    if (!otherParticipant) return;
+    setUnblockLoading(true);
+    try {
+      const targetId = otherParticipant._id || otherParticipant.id || '';
+      await blockOrUnblockUser(targetId);
+      setIsBlockedByMe(false);
+      Alert.alert('✅', 'Đã bỏ chặn người dùng');
+    } catch (e: any) {
+      Alert.alert('Lỗi', e.message || 'Không thể bỏ chặn');
+    } finally {
+      setUnblockLoading(false);
+    }
+  };
+
+  // ==================== RENDERS THE ATTACHMENT BOX ====================
   const renderMessageStatus = (item: Message) => {
     if ((item.status as any) === 'sending') return <Ionicons name="time-outline" size={11} color="rgba(255,255,255,0.6)" />;
     const seenBy = getNormalizedUserIds(item.seenBy || []).filter((id) => id !== currentUserId);
@@ -981,7 +1022,7 @@ export default function ChatScreen() {
         style={[
           styles.bubbleWrapper,
           isMine ? styles.myWrapper : styles.theirWrapper,
-          isSendingMsg && { opacity: 0.7 }, // Tin nhắn tạm hiện mờ hơn
+          isSendingMsg && { opacity: 0.7 },
         ]}
       >
         {!isMine && (
@@ -1003,7 +1044,7 @@ export default function ChatScreen() {
                     {typeof (replyMsg as any).senderId === 'object' ? (replyMsg as any).senderId?.username : 'Tin nhắn'}
                   </Text>
                   <Text style={{ color: isMine ? 'rgba(255,255,255,0.7)' : colors.muted, fontSize: 12 }} numberOfLines={2}>
-                    {(replyMsg as any).content || 'File đính kèm...'}
+                    {(replyMsg as any).content || 'Tệp đính kèm...'}
                   </Text>
                 </View>
               )}
@@ -1023,13 +1064,13 @@ export default function ChatScreen() {
                     const rawMedia = typeof mediaItem === 'string' ? mediaById[mediaId] : mediaItem;
                     const media = rawMedia ? { ...rawMedia, url: toAbsoluteMediaUrl(rawMedia.url) } : null;
                     const isImage = isImageAttachment(media);
-                    const isAudio = isAudioAttachment(media);
+                    const isAudio = isImage ? false : isAudioAttachment(media);
                     const fileName = media?.fileName || `Tệp đính kèm ${idx + 1}`;
                     const canOpen = !!media?.url;
 
                     if (isImage && media?.url) {
                       return (
-                        <TouchableOpacity key={`${mediaId}-${idx}`} onPress={() => setViewImageUrl(media.url)} activeOpacity={0.9}>
+                        <TouchableOpacity key={`${mediaId}-${idx}`} onPress={() => setViewImageUrl(media.url || null)} activeOpacity={0.9}>
                           <Image source={{ uri: media.url }} style={styles.inlineImage} resizeMode="cover" />
                         </TouchableOpacity>
                       );
@@ -1048,26 +1089,28 @@ export default function ChatScreen() {
                         key={`${mediaId}-${idx}`}
                         disabled={!canOpen}
                         onPress={() => openAttachment(media)}
-                        style={[styles.fileAttachment, { backgroundColor: isMine ? '#1D4ED8' : colors.border }]}
+                        style={[
+                          styles.fileAttachment,
+                          { 
+                            backgroundColor: isMine ? '#E0E7FF' : colors.surface,
+                            borderColor: isMine ? '#C7D2FE' : colors.border,
+                            borderWidth: 1
+                          }
+                        ]}
                       >
-                        <View style={{ width: 40, height: 40, borderRadius: 8, backgroundColor: isMine ? '#DBEAFE20' : colors.tint + '15', alignItems: 'center', justifyContent: 'center' }}>
-                           <Ionicons name="document-text" size={24} color={isMine ? '#DBEAFE' : colors.tint} />
+                        <View style={{ width: 44, height: 44, borderRadius: 10, backgroundColor: isMine ? '#4F46E5' : '#E5E7EB', alignItems: 'center', justifyContent: 'center', marginRight: 10 }}>
+                           <Ionicons name="document" size={24} color={isMine ? '#fff' : '#6B7280'} />
                         </View>
-                        <View style={{ flex: 1 }}>
-                          <Text numberOfLines={2} style={{ color: isMine ? '#DBEAFE' : colors.text, fontSize: 14, fontWeight: '600' }}>
+                        <View style={{ flex: 1, marginRight: 8 }}>
+                          <Text numberOfLines={1} ellipsizeMode="tail" style={{ color: isMine ? '#1E1B4B' : colors.text, fontSize: 14, fontWeight: '600' }}>
                             {fileName}
                           </Text>
-                          {media?.size ? (
-                            <Text style={{ color: isMine ? '#DBEAFE90' : colors.muted, fontSize: 11, marginTop: 2 }}>
-                              {media.size < 1024 * 1024 ? `${(media.size / 1024).toFixed(1)} KB` : `${(media.size / (1024 * 1024)).toFixed(1)} MB`} • {(media.fileName || '').split('.').pop()?.toUpperCase()}
-                            </Text>
-                          ) : (
-                            <Text style={{ color: isMine ? '#DBEAFE90' : colors.muted, fontSize: 11, marginTop: 2 }}>
-                               {(media?.fileName || '').split('.').pop()?.toUpperCase()}
-                            </Text>
-                          )}
+                          <Text style={{ color: isMine ? '#4338CA' : colors.muted, fontSize: 11, marginTop: 2 }}>
+                            {media?.size ? (media.size < 1024 * 1024 ? `${(media.size / 1024).toFixed(1)} KB` : `${(media.size / (1024 * 1024)).toFixed(1)} MB`) : 'FILE'} 
+                            {' • '}{(media?.fileName || '').split('.').pop()?.toUpperCase() || 'DAT'}
+                          </Text>
                         </View>
-                        {canOpen && <Ionicons name="download-outline" size={20} color={isMine ? '#DBEAFE' : colors.muted} />}
+                        {canOpen && <Ionicons name="cloud-download-outline" size={20} color={isMine ? '#4F46E5' : colors.muted} />}
                       </TouchableOpacity>
                     );
                   })}
@@ -1167,6 +1210,19 @@ export default function ChatScreen() {
         />
       )}
 
+      {isStranger && !isBlockedByMe && (
+        <View style={{ backgroundColor: '#F0F5FF', padding: 12, margin: 16, borderRadius: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', zIndex: 10 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+             <Ionicons name="person-add" size={18} color="#0068FF" />
+             <Text style={{ marginLeft: 8, color: '#4B5563', fontSize: 13, flex: 1 }}>Bạn và <Text style={{ fontWeight: 'bold' }}>{otherParticipant?.username || 'người này'}</Text> chưa kết bạn</Text>
+          </View>
+          <TouchableOpacity onPress={handleSendFriendRequest} style={{ borderWidth: 1, borderColor: '#0068FF', borderRadius: 20, paddingHorizontal: 12, paddingVertical: 6, flexDirection: 'row', alignItems: 'center', marginLeft: 8, backgroundColor: '#fff' }}>
+             <Ionicons name="person-add" size={14} color="#0068FF" />
+             <Text style={{ marginLeft: 4, color: '#0068FF', fontWeight: '600', fontSize: 13 }}>Gửi kết bạn</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
       <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding" keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}>
         <FlatList
           data={messages}
@@ -1210,7 +1266,14 @@ export default function ChatScreen() {
           </View>
         )}
 
-        {showVoiceRecorder ? (
+        {isBlockedByMe ? (
+          <View style={[styles.inputBar, { borderTopColor: colors.border, backgroundColor: colors.surface, paddingBottom: Math.max(12, insets.bottom), alignItems: 'center', justifyContent: 'center', paddingVertical: 12, flexDirection: 'column' }]}>
+            <Text style={{ color: colors.muted, marginBottom: 8 }}>Bạn đã chặn người dùng này</Text>
+            <TouchableOpacity onPress={handleUnblock} disabled={unblockLoading} style={{ backgroundColor: '#DBEAFE', paddingHorizontal: 20, paddingVertical: 8, borderRadius: 20 }}>
+              {unblockLoading ? <ActivityIndicator size="small" color={colors.tint} /> : <Text style={{ color: colors.tint, fontWeight: 'bold' }}>BỎ CHẶN</Text>}
+            </TouchableOpacity>
+          </View>
+        ) : showVoiceRecorder ? (
           <View style={[styles.voiceRecorderWrap, { borderTopColor: colors.border, backgroundColor: colors.surface, paddingBottom: Math.max(12, insets.bottom) }]}>
             <VoiceRecorderMobile
               onCancel={() => setShowVoiceRecorder(false)}
@@ -1461,7 +1524,7 @@ const styles = StyleSheet.create({
   msgMeta: { flexDirection: 'row', alignItems: 'center', marginTop: 4, gap: 2 },
   inlineImage: { width: 200, height: 160, borderRadius: 12 },
   audioAttachment: { maxWidth: 260 },
-  fileAttachment: { flexDirection: 'row', alignItems: 'center', gap: 8, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 8 },
+  fileAttachment: { flexDirection: 'row', alignItems: 'center', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10, minWidth: 240, maxWidth: 260 },
   replyPreview: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 8, borderTopWidth: 1, gap: 8 },
   replyPreviewBar: { width: 3, height: '100%', borderRadius: 2, minHeight: 30 },
   inputBar: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingTop: 10, borderTopWidth: StyleSheet.hairlineWidth, gap: 6 },

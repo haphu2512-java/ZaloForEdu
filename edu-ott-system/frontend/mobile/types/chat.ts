@@ -54,6 +54,8 @@ export interface Conversation {
     nickname?: string | null;
     isHidden?: boolean;
     isDeleted?: boolean;
+    isPinned?: boolean;
+    isMuted?: boolean;
   } | null;
   lastMessageAt?: string | null;
   createdAt: string;
