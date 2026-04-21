@@ -20,6 +20,7 @@ const sendMessage = asyncHandler(async (req, res) => {
   }
 
   const Conversation = require('../models/Conversation');
+  const User = require('../models/User');
   const conversation = await Conversation.findById(conversationId);
   if (!conversation) throw new ApiError(404, 'CONVERSATION_NOT_FOUND', 'Conversation not found');
 
@@ -46,26 +47,23 @@ const sendMessage = asyncHandler(async (req, res) => {
     }
   }
 
-  // Nếu là chat nhóm, kiểm tra quyền gửi tin nhắn
-  if (conversation.type === 'group') {
-    const isAdmin = (conversation.adminIds || []).some(id => toStr(id) === toStr(req.user._id));
-    const isOwner = toStr(conversation.ownerId || conversation.createdBy) === toStr(req.user._id);
-    if (conversation.settings?.canMembersSendMessages === false && !isAdmin && !isOwner) {
-      throw new ApiError(403, 'FORBIDDEN', 'Chỉ Admin mới có quyền gửi tin nhắn trong nhóm này');
-    }
-  }
-
-  // Nếu là chat 1-1, kiểm tra xem có ai bị block không
+  // Chat 1-1: kiểm tra block + messagePrivacy
   if (conversation.type === 'direct') {
     const otherParticipantId = conversation.participants.find(p => toStr(p) !== toStr(req.user._id));
     if (otherParticipantId) {
       const currentUser = await User.findById(req.user._id);
-      const otherUser = await User.findById(otherParticipantId);
-      if (currentUser && currentUser.blockedUsers && currentUser.blockedUsers.some(id => toStr(id) === toStr(otherParticipantId))) {
+      const otherUser = await User.findById(otherParticipantId).select('blockedUsers messagePrivacy friends');
+      if (currentUser?.blockedUsers?.some(id => toStr(id) === toStr(otherParticipantId))) {
         throw new ApiError(403, 'FORBIDDEN', 'Bạn đã chặn người này');
       }
-      if (otherUser && otherUser.blockedUsers && otherUser.blockedUsers.some(id => toStr(id) === toStr(req.user._id))) {
+      if (otherUser?.blockedUsers?.some(id => toStr(id) === toStr(req.user._id))) {
         throw new ApiError(403, 'FORBIDDEN', 'Bạn đã bị người này chặn');
+      }
+      if (otherUser?.messagePrivacy === 'friends') {
+        const isFriend = (otherUser.friends || []).some(f => toStr(f) === toStr(req.user._id));
+        if (!isFriend) {
+          throw new ApiError(403, 'PRIVACY_RESTRICTED', 'Người dùng này chỉ nhận tin nhắn từ bạn bè');
+        }
       }
     }
   }

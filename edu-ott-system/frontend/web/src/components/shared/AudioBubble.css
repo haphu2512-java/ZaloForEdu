@@ -1,0 +1,102 @@
+.mdc-audio-bubble {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: #E8F4FD;
+  border: 1px solid #D1E5F7;
+  border-radius: 20px;
+  padding: 8px 14px;
+  min-width: 220px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+[data-theme="dark"] .mdc-audio-bubble { 
+  background: #1B3147 !important; 
+  border-color: #24415C !important; 
+}
+
+.mdc-audio-play-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--z-primary, #0068FF);
+  color: white;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: transform 0.15s, background 0.15s;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
+}
+.mdc-audio-play-btn:active {
+  transform: scale(0.9);
+}
+.mdc-audio-play-btn:hover { 
+  background: var(--z-primary-hover, #0056cc); 
+}
+
+.mdc-audio-waveform {
+  flex: 1;
+  position: relative;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  background: rgba(0,0,0,0.04);
+  border-radius: 4px;
+  overflow: hidden;
+  padding: 0 4px;
+}
+
+.mdc-audio-progress {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  background: rgba(0, 104, 255, 0.15);
+  transition: width 0.1s linear;
+  pointer-events: none;
+  border-radius: 4px;
+}
+
+.mdc-audio-bars {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 4px;
+}
+
+.mdc-audio-bar {
+  flex: 1;
+  background: var(--z-primary, #0068FF);
+  border-radius: 2px;
+  opacity: 0.7;
+}
+
+.mdc-audio-time {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--z-text-secondary, #6B7280);
+  font-variant-numeric: tabular-nums;
+  min-width: 36px;
+  text-align: right;
+}
+
+/* KHI NẰM Ở BUBBLE CỦA NGƯỜI KHÁC (THEM) */
+.mdc-msg-wrap.them .mdc-audio-bubble,
+.mdc-msg-wrap:not(.me) .mdc-audio-bubble {
+  background: var(--z-bg-main, #F3F4F6);
+  border-color: var(--z-border, #E5E7EB);
+}
+[data-theme="dark"] .mdc-msg-wrap.them .mdc-audio-bubble {
+  background: #2a2a2a !important; 
+  border-color: #3a3a3a !important;
+}
+
+/* KHI NẰM Ở BUBBLE CỦA MÌNH (ME) - Default above handles this well with #E8F4FD */
+.mdc-msg-wrap.me .mdc-audio-bubble {
+  background: #E8F4FD;
+  border-color: #D1E5F7;
+}

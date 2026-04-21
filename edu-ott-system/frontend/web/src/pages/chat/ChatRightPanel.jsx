@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { FaBell, FaThumbtack, FaUserPlus, FaUserSecret, FaArrowLeft, FaTrashAlt, FaSignOutAlt, FaLink, FaEllipsisH, FaChevronDown, FaChevronUp, FaCalendarAlt, FaUserTimes, FaKey, FaSync, FaPen, FaCheck, FaTimes, FaFlag, FaTag } from 'react-icons/fa';
+import { FaBell, FaBellSlash, FaThumbtack, FaUserPlus, FaUserSecret, FaArrowLeft, FaTrashAlt, FaSignOutAlt, FaLink, FaEllipsisH, FaChevronDown, FaChevronUp, FaCalendarAlt, FaUserTimes, FaKey, FaSync, FaPen, FaCheck, FaTimes, FaFlag, FaTag, FaPoll } from 'react-icons/fa';
 import toast from 'react-hot-toast';
 import { conversationService } from '../../services/conversationService';
 import { pollService } from '../../services/pollService';
@@ -75,10 +75,12 @@ export const ChatRightPanel = ({
   handleProcessJoinRequest,
   pendingEditReminder,
   onPendingEditConsumed,
+  onShowReminderList = () => {},
   onShowAddMember,
   onShowPoll,
   pinnedMessages = [],
-  setPinnedMessages,
+  onUnpin,
+  onJump,
 }) => {
   const { t } = useLanguage();
 
@@ -113,6 +115,7 @@ export const ChatRightPanel = ({
 
   useEffect(() => {
     if (rightPanelMode !== 'blocked' || !activeConversation) return;
+    if (activeConversation.type !== 'group' && activeConversation.roomModel !== 'Group') return;
     conversationService.listBlockedMembers(activeConversation._id)
       .then(res => setBlockedMembers(res.data || []))
       .catch(() => setBlockedMembers([]));
@@ -162,6 +165,19 @@ export const ChatRightPanel = ({
   const isAdmin = activeConversation?.adminIds?.some(aid => (aid._id || aid) === myId) || isOwner;
   const isPrivileged = isOwner || isAdmin;
   const isGroup = activeConversation?.type === 'group' || activeConversation?.roomModel === 'Group';
+
+  const mutedUntil = activeConversation?.preference?.mutedUntil;
+  const isMuted = mutedUntil && new Date(mutedUntil) > new Date();
+
+  const openMuteModal = () => {
+    if (isMuted) {
+      // Đang mute → bật lại thông báo ngay, không cần modal
+      handleMute(0);
+      return;
+    }
+    setMuteOption(60);
+    setShowMuteModal(true);
+  };
   const canEditGroupInfo = isPrivileged || activeConversation?.settings?.canMembersUpdateInfo !== false;
 
   const getMemberRole = (member) => {
@@ -178,7 +194,7 @@ export const ChatRightPanel = ({
 
   return (
     <>
-      <aside className="chat-right-panel" style={{ width: 320, background: 'var(--z-bg-sidebar)', borderLeft: '1px solid var(--z-border)', display: 'flex', flexDirection: 'column' }}>
+      <aside className="chat-right-panel" style={{ background: 'var(--z-bg-sidebar)', borderLeft: '1px solid var(--z-border)', display: 'flex', flexDirection: 'column' }}>
         {rightPanelMode === 'default' ? (
           <>
             {/* HEADER */}
@@ -218,9 +234,11 @@ export const ChatRightPanel = ({
 
               {/* ACTION BUTTONS */}
               <div className="crp-actions" style={{ display: 'flex', justifyContent: 'center', gap: 16, marginTop: 16, width: '100%' }}>
-                <div className="crp-action-btn" style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, cursor: 'pointer', color: 'var(--z-text-primary)' }} onClick={() => setShowMuteModal(true)}>
-                  <div className="crp-action-icon" style={{ background: 'var(--z-bg-main)', width: 36, height: 36, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><FaBell size={16} /></div>
-                  <span style={{ fontSize: 12 }}>Tắt TB</span>
+                <div className="crp-action-btn" style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, cursor: 'pointer', color: isMuted ? 'var(--z-primary)' : 'var(--z-text-primary)' }} onClick={openMuteModal}>
+                  <div className="crp-action-icon" style={{ background: isMuted ? 'var(--z-primary-light, #e8f0fe)' : 'var(--z-bg-main)', width: 36, height: 36, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    {isMuted ? <FaBellSlash size={16} color="var(--z-primary)" /> : <FaBell size={16} />}
+                  </div>
+                  <span style={{ fontSize: 12 }}>{isMuted ? 'Bật TB' : 'Tắt TB'}</span>
                 </div>
 
                 {!isGroup ? (
@@ -316,34 +334,21 @@ export const ChatRightPanel = ({
               {isGroup && (
                 <Accordion title={<span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><FaCalendarAlt size={13} /> Danh sách nhắc hẹn</span>} defaultOpen={false}>
                   <div style={{ padding: '8px 16px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
+                    <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
                       <button
-                        style={{ border: 'none', background: 'var(--z-primary)', color: 'white', fontSize: 11, cursor: 'pointer', padding: '4px 10px', borderRadius: 12 }}
+                        onClick={onShowReminderList}
+                        style={{ flex: 1, padding: '7px 10px', borderRadius: 8, border: '1px solid var(--z-border)', background: 'var(--z-bg-main)', color: 'var(--z-text-primary)', fontSize: 12, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
+                      >
+                        <FaCalendarAlt size={12} /> Xem tất cả ({reminders.length})
+                      </button>
+                      <button
+                        data-create-reminder
+                        style={{ flex: 1, border: 'none', background: 'var(--z-primary)', color: 'white', fontSize: 12, cursor: 'pointer', padding: '7px 10px', borderRadius: 8, fontWeight: 600 }}
                         onClick={() => { setRemTitle(''); setRemTime(''); setShowAddReminder(true); }}
                       >+ Tạo mới</button>
                     </div>
-                    {reminders.length === 0 ? (
+                    {reminders.length === 0 && (
                       <div style={{ fontSize: 12, color: 'var(--z-text-muted)', textAlign: 'center', padding: '12px 0' }}>Chưa có nhắc hẹn nào</div>
-                    ) : (
-                      reminders.map((rem, idx) => (
-                        <div key={rem._id || `rem-${idx}`} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '8px 0', borderBottom: '1px solid var(--z-border)' }}>
-                          <FaCalendarAlt size={12} color="var(--z-primary)" style={{ marginTop: 3, flexShrink: 0 }} />
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--z-text-primary)', wordBreak: 'break-word' }}>{rem.title}</div>
-                            <div style={{ fontSize: 11, color: 'var(--z-primary)', marginTop: 2 }}>{new Date(rem.remindAt).toLocaleString('vi-VN')}</div>
-                            <div style={{ fontSize: 11, color: 'var(--z-text-muted)' }}>{(rem.participants || []).length} người tham gia</div>
-                            {rem.status === 'expired' && <div style={{ fontSize: 10, color: '#ef4444' }}>Đã hết hạn</div>}
-                          </div>
-                          <button title="Sửa" style={{ border: 'none', background: 'none', color: 'var(--z-primary)', cursor: 'pointer', padding: '2px', flexShrink: 0 }}
-                            onClick={() => { setEditingReminder(rem); setEditRemTitle(rem.title); setEditRemTime(new Date(rem.remindAt).toISOString().slice(0, 16)); }}>
-                            <FaPen size={10} />
-                          </button>
-                          <button title="Xóa" style={{ border: 'none', background: 'none', color: '#ef4444', cursor: 'pointer', padding: '2px', flexShrink: 0 }}
-                            onClick={() => { if (window.confirm(`Hủy nhắc hẹn "${rem.title}"?`)) handleDeleteReminder(rem._id); }}>
-                            <FaTrashAlt size={11} />
-                          </button>
-                        </div>
-                      ))
                     )}
                   </div>
                 </Accordion>
@@ -353,33 +358,33 @@ export const ChatRightPanel = ({
               {/* GHIM & GHI CHÚ */}
               <Accordion title={<span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><FaThumbtack size={13} /> Tin nhắn đã ghim</span>} defaultOpen={false}>
                 <div style={{ padding: '8px 16px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
+                    <button
+                      style={{ border: 'none', background: 'var(--z-primary)', color: 'white', fontSize: 11, cursor: 'pointer', padding: '4px 10px', borderRadius: 12 }}
+                      onClick={() => setShowPinnedPanel(true)}
+                    >Xem tất cả</button>
+                  </div>
                   {pinnedMessages.length === 0 ? (
                     <div style={{ fontSize: 12, color: 'var(--z-text-muted)', textAlign: 'center', padding: '12px 0' }}>Chưa có tin nhắn ghim nào</div>
                   ) : (
-                    pinnedMessages.map((pin, idx) => (
-                      <div key={pin._id || idx} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '8px 0', borderBottom: '1px solid var(--z-border)' }}>
+                    pinnedMessages.slice(0, 3).map((pin, idx) => (
+                      <div key={pin._id || idx} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '8px 0', borderBottom: '1px solid var(--z-border)', cursor: 'pointer' }}
+                        onClick={() => onJump && onJump(pin.messageId?._id || pin.messageId)}
+                      >
                         <FaThumbtack size={10} color="#F59E0B" style={{ marginTop: 4, flexShrink: 0 }} />
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ fontSize: 13, color: 'var(--z-text-primary)', wordBreak: 'break-word', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {pin.messageId?.content || '[Hình ảnh/File]'}
+                            {pin.messageId?.content || (pin.messageId?.mediaIds?.length > 0 ? '[Hình ảnh]' : (pin.messageId?.attachments?.length > 0 ? '[Tập tin]' : '[Tin nhắn]'))}
                           </div>
                           <div style={{ fontSize: 11, color: 'var(--z-text-muted)', marginTop: 2 }}>
                             {new Date(pin.pinnedAt || pin.createdAt).toLocaleDateString('vi-VN')}
                           </div>
                         </div>
                         <button title="Bỏ ghim" style={{ border: 'none', background: 'none', color: '#ef4444', cursor: 'pointer', padding: '2px', flexShrink: 0 }}
-                          onClick={async () => {
+                          onClick={(e) => {
+                            e.stopPropagation();
                             if (window.confirm('Bỏ ghim tin nhắn này?')) {
-                              try {
-                                const msgId = pin.messageId?._id || pin.messageId;
-                                await conversationService.unpinMessage(activeConversation._id, msgId);
-                                if (setPinnedMessages) {
-                                    setPinnedMessages(prev => prev.filter(p => (p.messageId?._id || p.messageId) !== msgId));
-                                }
-                                toast.success('Đã bỏ ghim');
-                              } catch (err) {
-                                toast.error('Lỗi bỏ ghim');
-                              }
+                              onUnpin && onUnpin(pin.messageId?._id || pin.messageId);
                             }
                           }}>
                           <FaTimes size={11} />
@@ -603,7 +608,7 @@ export const ChatRightPanel = ({
                     )}
                   </div>
                 )}
-                {isPrivileged && (
+                {isPrivileged && isGroup && (
                   <div style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer' }} onClick={() => setRightPanelMode('blocked')}>
                     <FaUserTimes size={18} color="var(--z-text-secondary)" />
                     <span style={{ fontSize: 15, color: 'var(--z-text-primary)' }}>Chặn khỏi nhóm</span>
@@ -807,19 +812,25 @@ export const ChatRightPanel = ({
               {blockedMembers.length === 0 ? (
                 <div style={{ textAlign: 'center', color: 'var(--z-text-muted)', fontSize: 13, padding: '20px 0' }}>Chưa có ai bị chặn</div>
               ) : blockedMembers.map(u => {
-                const uid = String(u._id || u);
+                const uid = typeof u === 'string' ? u : (u.id || u._id || String(u));
                 const name = u.username || 'Người dùng';
+                
+                const handleUnblock = async () => {
+                  try {
+                    await conversationService.unblockMember(activeConversation._id, uid);
+                    toast.success(`Đã bỏ chặn ${name}`);
+                    const res = await conversationService.listBlockedMembers(activeConversation._id);
+                    setBlockedMembers(res.data || []);
+                  } catch (err) {
+                    toast.error(`Lỗi: ${err?.response?.data?.message || err?.message}`);
+                  }
+                };
+
                 return (
                   <div key={uid} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 0', borderBottom: '1px solid var(--z-border)' }}>
                     <img src={u.avatarUrl || 'https://i.pravatar.cc/150'} style={{ width: 40, height: 40, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} alt="" />
                     <div style={{ flex: 1, fontSize: 14, fontWeight: 500, color: 'var(--z-text-primary)' }}>{name}</div>
-                    <button onClick={async () => {
-                      try {
-                        await conversationService.unblockMember(activeConversation._id, uid);
-                        toast.success(`Đã bỏ chặn ${name}`);
-                        setBlockedMembers(prev => prev.filter(b => String(b._id || b) !== uid));
-                      } catch { toast.error('Lỗi bỏ chặn'); }
-                    }} style={{ padding: '5px 14px', borderRadius: 8, border: 'none', background: 'var(--z-bg-main)', color: 'var(--z-primary)', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                    <button onClick={handleUnblock} style={{ padding: '5px 14px', borderRadius: 8, border: 'none', background: 'var(--z-bg-main)', color: 'var(--z-primary)', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
                       Bỏ chặn
                     </button>
                   </div>
@@ -832,15 +843,6 @@ export const ChatRightPanel = ({
         {/* NÚT CUỐI - Xóa lịch sử hoặc Rời nhóm + Tính năng mới */}
         {rightPanelMode === 'default' && (
           <div style={{ padding: '12px 16px', borderTop: '1px solid var(--z-border)', display: 'flex', flexDirection: 'column', gap: 8 }}>
-
-            {/* Nút xem tin nhắn đã ghim */}
-            <button
-              onClick={() => setShowPinnedPanel(true)}
-              style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 10, border: '1px solid var(--z-border)', background: 'var(--z-bg-main)', color: 'var(--z-text-primary)', cursor: 'pointer', fontSize: 14, fontWeight: 500 }}
-            >
-              <FaThumbtack size={14} color="#F59E0B" />
-              Tin nhắn đã ghim
-            </button>
 
             {/* Nút phân loại hội thoại */}
             <button
@@ -979,11 +981,23 @@ export const ChatRightPanel = ({
                       <button key={opt.label}
                         style={{ padding: '6px 14px', fontSize: 13, border: `1.5px solid ${isActive ? 'var(--z-primary)' : 'var(--z-border)'}`, borderRadius: 20, cursor: 'pointer', background: isActive ? 'rgba(0,104,255,0.08)' : 'transparent', color: isActive ? 'var(--z-primary)' : 'var(--z-text-primary)', fontWeight: isActive ? 600 : 400, transition: 'all .15s' }}
                         onClick={() => {
-                          if (opt.special === 'custom') return; // do nothing — user edits datetime input
-                          let d = new Date();
-                          if (opt.special === 'tomorrow9') { d.setDate(d.getDate() + 1); d.setHours(9, 0, 0, 0); }
-                          else d = new Date(d.getTime() + opt.mins * 60000);
-                          setTime(d.toISOString().slice(0, 16));
+                          if (opt.special === 'custom') return;
+                          const now = new Date();
+                          let d;
+                          if (opt.special === 'tomorrow9') { 
+                            d = new Date(now);
+                            d.setDate(d.getDate() + 1); 
+                            d.setHours(9, 0, 0, 0); 
+                          } else {
+                            d = new Date(now.getTime() + opt.mins * 60000);
+                          }
+                          // Format to local datetime-local format (YYYY-MM-DDTHH:mm)
+                          const year = d.getFullYear();
+                          const month = String(d.getMonth() + 1).padStart(2, '0');
+                          const day = String(d.getDate()).padStart(2, '0');
+                          const hours = String(d.getHours()).padStart(2, '0');
+                          const minutes = String(d.getMinutes()).padStart(2, '0');
+                          setTime(`${year}-${month}-${day}T${hours}:${minutes}`);
                         }}>
                         {opt.label}
                       </button>
@@ -1038,10 +1052,7 @@ export const ChatRightPanel = ({
                 isPrivileged={isOwnerLocal || isAdminLocal}
                 canPin={canPinLocal}
                 onClose={() => setShowPinnedPanel(false)}
-                onJumpToMessage={(msgId) => {
-                  const el = document.getElementById(`msg-${msgId}`);
-                  if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); el.classList.add('highlight-msg'); setTimeout(() => el.classList.remove('highlight-msg'), 1500); }
-                }}
+                onJumpToMessage={onJump}
               />
             </div>
           </div>
@@ -1069,7 +1080,6 @@ export const ChatRightPanel = ({
                 { label: 'Trong 4 giờ', val: 240 },
                 { label: 'Trong 8 giờ', val: 480 },
                 { label: 'Cho đến khi mở lại', val: -1 },
-                { label: '🔔 Bật lại thông báo', val: 0 },
               ].map(opt => (
                 <label key={opt.val} className="mute-opt">
                   <input type="radio" name="mute_duration" checked={muteOption === opt.val} onChange={() => setMuteOption(opt.val)} />

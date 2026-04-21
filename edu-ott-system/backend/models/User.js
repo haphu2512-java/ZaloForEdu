@@ -63,6 +63,11 @@ const userSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+    messagePrivacy: {
+      type: String,
+      enum: ['everyone', 'friends'],
+      default: 'everyone',
+    },
     isEmailVerified: {
       type: Boolean,
       default: false,
@@ -80,6 +85,26 @@ const userSchema = new mongoose.Schema(
       default: null,
     },
     resetPasswordExpires: {
+      type: Date,
+      default: null,
+    },
+    isPhoneVerified: {
+      type: Boolean,
+      default: false,
+    },
+    otpCode: {
+      type: String,
+      default: null,
+    },
+    otpExpires: {
+      type: Date,
+      default: null,
+    },
+    otpType: {
+      type: String,
+      default: null,
+    },
+    lastOtpSentAt: {
       type: Date,
       default: null,
     },

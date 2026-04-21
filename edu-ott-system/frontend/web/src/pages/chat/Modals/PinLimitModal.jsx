@@ -5,7 +5,7 @@ export default function PinLimitModal({ isOpen, onClose, onReplace, currentPins 
   if (!isOpen) return null;
 
   // Lấy ghim cũ nhất (thường là cái đầu tiên trong danh sách)
-  const oldestPin = currentPins[currentPins.length - 1]; 
+  const oldestPin = currentPins[0]; 
   const displayContent = oldestPin?.messageId?.content || '[Hình ảnh/File]';
   const senderName = oldestPin?.messageId?.senderId?.fullName || oldestPin?.messageId?.senderId?.username || 'Thành viên';
 

@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  FaThumbtack, FaTag, FaEyeSlash, FaFlag, FaChevronRight, FaCheck,
+  FaThumbtack, FaTag, FaEyeSlash, FaFlag, FaChevronRight, FaCheck, FaTrashAlt,
 } from 'react-icons/fa';
 
 const CATEGORIES = [
@@ -30,6 +30,7 @@ export default function ConversationContextMenu({
   onPin,
   onClassify,
   onHide,
+  onDelete,
   onReport,
   myId,
 }) {
@@ -171,6 +172,14 @@ export default function ConversationContextMenu({
         <FaEyeSlash size={13} />,
         'Ẩn hội thoại',
         () => { onHide(conv); onClose(); }
+      )}
+
+      {/* ── Xóa hội thoại ── */}
+      {menuItem(
+        <FaTrashAlt size={13} />,
+        'Xóa cuộc hội thoại',
+        () => { onDelete(conv); onClose(); },
+        { danger: true }
       )}
 
       {/* ── Báo cáo (chỉ 1-1) ── */}

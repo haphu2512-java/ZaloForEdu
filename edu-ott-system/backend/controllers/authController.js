@@ -235,6 +235,14 @@ const login = asyncHandler(async (req, res) => {
     throw new ApiError(403, 'ACCOUNT_LOCKED', user.banReason || 'Tài khoản của bạn đã bị khóa.');
   }
 
+  // 2. Kiểm tra tài khoản đã xác thực chưa
+  if (user.email && !user.isEmailVerified) {
+    throw new ApiError(403, 'EMAIL_NOT_VERIFIED', 'Tài khoản chưa được xác thực. Vui lòng nhập mã OTP đã gửi đến email.');
+  }
+  if (user.phone && !user.isPhoneVerified) {
+    throw new ApiError(403, 'PHONE_NOT_VERIFIED', 'Tài khoản chưa được xác thực. Vui lòng nhập mã OTP đã gửi đến số điện thoại.');
+  }
+
   const passwordToCompare = user.passwordHash || user.password;
   if (!passwordToCompare) {
     throw new ApiError(401, 'INVALID_CREDENTIALS', 'Tài khoản không hợp lệ');

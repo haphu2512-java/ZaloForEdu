@@ -100,7 +100,7 @@ const listConversations = asyncHandler(async (req, res) => {
   }
 
   const conversations = await Conversation.find(query)
-    .populate('participants', 'username email avatarUrl isOnline lastSeen')
+    .populate('participants', 'username email avatarUrl isOnline lastSeen messagePrivacy')
     .populate('ownerId', 'username avatarUrl')
     .populate('adminIds', 'username avatarUrl')
     .sort({ lastMessageAt: -1, _id: -1 })
@@ -200,6 +200,7 @@ const createConversation = asyncHandler(async (req, res) => {
         : { type: 'direct', participants: { $all: uniqueParticipants, $size: 2 } }
     );
     if (existing) {
+      await existing.populate('participants', 'username email avatarUrl isOnline lastSeen messagePrivacy');
       return successResponse(res, existing, 'Conversation already exists');
     }
   }
@@ -214,6 +215,7 @@ const createConversation = asyncHandler(async (req, res) => {
     lastMessageAt: new Date(),
   });
 
+  await conversation.populate('participants', 'username email avatarUrl isOnline lastSeen messagePrivacy');
   return successResponse(res, conversation, 'Conversation created', 201);
 });
 
@@ -530,7 +532,7 @@ const listArchivedConversations = asyncHandler(async (req, res) => {
     _id: { $in: hiddenIds },
     participants: req.user._id,
   })
-    .populate('participants', 'username email avatarUrl isOnline lastSeen')
+    .populate('participants', 'username email avatarUrl isOnline lastSeen messagePrivacy')
     .sort({ lastMessageAt: -1, _id: -1 });
 
   const conversationIds = conversations.map((c) => c._id);

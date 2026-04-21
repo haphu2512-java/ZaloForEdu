@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { pollService } from "../../services/pollService";
 import toast from "react-hot-toast";
 
-export default function PollMessage({ poll, userId }) {
+export default function PollMessage({ poll, userId, onPollVoted }) {
   const [selectedIndexes, setSelectedIndexes] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -40,8 +40,11 @@ export default function PollMessage({ poll, userId }) {
     }
     setIsSubmitting(true);
     try {
-      await pollService.votePoll(poll._id, selectedIndexes);
+      const res = await pollService.votePoll(poll._id, selectedIndexes);
       toast.success("Đã bình chọn thành công!");
+      if (res.data || res) {
+        onPollVoted?.(res.data || res);
+      }
     } catch (err) {
       toast.error(err.response?.data?.message || "Lỗi bình chọn");
     } finally {

@@ -32,4 +32,11 @@ router.delete('/:id', auth, validate({ params: reminderIdParamSchema }), reminde
 router.post('/:id/join', auth, validate({ params: reminderIdParamSchema }), reminderController.joinReminder);
 router.post('/:id/decline', auth, validate({ params: reminderIdParamSchema }), reminderController.declineReminder);
 
+// Test endpoint to manually trigger reminders
+router.post('/trigger-test', auth, async (req, res) => {
+  const { triggerDueReminders } = require('../services/reminderScheduler');
+  await triggerDueReminders();
+  res.json({ success: true, message: 'Triggered reminder check' });
+});
+
 module.exports = router;

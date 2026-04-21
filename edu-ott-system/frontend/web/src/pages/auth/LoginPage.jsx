@@ -72,6 +72,10 @@ export default function LoginPage() {
         return;
       }
       navigate(result.role === "admin" ? "/admin" : "/chat");
+    } else if (result.errorCode === 'EMAIL_NOT_VERIFIED') {
+      navigate(`/verify-otp?email=${encodeURIComponent(payload.email)}`);
+    } else if (result.errorCode === 'PHONE_NOT_VERIFIED') {
+      navigate(`/verify-otp?phone=${encodeURIComponent(payload.phone)}`);
     }
   };
 

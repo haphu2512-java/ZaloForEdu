@@ -191,11 +191,14 @@
 /* ── MAIN CHAT AREA (GIỮA) ── */
 .chat-main {
   flex: 1;
+  min-width: 0;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   background: var(--z-bg-main);
   position: relative;
 }
+
 
 .chat-header {
   height: 64px;
@@ -808,105 +811,7 @@
   font-weight: 700;
 }
 
-/* Audio bubble in ChatPage */
-.mdc-audio-bubble {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  background: rgba(255, 255, 255, 0.2);
-  border-radius: 16px;
-  padding: 8px 12px;
-  min-width: 200px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.mdc-audio-play-btn {
-  width: 34px;
-  height: 34px;
-  border-radius: 50%;
-  background: #fff;
-  color: var(--z-primary);
-  border: none;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  flex-shrink: 0;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-  transition: transform 0.2s;
-}
-
-.mdc-audio-play-btn:active {
-  transform: scale(0.9);
-}
-
-.mdc-audio-waveform {
-  flex: 1;
-  position: relative;
-  height: 24px;
-  display: flex;
-  align-items: center;
-}
-
-.mdc-audio-progress {
-  position: absolute;
-  top: 0;
-  left: 0;
-  height: 100%;
-  background: rgba(255, 255, 255, 0.3);
-  border-radius: 2px;
-  pointer-events: none;
-}
-
-.mdc-audio-bars {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  gap: 2px;
-}
-
-.mdc-audio-bar {
-  flex: 1;
-  background: #fff;
-  border-radius: 1px;
-  opacity: 0.8;
-}
-
-.mdc-audio-time {
-  font-size: 11px;
-  color: #fff;
-  font-weight: 600;
-  min-width: 32px;
-}
-
-/* Khi nằm ở bubble người khác (trắng/xám) */
-.chat-main [class*="bubble-them"] .mdc-audio-bubble,
-.chat-main [style*="backgroundColor: #FFFFFF"] .mdc-audio-bubble {
-  background: #F3F4F6;
-  border-color: #E5E7EB;
-}
-
-.chat-main [class*="bubble-them"] .mdc-audio-play-btn,
-.chat-main [style*="backgroundColor: #FFFFFF"] .mdc-audio-play-btn {
-  background: var(--z-primary);
-  color: #fff;
-}
-
-.chat-main [class*="bubble-them"] .mdc-audio-bar,
-.chat-main [style*="backgroundColor: #FFFFFF"] .mdc-audio-bar {
-  background: var(--z-primary);
-}
-
-.chat-main [class*="bubble-them"] .mdc-audio-time,
-.chat-main [style*="backgroundColor: #FFFFFF"] .mdc-audio-time {
-  color: var(--z-text-secondary);
-}
-
-.chat-main [class*="bubble-them"] .mdc-audio-progress,
-.chat-main [style*="backgroundColor: #FFFFFF"] .mdc-audio-progress {
-  background: rgba(0, 104, 255, 0.1);
-}
+/* Removed Audio bubble styles (moved to AudioBubble.css) */
 
 
 /* Voice Recorder integration fixes */

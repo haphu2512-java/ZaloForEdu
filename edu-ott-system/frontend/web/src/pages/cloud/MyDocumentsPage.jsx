@@ -180,10 +180,16 @@ export default function MyDocumentsPage(){
         if(replySnapshot && !isPopulatedReply(newMsg.replyTo)){
           newMsg.replyTo = replySnapshot;
         }
-        setMessages(prev=>[...prev,newMsg]);
+        setMessages(prev=>{
+          const targetId = String(newMsg._id || newMsg.id);
+          const filtered = prev.filter(m => String(m._id || m.id) !== targetId);
+          return [...filtered, newMsg];
+        });
       }
       setUploads(prev=>prev.filter(u=>u.id!==uid));
-      toast.success("Đã lưu: "+file.name);
+      if (!file.name.startsWith("voice_")) {
+        toast.success("Đã lưu: " + file.name);
+      }
     }catch(err){setUploads(prev=>prev.filter(u=>u.id!==uid));toast.error(err.message||"Tải lên thất bại");}
   },[convId]);
 
@@ -206,7 +212,11 @@ export default function MyDocumentsPage(){
       const newMsg=res.data?.data;
       if(newMsg){
         if(replySnapshot && !isPopulatedReply(newMsg.replyTo)) newMsg.replyTo = replySnapshot;
-        setMessages(prev=>[...prev,newMsg]);
+        setMessages(prev=>{
+          const targetId = String(newMsg._id || newMsg.id);
+          const filtered = prev.filter(m => String(m._id || m.id) !== targetId);
+          return [...filtered, newMsg];
+        });
       }
     }
     catch(err){toast.error("Gửi thất bại: "+(err.response?.data?.message||err.message));}
@@ -410,7 +420,7 @@ export default function MyDocumentsPage(){
           {loading?(<div className="mdc-loading"><FaSpinner className="spin" size={28}/></div>):filtered.length===0&&uploads.length===0?(
             <div className="mdc-empty"><div className="mdc-empty-icon"><FaCloud size={52}/></div><h3>{searchQuery?"Không tìm thấy kết quả":"Chưa có nội dung nào"}</h3><p>{searchQuery?`Không có file nào chứa từ khóa "${searchQuery}"`:"Gửi ảnh, video, tài liệu hoặc ghi chú để lưu trữ cá nhân"}</p></div>
           ):(
-            <>{Object.entries(grouped).map(([dateLabel,items])=>(<div key={dateLabel}><div className="mdc-date-sep">{dateLabel}</div>{items.map(msg=>(<CloudMsgBubble key={msg._id} msg={msg} isRemoving={removingId===msg._id} onDelete={confirmDelete} onPreview={(url,name)=>setPreview({url,name})} onReaction={handleReaction} pinnedIds={pinnedIds} onPin={handlePin} onForward={openShareModal} onReply={(m)=>setReplyTo(m)} searchQuery={searchQuery}/>))}</div>))}{uploads.map(u=>(<UploadBubble key={u.id} name={u.name} percent={u.percent}/>))}</>
+            <>{Object.entries(grouped).map(([dateLabel,items])=>(<div key={dateLabel}><div className="mdc-date-sep">{dateLabel}</div>{items.map(msg=>(<CloudMsgBubble key={String(msg._id || msg.id)} msg={msg} isRemoving={removingId===msg._id} onDelete={confirmDelete} onPreview={(url,name)=>setPreview({url,name})} onReaction={handleReaction} pinnedIds={pinnedIds} onPin={handlePin} onForward={openShareModal} onReply={(m)=>setReplyTo(m)} searchQuery={searchQuery}/>))}</div>))}{uploads.map(u=>(<UploadBubble key={String(u.id)} name={u.name} percent={u.percent}/>))}</>
 
           )}
           <div ref={messagesEndRef}/>

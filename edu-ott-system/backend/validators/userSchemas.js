@@ -9,6 +9,7 @@ const updateUserSchema = z.object({
   email: z.union([z.string().trim().email(), z.null()]).optional(),
   phone: z.string().trim().min(8).max(20).nullable().optional(),
   avatarUrl: z.string().trim().url().nullable().optional(),
+  messagePrivacy: z.enum(['everyone', 'friends']).optional(),
 });
 
 const blockUserBodySchema = z.object({

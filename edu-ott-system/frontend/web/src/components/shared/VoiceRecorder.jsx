@@ -215,7 +215,7 @@ export const VoiceRecorder = ({ onCancel, onSend }) => {
         setAudioUrl(audioUrl);
       };
 
-      mediaRecorder.start(1000); // Thu mỗi 1 giây để đảm bảo metadata đúng
+      mediaRecorder.start(); // Remove 1000 to avoid chunk overlap bugs
       setIsRecording(true);
       
       setRecordingTime(0);

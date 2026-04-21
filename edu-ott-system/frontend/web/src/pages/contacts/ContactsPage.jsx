@@ -10,6 +10,7 @@ import { useFriendStore } from "../../store/friendStore";
 import { useChatStore } from "../../store/chatStore";
 import { useNavigate } from "react-router-dom";
 import AddFriendModal from "../../components/Modals/AddFriendModal";
+import UserProfileModal from "../../components/Modals/UserProfileModal";
 import CreateGroupModal from "../chat/Modals/CreateGroupModal";
 import { socketService } from "../../services/socketService";
 import { useAuthStore } from "../../store/authStore";
@@ -367,18 +368,17 @@ export default function ContactsPage() {
         </div>
       </div>
 
-      {/* ── DETAIL PANEL ── */}
-      {selectedFriend && (
-        <FriendDetailPanel
-          friend={selectedFriend}
-          onClose={() => setSelectedFriend(null)}
-          onChat={(f) => { navigate("/chat"); setSelectedFriend(null); }}
-          onBlock={(f) => handleAction("block", f)}
-          onUnfriend={(f) => handleAction("unfriend", f)}
-          onVideoCall={(f) => handleAction("video", f)}
-          onAudioCall={(f) => handleAction("audio", f)}
-        />
-      )}
+      {/* ── PROFILE MODAL ── */}
+      <UserProfileModal
+        isOpen={!!selectedFriend}
+        onClose={() => setSelectedFriend(null)}
+        user={selectedFriend}
+        status="friend"
+        onStatusChange={(newStatus) => {
+          if (newStatus !== "friend") setSelectedFriend(null);
+          fetchFriends();
+        }}
+      />
 
       <AddFriendModal isOpen={showAddFriend} onClose={() => setShowAddFriend(false)} />
       <CreateGroupModal 
