@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   FaTimes, FaCommentDots, FaPhoneAlt, FaVideo,
   FaUserPlus, FaUserMinus, FaBan, FaFlag, FaShareAlt,
@@ -14,11 +14,37 @@ const DEFAULT_AVATAR = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/
 
 export default function UserProfileModal({ isOpen, onClose, user, status: initialStatus, onStatusChange, onChatOpened }) {
   const navigate = useNavigate();
-  const { fetchFriends, fetchOutgoingRequests, fetchIncomingRequests, unfriend, blockFriend, outgoingRequests, incomingRequests } = useFriendStore();
+  const { fetchFriends, fetchOutgoingRequests, fetchIncomingRequests, unfriend, blockFriend, outgoingRequests, incomingRequests, friends } = useFriendStore();
 
   const [status, setStatus] = useState(initialStatus || "none");
   const [actionLoading, setActionLoading] = useState(null);
   const [chatLoading, setChatLoading] = useState(false);
+
+  // Sync status từ store mỗi khi modal mở — tránh state bị reset về "none"
+  useEffect(() => {
+    if (!isOpen || !user) return;
+    const uid = String(user._id || user.id);
+
+    // Kiểm tra đã là bạn bè chưa
+    const isFriend = friends?.some(f => String(f._id || f.id || f) === uid);
+    if (isFriend) { setStatus("friend"); return; }
+
+    // Kiểm tra đã gửi lời mời chưa
+    const hasOutgoing = outgoingRequests?.some(
+      r => String(r.toUserId?._id || r.toUserId || "") === uid
+    );
+    if (hasOutgoing) { setStatus("outgoing"); return; }
+
+    // Kiểm tra có lời mời đến không
+    const hasIncoming = incomingRequests?.some(
+      r => String(r.fromUserId?._id || r.fromUserId || "") === uid
+    );
+    if (hasIncoming) { setStatus("incoming"); return; }
+
+    // Không có quan hệ
+    setStatus(initialStatus || "none");
+  }, [isOpen, user?._id, user?.id, outgoingRequests, incomingRequests, friends]);
+
 
   if (!isOpen || !user) return null;
 
