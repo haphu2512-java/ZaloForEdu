@@ -10,19 +10,23 @@ const OTP_EXPIRE_MINUTES = 10;
 const createEmailOtp = () => String(Math.floor(100000 + Math.random() * 900000));
 
 const sendVerificationOtp = async ({ email, otp }) => {
+  console.log(`\n╔${'═'.repeat(50)}╗`);
+  console.log(`║  [OTP EMAIL - Profile] Gửi tới : ${email.padEnd(21)}║`);
+  console.log(`║  Mã OTP                : ${otp.padEnd(26)}║`);
+  console.log(`╚${'═'.repeat(50)}╝\n`);
   await sendEmail({
     to: email,
     subject: 'Mã OTP xác thực email - Zalo Clone',
-    text: `Mã OTP xác thực email của bạn là: ${otp}. Mã có hiệu lực trong 10 phút.`,
+    text: `Mã OTP xác thực email của bạn là: ${otp}. Mã có hiệu lực trong ${OTP_EXPIRE_MINUTES} phút.`,
     html: `<p>Mã OTP xác thực email của bạn là: <strong>${otp}</strong></p><p>Mã có hiệu lực trong ${OTP_EXPIRE_MINUTES} phút.</p>`,
   });
 };
 
 const sendSmsOtpProfile = (phone, otp) => {
-  console.log(`\n══════════════════════════════════════
-[SMS] Mã OTP xác thực số ĐT ZaloApp: ${otp} (${OTP_EXPIRE_MINUTES} phút)
-Gửi tới: ${phone}
-══════════════════════════════════════\n`);
+  console.log(`\n╔${'═'.repeat(50)}╗`);
+  console.log(`║  [OTP SMS - Profile] Gửi tới : ${phone.padEnd(22)}║`);
+  console.log(`║  Mã OTP              : ${otp.padEnd(28)}║`);
+  console.log(`╚${'═'.repeat(50)}╝\n`);
 };
 
 const getUserById = asyncHandler(async (req, res) => {
