@@ -156,6 +156,7 @@ export default function AddFriendModal({ isOpen, onClose }) {
           onClose={() => setSelectedUser(null)}
           user={selectedUser.user}
           status={selectedUser.status}
+          onChatOpened={onClose}
           onStatusChange={(newStatus) => {
             setSelectedUser(prev => prev ? { ...prev, status: newStatus } : null);
             Promise.all([fetchFriends(), fetchOutgoingRequests(), fetchIncomingRequests()]);
