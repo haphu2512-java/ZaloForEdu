@@ -93,6 +93,7 @@ export const ChatRightPanel = ({
 
   useEffect(() => {
     if (rightPanelMode !== 'blocked' || !activeConversation) return;
+    if (activeConversation.type !== 'group' && activeConversation.roomModel !== 'Group') return;
     conversationService.listBlockedMembers(activeConversation._id)
       .then(res => setBlockedMembers(res.data || []))
       .catch(() => setBlockedMembers([]));
@@ -501,7 +502,7 @@ export const ChatRightPanel = ({
                     )}
                   </div>
                 )}
-                {isPrivileged && (
+                {isPrivileged && isGroup && (
                   <div style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer' }} onClick={() => setRightPanelMode('blocked')}>
                     <FaUserTimes size={18} color="var(--z-text-secondary)" />
                     <span style={{ fontSize: 15, color: 'var(--z-text-primary)' }}>Chặn khỏi nhóm</span>
@@ -705,19 +706,25 @@ export const ChatRightPanel = ({
               {blockedMembers.length === 0 ? (
                 <div style={{ textAlign: 'center', color: 'var(--z-text-muted)', fontSize: 13, padding: '20px 0' }}>Chưa có ai bị chặn</div>
               ) : blockedMembers.map(u => {
-                const uid = String(u._id || u);
+                const uid = typeof u === 'string' ? u : (u.id || u._id || String(u));
                 const name = u.username || 'Người dùng';
+                
+                const handleUnblock = async () => {
+                  try {
+                    await conversationService.unblockMember(activeConversation._id, uid);
+                    toast.success(`Đã bỏ chặn ${name}`);
+                    const res = await conversationService.listBlockedMembers(activeConversation._id);
+                    setBlockedMembers(res.data || []);
+                  } catch (err) {
+                    toast.error(`Lỗi: ${err?.response?.data?.message || err?.message}`);
+                  }
+                };
+
                 return (
                   <div key={uid} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 0', borderBottom: '1px solid var(--z-border)' }}>
                     <img src={u.avatarUrl || 'https://i.pravatar.cc/150'} style={{ width: 40, height: 40, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} alt="" />
                     <div style={{ flex: 1, fontSize: 14, fontWeight: 500, color: 'var(--z-text-primary)' }}>{name}</div>
-                    <button onClick={async () => {
-                      try {
-                        await conversationService.unblockMember(activeConversation._id, uid);
-                        toast.success(`Đã bỏ chặn ${name}`);
-                        setBlockedMembers(prev => prev.filter(b => String(b._id || b) !== uid));
-                      } catch { toast.error('Lỗi bỏ chặn'); }
-                    }} style={{ padding: '5px 14px', borderRadius: 8, border: 'none', background: 'var(--z-bg-main)', color: 'var(--z-primary)', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                    <button onClick={handleUnblock} style={{ padding: '5px 14px', borderRadius: 8, border: 'none', background: 'var(--z-bg-main)', color: 'var(--z-primary)', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
                       Bỏ chặn
                     </button>
                   </div>
