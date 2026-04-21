@@ -498,7 +498,10 @@ export default function ContactsScreen() {
   const handleGroupAction = async (action: () => Promise<any>, successMessage: string) => {
     try {
       setGroupActionLoading(true);
-      await action();
+      const res = await action();
+      if (res && (res._id || res.id) && selectedGroup && (selectedGroup._id === res._id || selectedGroup.id === res.id)) {
+        setSelectedGroup((prev) => prev ? { ...prev, ...res } : res);
+      }
       await loadContacts();
       Alert.alert('Thành công', successMessage);
     } catch (error: any) {
@@ -940,7 +943,7 @@ export default function ContactsScreen() {
         onClose={() => setGroupManageVisible(false)}
         brand={brand}
         colors={colors}
-        colorScheme={colorScheme as 'light'|'dark'}
+        colorScheme={colorScheme as 'light' | 'dark'}
         selectedGroup={selectedGroup}
         groupActionLoading={groupActionLoading}
         currentUserId={currentUserId}

@@ -96,3 +96,7 @@ export async function kickMember(communityId: string, memberId: string): Promise
 export async function promoteMemberToAdmin(communityId: string, memberId: string): Promise<void> {
   await fetchAPI(`/conversations/${communityId}/admins/${memberId}/promote`, { method: 'PUT' });
 }
+
+export async function disbandCommunity(communityId: string): Promise<void> {
+  await fetchAPI(`/communities/${communityId}`, { method: 'DELETE' });
+}

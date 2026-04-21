@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -8,6 +8,7 @@ import ChatScreen from '@/screens/ChatScreen';
 import MembersScreen from '@/screens/MembersScreen';
 import { useAuth } from '@/context/auth';
 import { useCommunityStore } from '@/stores/communityStore';
+import { disbandCommunity } from '@/services/communityService';
 import type { CommunityMember } from '@/types/community';
 
 type DetailTab = 'chat' | 'media' | 'members';
@@ -19,6 +20,7 @@ export default function CommunityScreen() {
   const router = useRouter();
   const { user } = useAuth();
   const [tab, setTab] = useState<DetailTab>('chat');
+  const [disbanding, setDisbanding] = useState(false);
 
   const {
     communities,
@@ -30,6 +32,7 @@ export default function CommunityScreen() {
     setCurrentChannel,
     loadCommunityDetail,
     clearUnread,
+    loadCommunities,
   } = useCommunityStore();
 
   const communityId = String(id);
@@ -39,6 +42,7 @@ export default function CommunityScreen() {
   const activeChannel = channels.find((c: any) => c._id === activeChannelId);
   const meId = user?.id || (user as any)?._id || '';
   const currentMember = (membersByCommunity[communityId] || []).find((m: any) => getUserId(m.userId) === meId);
+  const iAmOwner = currentMember?.role === 'owner';
 
   useEffect(() => {
     if (!communityId) return;
@@ -77,6 +81,43 @@ export default function CommunityScreen() {
           </Text>
           <Text style={styles.meta}>{community?.memberCount || community?.participants?.length || 0} thành viên</Text>
         </View>
+        {iAmOwner ? (
+          <TouchableOpacity
+            style={styles.disbandBtn}
+            disabled={disbanding}
+            onPress={() => {
+              Alert.alert(
+                'Giai tan cong dong',
+                'Hanh dong nay se xoa cong dong, kenh va toan bo tin nhan. Ban co chac chan?',
+                [
+                  { text: 'Huy', style: 'cancel' },
+                  {
+                    text: 'Giai tan',
+                    style: 'destructive',
+                    onPress: async () => {
+                      try {
+                        setDisbanding(true);
+                        await disbandCommunity(communityId);
+                        await loadCommunities();
+                        router.replace('/community');
+                      } catch (error: any) {
+                        Alert.alert('Loi', error?.message || 'Khong the giai tan cong dong');
+                      } finally {
+                        setDisbanding(false);
+                      }
+                    },
+                  },
+                ],
+              );
+            }}
+          >
+            {disbanding ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <Text style={styles.disbandText}>Giai tan</Text>
+            )}
+          </TouchableOpacity>
+        ) : null}
       </View>
 
       <View style={styles.tabs}>
@@ -136,6 +177,16 @@ const styles = StyleSheet.create({
   avatar: { width: 42, height: 42, borderRadius: 21 },
   name: { fontSize: 17, fontWeight: '700', color: '#111827' },
   meta: { marginTop: 2, color: '#6B7280', fontSize: 12 },
+  disbandBtn: {
+    backgroundColor: '#DC2626',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+    minWidth: 72,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  disbandText: { color: '#fff', fontSize: 12, fontWeight: '700' },
   tabs: { flexDirection: 'row', paddingHorizontal: 12, paddingTop: 8, gap: 8 },
   tabBtn: { flex: 1, alignItems: 'center', paddingVertical: 8, borderRadius: 10, backgroundColor: '#F3F4F6' },
   tabBtnActive: { backgroundColor: '#DBEAFE' },

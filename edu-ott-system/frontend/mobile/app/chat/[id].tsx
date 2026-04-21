@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+﻿import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
   View,
   Text,
@@ -191,6 +191,7 @@ export default function ChatScreen() {
     message: null,
     emojiFilter: null,
   });
+  const [reactionPickerMsg, setReactionPickerMsg] = useState<Message | null>(null);
 
   // Tránh mở Picker nhiều lần cùng lúc gây lỗi "picking in progress"
   const isPicking = useRef(false);
@@ -873,23 +874,7 @@ export default function ChatScreen() {
   };
 
   const handleReactToMessage = async (msg: Message) => {
-    Alert.alert(
-      'Chọn cảm xúc', '',
-      [...QUICK_EMOJIS, 'Hủy'].map((emoji) => ({
-        text: emoji,
-        onPress: async () => {
-          if (emoji === 'Hủy') return;
-          try {
-            const reactions = await reactToMessage(getMessageId(msg), emoji);
-            setMessages((prev) =>
-              prev.map((m) => getMessageId(m) === getMessageId(msg) ? { ...m, reactions: reactions || [] } : m)
-            );
-          } catch {
-            Alert.alert('Lỗi', 'Không thể thả cảm xúc');
-          }
-        },
-      }))
-    );
+    setReactionPickerMsg(msg);
   };
 
   const handleOpenConversationOptions = () => {
@@ -1509,6 +1494,38 @@ export default function ChatScreen() {
         getConversationTitle={getConversationTitle}
       />
 
+      {/* Emoji Picker Modal */}
+      <Modal visible={!!reactionPickerMsg} transparent animationType="fade" onRequestClose={() => setReactionPickerMsg(null)}>
+        <TouchableOpacity style={styles.reactionPickerOverlay} activeOpacity={1} onPress={() => setReactionPickerMsg(null)}>
+          <Pressable style={[styles.reactionPickerBox, { backgroundColor: colors.surface }]} onPress={(e) => e.stopPropagation()}>
+            <Text style={{ textAlign: 'center', fontSize: 16, fontWeight: 'bold', marginBottom: 16, color: colors.text }}>Chọn cảm xúc</Text>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 12 }}>
+              {QUICK_EMOJIS.map((emoji) => (
+                <TouchableOpacity
+                  key={emoji}
+                  onPress={async () => {
+                    const msg = reactionPickerMsg;
+                    setReactionPickerMsg(null);
+                    if (!msg) return;
+                    try {
+                      const reactions = await reactToMessage(getMessageId(msg), emoji);
+                      setMessages((prev) =>
+                        prev.map((m) => getMessageId(m) === getMessageId(msg) ? { ...m, reactions: reactions || [] } : m)
+                      );
+                    } catch {
+                      Alert.alert('Lỗi', 'Không thể thả cảm xúc');
+                    }
+                  }}
+                  style={{ padding: 10, backgroundColor: colorScheme === 'dark' ? '#374151' : '#F3F4F6', borderRadius: 24, width: 56, height: 56, alignItems: 'center', justifyContent: 'center' }}
+                >
+                  <Text style={{ fontSize: 28 }}>{emoji}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </Pressable>
+        </TouchableOpacity>
+      </Modal>
+
       <ChatActionMenuModal
         visible={actionMenu.visible}
         onClose={() => setActionMenu({ visible: false, options: [] })}
@@ -1674,6 +1691,8 @@ const styles = StyleSheet.create({
     borderBottomColor: '#E5E7EB',
   },
   reactionAvatar: { width: 44, height: 44, borderRadius: 22 },
+  reactionPickerOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
+  reactionPickerBox: { width: '85%', borderRadius: 24, padding: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 5 },
 });
 
 

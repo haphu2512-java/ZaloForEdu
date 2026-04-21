@@ -35,6 +35,7 @@ import {
   demoteGroupAdmin,
   transferGroupOwner,
   leaveGroup,
+  disbandGroup,
   updateGroupAvatar,
   updateGroupNickname,
   updateConversationPreference,
@@ -206,7 +207,10 @@ export default function ConversationDetailsScreen() {
   const handleAction = async (actionFn: () => Promise<any>, successMsg: string) => {
     try {
       setActionLoading(true);
-      await actionFn();
+      const res = await actionFn();
+      if (res && (res._id || res.id)) {
+        setConversation((prev) => prev ? { ...prev, ...res } : res);
+      }
       await loadData();
       Alert.alert('Thành công', successMsg);
     } catch (error: any) {
@@ -695,6 +699,31 @@ export default function ConversationDetailsScreen() {
               <Ionicons name="exit-outline" size={24} color="#EF4444" />
               <Text style={styles.dangerBtnText}>Rời nhóm</Text>
             </TouchableOpacity>
+            {iAmOwner ? (
+              <TouchableOpacity
+                style={styles.dangerBtn}
+                onPress={() =>
+                  Alert.alert(
+                    'Giai tan nhom',
+                    'Hanh dong nay se xoa nhom va toan bo tin nhan. Ban co chac chan?',
+                    [
+                      { text: 'Huy', style: 'cancel' },
+                      {
+                        text: 'Giai tan',
+                        style: 'destructive',
+                        onPress: () =>
+                          handleAction(() => disbandGroup(conversation._id), 'Da giai tan nhom').then(() =>
+                            router.replace('/(tabs)'),
+                          ),
+                      },
+                    ],
+                  )
+                }
+              >
+                <Ionicons name="trash-outline" size={24} color="#EF4444" />
+                <Text style={styles.dangerBtnText}>Giai tan nhom</Text>
+              </TouchableOpacity>
+            ) : null}
           </View>
         )}
       </ScrollView>

@@ -3,7 +3,7 @@ const express = require('express');
 const auth = require('../middlewares/auth');
 const validate = require('../middlewares/validate');
 const communityController = require('../controllers/communityController');
-const { requireCommunityManageMembers } = require('../middlewares/communityRoles');
+const { loadCommunityMember, requireCommunityRoles, requireCommunityManageMembers } = require('../middlewares/communityRoles');
 const {
   communityIdParamSchema,
   createCommunitySchema,
@@ -22,6 +22,14 @@ router.post(
   validate({ params: communityIdParamSchema, body: approveJoinSchema }),
   ...requireCommunityManageMembers,
   communityController.approveCommunityJoin,
+);
+router.delete(
+  '/:id',
+  auth,
+  validate({ params: communityIdParamSchema }),
+  loadCommunityMember,
+  requireCommunityRoles(['owner']),
+  communityController.disbandCommunity,
 );
 
 module.exports = router;

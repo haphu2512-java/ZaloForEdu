@@ -4,6 +4,8 @@ const Conversation = require('../models/Conversation');
 const Channel = require('../models/Channel');
 const GroupMember = require('../models/GroupMember');
 const JoinRequest = require('../models/JoinRequest');
+const Message = require('../models/Message');
+const ConversationPreference = require('../models/ConversationPreference');
 const asyncHandler = require('../utils/asyncHandler');
 const ApiError = require('../utils/apiError');
 const { successResponse } = require('../utils/apiResponse');
@@ -163,9 +165,33 @@ const approveCommunityJoin = asyncHandler(async (req, res) => {
   return successResponse(res, member, `Join request ${action}d`);
 });
 
+const disbandCommunity = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const community = await Conversation.findOne({ _id: id, type: 'community' });
+  if (!community) throw new ApiError(404, 'COMMUNITY_NOT_FOUND', 'Community not found');
+
+  const ownerId = (community.ownerId || community.createdBy)?.toString();
+  if (ownerId !== req.user._id.toString()) {
+    throw new ApiError(403, 'FORBIDDEN', 'Only community owner can disband this community');
+  }
+
+  await Promise.all([
+    Message.deleteMany({ conversationId: id }),
+    ConversationPreference.deleteMany({ conversationId: id }),
+    Channel.deleteMany({ groupId: id }),
+    GroupMember.deleteMany({ groupId: id }),
+    JoinRequest.deleteMany({ conversationId: id }),
+  ]);
+
+  await community.deleteOne();
+
+  return successResponse(res, null, 'Community disbanded successfully');
+});
+
 module.exports = {
   createCommunity,
   getCommunityById,
   joinCommunity,
   approveCommunityJoin,
+  disbandCommunity,
 };
