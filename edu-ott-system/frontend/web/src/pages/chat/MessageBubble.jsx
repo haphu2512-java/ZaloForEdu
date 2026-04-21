@@ -28,7 +28,11 @@ export const MessageBubble = ({
   onDelete,
   onForward,
   onReply,
-  onPin,        // ← MỚI: (messageId) => void
+  onPin,        // ← (messageId) => void
+  isPinned,     // ← boolean: tin nhắn đã ghim?
+  onUnpin,      // ← (messageId) => void
+  onPollVoted,  // ← (updatedPoll) => void
+  userId,       // ← ID người dùng hiện tại (dùng cho PollMessage)
 }) => {
   const sender = message.senderId || message.sender || message.actualSender;
 
@@ -63,8 +67,34 @@ export const MessageBubble = ({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+
+
   if (type === 'system') {
     return <div style={{ textAlign: 'center', margin: '16px 0', fontSize: '12px', color: '#8A8D91' }}><span>{content}</span></div>;
+  }
+
+  // ── Render poll message ──
+  if (type === 'poll' && message.pollId) {
+    const pollData = typeof message.pollId === 'object' ? message.pollId : null;
+    if (pollData) {
+      return (
+        <div id={`msg-${_id}`} className={`mdc-msg-wrap ${isMe ? 'me' : 'them'}`}>
+          {!isMe && <img src={avatar} alt="avatar" className="mdc-msg-avatar" />}
+          <div className="mdc-msg-body">
+            {!isMe && sender && <div className="mdc-msg-sender-name">{name}</div>}
+            {isPinned && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: '#F59E0B', marginBottom: 4 }}>
+                <FaThumbtack size={9} /> Đã ghim
+              </div>
+            )}
+            <PollMessage poll={pollData} userId={userId} onPollVoted={onPollVoted} />
+            <div className="mdc-msg-time" style={{ justifyContent: isMe ? 'flex-end' : 'flex-start' }}>
+              <span>{timeString}</span>
+            </div>
+          </div>
+        </div>
+      );
+    }
   }
 
   const bubbleStyle = isMe
@@ -115,7 +145,25 @@ export const MessageBubble = ({
       className={`mdc-msg-wrap ${isMe ? 'me' : 'them'}`}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => { setIsHovered(false); if (!showMoreMenu && !showEmojiPicker) setShowMoreMenu(false); }}
+      style={{ position: 'relative' }}
     >
+      {isPinned && (
+        <div style={{ 
+          display: 'flex', 
+          alignItems: 'center', 
+          gap: 4, 
+          fontSize: 10, 
+          color: '#F59E0B', 
+          fontWeight: 600,
+          marginBottom: 2, 
+          paddingLeft: isMe ? 0 : 44, 
+          justifyContent: isMe ? 'flex-end' : 'flex-start',
+          textTransform: 'uppercase',
+          letterSpacing: '0.5px'
+        }}>
+          <FaThumbtack size={8} /> Tin nhắn đã ghim
+        </div>
+      )}
       {!isMe && <img src={avatar} alt="avatar" className="mdc-msg-avatar" />}
 
       <div className="mdc-msg-body">
@@ -246,15 +294,18 @@ export const MessageBubble = ({
                     <FaShare size={13} color="#65676B" /> Chuyển tiếp
                   </div>
 
-                  {/* ── Nút Ghim ── */}
-                  <div
-                    className="mdc-mm-item"
-                    onClick={handlePin}
-                    style={{ opacity: pinLoading ? 0.6 : 1, cursor: pinLoading ? 'wait' : 'pointer' }}
-                  >
-                    <FaThumbtack size={13} color="#F59E0B" />
-                    {pinLoading ? 'Đang ghim...' : 'Ghim tin nhắn'}
-                  </div>
+                  {/* ── Nút Ghim / Bỏ ghim ── */}
+                  {isPinned ? (
+                    <div className="mdc-mm-item" onClick={() => { onUnpin?.(_id); setShowMoreMenu(false); }}>
+                      <FaThumbtack size={13} color="#9CA3AF" /> Bỏ ghim
+                    </div>
+                  ) : (
+                    <div className="mdc-mm-item" onClick={handlePin}
+                      style={{ opacity: pinLoading ? 0.6 : 1, cursor: pinLoading ? 'wait' : 'pointer' }}>
+                      <FaThumbtack size={13} color="#F59E0B" />
+                      {pinLoading ? 'Đang ghim...' : 'Ghim tin nhắn'}
+                    </div>
+                  )}
 
                   {isMe && (
                     <div className="mdc-mm-item" onClick={() => { onRecall?.(_id); setShowMoreMenu(false); }}>

@@ -1,8 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import axios from "axios";
-import { FaChevronDown } from 'react-icons/fa';
 import { useParams, useNavigate } from "react-router-dom";
-import { FaSearch, FaUsers, FaCloud, FaSpinner, FaUserSecret, FaArrowLeft, FaUserPlus, FaCheck, FaTimes, FaThumbtack } from "react-icons/fa";
+import { FaCloud, FaSpinner, FaUserPlus, FaCheck, FaTimes, FaArrowLeft } from "react-icons/fa";
 import toast from "react-hot-toast";
 
 import { uploadFile } from "../../services/mediaService";
@@ -12,17 +11,25 @@ import { MessageBubble } from "./MessageBubble";
 import { ShareMessageModal } from "./Modals/ShareMessageModal";
 import AddFriendModal from "./Modals/AddFriendModal";
 import CreateGroupModal from "./Modals/CreateGroupModal";
-import ConversationContextMenu from "./Modals/ConversationContextMenu";
-import ReportUserModal from "./Modals/ReportUserModal";
+import CreatePollModal from "./Modals/CreatePollModal";
+import PinLimitModal from "./Modals/PinLimitModal";
+import UnpinConfirmModal from "./Modals/UnpinConfirmModal";
 import { ChatHeader } from "./ChatHeader";
 import { MessageInput } from "./MessageInput";
 import { ChatRightPanel } from "./ChatRightPanel";
+import { ChatSidebar } from "./ChatSidebar";
+import { PinnedBar } from "./PinnedBar";
+import { useChatSocket } from "./useChatSocket";
 import MyDocumentsPage from "../cloud/MyDocumentsPage";
 import { useTheme } from '../../contexts/ThemeContext';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { getCategory } from './chatUtils';
 import "./ChatPage.css";
 import { conversationService } from "../../services/conversationService";
+import { pollService } from "../../services/pollService";
+import ConversationContextMenu from "./Modals/ConversationContextMenu";
+import ReportUserModal from "./Modals/ReportUserModal";
+import AddMemberModal from "./Modals/AddMemberModal";
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api/v1";
 const API_ORIGIN = API_BASE_URL.replace(/\/api\/v1\/?$/, "");
@@ -248,6 +255,15 @@ export default function ChatPage() {
   const [justSentRequestTo, setJustSentRequestTo] = useState(null); // track optimistic state
   const [showAddFriendModal, setShowAddFriendModal] = useState(false);
   const [showCreateGroupModal, setShowCreateGroupModal] = useState(false);
+  const [showAddMemberModal, setShowAddMemberModal] = useState(false);
+
+  // ── Pin & Poll states ──
+  const [pinnedMessages, setPinnedMessages] = useState([]);
+  const [showPinLimitModal, setShowPinLimitModal] = useState(false);
+  const [pendingPinId, setPendingPinId] = useState(null);
+  const [showUnpinConfirmModal, setShowUnpinConfirmModal] = useState(false);
+  const [unpinTargetId, setUnpinTargetId] = useState(null);
+  const [showCreatePollModal, setShowCreatePollModal] = useState(false);
 
   const pageRef = useRef(null);
   const messagesEndRef = useRef(null);
@@ -457,215 +473,15 @@ export default function ChatPage() {
     } catch (err) { console.error("Lỗi lấy danh sách:", err); }
   }, [token]);
 
-  // ==================== KHỞI TẠO SOCKET ====================
-  useEffect(() => {
-    if (!token) return;
-    socketService.connect();
-    fetchConversationsData();
-
-    const handleConversationUpdated = (payload) => {
-      const { conversationId, latestMessage } = payload;
-      const convIdStr = String(conversationId);
-      let activeIdStr = String(activeConvIdRef.current);
-      const isMyMessage = String(latestMessage?.senderId?._id || latestMessage?.senderId) === String(userId);
-
-      // FIX: Phát hiện khi đang mở mock conversation mà nhận được update của conversation thật tương ứng
-      const activeCon = activeConversationRef.current;
-      if (activeCon?.isMock && convIdStr !== activeIdStr) {
-        const mockFriendId = String(activeCon._id).replace('mock_', '');
-        const senderId = String(latestMessage?.senderId?._id || latestMessage?.senderId || '');
-        if (senderId === mockFriendId || isMyMessage) {
-          // Conversation thật đã được tạo - chuyển sang conversation thật
-          const realConv = { ...activeCon, _id: convIdStr, isMock: false, latestMessage };
-          setActiveConversation(realConv);
-          activeConvIdRef.current = convIdStr;
-          activeIdStr = convIdStr;
-        }
-      }
-
-      if (convIdStr === activeIdStr) {
-        const msgIdStr = String(latestMessage?._id || latestMessage?.id);
-        const normalizedMsg = {
-          ...latestMessage,
-          mediaIds: (latestMessage.mediaIds || []).map(media =>
-            typeof media === 'object' && media.url && !/^https?:\/\//i.test(media.url)
-              ? { ...media, url: `${API_ORIGIN}${media.url}` }
-              : media
-          )
-        };
-
-        setMessages(prev => {
-          if (prev.some(m => !String(m._id || m.id).startsWith('temp-') && String(m._id || m.id) === msgIdStr)) {
-            return prev;
-          }
-          const tempIdx = prev.findIndex(m =>
-            String(m._id || m.id).startsWith('temp-') &&
-            (m.content || '').trim() === (normalizedMsg.content || '').trim()
-          );
-          if (tempIdx !== -1) {
-            const arr = [...prev];
-            arr[tempIdx] = normalizedMsg;
-            return arr;
-          }
-          return [...prev, normalizedMsg];
-        });
-
-        socketService.socket?.emit("message_delivered", { messageId: latestMessage._id });
-        socketService.socket?.emit("message_seen", { messageId: latestMessage._id });
-      } else if (!isMyMessage && latestMessage?.type !== 'system' && latestMessage?.type !== 'system_reminder') {
-        const senderObj = latestMessage?.senderId;
-        const senderName = senderObj?.username || senderObj?.fullName || 'Ai đó';
-        const shortContent = latestMessage?.content || '[Hình ảnh/File đính kèm]';
-        const avatarSrc = senderObj?.avatarUrl || senderObj?.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(senderName)}&background=0068FF&color=fff`;
-        toast.custom((t) => (
-          <div
-            className={`push-notif-card ${t.visible ? 'entering' : 'leaving'}`}
-            onClick={() => toast.dismiss(t.id)}
-          >
-            <img src={avatarSrc} alt="" className="push-notif-avatar" />
-            <div className="push-notif-body">
-              <div className="push-notif-sender">{senderName}</div>
-              <div className="push-notif-content">{shortContent}</div>
-            </div>
-            <span className="push-notif-close">✕</span>
-          </div>
-        ), { position: 'bottom-right', duration: 4500, id: `notif_${latestMessage?._id}` });
-      }
-
-      setSelfConversation(prev => {
-        if (prev && String(prev._id) === convIdStr) {
-          return { ...prev, latestMessage };
-        }
-        return prev;
-      });
-
-      setConversations(prevConvs => {
-        const index = prevConvs.findIndex(c => String(c._id) === convIdStr);
-        if (index === -1) {
-          fetchConversationsData();
-          // Xóa mock conversation nếu đang có (đã được tạo thật)
-          const mockId = `mock_${String(latestMessage?.senderId?._id || latestMessage?.senderId || '')}`;
-          return prevConvs.filter(c => c._id !== mockId);
-        }
-
-        const newConvs = [...prevConvs];
-        const target = { ...newConvs[index], latestMessage };
-
-        if (convIdStr !== activeIdStr && !isMyMessage) {
-          target.unreadCount = (target.unreadCount || 0) + 1;
-        } else if (convIdStr === activeIdStr) {
-          target.unreadCount = 0;
-        }
-
-        newConvs.splice(index, 1);
-        return [target, ...newConvs];
-      });
-    };
-
-    const handleSettingsUpdated = (newSettings) => {
-      setActiveConversation(prev => prev ? { ...prev, settings: newSettings } : prev);
-      setConversations(prev => prev.map(c =>
-        activeConversationRef.current && c._id === activeConversationRef.current._id
-          ? { ...c, settings: newSettings } : c
-      ));
-    };
-
-    const handleMessageRecalled = ({ messageId }) => {
-      setMessages(prev => prev.map(m => String(m._id) === String(messageId) ? { ...m, isRecalled: true, content: "", attachments: [], mediaIds: [] } : m));
-      setConversations(prev => prev.map(c => {
-        if (c.latestMessage && String(c.latestMessage._id) === String(messageId)) {
-          return { ...c, latestMessage: { ...c.latestMessage, isRecalled: true, content: "" } };
-        }
-        return c;
-      }));
-    };
-
-    const handleMessageReacted = ({ messageId, reactions }) => {
-      setMessages(prev => prev.map(m => String(m._id) === String(messageId) ? { ...m, reactions } : m));
-    };
-
-    const handleNewNotification = (notif) => {
-      if (notif?.type === 'friend_request') fetchIncomingRequests();
-      if (notif?.type === 'friend_accepted') { fetchFriends(); fetchOutgoingRequests(); }
-    };
-
-    const handleReminderCreated = (reminder) => {
-      setReminders(prev => {
-        if (prev.some(r => r._id === reminder._id)) return prev;
-        return [...prev, reminder].sort((a, b) => new Date(a.remindAt) - new Date(b.remindAt));
-      });
-      // System message is persisted by backend and arrives via conversation_updated
-    };
-
-    const handleReminderUpdated = (reminder) => {
-      setReminders(prev => prev.map(r => r._id === reminder._id ? reminder : r));
-    };
-
-    const handleReminderDeleted = ({ reminderId }) => {
-      setReminders(prev => prev.filter(r => r._id !== reminderId));
-    };
-
-    const handleJoinRequestReceived = ({ conversationId, conversationName, joinRequest }) => {
-      const activeId = activeConvIdRef.current;
-      if (activeId && activeId === conversationId) {
-        setJoinRequests(prev => {
-          if (prev.some(r => r._id === joinRequest._id)) return prev;
-          return [joinRequest, ...prev];
-        });
-      }
-      toast(`Yêu cầu tham gia nhóm "${conversationName}" mới`, { icon: '👥' });
-    };
-
-    const handleJoinRequestProcessed = ({ conversationName, action }) => {
-      if (action === 'approve') {
-        toast.success(`Yêu cầu tham gia "${conversationName}" đã được chấp thuận!`);
-        fetchConversationsData();
-      } else {
-        toast.error(`Yêu cầu tham gia "${conversationName}" đã bị từ chối.`);
-      }
-    };
-
-    socketService.on("conversation_updated", handleConversationUpdated);
-    socketService.on("conversation_settings_updated", handleSettingsUpdated);
-    socketService.on("message_recalled", handleMessageRecalled);
-    socketService.on("message_reacted", handleMessageReacted);
-    socketService.on("new_notification", handleNewNotification);
-    socketService.on("reminder_created", handleReminderCreated);
-    socketService.on("reminder_updated", handleReminderUpdated);
-    socketService.on("reminder_deleted", handleReminderDeleted);
-    socketService.on("join_request_received", handleJoinRequestReceived);
-    socketService.on("join_request_processed", handleJoinRequestProcessed);
-
-    const handleReminderTriggered = ({ _id, title, participants }) => {
-      setReminders(prev => prev.map(r => r._id === _id ? { ...r, status: 'done' } : r));
-      const currentUserObj = JSON.parse(localStorage.getItem('user') || '{}');
-      const myId = String(currentUserObj._id || currentUserObj.id || '');
-      const isParticipant = (participants || []).some(p => String(p._id || p) === myId);
-      if (!isParticipant) return;
-      // Dùng browser Notification nếu được cấp quyền, fallback toast
-      const msg = `🔔 Nhắc hẹn: ${title}`;
-      if (Notification.permission === 'granted') {
-        new Notification('Nhắc hẹn', { body: title, icon: '/favicon.ico' });
-      } else {
-        toast(msg, { duration: 8000, icon: '🔔', style: { fontWeight: 600 } });
-      }
-    };
-    socketService.on("reminder_triggered", handleReminderTriggered);
-
-    return () => {
-      socketService.off("conversation_updated", handleConversationUpdated);
-      socketService.off("conversation_settings_updated", handleSettingsUpdated);
-      socketService.off("message_recalled", handleMessageRecalled);
-      socketService.off("message_reacted", handleMessageReacted);
-      socketService.off("new_notification", handleNewNotification);
-      socketService.off("reminder_created", handleReminderCreated);
-      socketService.off("reminder_updated", handleReminderUpdated);
-      socketService.off("reminder_deleted", handleReminderDeleted);
-      socketService.off("join_request_received", handleJoinRequestReceived);
-      socketService.off("join_request_processed", handleJoinRequestProcessed);
-      socketService.off("reminder_triggered", handleReminderTriggered);
-    };
-  }, [token, userId, fetchConversationsData]);
+  // ==================== SOCKET (tách sang useChatSocket) ====================
+  useChatSocket({
+    token, userId,
+    activeConvIdRef, activeConversationRef,
+    setMessages, setConversations, setActiveConversation, setSelfConversation,
+    setPinnedMessages, setReminders, setJoinRequests,
+    fetchConversationsData, fetchIncomingRequests, fetchFriends, fetchOutgoingRequests,
+    toast,
+  });
 
   // ==================== LOAD TIN NHẮN KHI VÀO PHÒNG ====================
   useEffect(() => {
@@ -704,6 +520,10 @@ export default function ChatPage() {
     };
 
     fetchMessages();
+    // Fetch pinned messages
+    conversationService.getPinnedMessages(activeConversation._id)
+      .then(res => setPinnedMessages(res.data?.items || res.data || []))
+      .catch(() => setPinnedMessages([]));
     // socket.io sẽ buffer emit này nếu chưa connect, và gửi khi connected
     socketService.socket?.emit("join_conversation", { conversationId: activeConversation._id });
 
@@ -940,6 +760,93 @@ export default function ChatPage() {
     try {
       await axios.delete(`${API_BASE_URL}/messages/${msgId}`, { headers: { Authorization: `Bearer ${token}` } });
     } catch (err) { toast.error("Lỗi xóa tin nhắn"); }
+  };
+
+  // ==================== PIN MESSAGE HANDLERS ====================
+  const pinnedMsgIds = useMemo(() => new Set(pinnedMessages.map(p => String(p.messageId?._id || p.messageId))), [pinnedMessages]);
+
+  const handlePinMessage = async (messageId) => {
+    if (!activeConversation) return;
+    if (pinnedMessages.length >= 3) {
+      setPendingPinId(messageId);
+      setShowPinLimitModal(true);
+      return;
+    }
+    // Optimistic update
+    const tempPin = { _id: `temp-pin-${Date.now()}`, messageId: messageId, pinnedAt: new Date().toISOString() };
+    setPinnedMessages(prev => [...prev, tempPin]);
+
+    try {
+      await conversationService.pinMessage(activeConversation._id, messageId);
+      const res = await conversationService.getPinnedMessages(activeConversation._id);
+      setPinnedMessages(res.data?.items || res.data || []);
+      toast.success("📌 Đã ghim tin nhắn");
+    } catch (err) {
+      // Rollback
+      setPinnedMessages(prev => prev.filter(p => p._id !== tempPin._id));
+      toast.error(err.response?.data?.message || "Lỗi ghim tin nhắn");
+    }
+  };
+
+  const handleUnpinMessage = async (messageId) => {
+    if (!activeConversation) return;
+    try {
+      await conversationService.unpinMessage(activeConversation._id, messageId);
+      setPinnedMessages(prev => prev.filter(p => String(p.messageId?._id || p.messageId) !== String(messageId)));
+      toast.success("Đã bỏ ghim tin nhắn");
+    } catch (err) {
+      toast.error("Lỗi bỏ ghim tin nhắn");
+    }
+  };
+
+  const handleForcePin = async () => {
+    if (!pendingPinId || !activeConversation) return;
+    // Bỏ ghim tin cũ nhất rồi ghim tin mới
+    const oldest = pinnedMessages[0];
+    if (oldest) {
+      await conversationService.unpinMessage(activeConversation._id, oldest.messageId?._id || oldest.messageId);
+    }
+    try {
+      await conversationService.pinMessage(activeConversation._id, pendingPinId);
+      const res = await conversationService.getPinnedMessages(activeConversation._id);
+      setPinnedMessages(res.data?.items || res.data || []);
+      toast.success("📌 Đã ghim tin nhắn");
+    } catch (err) {
+      toast.error("Lỗi ghim tin nhắn");
+    }
+    setShowPinLimitModal(false);
+    setPendingPinId(null);
+  };
+
+  const jumpToMessage = (msgId) => {
+    const el = document.getElementById(`msg-${msgId}`);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      el.classList.add('highlight-msg');
+      setTimeout(() => el.classList.remove('highlight-msg'), 1500);
+    }
+  };
+
+  // ==================== POLL HANDLERS ====================
+  const handleCreatePoll = async (pollData) => {
+    if (!activeConversation) return;
+    try {
+      await pollService.createPoll({ ...pollData, conversationId: activeConversation._id });
+      toast.success("📊 Đã tạo bình chọn");
+      setShowCreatePollModal(false);
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Lỗi tạo bình chọn");
+    }
+  };
+
+  const handlePollVoted = (updatedPoll) => {
+    if (!updatedPoll) return;
+    setMessages(prev => prev.map(m => {
+      if (m.type === 'poll' && String(m.pollId?._id || m.pollId) === String(updatedPoll._id)) {
+        return { ...m, pollId: updatedPoll };
+      }
+      return m;
+    }));
   };
 
   // ── Ghim / bỏ ghim hội thoại — lưu DB qua ConversationPreference ──
@@ -1394,448 +1301,41 @@ export default function ChatPage() {
         </div>
       )}
 
-      {/* ── BÊN TRÁI: SIDEBAR ── */}
-      <aside className="room-sidebar">
-        <div className="rs-header">
-          <span style={{ fontWeight: 800, fontSize: 18 }}>Đoạn chat</span>
-          <div style={{ display: "flex", gap: 6 }}>
-            <button
-              title="Thêm bạn bè"
-              onClick={() => setShowAddFriendModal(true)}
-              style={{ width: 34, height: 34, borderRadius: "50%", border: "none", background: "var(--z-bg-hover)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--z-text-secondary)", transition: "background 0.2s" }}
-              onMouseEnter={e => e.currentTarget.style.background = "var(--z-border)"}
-              onMouseLeave={e => e.currentTarget.style.background = "var(--z-bg-hover)"}
-            >
-              <FaUserPlus size={15} />
-            </button>
-            <button
-              title="Tạo nhóm"
-              onClick={() => setShowCreateGroupModal(true)}
-              style={{ width: 34, height: 34, borderRadius: "50%", border: "none", background: "var(--z-bg-hover)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--z-text-secondary)", transition: "background 0.2s" }}
-              onMouseEnter={e => e.currentTarget.style.background = "var(--z-border)"}
-              onMouseLeave={e => e.currentTarget.style.background = "var(--z-bg-hover)"}
-            >
-              <FaUsers size={15} />
-            </button>
-          </div>
-        </div>
-        <div className="rs-search-bar">
-          <FaSearch color="var(--z-text-secondary)" size={14} />
-          <input placeholder={t('searchPlaceholder')} value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
-        </div>
+      {/* ── BÊN TRÁI: SIDEBAR (Đã tách component) ── */}
+      <ChatSidebar
+        searchQuery={searchQuery} setSearchQuery={setSearchQuery}
+        categoryFilter={categoryFilter} setCategoryFilter={setCategoryFilter}
+        friendConvs={friendConvs} strangerConvs={strangerConvs}
+        activeConversation={activeConversation} setActiveConversation={setActiveConversation}
+        navigate={navigate}
+        getConversationName={getConversationName}
+        getConversationAvatar={getConversationAvatar}
+        getOtherParticipant={getOtherParticipant}
+        setShowAddFriendModal={setShowAddFriendModal}
+        setShowCreateGroupModal={setShowCreateGroupModal}
+        setShowStrangerPanel={setShowStrangerPanel}
+        userId={userId} friendIds={friendIds}
+        handlePinConversation={handlePinConversation}
+        handleClassifyConversation={handleClassifyConversation}
+        handleHideConversation={handleHideConversation}
+        handleMuteConversation={handleMuteConversation}
+        handleDeleteConversationCtx={handleDeleteConversation}
+        handleLeaveGroupCtx={handleLeaveGroup}
+        ctxMenu={ctxMenu} setCtxMenu={setCtxMenu}
+        reportTarget={reportTarget} setReportTarget={setReportTarget}
+        showHidden={showHidden} hiddenConvs={hiddenConvs}
+        handlePinButtonClick={handlePinButtonClick}
+        handleUnhideConversation={handleUnhideConversation}
+        showPinModal={showPinModal} setShowPinModal={setShowPinModal}
+        pinModalMode={pinModalMode} setPinModalMode={setPinModalMode}
+        pinInput={pinInput} setPinInput={setPinInput}
+        pinConfirm={pinConfirm} setPinConfirm={setPinConfirm}
+        pinError={pinError} setPinError={setPinError}
+        pinStep={pinStep} setPinStep={setPinStep}
+        handlePinSubmit={handlePinSubmit}
+        getSavedPin={getSavedPin}
+      />
 
-        {/* ── Tabs lọc theo phân loại ── */}
-        {(() => {
-          const CATS = [
-            { key: 'all', label: 'Tất cả', emoji: null },
-            { key: 'primary', label: 'Chính', emoji: '💬' },
-            { key: 'work', label: 'Việc', emoji: '💼' },
-            { key: 'family', label: 'G.đình', emoji: '🏠' },
-            { key: 'other', label: 'Khác', emoji: '🗂️' },
-          ];
-          return (
-            <div style={{
-              display: 'flex', gap: 4, padding: '6px 10px 4px',
-              overflowX: 'auto', scrollbarWidth: 'none',
-              borderBottom: '1px solid var(--z-border)',
-            }}>
-              {CATS.map(cat => {
-                const isActive = categoryFilter === cat.key;
-                return (
-                  <button
-                    key={cat.key}
-                    onClick={() => setCategoryFilter(cat.key)}
-                    style={{
-                      flexShrink: 0,
-                      padding: '4px 10px',
-                      borderRadius: 20,
-                      border: 'none',
-                      cursor: 'pointer',
-                      fontSize: 12,
-                      fontWeight: isActive ? 700 : 500,
-                      background: isActive ? 'var(--z-primary)' : 'var(--z-bg-hover)',
-                      color: isActive ? '#fff' : 'var(--z-text-secondary)',
-                      transition: 'all 0.15s',
-                      whiteSpace: 'nowrap',
-                    }}
-                  >
-                    {cat.emoji ? `${cat.emoji} ${cat.label}` : cat.label}
-                  </button>
-                );
-              })}
-            </div>
-          );
-        })()}
-        {/* ── Nút xem hội thoại đã ẩn ── */}
-        <div
-          onClick={handlePinButtonClick}
-          style={{
-            display: 'flex', alignItems: 'center', gap: 8,
-            padding: '7px 14px', cursor: 'pointer',
-            fontSize: 12, color: showHidden ? 'var(--z-primary)' : 'var(--z-text-muted)',
-            fontWeight: showHidden ? 700 : 500,
-            borderBottom: '1px solid var(--z-border)',
-            background: showHidden ? 'rgba(0,104,255,0.05)' : 'transparent',
-            transition: 'background 0.15s',
-          }}
-        >
-          <span>👁‍🗨</span>
-          <span>{showHidden ? 'Ẩn danh sách ẩn' : 'Hội thoại đã ẩn'}</span>
-          {!showHidden && hiddenConvs.length > 0 && (
-            <span style={{ marginLeft: 'auto', background: '#6366f1', color: '#fff', borderRadius: 10, padding: '1px 7px', fontSize: 11 }}>
-              {hiddenConvs.length}
-            </span>
-          )}
-        </div>
-        <div className="rs-list">
-          {/* ── Panel hội thoại đã ẩn ── */}
-          {showHidden && (
-            <div style={{ borderBottom: '2px solid var(--z-border)', paddingBottom: 4, marginBottom: 4 }}>
-              {hiddenConvs.length === 0 ? (
-                <div style={{ padding: '20px 16px', textAlign: 'center', fontSize: 13, color: 'var(--z-text-muted)' }}>
-                  Không có hội thoại nào bị ẩn
-                </div>
-              ) : hiddenConvs.map(conv => {
-                const name = getConversationName(conv);
-                if (!name) return null;
-                return (
-                  <div
-                    key={conv._id}
-                    style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', cursor: 'pointer' }}
-                    onMouseEnter={e => e.currentTarget.style.background = 'var(--z-bg-hover)'}
-                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-                    onClick={() => { setActiveConversation(conv); navigate('/chat/' + conv._id); setShowHidden(false); }}
-                  >
-                    <img
-                      src={getConversationAvatar(conv)} alt=""
-                      style={{ width: 40, height: 40, borderRadius: '50%', objectFit: 'cover', flexShrink: 0, opacity: 0.65 }}
-                      onError={e => { e.currentTarget.src = DEFAULT_AVATAR; }}
-                    />
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--z-text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</div>
-                      <div style={{ fontSize: 11, color: 'var(--z-text-muted)', marginTop: 2 }}>Đã ẩn</div>
-                    </div>
-                    <button
-                      onClick={(e) => { e.stopPropagation(); handleUnhideConversation(conv); }}
-                      style={{ fontSize: 11, padding: '4px 10px', borderRadius: 8, border: '1px solid var(--z-border)', background: 'var(--z-bg-main)', color: 'var(--z-primary)', cursor: 'pointer', fontWeight: 600, flexShrink: 0 }}
-                    >
-                      Hiện lại
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-          {/* Item đặc biệt: Tin nhắn từ người lạ */}
-          {strangerConvs.length > 0 && (
-            <div
-              className="chat-list-item"
-              onClick={() => setShowStrangerPanel(true)}
-              style={{ cursor: 'pointer' }}
-            >
-              <div style={{ width: 44, height: 44, borderRadius: '50%', background: '#0068FF', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                <FaUserSecret size={20} color="#fff" />
-              </div>
-              <div className="cli-info">
-                <div className="cli-top">
-                  <span className="cli-name" style={{ fontWeight: 700 }}>Tin nhắn từ người lạ</span>
-                  <span className="cli-time" style={{ color: 'var(--z-primary)' }}></span>
-                </div>
-                <div className="cli-bottom">
-                  <span className="cli-msg">Gửi từ người chưa có trong danh bạ...</span>
-                  <div className="cli-unread" style={{ background: '#ef4444' }}>●</div>
-                </div>
-              </div>
-            </div>
-          )}
-          {/* ── Divider phân vùng: Đã ghim / Cuộc trò chuyện ── */}
-          {(() => {
-            const hasPinned = friendConvs.some(c => c.preference?.isPinned);
-            return hasPinned ? (
-              <div style={{
-                display: 'flex', alignItems: 'center', gap: 6,
-                padding: '5px 14px 3px',
-                fontSize: 10, fontWeight: 600,
-                color: 'var(--z-text-muted)',
-                letterSpacing: '0.6px',
-                textTransform: 'uppercase',
-                opacity: 0.7,
-              }}>
-                <FaThumbtack size={8} style={{ transform: 'rotate(0deg)' }} />
-                Đã ghim
-              </div>
-            ) : null;
-          })()}
-          {friendConvs.map((conv, idx) => {
-            const isActive = activeConversation?._id === conv._id;
-            const convName = getConversationName(conv);
-            if (!convName) return null;
-            const unread = conv.unreadCount || 0;
-            const isSelf = conv.type === 'direct' && conv.participants?.length === 1;
-            const isPinned = conv.preference?.isPinned === true;
-            // Divider giữa pinned và non-pinned
-            const prevConv = friendConvs[idx - 1];
-            const showUnpinnedHeader = isPinned === false && prevConv?.preference?.isPinned === true;
-            return (
-              <React.Fragment key={conv._id}>
-                {/* Divider "Cuộc trò chuyện" khi hết vùng pinned */}
-                {showUnpinnedHeader && (
-                  <div style={{
-                    display: 'flex', alignItems: 'center', gap: 6,
-                    padding: '8px 14px 3px',
-                    fontSize: 10, fontWeight: 600,
-                    color: 'var(--z-text-muted)',
-                    letterSpacing: '0.6px',
-                    textTransform: 'uppercase',
-                    opacity: 0.7,
-                  }}>
-                    Cuộc trò chuyện
-                  </div>
-                )}
-                <div
-                  className={`chat-list-item ${isActive ? 'active' : ''} ${isPinned ? 'pinned-conv' : ''}`}
-                  onClick={() => { setActiveConversation(conv); navigate('/chat/' + conv._id); }}
-                  style={{ position: 'relative' }}
-                >
-                  {isSelf ? (
-                    <div style={{ width: 48, height: 48, borderRadius: '50%', background: 'linear-gradient(135deg, #0068FF, #00B4D8)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                      <FaCloud size={20} color="#fff" />
-                    </div>
-                  ) : (
-                    <div style={{ position: 'relative', flexShrink: 0 }}>
-                      <img className="cli-avatar" src={getConversationAvatar(conv)} alt="avt" onError={e => { e.currentTarget.src = DEFAULT_AVATAR; }} />
-                      {/* Badge ghim nhỏ trên avatar */}
-                      {isPinned && (
-                        <div style={{
-                          position: 'absolute', bottom: -2, right: -2,
-                          width: 16, height: 16, borderRadius: '50%',
-                          background: '#F59E0B', border: '2px solid var(--z-bg-sidebar)',
-                          display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        }}>
-                          <FaThumbtack size={7} color="#fff" />
-                        </div>
-                      )}
-                    </div>
-                  )}
-                  <div className="cli-info">
-                    <div className="cli-top">
-                      <span className="cli-name" style={{ fontWeight: unread > 0 ? 800 : 600, color: unread > 0 ? 'var(--z-text-primary)' : '' }}>
-                        {getConversationName(conv)}
-                      </span>
-                      <span className="cli-time" style={{ color: unread > 0 ? 'var(--z-primary)' : 'var(--z-text-muted)' }}>
-                        {conv.latestMessage ? formatChatTimestamp(conv.latestMessage.createdAt) : ''}
-                      </span>
-                    </div>
-                    <div className="cli-bottom">
-                      <span className="cli-msg" style={{ fontWeight: unread > 0 ? 700 : 400, color: unread > 0 ? 'var(--z-text-primary)' : 'var(--z-text-secondary)' }}>
-                        {conv.latestMessage?.isRecalled ? t('recalledMessage') || 'Tin nhắn đã thu hồi' : (conv.latestMessage?.content || (conv.latestMessage?.mediaIds?.length > 0 || conv.latestMessage?.attachments?.length > 0 ? '[Hình ảnh/File]' : t('noMessages') || 'Chưa có tin nhắn'))}
-                      </span>
-                      {unread > 0 && <div className="cli-unread">{unread > 99 ? '99+' : unread}</div>}
-                    </div>
-                  </div>
-
-                  {/* ── Nút ⋯ / 📌 context menu (hiện khi hover qua CSS) ── */}
-                  <button
-                    className={`conv-ctx-btn${isPinned ? ' pinned' : ''}`}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (isSelf) {
-                        // Cloud: toggle ghim trực tiếp
-                        handlePinConversation(conv);
-                      } else {
-                        setCtxMenu({ conv, x: e.clientX, y: e.clientY });
-                      }
-                    }}
-                    title={isSelf ? (isPinned ? 'Bỏ ghim' : 'Ghim lên đầu') : 'Tuỳ chọn'}
-                    style={{
-                      position: 'absolute', right: 6, top: '50%',
-                      transform: 'translateY(-50%)',
-                      background: 'var(--z-bg-main)',
-                      border: '1px solid var(--z-border)',
-                      cursor: 'pointer',
-                      padding: '3px 7px', borderRadius: 8,
-                      color: isPinned ? '#F59E0B' : 'var(--z-text-primary)',
-                      /* KHÔNG set opacity inline — để CSS :hover kiểm soát */
-                      transition: 'opacity 0.15s, color 0.15s',
-                      zIndex: 3,
-                      fontSize: 14, fontWeight: 900, letterSpacing: 1,
-                      lineHeight: 1.2,
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      boxShadow: '0 1px 4px rgba(0,0,0,0.12)',
-                    }}
-                  >
-                    {isSelf
-                      ? <FaThumbtack size={11} style={{ transform: isPinned ? 'rotate(0deg)' : 'rotate(45deg)', transition: 'transform 0.2s' }} />
-                      : '···'
-                    }
-                  </button>
-                </div>
-              </React.Fragment>
-            );
-          })}
-          {friendConvs.length === 0 && <div style={{ textAlign: 'center', padding: '20px', color: 'var(--z-text-muted)', fontSize: 13 }}>Không tìm thấy cuộc trò chuyện nào</div>}
-        </div>{/* end rs-list */}
-
-        {/* ── Context Menu ── */}
-        {ctxMenu && (
-          <ConversationContextMenu
-            conv={ctxMenu.conv}
-            position={{ x: ctxMenu.x, y: ctxMenu.y }}
-            onClose={() => setCtxMenu(null)}
-            onPin={(conv) => handlePinConversation(conv)}
-            onClassify={handleClassifyConversation}
-            onHide={handleHideConversation}
-            onReport={(conv) => {
-              const other = getOtherParticipant(conv);
-              if (other) setReportTarget({ id: String(other._id || other.id), name: other.username || other.fullName || 'người dùng' });
-              setCtxMenu(null);
-            }}
-            myId={userId}
-          />
-        )}
-
-        {/* ── Report Modal từ context menu ── */}
-        {reportTarget && (
-          <ReportUserModal
-            targetUserId={reportTarget.id}
-            targetUserName={reportTarget.name}
-            onClose={() => setReportTarget(null)}
-          />
-        )}
-
-        {/* ── Modal PIN để xem hội thoại ẩn (pure FE) ── */}
-        {showPinModal && (
-          <div
-            style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-            onClick={(e) => { if (e.target === e.currentTarget) setShowPinModal(false); }}
-          >
-            <div style={{ background: 'var(--z-bg-sidebar)', borderRadius: 18, padding: '28px 32px', width: 320, boxShadow: '0 8px 40px rgba(0,0,0,0.22)', textAlign: 'center' }}
-              onClick={e => e.stopPropagation()}>
-
-              {/* Icon + tiêu đề */}
-              <div style={{ fontSize: 32, marginBottom: 8 }}>🔒</div>
-              <div style={{ fontSize: 17, fontWeight: 700, color: 'var(--z-text-primary)', marginBottom: 6 }}>
-                {pinModalMode === 'setup'
-                  ? (pinStep === 1 ? 'Tạo PIN bảo mật' : 'Xác nhận PIN')
-                  : 'Nhập PIN'}
-              </div>
-              <div style={{ fontSize: 13, color: 'var(--z-text-muted)', marginBottom: 24, lineHeight: 1.5 }}>
-                {pinModalMode === 'setup'
-                  ? (pinStep === 1
-                    ? 'Nhập 4 chữ số để bảo vệ hội thoại ẩn.'
-                    : 'Nhập lại PIN để xác nhận.')
-                  : 'Nhập PIN 4 chữ số để xem hội thoại đã ẩn.'}
-              </div>
-
-              {/* 4 ô nhập PIN dạng dots */}
-              <div style={{ display: 'flex', justifyContent: 'center', gap: 12, marginBottom: 20 }}>
-                {[0, 1, 2, 3].map(i => (
-                  <div key={i} style={{
-                    width: 48, height: 56, borderRadius: 12,
-                    border: `2px solid ${pinError ? '#ef4444' : i < pinInput.length ? 'var(--z-primary)' : 'var(--z-border)'}`,
-                    background: 'var(--z-bg-main)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: 24, fontWeight: 900, color: 'var(--z-text-primary)',
-                    transition: 'border-color 0.15s',
-                  }}>
-                    {i < pinInput.length ? '●' : ''}
-                  </div>
-                ))}
-              </div>
-
-              {/* Hidden input để capture keyboard */}
-              <input
-                autoFocus
-                type="tel"
-                maxLength={4}
-                value={pinInput}
-                onChange={e => {
-                  const val = e.target.value.replace(/\D/g, '').slice(0, 4);
-                  setPinInput(val);
-                  setPinError('');
-                  if (val.length === 4) setTimeout(() => {
-                    if (pinModalMode === 'setup' && pinStep === 1) {
-                      setPinStep(2); setPinConfirm(val); setPinInput('');
-                    } else {
-                      // auto-submit
-                      const btn = document.getElementById('pin-submit-btn');
-                      if (btn) btn.click();
-                    }
-                  }, 120);
-                }}
-                onKeyDown={e => { if (e.key === 'Enter') document.getElementById('pin-submit-btn')?.click(); }}
-                style={{ position: 'absolute', opacity: 0, width: 1, height: 1, pointerEvents: 'none' }}
-              />
-
-              {pinError && (
-                <div style={{ fontSize: 12, color: '#ef4444', marginBottom: 12, fontWeight: 600 }}>{pinError}</div>
-              )}
-
-              {/* Numpad */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10, marginBottom: 16 }}>
-                {[1, 2, 3, 4, 5, 6, 7, 8, 9, '', 0, '⌫'].map((k, idx) => (
-                  <button key={idx}
-                    onClick={() => {
-                      if (k === '') return;
-                      if (k === '⌫') { setPinInput(p => p.slice(0, -1)); setPinError(''); return; }
-                      setPinInput(p => {
-                        const next = p.length < 4 ? p + k : p;
-                        if (next.length === 4) {
-                          setTimeout(() => {
-                            if (pinModalMode === 'setup' && pinStep === 1) {
-                              setPinStep(2); setPinConfirm(next); setPinInput('');
-                            }
-                          }, 120);
-                        }
-                        return next;
-                      });
-                      setPinError('');
-                    }}
-                    style={{
-                      padding: '14px', borderRadius: 12, border: '1px solid var(--z-border)',
-                      background: k === '' ? 'transparent' : 'var(--z-bg-main)',
-                      color: 'var(--z-text-primary)', fontSize: 18, fontWeight: 600,
-                      cursor: k === '' ? 'default' : 'pointer',
-                      transition: 'background 0.12s',
-                      visibility: k === '' ? 'hidden' : 'visible',
-                    }}
-                    onMouseEnter={e => { if (k !== '') e.currentTarget.style.background = 'var(--z-bg-hover)'; }}
-                    onMouseLeave={e => { e.currentTarget.style.background = k === '' ? 'transparent' : 'var(--z-bg-main)'; }}
-                  >
-                    {k}
-                  </button>
-                ))}
-              </div>
-
-              <div style={{ display: 'flex', gap: 10 }}>
-                <button
-                  onClick={() => { setShowPinModal(false); setPinInput(''); setPinError(''); setPinStep(1); }}
-                  style={{ flex: 1, padding: '11px', borderRadius: 12, border: '1px solid var(--z-border)', background: 'transparent', color: 'var(--z-text-primary)', cursor: 'pointer', fontWeight: 600, fontSize: 14 }}
-                >
-                  Huỷ
-                </button>
-                <button
-                  id="pin-submit-btn"
-                  onClick={handlePinSubmit}
-                  style={{ flex: 1, padding: '11px', borderRadius: 12, border: 'none', background: 'var(--z-primary)', color: '#fff', cursor: 'pointer', fontWeight: 700, fontSize: 14 }}
-                >
-                  {pinModalMode === 'setup' && pinStep === 1 ? 'Tiếp theo' : 'Xác nhận'}
-                </button>
-              </div>
-
-              {/* Reset PIN (nếu đã có) */}
-              {pinModalMode === 'unlock' && (
-                <div
-                  onClick={() => { setPinModalMode('setup'); setPinStep(1); setPinInput(''); setPinError(''); }}
-                  style={{ marginTop: 14, fontSize: 12, color: 'var(--z-primary)', cursor: 'pointer', textDecoration: 'underline' }}
-                >
-                  Đặt lại PIN
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-      </aside>
 
       {/* ── Cloud của tôi: dùng giao diện MyDocumentsPage ── */}
       {activeConversation?.type === 'direct' && activeConversation?.participants?.length === 1 ? (
@@ -1857,6 +1357,15 @@ export default function ChatPage() {
               strangerId: getOtherParticipant(activeConversation)?._id || getOtherParticipant(activeConversation)?.id,
             }}
             onInfo={() => setShowRightPanel(!showRightPanel)}
+          />
+
+          {/* ── THANH GHIM TIN NHẮN (Đã ghim) ── */}
+          <PinnedBar
+            pinnedMessages={pinnedMessages}
+            jumpToMessage={jumpToMessage}
+            setShowRightPanel={setShowRightPanel}
+            setUnpinTargetId={setUnpinTargetId}
+            setShowUnpinConfirmModal={setShowUnpinConfirmModal}
           />
 
           <div className="chat-messages">
@@ -2044,6 +1553,11 @@ export default function ChatPage() {
                             onDelete={handleDelete}
                             onForward={openShareModal}
                             onReply={(msg) => console.log('Trả lời:', msg)}
+                            onPin={handlePinMessage}
+                            onUnpin={handleUnpinMessage}
+                            isPinned={pinnedMsgIds.has(String(item._id || item.id))}
+                            onPollVoted={handlePollVoted}
+                            userId={userId}
                           />
                         )}
                       </React.Fragment>
@@ -2085,6 +1599,7 @@ export default function ChatPage() {
                 onSend={handleSendText}
                 onSendLike={handleSendLike}
                 onUploadFiles={handleUploadFilesFromInput}
+                onShowPoll={() => setShowCreatePollModal(true)}
               />
             );
           })()}
@@ -2121,6 +1636,11 @@ export default function ChatPage() {
           handleProcessJoinRequest={handleProcessJoinRequest}
           pendingEditReminder={pendingEditReminder}
           onPendingEditConsumed={() => setPendingEditReminder(null)}
+          onShowAddMember={() => setShowAddMemberModal(true)}
+          onShowPoll={() => setShowCreatePollModal(true)}
+          pinnedMessages={pinnedMessages}
+          onUnpin={handleUnpinMessage}
+          onJump={jumpToMessage}
         />
       )}
 
@@ -2180,6 +1700,67 @@ export default function ChatPage() {
           </div>
         </div>
       )}
+    {/* ── MODALS GHIM & BÌNH CHỌN ── */}
+    {showPinLimitModal && (
+      <PinLimitModal
+        isOpen={showPinLimitModal}
+        onClose={() => setShowPinLimitModal(false)}
+        onReplace={handleForcePin}
+        currentPins={pinnedMessages}
+      />
+    )}
+    {showCreatePollModal && (
+      <CreatePollModal
+        isOpen={showCreatePollModal}
+        onClose={() => setShowCreatePollModal(false)}
+        conversationId={activeConversation?._id}
+      />
+    )}
+    {showAddMemberModal && (
+      <AddMemberModal
+        isOpen={showAddMemberModal}
+        onClose={() => setShowAddMemberModal(false)}
+        activeConversation={activeConversation}
+        friends={friends}
+        onAdded={fetchConversationsData}
+      />
+    )}
+    {showUnpinConfirmModal && (
+      <UnpinConfirmModal
+        isOpen={showUnpinConfirmModal}
+        onClose={() => setShowUnpinConfirmModal(false)}
+        onConfirm={() => {
+          if (unpinTargetId) handleUnpinMessage(unpinTargetId);
+        }}
+      />
+    )}
+
+    {/* ── CONTEXT MENU & REPORT ── */}
+    {ctxMenu && (
+      <ConversationContextMenu
+        conv={ctxMenu.conv}
+        position={{ x: ctxMenu.x, y: ctxMenu.y }}
+        onClose={() => setCtxMenu(null)}
+        onPin={(conv) => handlePinConversation(conv)}
+        onClassify={handleClassifyConversation}
+        onHide={handleHideConversation}
+        onReport={(conv) => {
+          const other = getOtherParticipant(conv);
+          if (other) setReportTarget({ id: String(other._id || other.id), name: other.username || other.fullName || 'người dùng' });
+          setCtxMenu(null);
+        }}
+        myId={userId}
+      />
+    )}
+
+    {reportTarget && (
+      <ReportUserModal
+        targetUserId={reportTarget.id}
+        targetUserName={reportTarget.name}
+        onClose={() => setReportTarget(null)}
+      />
+    )}
+
     </div>
   );
 }

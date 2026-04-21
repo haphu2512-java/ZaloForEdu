@@ -12,9 +12,9 @@ class SocketService {
     this._pendingListeners = []; // listeners registered before connect()
   }
 
-  connect() {
-    if (this.socket) return; // Đã có socket (dù đang connecting hay connected)
-    const token = localStorage.getItem("token");
+  connect(explicitToken = null) {
+    if (this.socket) return; 
+    const token = explicitToken || localStorage.getItem("token");
     if (!token) return;
 
     this.socket = io(getSocketUrl(), {

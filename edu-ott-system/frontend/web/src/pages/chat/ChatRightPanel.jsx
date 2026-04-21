@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { FaBell, FaThumbtack, FaUserPlus, FaUserSecret, FaArrowLeft, FaTrashAlt, FaSignOutAlt, FaLink, FaEllipsisH, FaChevronDown, FaChevronUp, FaCalendarAlt, FaUserTimes, FaKey, FaSync, FaPen, FaCheck, FaTimes, FaFlag, FaTag } from 'react-icons/fa';
+import { FaBell, FaThumbtack, FaUserPlus, FaUserSecret, FaArrowLeft, FaTrashAlt, FaSignOutAlt, FaLink, FaEllipsisH, FaChevronDown, FaChevronUp, FaCalendarAlt, FaUserTimes, FaKey, FaSync, FaPen, FaCheck, FaTimes, FaFlag, FaTag, FaPoll } from 'react-icons/fa';
 import toast from 'react-hot-toast';
 import { conversationService } from '../../services/conversationService';
 import { pollService } from '../../services/pollService';
@@ -78,7 +78,8 @@ export const ChatRightPanel = ({
   onShowAddMember,
   onShowPoll,
   pinnedMessages = [],
-  setPinnedMessages,
+  onUnpin,
+  onJump,
 }) => {
   const { t } = useLanguage();
 
@@ -353,33 +354,33 @@ export const ChatRightPanel = ({
               {/* GHIM & GHI CHÚ */}
               <Accordion title={<span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><FaThumbtack size={13} /> Tin nhắn đã ghim</span>} defaultOpen={false}>
                 <div style={{ padding: '8px 16px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
+                    <button
+                      style={{ border: 'none', background: 'var(--z-primary)', color: 'white', fontSize: 11, cursor: 'pointer', padding: '4px 10px', borderRadius: 12 }}
+                      onClick={() => setShowPinnedPanel(true)}
+                    >Xem tất cả</button>
+                  </div>
                   {pinnedMessages.length === 0 ? (
                     <div style={{ fontSize: 12, color: 'var(--z-text-muted)', textAlign: 'center', padding: '12px 0' }}>Chưa có tin nhắn ghim nào</div>
                   ) : (
-                    pinnedMessages.map((pin, idx) => (
-                      <div key={pin._id || idx} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '8px 0', borderBottom: '1px solid var(--z-border)' }}>
+                    pinnedMessages.slice(0, 3).map((pin, idx) => (
+                      <div key={pin._id || idx} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '8px 0', borderBottom: '1px solid var(--z-border)', cursor: 'pointer' }}
+                        onClick={() => onJump && onJump(pin.messageId?._id || pin.messageId)}
+                      >
                         <FaThumbtack size={10} color="#F59E0B" style={{ marginTop: 4, flexShrink: 0 }} />
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ fontSize: 13, color: 'var(--z-text-primary)', wordBreak: 'break-word', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {pin.messageId?.content || '[Hình ảnh/File]'}
+                            {pin.messageId?.content || (pin.messageId?.mediaIds?.length > 0 ? '[Hình ảnh]' : (pin.messageId?.attachments?.length > 0 ? '[Tập tin]' : '[Tin nhắn]'))}
                           </div>
                           <div style={{ fontSize: 11, color: 'var(--z-text-muted)', marginTop: 2 }}>
                             {new Date(pin.pinnedAt || pin.createdAt).toLocaleDateString('vi-VN')}
                           </div>
                         </div>
                         <button title="Bỏ ghim" style={{ border: 'none', background: 'none', color: '#ef4444', cursor: 'pointer', padding: '2px', flexShrink: 0 }}
-                          onClick={async () => {
+                          onClick={(e) => {
+                            e.stopPropagation();
                             if (window.confirm('Bỏ ghim tin nhắn này?')) {
-                              try {
-                                const msgId = pin.messageId?._id || pin.messageId;
-                                await conversationService.unpinMessage(activeConversation._id, msgId);
-                                if (setPinnedMessages) {
-                                    setPinnedMessages(prev => prev.filter(p => (p.messageId?._id || p.messageId) !== msgId));
-                                }
-                                toast.success('Đã bỏ ghim');
-                              } catch (err) {
-                                toast.error('Lỗi bỏ ghim');
-                              }
+                              onUnpin && onUnpin(pin.messageId?._id || pin.messageId);
                             }
                           }}>
                           <FaTimes size={11} />
@@ -833,15 +834,6 @@ export const ChatRightPanel = ({
         {rightPanelMode === 'default' && (
           <div style={{ padding: '12px 16px', borderTop: '1px solid var(--z-border)', display: 'flex', flexDirection: 'column', gap: 8 }}>
 
-            {/* Nút xem tin nhắn đã ghim */}
-            <button
-              onClick={() => setShowPinnedPanel(true)}
-              style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 10, border: '1px solid var(--z-border)', background: 'var(--z-bg-main)', color: 'var(--z-text-primary)', cursor: 'pointer', fontSize: 14, fontWeight: 500 }}
-            >
-              <FaThumbtack size={14} color="#F59E0B" />
-              Tin nhắn đã ghim
-            </button>
-
             {/* Nút phân loại hội thoại */}
             <button
               onClick={() => setShowClassifyModal(true)}
@@ -1038,10 +1030,7 @@ export const ChatRightPanel = ({
                 isPrivileged={isOwnerLocal || isAdminLocal}
                 canPin={canPinLocal}
                 onClose={() => setShowPinnedPanel(false)}
-                onJumpToMessage={(msgId) => {
-                  const el = document.getElementById(`msg-${msgId}`);
-                  if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); el.classList.add('highlight-msg'); setTimeout(() => el.classList.remove('highlight-msg'), 1500); }
-                }}
+                onJumpToMessage={onJump}
               />
             </div>
           </div>
