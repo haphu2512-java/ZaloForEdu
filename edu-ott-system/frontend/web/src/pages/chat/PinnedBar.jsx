@@ -26,12 +26,12 @@ export const PinnedBar = ({ pinnedMessages = [], jumpToMessage, setShowRightPane
       >
         <FaThumbtack size={12} color="#F59E0B" style={{ flexShrink: 0, transform: 'rotate(45deg)' }} />
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 12, color: 'var(--z-text-muted)', marginBottom: 1 }}>
+          <div style={{ fontSize: 12, color: 'var(--z-text-muted)', marginBottom: 1, display: 'flex', alignItems: 'center', gap: 6 }}>
             📌 {pinnedMessages.length} tin nhắn đã ghim
+            <span style={{ color: 'var(--z-primary)', fontSize: 12, fontWeight: 700, cursor: 'pointer', flexShrink: 0 }}>Xem</span>
           </div>
-          <div style={{ fontSize: 13, color: 'var(--z-text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'flex', alignItems: 'center', gap: 6 }}>
+          <div style={{ fontSize: 13, color: 'var(--z-text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
             <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}>{latestContent}</span>
-            <span style={{ color: 'var(--z-primary)', fontSize: 12, fontWeight: 600, cursor: 'pointer', flexShrink: 0 }}>Xem</span>
           </div>
         </div>
         <button

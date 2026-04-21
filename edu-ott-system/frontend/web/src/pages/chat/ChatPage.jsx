@@ -1533,7 +1533,17 @@ export default function ChatPage() {
                         {showDate && <div className="msg-date-divider"><span>{formatDateDivider(item.createdAt)}</span></div>}
                         {item.type === 'system' ? (
                           <div style={{ display: 'flex', justifyContent: 'center', margin: '4px 0' }}>
-                            <span style={{ fontSize: 12, color: 'var(--z-text-muted)', background: 'var(--z-bg-main)', padding: '3px 10px', borderRadius: 10 }}>{item.content}</span>
+                            <span style={{ fontSize: 12, color: 'var(--z-text-muted)', background: 'var(--z-bg-main)', padding: '3px 10px', borderRadius: 10 }}>
+                              {item.content}
+                              {item.content?.includes('ghim') && pinnedMessages.length > 0 && (
+                                <span 
+                                  style={{ color: 'var(--z-primary)', cursor: 'pointer', fontWeight: 600, marginLeft: 6 }} 
+                                  onClick={() => jumpToMessage(pinnedMessages[pinnedMessages.length - 1]?.messageId?._id || pinnedMessages[pinnedMessages.length - 1]?.messageId)}
+                                >
+                                  Xem
+                                </span>
+                              )}
+                            </span>
                           </div>
                         ) : item.type === 'system_reminder' ? (
                           <div style={{ display: 'flex', justifyContent: 'center', margin: '4px 0' }}>
@@ -1744,6 +1754,7 @@ export default function ChatPage() {
         onPin={(conv) => handlePinConversation(conv)}
         onClassify={handleClassifyConversation}
         onHide={handleHideConversation}
+        onDelete={handleDeleteConversationCtx}
         onReport={(conv) => {
           const other = getOtherParticipant(conv);
           if (other) setReportTarget({ id: String(other._id || other.id), name: other.username || other.fullName || 'người dùng' });

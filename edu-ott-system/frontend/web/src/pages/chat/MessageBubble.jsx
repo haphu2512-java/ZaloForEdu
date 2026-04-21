@@ -147,23 +147,6 @@ export const MessageBubble = ({
       onMouseLeave={() => { setIsHovered(false); if (!showMoreMenu && !showEmojiPicker) setShowMoreMenu(false); }}
       style={{ position: 'relative' }}
     >
-      {isPinned && (
-        <div style={{ 
-          display: 'flex', 
-          alignItems: 'center', 
-          gap: 4, 
-          fontSize: 10, 
-          color: '#F59E0B', 
-          fontWeight: 600,
-          marginBottom: 2, 
-          paddingLeft: isMe ? 0 : 44, 
-          justifyContent: isMe ? 'flex-end' : 'flex-start',
-          textTransform: 'uppercase',
-          letterSpacing: '0.5px'
-        }}>
-          <FaThumbtack size={8} /> Tin nhắn đã ghim
-        </div>
-      )}
       {!isMe && <img src={avatar} alt="avatar" className="mdc-msg-avatar" />}
 
       <div className="mdc-msg-body">
