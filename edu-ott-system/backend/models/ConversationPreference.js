@@ -36,10 +36,31 @@ const conversationPreferenceSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+    isPinned: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+    pinnedAt: {
+      type: Date,
+      default: null,
+    },
+    isMuted: {
+      type: Boolean,
+      default: false,
+    },
+    // Notification mode: all, mention_only, mute
+    notificationMode: {
+      type: String,
+      enum: ['all', 'mention_only', 'mute'],
+      default: 'all',
+    },
   },
   { timestamps: true },
 );
 
 conversationPreferenceSchema.index({ userId: 1, conversationId: 1 }, { unique: true });
+// Index to sort pinned conversations first for each user
+conversationPreferenceSchema.index({ userId: 1, isPinned: -1, pinnedAt: -1 });
 
 module.exports = mongoose.model('ConversationPreference', conversationPreferenceSchema);

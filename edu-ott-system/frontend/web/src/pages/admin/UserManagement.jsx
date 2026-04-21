@@ -61,13 +61,13 @@ export default function UserManagement() {
     const finalReason = isBanning ? banReasonInput : null;
 
     try {
-      await userService.updateUserStatus({ 
-        targetUserId: userId, 
+      await userService.updateUserStatus({
+        targetUserId: userId,
         isActive: !isBanning,
-        banReason: finalReason 
+        banReason: finalReason
       });
-      
-      setUsers(users.map(u => 
+
+      setUsers(users.map(u =>
         (u.id || u._id) === userId ? { ...u, isActive: !isBanning, banReason: finalReason } : u
       ));
       closeModal();
@@ -84,15 +84,15 @@ export default function UserManagement() {
 
     try {
       const res = await userService.updateUserStatus({ targetUserId: userId, action: 'warn' });
-      
+
       const newWarningCount = res.data?.warningCount || (user.warningCount || 0) + 1;
       const isNowBanned = res.data?.isActive === false || newWarningCount >= 3;
 
       setUsers(users.map(u => {
         if ((u.id || u._id) === userId) {
-          return { 
-            ...u, 
-            warningCount: newWarningCount, 
+          return {
+            ...u,
+            warningCount: newWarningCount,
             isActive: !isNowBanned,
             banReason: isNowBanned ? 'Hệ thống tự động khóa: Vượt quá 3 lần cảnh cáo vi phạm' : u.banReason
           };
@@ -142,14 +142,14 @@ export default function UserManagement() {
 
   return (
     <div style={{ animation: "fadeIn 0.4s ease-out", color: "#1e293b", position: "relative" }}>
-      
+
       {/* STATS SECTION */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "24px", marginBottom: "32px" }}>
         {[
-          { label: "Tổng người dùng", value: stats.total, icon: <Users size={20}/>, color: "#3b82f6", bg: "#eff6ff" },
-          { label: "Đang hoạt động", value: stats.active, icon: <Activity size={20}/>, color: "#10b981", bg: "#ecfdf5" },
-          { label: "Quản trị viên", value: stats.admins, icon: <Shield size={20}/>, color: "#8b5cf6", bg: "#f5f3ff" },
-          { label: "Đã bị khóa", value: stats.banned, icon: <ShieldAlert size={20}/>, color: "#ef4444", bg: "#fef2f2" },
+          { label: "Tổng người dùng", value: stats.total, icon: <Users size={20} />, color: "#3b82f6", bg: "#eff6ff" },
+          { label: "Đang hoạt động", value: stats.active, icon: <Activity size={20} />, color: "#10b981", bg: "#ecfdf5" },
+          { label: "Quản trị viên", value: stats.admins, icon: <Shield size={20} />, color: "#8b5cf6", bg: "#f5f3ff" },
+          { label: "Đã bị khóa", value: stats.banned, icon: <ShieldAlert size={20} />, color: "#ef4444", bg: "#fef2f2" },
         ].map((s, i) => (
           <div key={i} style={{ backgroundColor: "#fff", padding: "20px", borderRadius: "16px", border: "1px solid #f1f5f9", boxShadow: "0 2px 4px rgba(0,0,0,0.02)", display: "flex", alignItems: "center", gap: "16px" }}>
             <div style={{ backgroundColor: s.bg, color: s.color, padding: "12px", borderRadius: "12px" }}>{s.icon}</div>
@@ -165,12 +165,12 @@ export default function UserManagement() {
       <div style={{ backgroundColor: "#fff", borderRadius: "20px", border: "1px solid #f1f5f9", boxShadow: "0 4px 6px -1px rgba(0,0,0,0.05)", overflow: "hidden" }}>
         <div style={{ padding: "20px 24px", borderBottom: "1px solid #f1f5f9" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "20px" }}>
-            
+
             <div style={{ display: "flex", backgroundColor: "#f8fafc", padding: "4px", borderRadius: "12px" }}>
               {['All', 'Active', 'Banned'].map(t => (
-                <button 
+                <button
                   key={t}
-                  onClick={() => {setActiveTab(t); setCurrentPage(1);}}
+                  onClick={() => { setActiveTab(t); setCurrentPage(1); }}
                   style={{ padding: "8px 16px", borderRadius: "10px", border: "none", cursor: "pointer", fontSize: "14px", fontWeight: 600, backgroundColor: activeTab === t ? "#fff" : "transparent", color: activeTab === t ? "#3b82f6" : "#64748b", boxShadow: activeTab === t ? "0 2px 4px rgba(0,0,0,0.05)" : "none", transition: "0.2s" }}
                 >
                   {t === 'All' ? 'Tất cả' : t === 'Active' ? 'Hoạt động' : 'Bị khóa'}
@@ -181,13 +181,13 @@ export default function UserManagement() {
             <div style={{ display: "flex", gap: "12px", flex: 1, justifyContent: "flex-end", minWidth: "300px" }}>
               <div style={{ position: "relative", flex: 1, maxWidth: "350px" }}>
                 <Search size={18} style={{ position: "absolute", left: "14px", top: "50%", transform: "translateY(-50%)", color: "#94a3b8" }} />
-                <input 
-                  type="text" placeholder="Tìm tên, email..." 
-                  value={searchTerm} onChange={(e) => {setSearchTerm(e.target.value); setCurrentPage(1);}}
+                <input
+                  type="text" placeholder="Tìm tên, email..."
+                  value={searchTerm} onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
                   style={{ width: "100%", padding: "10px 16px 10px 42px", borderRadius: "12px", border: "1px solid #e2e8f0", fontSize: "14px", outline: "none" }}
                 />
               </div>
-              <select 
+              <select
                 value={filterRole} onChange={(e) => setFilterRole(e.target.value)}
                 style={{ padding: "10px 16px", borderRadius: "12px", border: "1px solid #e2e8f0", backgroundColor: "#fff", fontSize: "14px", fontWeight: 600, cursor: "pointer" }}
               >
@@ -216,6 +216,7 @@ export default function UserManagement() {
                   <th style={{ padding: "16px 24px", fontSize: "12px", fontWeight: 700, color: "#64748b", textTransform: "uppercase" }}>Thành viên</th>
                   <th style={{ padding: "16px 24px", fontSize: "12px", fontWeight: 700, color: "#64748b", textTransform: "uppercase" }}>Vai trò</th>
                   <th style={{ padding: "16px 24px", fontSize: "12px", fontWeight: 700, color: "#64748b", textTransform: "uppercase" }}>Cảnh cáo</th>
+                  <th style={{ padding: "16px 24px", fontSize: "12px", fontWeight: 700, color: "#64748b", textTransform: "uppercase" }}>Báo cáo CĐ</th>
                   <th style={{ padding: "16px 24px", fontSize: "12px", fontWeight: 700, color: "#64748b", textTransform: "uppercase" }}>Trạng thái</th>
                   <th style={{ padding: "16px 24px", fontSize: "12px", fontWeight: 700, color: "#64748b", textTransform: "uppercase", textAlign: "right" }}>Thao tác</th>
                 </tr>
@@ -224,12 +225,13 @@ export default function UserManagement() {
                 {paginatedUsers.map((user) => {
                   const isBanned = user.isActive === false;
                   const isAdmin = user.role === 'admin';
-                  const userId = user.id || user._id; 
+                  const userId = user.id || user._id;
                   const warnings = user.warningCount || 0;
+                  const reportCount = user.reportCount || 0;
 
                   return (
                     <tr key={userId} className="user-row" style={{ borderBottom: "1px solid #f1f5f9", transition: "0.2s" }}>
-                      
+
                       <td style={{ padding: "16px 24px" }}>
                         <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
                           <img src={user.avatarUrl || 'https://i.pravatar.cc/150?img=11'} alt="Ava" style={{ width: "40px", height: "40px", borderRadius: "12px", objectFit: "cover" }} />
@@ -242,7 +244,7 @@ export default function UserManagement() {
 
                       <td style={{ padding: "16px 24px" }}>
                         <span style={{ display: "inline-flex", alignItems: "center", gap: "4px", fontSize: "12px", fontWeight: 700, color: isAdmin ? "#6366f1" : "#64748b", backgroundColor: isAdmin ? "#f5f3ff" : "#f1f5f9", padding: "4px 10px", borderRadius: "8px" }}>
-                          {isAdmin ? <Shield size={12}/> : <Users size={12}/>}
+                          {isAdmin ? <Shield size={12} /> : <Users size={12} />}
                           {isAdmin ? 'Admin' : 'User'}
                         </span>
                       </td>
@@ -251,6 +253,24 @@ export default function UserManagement() {
                         <span style={{ fontSize: "13px", fontWeight: 600, color: warnings >= 2 ? "#ef4444" : warnings === 1 ? "#f59e0b" : "#10b981", backgroundColor: warnings >= 2 ? "#fef2f2" : warnings === 1 ? "#fffbeb" : "#ecfdf5", padding: "4px 8px", borderRadius: "6px" }}>
                           {warnings} Vi phạm
                         </span>
+                      </td>
+
+                      {/* Cột báo cáo từ cộng đồng */}
+                      <td style={{ padding: "16px 24px" }}>
+                        <span style={{
+                          fontSize: "13px", fontWeight: 600,
+                          color: reportCount >= 7 ? "#ef4444" : reportCount >= 3 ? "#f59e0b" : "#64748b",
+                          backgroundColor: reportCount >= 7 ? "#fef2f2" : reportCount >= 3 ? "#fffbeb" : "#f1f5f9",
+                          padding: "4px 8px", borderRadius: "6px",
+                          display: "inline-flex", alignItems: "center", gap: 4,
+                        }}>
+                          🚩 {reportCount}/10
+                        </span>
+                        {reportCount >= 7 && !isBanned && (
+                          <div style={{ fontSize: "11px", color: "#ef4444", marginTop: 3, fontWeight: 600 }}>
+                            ⚠ Sắp bị auto-ban
+                          </div>
+                        )}
                       </td>
 
                       <td style={{ padding: "16px 24px" }}>
@@ -266,20 +286,20 @@ export default function UserManagement() {
                           </div>
                         )}
                       </td>
-                      
+
                       <td style={{ padding: "16px 24px", textAlign: "right" }}>
                         <div className="action-buttons" style={{ display: "flex", justifyContent: "flex-end", gap: "8px" }}>
-                          
+
                           <button onClick={() => openModal('warn', user)} disabled={isBanned} style={{ padding: "8px", borderRadius: "10px", border: "none", backgroundColor: isBanned ? "#f1f5f9" : "#fffbeb", color: isBanned ? "#cbd5e1" : "#d97706", cursor: isBanned ? "not-allowed" : "pointer" }} title="Ghi nhận vi phạm">
-                            <AlertTriangle size={16}/>
+                            <AlertTriangle size={16} />
                           </button>
 
                           <button onClick={() => openModal(isBanned ? 'unban' : 'ban', user)} style={{ padding: "8px", borderRadius: "10px", border: "none", backgroundColor: isBanned ? "#ecfdf5" : "#fff1f2", color: isBanned ? "#10b981" : "#ef4444", cursor: "pointer" }} title={isBanned ? "Mở khóa" : "Khóa tài khoản"}>
-                            {isBanned ? <UserCheck size={16}/> : <UserX size={16}/>}
+                            {isBanned ? <UserCheck size={16} /> : <UserX size={16} />}
                           </button>
 
                           <button onClick={() => openModal('delete', user)} style={{ padding: "8px", borderRadius: "10px", backgroundColor: "#fff", color: "#94a3b8", cursor: "pointer", border: "1px solid #e2e8f0" }} title="Xóa dữ liệu">
-                            <Trash2 size={16}/>
+                            <Trash2 size={16} />
                           </button>
 
                         </div>
@@ -298,8 +318,8 @@ export default function UserManagement() {
             Hiển thị <b>{Math.min((currentPage - 1) * itemsPerPage + 1, filteredUsers.length)}</b> - <b>{Math.min(currentPage * itemsPerPage, filteredUsers.length)}</b> trên tổng <b>{filteredUsers.length}</b>
           </p>
           <div style={{ display: "flex", gap: "8px" }}>
-            <button disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)} style={{ padding: "6px 12px", border: "1px solid #e2e8f0", borderRadius: "8px", backgroundColor: "#fff", cursor: currentPage === 1 ? "not-allowed" : "pointer", opacity: currentPage === 1 ? 0.5 : 1, display: "flex", alignItems: "center", gap: "4px", fontSize: "13px", fontWeight: 600, color: "#475569" }}><ChevronLeft size={16}/> Trước</button>
-            <button disabled={currentPage === totalPages || filteredUsers.length === 0} onClick={() => setCurrentPage(p => p + 1)} style={{ padding: "6px 12px", border: "1px solid #e2e8f0", borderRadius: "8px", backgroundColor: "#fff", cursor: currentPage === totalPages ? "not-allowed" : "pointer", opacity: currentPage === totalPages || filteredUsers.length === 0 ? 0.5 : 1, display: "flex", alignItems: "center", gap: "4px", fontSize: "13px", fontWeight: 600, color: "#475569" }}>Sau <ChevronRight size={16}/></button>
+            <button disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)} style={{ padding: "6px 12px", border: "1px solid #e2e8f0", borderRadius: "8px", backgroundColor: "#fff", cursor: currentPage === 1 ? "not-allowed" : "pointer", opacity: currentPage === 1 ? 0.5 : 1, display: "flex", alignItems: "center", gap: "4px", fontSize: "13px", fontWeight: 600, color: "#475569" }}><ChevronLeft size={16} /> Trước</button>
+            <button disabled={currentPage === totalPages || filteredUsers.length === 0} onClick={() => setCurrentPage(p => p + 1)} style={{ padding: "6px 12px", border: "1px solid #e2e8f0", borderRadius: "8px", backgroundColor: "#fff", cursor: currentPage === totalPages ? "not-allowed" : "pointer", opacity: currentPage === totalPages || filteredUsers.length === 0 ? 0.5 : 1, display: "flex", alignItems: "center", gap: "4px", fontSize: "13px", fontWeight: 600, color: "#475569" }}>Sau <ChevronRight size={16} /></button>
           </div>
         </div>
       </div>
@@ -307,26 +327,26 @@ export default function UserManagement() {
       {/* ========================================================= */}
       {/* =================== CÁC CUSTOM MODALS =================== */}
       {/* ========================================================= */}
-      
+
       {modalState.isOpen && (
         <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "rgba(15, 23, 42, 0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 9999, backdropFilter: "blur(4px)", animation: "fadeIn 0.2s ease-out" }}>
-          
+
           <div style={{ backgroundColor: "#fff", width: "100%", maxWidth: "450px", borderRadius: "20px", padding: "24px", boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)" }}>
-            
+
             {/* Header Modal */}
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
               <h3 style={{ margin: 0, fontSize: "18px", fontWeight: 800, color: "#0f172a", display: "flex", alignItems: "center", gap: "8px" }}>
-                {modalState.type === 'ban' && <><UserX className="text-red-500" size={22}/> Khóa Tài Khoản</>}
-                {modalState.type === 'unban' && <><UserCheck className="text-emerald-500" size={22}/> Mở Khóa Tài Khoản</>}
-                {modalState.type === 'warn' && <><AlertTriangle className="text-amber-500" size={22}/> Ghi Nhận Vi Phạm</>}
-                {modalState.type === 'delete' && <><Trash2 className="text-red-500" size={22}/> Xóa Vĩnh Viễn</>}
+                {modalState.type === 'ban' && <><UserX className="text-red-500" size={22} /> Khóa Tài Khoản</>}
+                {modalState.type === 'unban' && <><UserCheck className="text-emerald-500" size={22} /> Mở Khóa Tài Khoản</>}
+                {modalState.type === 'warn' && <><AlertTriangle className="text-amber-500" size={22} /> Ghi Nhận Vi Phạm</>}
+                {modalState.type === 'delete' && <><Trash2 className="text-red-500" size={22} /> Xóa Vĩnh Viễn</>}
               </h3>
-              <button onClick={closeModal} style={{ background: "transparent", border: "none", cursor: "pointer", color: "#94a3b8", padding: "4px" }}><X size={20}/></button>
+              <button onClick={closeModal} style={{ background: "transparent", border: "none", cursor: "pointer", color: "#94a3b8", padding: "4px" }}><X size={20} /></button>
             </div>
 
             {/* Content Modal */}
             <div style={{ marginBottom: "24px" }}>
-              
+
               {/* NỘI DUNG MODAL BAN */}
               {modalState.type === 'ban' && (
                 <>
@@ -335,8 +355,8 @@ export default function UserManagement() {
                   </p>
                   <div>
                     <label style={{ display: "block", fontSize: "13px", fontWeight: 700, color: "#334155", marginBottom: "8px" }}>Lý do khóa (Bắt buộc):</label>
-                    <select 
-                      value={banReasonInput} 
+                    <select
+                      value={banReasonInput}
                       onChange={(e) => setBanReasonInput(e.target.value)}
                       style={{ width: "100%", padding: "12px 16px", borderRadius: "10px", border: "1px solid #e2e8f0", backgroundColor: "#f8fafc", fontSize: "14px", outline: "none", color: "#0f172a", marginBottom: "12px", fontFamily: "inherit" }}
                     >
@@ -347,10 +367,10 @@ export default function UserManagement() {
                       <option value="Khác...">Lý do khác...</option>
                     </select>
                     {banReasonInput === "Khác..." && (
-                      <input 
+                      <input
                         autoFocus
-                        type="text" 
-                        placeholder="Nhập lý do cụ thể..." 
+                        type="text"
+                        placeholder="Nhập lý do cụ thể..."
                         onChange={(e) => setBanReasonInput(e.target.value)}
                         style={{ width: "100%", padding: "12px 16px", borderRadius: "10px", border: "1px solid #cbd5e1", fontSize: "14px", outline: "none", color: "#0f172a", fontFamily: "inherit", boxSizing: "border-box" }}
                       />
@@ -395,25 +415,25 @@ export default function UserManagement() {
               <button disabled={isProcessing} onClick={closeModal} style={{ padding: "10px 16px", borderRadius: "10px", border: "1px solid #e2e8f0", backgroundColor: "#fff", color: "#64748b", fontWeight: 600, fontSize: "14px", cursor: "pointer" }}>
                 Hủy bỏ
               </button>
-              
+
               {modalState.type === 'ban' && (
                 <button disabled={isProcessing} onClick={executeBanOrUnban} style={{ padding: "10px 20px", borderRadius: "10px", border: "none", backgroundColor: "#ef4444", color: "#fff", fontWeight: 600, fontSize: "14px", cursor: "pointer", display: "flex", alignItems: "center", gap: "8px", boxShadow: "0 4px 6px -1px rgba(239, 68, 68, 0.2)" }}>
-                  {isProcessing ? <Loader2 size={16} className="spin"/> : "Xác nhận Khóa"}
+                  {isProcessing ? <Loader2 size={16} className="spin" /> : "Xác nhận Khóa"}
                 </button>
               )}
               {modalState.type === 'unban' && (
                 <button disabled={isProcessing} onClick={executeBanOrUnban} style={{ padding: "10px 20px", borderRadius: "10px", border: "none", backgroundColor: "#10b981", color: "#fff", fontWeight: 600, fontSize: "14px", cursor: "pointer", display: "flex", alignItems: "center", gap: "8px", boxShadow: "0 4px 6px -1px rgba(16, 185, 129, 0.2)" }}>
-                  {isProcessing ? <Loader2 size={16} className="spin"/> : "Xác nhận Mở khóa"}
+                  {isProcessing ? <Loader2 size={16} className="spin" /> : "Xác nhận Mở khóa"}
                 </button>
               )}
               {modalState.type === 'warn' && (
                 <button disabled={isProcessing} onClick={executeWarn} style={{ padding: "10px 20px", borderRadius: "10px", border: "none", backgroundColor: "#f59e0b", color: "#fff", fontWeight: 600, fontSize: "14px", cursor: "pointer", display: "flex", alignItems: "center", gap: "8px", boxShadow: "0 4px 6px -1px rgba(245, 158, 11, 0.2)" }}>
-                  {isProcessing ? <Loader2 size={16} className="spin"/> : "Ghi nhận Vi phạm"}
+                  {isProcessing ? <Loader2 size={16} className="spin" /> : "Ghi nhận Vi phạm"}
                 </button>
               )}
               {modalState.type === 'delete' && (
                 <button disabled={isProcessing} onClick={executeDelete} style={{ padding: "10px 20px", borderRadius: "10px", border: "none", backgroundColor: "#dc2626", color: "#fff", fontWeight: 600, fontSize: "14px", cursor: "pointer", display: "flex", alignItems: "center", gap: "8px", boxShadow: "0 4px 6px -1px rgba(220, 38, 38, 0.2)" }}>
-                  {isProcessing ? <Loader2 size={16} className="spin"/> : "Xóa vĩnh viễn"}
+                  {isProcessing ? <Loader2 size={16} className="spin" /> : "Xóa vĩnh viễn"}
                 </button>
               )}
             </div>

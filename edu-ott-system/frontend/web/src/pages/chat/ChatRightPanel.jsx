@@ -1,10 +1,14 @@
 import { useState, useEffect } from 'react';
-import { FaBell, FaBellSlash, FaThumbtack, FaUserPlus, FaUserSecret, FaArrowLeft, FaTrashAlt, FaSignOutAlt, FaLink, FaEllipsisH, FaChevronDown, FaChevronUp, FaCalendarAlt, FaUserTimes, FaKey, FaSync, FaPen, FaCheck, FaTimes } from 'react-icons/fa';
+import { FaBell, FaBellSlash, FaThumbtack, FaUserPlus, FaUserSecret, FaArrowLeft, FaTrashAlt, FaSignOutAlt, FaLink, FaEllipsisH, FaChevronDown, FaChevronUp, FaCalendarAlt, FaUserTimes, FaKey, FaSync, FaPen, FaCheck, FaTimes, FaFlag, FaTag, FaPoll } from 'react-icons/fa';
 import toast from 'react-hot-toast';
 import { conversationService } from '../../services/conversationService';
+import { pollService } from '../../services/pollService';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { getFileColor, getExt, formatBytes } from './chatUtils';
 import { toAbsoluteUrl } from './MessageBubble';
+import PinnedMessagesPanel from './Modals/PinnedMessagesPanel';
+import ReportUserModal from './Modals/ReportUserModal';
+import ClassifyConversationModal from './Modals/ClassifyConversationModal';
 
 // Tooltip component
 const Tooltip = ({ text, children }) => {
@@ -72,11 +76,18 @@ export const ChatRightPanel = ({
   pendingEditReminder,
   onPendingEditConsumed,
   onShowReminderList = () => {},
+  onShowAddMember,
+  onShowPoll,
+  pinnedMessages = [],
+  onUnpin,
+  onJump,
 }) => {
   const { t } = useLanguage();
 
   // Local states
   const [rightPanelMode, setRightPanelMode] = useState('default');
+  const [polls, setPolls] = useState([]);
+  const [loadingPolls, setLoadingPolls] = useState(false);
   const [showMuteModal, setShowMuteModal] = useState(false);
   const [isGroupNameEditing, setIsGroupNameEditing] = useState(false);
   const [editGroupName, setEditGroupName] = useState('');
@@ -91,6 +102,16 @@ export const ChatRightPanel = ({
   const [inviteLink, setInviteLink] = useState('');
   const [inviteCode, setInviteCode] = useState('');
   const [blockedMembers, setBlockedMembers] = useState([]);
+  // ── Tính năng mới ──
+  const [showPinnedPanel, setShowPinnedPanel] = useState(false);
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [showClassifyModal, setShowClassifyModal] = useState(false);
+  const [convCategory, setConvCategory] = useState('primary');
+
+  // Sync category từ preference khi đổi conversation
+  useEffect(() => {
+    setConvCategory(activeConversation?.preference?.category || 'primary');
+  }, [activeConversation?._id, activeConversation?.preference?.category]);
 
   useEffect(() => {
     if (rightPanelMode !== 'blocked' || !activeConversation) return;
@@ -122,7 +143,19 @@ export const ChatRightPanel = ({
         const origin = window.location.origin;
         setInviteLink(`${origin}/join/${data.inviteCode}`);
       })
-      .catch(() => {});
+      .catch(() => { });
+  }, [activeConversation?._id]);
+  
+  useEffect(() => {
+    if (activeConversation?._id && (activeConversation.type === 'group' || activeConversation.roomModel === 'Group')) {
+      setLoadingPolls(true);
+      pollService.getPolls(activeConversation._id, 10)
+        .then(res => {
+          setPolls(res.data?.items || res.items || []);
+        })
+        .catch(err => console.error("Lỗi lấy bình chọn:", err))
+        .finally(() => setLoadingPolls(false));
+    }
   }, [activeConversation?._id]);
 
   const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
@@ -194,7 +227,7 @@ export const ChatRightPanel = ({
                 )}
                 {isGroup && !isGroupNameEditing && canEditGroupInfo && (
                   <div style={{ cursor: 'pointer', color: 'var(--z-text-secondary)', padding: '2px' }} onClick={() => { setEditGroupName(activeConversation.name || ''); setIsGroupNameEditing(true); }}>
-                    <svg width="14" height="14" fill="currentColor" viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
+                    <svg width="14" height="14" fill="currentColor" viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z" /></svg>
                   </div>
                 )}
               </div>
@@ -221,7 +254,7 @@ export const ChatRightPanel = ({
                   </>
                 ) : (
                   <>
-                    <div className="crp-action-btn" style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, cursor: 'pointer', color: 'var(--z-text-primary)' }} onClick={() => toast('Chức năng thêm thành viên')}>
+                    <div className="crp-action-btn" style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, cursor: 'pointer', color: 'var(--z-text-primary)' }} onClick={onShowAddMember}>
                       <div className="crp-action-icon" style={{ background: 'var(--z-bg-main)', width: 36, height: 36, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><FaUserPlus size={16} /></div>
                       <span style={{ fontSize: 12 }}>Thêm TV</span>
                     </div>
@@ -268,6 +301,19 @@ export const ChatRightPanel = ({
                           )}
                           {showMemberActionId === keyStr && (
                             <div style={{ position: 'absolute', right: 0, top: '100%', background: 'var(--z-bg-sidebar)', border: '1px solid var(--z-border)', borderRadius: 6, zIndex: 10, boxShadow: '0 4px 12px rgba(0,0,0,0.15)', padding: '4px 0', width: 160 }}>
+                              <div className="m-action-item" onClick={async () => {
+                                const newNickname = prompt('Nhập biệt danh mới cho ' + displayName, activeConversation.nicknames?.[keyStr] || '');
+                                if (newNickname !== null) {
+                                  try {
+                                    await conversationService.updateNickname(activeConversation._id, keyStr, newNickname);
+                                    toast.success('Đã cập nhật biệt danh');
+                                    fetchConversations();
+                                  } catch (err) {
+                                    toast.error('Lỗi khi cập nhật biệt danh');
+                                  }
+                                }
+                                setShowMemberActionId(null);
+                              }}>🖊️ Đổi biệt danh</div>
                               {isOwner && role === 'member' && (
                                 <div className="m-action-item" onClick={() => { handleGroupAction('promote', keyStr); setShowMemberActionId(null); }}>⭐ Lên Phó nhóm</div>
                               )}
@@ -288,48 +334,119 @@ export const ChatRightPanel = ({
               {isGroup && (
                 <Accordion title={<span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><FaCalendarAlt size={13} /> Danh sách nhắc hẹn</span>} defaultOpen={false}>
                   <div style={{ padding: '8px 16px' }}>
-                    <button
-                      onClick={onShowReminderList}
-                      style={{ 
-                        width: '100%', 
-                        padding: '10px 14px', 
-                        borderRadius: 8, 
-                        border: '1px solid var(--z-border)', 
-                        background: 'var(--z-bg-main)', 
-                        color: 'var(--z-text-primary)', 
-                        fontSize: 13, 
-                        fontWeight: 600, 
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: 8,
-                        marginBottom: 12
-                      }}
-                    >
-                      <FaCalendarAlt size={14} />
-                      Xem tất cả nhắc hẹn ({reminders.length})
-                    </button>
-                    <button
-                      data-create-reminder
-                      style={{ 
-                        width: '100%',
-                        border: 'none', 
-                        background: 'var(--z-primary)', 
-                        color: 'white', 
-                        fontSize: 13, 
-                        cursor: 'pointer', 
-                        padding: '10px 14px', 
-                        borderRadius: 8,
-                        fontWeight: 600
-                      }}
-                      onClick={() => { setRemTitle(''); setRemTime(''); setShowAddReminder(true); }}
-                    >+ Tạo mới</button>
+                    <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+                      <button
+                        onClick={onShowReminderList}
+                        style={{ flex: 1, padding: '7px 10px', borderRadius: 8, border: '1px solid var(--z-border)', background: 'var(--z-bg-main)', color: 'var(--z-text-primary)', fontSize: 12, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
+                      >
+                        <FaCalendarAlt size={12} /> Xem tất cả ({reminders.length})
+                      </button>
+                      <button
+                        data-create-reminder
+                        style={{ flex: 1, border: 'none', background: 'var(--z-primary)', color: 'white', fontSize: 12, cursor: 'pointer', padding: '7px 10px', borderRadius: 8, fontWeight: 600 }}
+                        onClick={() => { setRemTitle(''); setRemTime(''); setShowAddReminder(true); }}
+                      >+ Tạo mới</button>
+                    </div>
+                    {reminders.length === 0 ? (
+                      <div style={{ fontSize: 12, color: 'var(--z-text-muted)', textAlign: 'center', padding: '12px 0' }}>Chưa có nhắc hẹn nào</div>
+                    ) : (
+                      reminders.map((rem, idx) => (
+                        <div key={rem._id || `rem-${idx}`} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '8px 0', borderBottom: '1px solid var(--z-border)' }}>
+                          <FaCalendarAlt size={12} color="var(--z-primary)" style={{ marginTop: 3, flexShrink: 0 }} />
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--z-text-primary)', wordBreak: 'break-word' }}>{rem.title}</div>
+                            <div style={{ fontSize: 11, color: 'var(--z-primary)', marginTop: 2 }}>{new Date(rem.remindAt).toLocaleString('vi-VN')}</div>
+                            <div style={{ fontSize: 11, color: 'var(--z-text-muted)' }}>{(rem.participants || []).length} người tham gia</div>
+                            {rem.status === 'expired' && <div style={{ fontSize: 10, color: '#ef4444' }}>Đã hết hạn</div>}
+                          </div>
+                          <button title="Sửa" style={{ border: 'none', background: 'none', color: 'var(--z-primary)', cursor: 'pointer', padding: '2px', flexShrink: 0 }}
+                            onClick={() => { setEditingReminder(rem); setEditRemTitle(rem.title); setEditRemTime(new Date(rem.remindAt).toISOString().slice(0, 16)); }}>
+                            <FaPen size={10} />
+                          </button>
+                          <button title="Xóa" style={{ border: 'none', background: 'none', color: '#ef4444', cursor: 'pointer', padding: '2px', flexShrink: 0 }}
+                            onClick={() => { if (window.confirm(`Hủy nhắc hẹn "${rem.title}"?`)) handleDeleteReminder(rem._id); }}>
+                            <FaTrashAlt size={11} />
+                          </button>
+                        </div>
+                      ))
+                    )}
                   </div>
                 </Accordion>
               )}
 
               {/* ẢNH / VIDEO */}
+              {/* GHIM & GHI CHÚ */}
+              <Accordion title={<span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><FaThumbtack size={13} /> Tin nhắn đã ghim</span>} defaultOpen={false}>
+                <div style={{ padding: '8px 16px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
+                    <button
+                      style={{ border: 'none', background: 'var(--z-primary)', color: 'white', fontSize: 11, cursor: 'pointer', padding: '4px 10px', borderRadius: 12 }}
+                      onClick={() => setShowPinnedPanel(true)}
+                    >Xem tất cả</button>
+                  </div>
+                  {pinnedMessages.length === 0 ? (
+                    <div style={{ fontSize: 12, color: 'var(--z-text-muted)', textAlign: 'center', padding: '12px 0' }}>Chưa có tin nhắn ghim nào</div>
+                  ) : (
+                    pinnedMessages.slice(0, 3).map((pin, idx) => (
+                      <div key={pin._id || idx} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '8px 0', borderBottom: '1px solid var(--z-border)', cursor: 'pointer' }}
+                        onClick={() => onJump && onJump(pin.messageId?._id || pin.messageId)}
+                      >
+                        <FaThumbtack size={10} color="#F59E0B" style={{ marginTop: 4, flexShrink: 0 }} />
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 13, color: 'var(--z-text-primary)', wordBreak: 'break-word', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {pin.messageId?.content || (pin.messageId?.mediaIds?.length > 0 ? '[Hình ảnh]' : (pin.messageId?.attachments?.length > 0 ? '[Tập tin]' : '[Tin nhắn]'))}
+                          </div>
+                          <div style={{ fontSize: 11, color: 'var(--z-text-muted)', marginTop: 2 }}>
+                            {new Date(pin.pinnedAt || pin.createdAt).toLocaleDateString('vi-VN')}
+                          </div>
+                        </div>
+                        <button title="Bỏ ghim" style={{ border: 'none', background: 'none', color: '#ef4444', cursor: 'pointer', padding: '2px', flexShrink: 0 }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (window.confirm('Bỏ ghim tin nhắn này?')) {
+                              onUnpin && onUnpin(pin.messageId?._id || pin.messageId);
+                            }
+                          }}>
+                          <FaTimes size={11} />
+                        </button>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </Accordion>
+
+              {/* BÌNH CHỌN */}
+              {isGroup && (
+                <Accordion title={<span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><FaPoll size={13} /> Bình chọn</span>} defaultOpen={false}>
+                  <div style={{ padding: '8px 16px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
+                      <button
+                        style={{ border: 'none', background: 'var(--z-primary)', color: 'white', fontSize: 11, cursor: 'pointer', padding: '4px 10px', borderRadius: 12 }}
+                        onClick={onShowPoll}
+                      >+ Tạo mới</button>
+                    </div>
+                    {loadingPolls ? (
+                      <div style={{ fontSize: 12, color: 'var(--z-text-muted)', textAlign: 'center', padding: '12px 0' }}>Đang tải...</div>
+                    ) : polls.length === 0 ? (
+                      <div style={{ fontSize: 12, color: 'var(--z-text-muted)', textAlign: 'center', padding: '12px 0' }}>Chưa có bình chọn nào</div>
+                    ) : (
+                      polls.map((poll, idx) => (
+                        <div key={poll._id || `poll-${idx}`} style={{ padding: '8px 0', borderBottom: '1px solid var(--z-border)', cursor: 'pointer' }} onClick={() => {
+                          toast.info(`Bình chọn: ${poll.question}`);
+                        }}>
+                          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--z-text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {poll.question}
+                          </div>
+                          <div style={{ fontSize: 11, color: 'var(--z-text-secondary)', marginTop: 2 }}>
+                            {poll.options?.length} lựa chọn • {poll.voters?.length || 0} lượt bình chọn
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </Accordion>
+              )}
+
               <Accordion title={t('imageVideo') || 'Ảnh/Video'}>
                 <div style={{ padding: '8px 16px' }}>
                   {imgFiles.length > 0 ? (
@@ -396,16 +513,16 @@ export const ChatRightPanel = ({
                 {/* BANNER CHO NON-ADMIN */}
                 {!isPrivileged && (
                   <div style={{ padding: '12px', background: '#f3f4f6', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, color: '#1f2937', fontSize: 13, fontWeight: 500 }}>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zM9 6c0-1.66 1.34-3 3-3s3 1.34 3 3v2H9V6zm9 14H6V10h12v10zm-6-3c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2z"/></svg>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zM9 6c0-1.66 1.34-3 3-3s3 1.34 3 3v2H9V6zm9 14H6V10h12v10zm-6-3c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2z" /></svg>
                     Tính năng chỉ dành cho quản trị viên
                   </div>
                 )}
-                
+
                 {/* 1. Quyền của thành viên (Checkboxes) */}
                 <div style={{ padding: '16px 16px 8px', fontSize: 14, fontWeight: 600, color: isPrivileged ? 'var(--z-text-primary)' : 'var(--z-text-secondary)' }}>
                   Cho phép các thành viên trong nhóm:
                 </div>
-                
+
                 {[
                   { text: 'Thay đổi tên & ảnh đại diện của nhóm', key: 'canMembersUpdateInfo' },
                   { text: 'Ghim tin nhắn, ghi chú, bình chọn lên đầu hội thoại', key: 'canMembersPin' },
@@ -421,8 +538,8 @@ export const ChatRightPanel = ({
                     }}>
                       <span style={{ fontSize: 15, color: 'var(--z-text-primary)' /* Zalo uses primary text for these */, flex: 1, paddingRight: 16 }}>{item.text}</span>
                       <svg width="20" height="20" viewBox="0 0 20 20" fill="none" style={{ color: isChecked ? (isPrivileged ? 'var(--z-primary)' : '#c8cdd4') : '#ccc', flexShrink: 0 }}>
-                        <rect width="20" height="20" rx="4" fill="currentColor"/>
-                        {isChecked && <path d="M14 8l-5 5-2-2" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>}
+                        <rect width="20" height="20" rx="4" fill="currentColor" />
+                        {isChecked && <path d="M14 8l-5 5-2-2" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />}
                       </svg>
                     </div>
                   );
@@ -743,9 +860,53 @@ export const ChatRightPanel = ({
           </div>
         ) : null}
 
-        {/* NÚT CUỐI - Xóa lịch sử hoặc Rời nhóm */}
+        {/* NÚT CUỐI - Xóa lịch sử hoặc Rời nhóm + Tính năng mới */}
         {rightPanelMode === 'default' && (
-          <div style={{ padding: '16px', borderTop: '1px solid var(--z-border)' }}>
+          <div style={{ padding: '12px 16px', borderTop: '1px solid var(--z-border)', display: 'flex', flexDirection: 'column', gap: 8 }}>
+
+            {/* Nút phân loại hội thoại */}
+            <button
+              onClick={() => setShowClassifyModal(true)}
+              style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 10, border: '1px solid var(--z-border)', background: 'var(--z-bg-main)', color: 'var(--z-text-primary)', cursor: 'pointer', fontSize: 14, fontWeight: 500 }}
+            >
+              <FaTag size={14} color="#6366f1" />
+              Phân loại: {(() => {
+                const cats = { primary: 'Chính', work: 'Công việc', family: 'Gia đình', other: 'Khác' };
+                return cats[convCategory] || 'Chính';
+              })()}
+            </button>
+
+            {/* Nút báo cáo (chỉ hiện với hội thoại 1-1) */}
+            {!isGroup && (() => {
+              const otherParticipant = (activeConversation?.participants || []).find(p => {
+                const pid = String(p._id || p.id || p);
+                return pid !== myId;
+              });
+              if (!otherParticipant) return null;
+              const targetId = String(otherParticipant._id || otherParticipant.id || otherParticipant);
+              const targetName = otherParticipant.username || otherParticipant.fullName || 'người dùng này';
+              return (
+                <>
+                  <button
+                    onClick={() => setShowReportModal(true)}
+                    style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 10, border: '1px solid #fee2e2', background: '#fff5f5', color: '#ef4444', cursor: 'pointer', fontSize: 14, fontWeight: 500 }}
+                  >
+                    <FaFlag size={14} />
+                    Báo cáo tài khoản
+                  </button>
+                  {/* Modal báo cáo — phải đặt NGOÀI button, không được lồng bên trong */}
+                  {showReportModal && (
+                    <ReportUserModal
+                      targetUserId={targetId}
+                      targetUserName={targetName}
+                      onClose={() => setShowReportModal(false)}
+                    />
+                  )}
+                </>
+              );
+            })()}
+
+            {/* Nút xóa hoặc rời nhóm */}
             {!isGroup ? (
               <div className="crp-gm-button danger" style={{ marginTop: 0 }} onClick={handleDeleteConversation}>
                 <FaTrashAlt size={14} /> Xóa lịch sử trò chuyện
@@ -893,6 +1054,40 @@ export const ChatRightPanel = ({
           </div>
         );
       })()}
+
+      {/* ── SLIDE-OVER: TIN NHẮN ĐÃ GHIM ── */}
+      {showPinnedPanel && activeConversation && (() => {
+        const isOwnerStr = activeConversation?.ownerId?._id || activeConversation?.ownerId || activeConversation?.createdBy;
+        const isOwnerLocal = isOwnerStr && String(isOwnerStr) === String(myId);
+        const isAdminLocal = activeConversation?.adminIds?.some(aid => String(aid._id || aid) === String(myId)) || isOwnerLocal;
+        const canPinLocal = activeConversation?.settings?.canMembersPin !== false;
+        return (
+          <div
+            style={{ position: 'fixed', inset: 0, zIndex: 3000, display: 'flex', justifyContent: 'flex-end' }}
+            onClick={(e) => { if (e.target === e.currentTarget) setShowPinnedPanel(false); }}
+          >
+            <div style={{ width: 360, background: 'var(--z-bg-sidebar)', height: '100%', boxShadow: '-4px 0 24px rgba(0,0,0,0.18)', display: 'flex', flexDirection: 'column' }}>
+              <PinnedMessagesPanel
+                conversationId={activeConversation._id}
+                isPrivileged={isOwnerLocal || isAdminLocal}
+                canPin={canPinLocal}
+                onClose={() => setShowPinnedPanel(false)}
+                onJumpToMessage={onJump}
+              />
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ── MODAL PHÂN LOẠI HỘI THOẠI ── */}
+      {showClassifyModal && activeConversation && (
+        <ClassifyConversationModal
+          conversationId={activeConversation._id}
+          currentCategory={convCategory}
+          onClose={() => setShowClassifyModal(false)}
+          onUpdated={(newCat) => setConvCategory(newCat)}
+        />
+      )}
 
       {/* MODAL TẮT THÔNG BÁO */}
       {showMuteModal && (

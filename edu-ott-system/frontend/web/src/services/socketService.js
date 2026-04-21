@@ -12,9 +12,9 @@ class SocketService {
     this._pendingListeners = []; // listeners registered before connect()
   }
 
-  connect() {
-    if (this.socket) return; // Đã có socket (dù đang connecting hay connected)
-    const token = localStorage.getItem("token");
+  connect(explicitToken = null) {
+    if (this.socket) return; 
+    const token = explicitToken || localStorage.getItem("token");
     if (!token) return;
 
     this.socket = io(getSocketUrl(), {
@@ -95,6 +95,38 @@ class SocketService {
   declineCall({ callerId, roomId }) {
     if (this.socket?.connected) {
       this.socket.emit("decline_call", { callerId, roomId });
+    }
+  }
+  // ─── Group Call ───
+
+  /**
+   * Bắt đầu cuộc gọi nhóm — server sẽ broadcast tới tất cả thành viên
+   * @param {object} opts
+   * @param {string} opts.conversationId
+   * @param {string} opts.roomId
+   * @param {string} opts.callerName
+   * @param {string} opts.type  'audio' | 'video'
+   * @param {string} opts.inviteLink  link Google-Meet-style để copy
+   */
+  startGroupCall({ conversationId, roomId, callerName, type, inviteLink }) {
+    if (!this.socket?.connected) {
+      console.error("❌ Socket chưa connected, không thể gọi nhóm!");
+      return false;
+    }
+    this.socket.emit("group_call_start", {
+      conversationId,
+      roomId,
+      callerName,
+      type,
+      inviteLink,
+    });
+    return true;
+  }
+
+  /** Từ chối group call */
+  declineGroupCall({ conversationId, roomId }) {
+    if (this.socket?.connected) {
+      this.socket.emit("group_call_decline", { conversationId, roomId });
     }
   }
 }

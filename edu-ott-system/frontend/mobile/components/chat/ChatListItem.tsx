@@ -12,6 +12,7 @@ interface ChatListItemProps {
   roomModel?: 'Conversation' | 'Class' | 'Group';
   isOnline?: boolean;
   isActive?: boolean;
+  isPinned?: boolean;
   onPress?: () => void;
   onLongPress?: () => void;
   colors?: {
@@ -44,6 +45,7 @@ export const ChatListItem: React.FC<ChatListItemProps> = ({
   roomModel,
   isOnline,
   isActive = true,
+  isPinned,
   onPress,
   onLongPress,
   colors,
@@ -95,6 +97,7 @@ export const ChatListItem: React.FC<ChatListItemProps> = ({
               VÔ HIỆU HÓA
             </Text>
           )}
+          {isPinned && <Ionicons name="pin" size={14} color={colors?.muted || '#8A8A8A'} style={{ alignSelf: 'center', marginLeft: 6, opacity: 0.6 }} />}
           <Text style={[styles.time, { color: colors?.muted || '#8A8A8A' }, hasUnread && styles.timeUnread]}>
             {time}
           </Text>

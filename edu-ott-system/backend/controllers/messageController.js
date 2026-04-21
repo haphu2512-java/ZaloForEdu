@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 
 const Message = require('../models/Message');
+const User = require('../models/User');
 const ConversationPreference = require('../models/ConversationPreference');
 const { createMessage, ensureConversationMember } = require('../services/messageService');
 const { decodeCursor, encodeCursor } = require('../utils/cursor');
@@ -30,17 +31,20 @@ const sendMessage = asyncHandler(async (req, res) => {
     }
   }
 
-  // Enforce messagePrivacy cho direct conversation
-  if (conversation.type === 'direct' && conversation.participants.length === 2) {
-    const otherParticipantId = conversation.participants.find(
-      (p) => toStr(p) !== toStr(req.user._id)
-    );
+  // Chat 1-1: kiểm tra block + messagePrivacy
+  if (conversation.type === 'direct') {
+    const otherParticipantId = conversation.participants.find(p => toStr(p) !== toStr(req.user._id));
     if (otherParticipantId) {
-      const otherUser = await User.findById(otherParticipantId).select('messagePrivacy friends');
+      const currentUser = await User.findById(req.user._id);
+      const otherUser = await User.findById(otherParticipantId).select('blockedUsers messagePrivacy friends');
+      if (currentUser?.blockedUsers?.some(id => toStr(id) === toStr(otherParticipantId))) {
+        throw new ApiError(403, 'FORBIDDEN', 'Bạn đã chặn người này');
+      }
+      if (otherUser?.blockedUsers?.some(id => toStr(id) === toStr(req.user._id))) {
+        throw new ApiError(403, 'FORBIDDEN', 'Bạn đã bị người này chặn');
+      }
       if (otherUser?.messagePrivacy === 'friends') {
-        const isFriend = (otherUser.friends || []).some(
-          (f) => toStr(f) === toStr(req.user._id)
-        );
+        const isFriend = (otherUser.friends || []).some(f => toStr(f) === toStr(req.user._id));
         if (!isFriend) {
           throw new ApiError(403, 'PRIVACY_RESTRICTED', 'Người dùng này chỉ nhận tin nhắn từ bạn bè');
         }
@@ -118,8 +122,12 @@ const listMessagesByConversation = asyncHandler(async (req, res) => {
     .populate('forwardFrom')
     .populate({
       path: 'pollId',
-      populate: { path: 'createdBy', select: 'username avatarUrl' }
-    });
+      populate: [
+        { path: 'createdBy', select: 'username avatarUrl' },
+        { path: 'options.votes', select: 'username avatarUrl' }
+      ]
+    })
+    .populate('reminderId', 'title remindAt participants declinedBy createdBy');
 
   let nextCursor = null;
   let finalItems = messages;
@@ -188,8 +196,21 @@ const recallMessage = asyncHandler(async (req, res) => {
     throw new ApiError(404, 'MESSAGE_NOT_FOUND', 'Message not found');
   }
 
-  if (!message.senderId.equals(req.user._id)) {
-    throw new ApiError(403, 'FORBIDDEN', 'Only sender can recall this message');
+  const isSender = message.senderId.equals(req.user._id);
+
+  // Nếu không phải người gửi → kiểm tra quyền Admin/Owner trong nhóm
+  if (!isSender) {
+    const Conversation = require('../models/Conversation');
+    const conversation = await Conversation.findById(message.conversationId);
+    if (!conversation || conversation.type !== 'group') {
+      throw new ApiError(403, 'FORBIDDEN', 'Only sender can recall this message');
+    }
+    const ownerId = (conversation.ownerId || conversation.createdBy)?.toString();
+    const isOwner = ownerId === toStr(req.user._id);
+    const isAdmin = (conversation.adminIds || []).some((a) => toStr(a) === toStr(req.user._id));
+    if (!isOwner && !isAdmin) {
+      throw new ApiError(403, 'FORBIDDEN', 'Only sender or group admin can recall this message');
+    }
   }
 
   message.isRecalled = true;

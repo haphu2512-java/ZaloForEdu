@@ -46,6 +46,24 @@ const emitMessageRecalled = async (conversationId, payload) => {
   });
 };
 
+const emitPinnedItemsUpdated = async (conversationId, payload) => {
+  if (!io) return;
+  const conversation = await Conversation.findById(conversationId).select('participants');
+  if (!conversation) return;
+  conversation.participants.forEach((participantId) => {
+    io.to(`user:${participantId.toString()}`).emit('pinned_items_updated', payload);
+  });
+};
+
+const emitPollUpdated = async (conversationId, payload) => {
+  if (!io) return;
+  const conversation = await Conversation.findById(conversationId).select('participants');
+  if (!conversation) return;
+  conversation.participants.forEach((participantId) => {
+    io.to(`user:${participantId.toString()}`).emit('poll_updated', payload);
+  });
+};
+
 const closeSocket = async () => {
   if (!io) return;
   await new Promise((resolve) => {
@@ -218,7 +236,64 @@ const initSocket = (server) => {
       });
     });
     // --------------------------------------
+
+    // ─────────────────────────────────────────────
+    // GROUP CALL – gọi nhóm
+    // payload: { conversationId, roomId, callerName, type, inviteLink }
+    // ─────────────────────────────────────────────
+    socket.on('group_call_start', async ({ conversationId, roomId, callerName, type, inviteLink }) => {
+      if (!conversationId || !roomId) return;
+
+      try {
+        // Chỉ gọi những thành viên trong nhóm (trừ người gọi)
+        const conversation = await Conversation.findById(conversationId).select('participants type');
+        if (!conversation || conversation.type !== 'group') return;
+
+        // Kiểm tra người gọi có trong nhóm không
+        const isMember = conversation.participants.some(p => p.toString() === userId);
+        if (!isMember) return;
+
+        const otherParticipants = conversation.participants.filter(p => p.toString() !== userId);
+
+        // Gửi thông báo cuộc gọi tới từng thành viên đang online
+        otherParticipants.forEach((participantId) => {
+          io.to(`user:${participantId.toString()}`).emit('incoming_group_call', {
+            conversationId,
+            roomId,
+            callerName,
+            type,
+            fromUserId: userId,
+            inviteLink: inviteLink || null,
+            isGroup: true,
+          });
+        });
+
+        // Thông báo cho chính người gọi biết đã broadcast thành công
+        socket.emit('group_call_started', { conversationId, roomId });
+      } catch (err) {
+        socket.emit('socket_error', { message: err.message });
+      }
+    });
+
+    // Thành viên từ chối group call
+    socket.on('group_call_decline', ({ conversationId, roomId }) => {
+      // Broadcast cho mọi người trong conversation biết ai đã từ chối
+      io.to(`conversation:${conversationId}`).emit('group_call_member_declined', {
+        userId,
+        roomId,
+      });
+    });
+
+    // ─────────────────────────────────────────────
+    // Disconnect
+    // ─────────────────────────────────────────────
+    socket.on('disconnect', async () => {
+      const lastSeen = await presenceService.setOffline(userId);
+      socket.broadcast.emit('user_offline', { userId, lastSeen: lastSeen.toISOString() });
+    });
   });
+
+
 
   logger.info('Socket.IO initialized');
   return io;
@@ -228,5 +303,7 @@ module.exports = initSocket;
 module.exports.emitToConversation = emitToConversation;
 module.exports.emitConversationUpdated = emitConversationUpdated;
 module.exports.emitMessageRecalled = emitMessageRecalled;
+module.exports.emitPinnedItemsUpdated = emitPinnedItemsUpdated;
+module.exports.emitPollUpdated = emitPollUpdated;
 module.exports.emitToUser = emitToUser;
 module.exports.closeSocket = closeSocket;

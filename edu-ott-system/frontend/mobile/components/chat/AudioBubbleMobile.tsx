@@ -17,12 +17,18 @@ export const AudioBubbleMobile: React.FC<AudioBubbleMobileProps> = ({ url, isMe 
 
   useEffect(() => {
     return () => {
-      if (player) player.remove();
+      if (player) {
+        if (isPlaying) player.pause();
+        player.remove();
+      }
     };
-  }, [player]);
+  }, [player, isPlaying]);
 
   useEffect(() => {
-    if (player) player.remove();
+    if (player) {
+      if (isPlaying) player.pause();
+      player.remove();
+    }
     setPlayer(null);
     setIsPlaying(false);
     setIsLoading(false);
