@@ -41,10 +41,10 @@ export default function UserProfileModal({ isOpen, onClose, user, status: initia
         type: "direct",
         participantIds: [uid],
       });
-      const convId = res.data.data._id;
+      const conv = res.data.data;
       onClose();
       onChatOpened?.();
-      navigate(`/chat/${convId}`);
+      navigate(`/chat/${conv._id}`, { state: { newConversation: conv } });
     } catch {
     } finally { setChatLoading(false); }
   };

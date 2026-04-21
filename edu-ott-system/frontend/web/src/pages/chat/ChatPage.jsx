@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import axios from "axios";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { FaSearch, FaUsers, FaCloud, FaSpinner, FaUserSecret, FaArrowLeft, FaUserPlus, FaCheck, FaTimes } from "react-icons/fa";
 import toast from "react-hot-toast";
 
@@ -94,6 +94,7 @@ function UploadBubble({ name, percent }) {
 
 export default function ChatPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { roomId } = useParams();
   const [conversations, setConversations] = useState([]);
   const [selfConversation, setSelfConversation] = useState(null);
@@ -399,12 +400,10 @@ export default function ChatPage() {
       }
       return;
     }
-    if (mergedConversations.length > 0) {
-      const targetRoom = mergedConversations.find(c => String(c._id) === String(roomId));
-      if (targetRoom) {
-        if (!activeConversation || String(activeConversation._id) !== String(roomId) || targetRoom !== activeConversation) {
-          setActiveConversation(targetRoom);
-        }
+    const targetRoom = mergedConversations.find(c => String(c._id) === String(roomId));
+    if (targetRoom) {
+      if (!activeConversation || String(activeConversation._id) !== String(roomId) || targetRoom !== activeConversation) {
+        setActiveConversation(targetRoom);
       }
     }
   }, [roomId, mergedConversations, selfConversation, activeConversation]);
@@ -422,6 +421,18 @@ export default function ChatPage() {
       setConversations(allConvs);
     } catch (err) { console.error("Lỗi lấy danh sách:", err); }
   }, [token]);
+
+  // Inject conversation passed via route state (e.g. newly created from UserProfileModal)
+  useEffect(() => {
+    const conv = location.state?.newConversation;
+    if (!conv?._id) return;
+    setConversations(prev => {
+      if (prev.find(c => String(c._id) === String(conv._id))) return prev;
+      return [conv, ...prev];
+    });
+    // Re-fetch to get fully-populated participant data
+    fetchConversationsData();
+  }, [location.state]);
 
   // ==================== KHỞI TẠO SOCKET ====================
   useEffect(() => {
