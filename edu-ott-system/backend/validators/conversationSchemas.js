@@ -45,6 +45,8 @@ const updateConversationPreferenceSchema = z.object({
   isHidden: z.boolean().optional(),
   isDeleted: z.boolean().optional(),
   mutedUntil: z.string().datetime().nullable().optional(),
+  // ── Ghim hội thoại ──
+  isPinned: z.boolean().optional(),
 });
 
 const conversationPaginationQuerySchema = z.object({

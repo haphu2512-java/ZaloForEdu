@@ -187,7 +187,7 @@ const updateUserStatus = asyncHandler(async (req, res) => {
 const reportUser = asyncHandler(async (req, res) => {
   const targetId = req.params.id;
   const reporterId = req.user._id.toString();
-  const { reason } = req.body; 
+  const { reason } = req.body;
 
   if (reporterId === targetId) throw new ApiError(400, 'INVALID_ACTION', 'Không thể tự báo cáo chính mình');
 
@@ -198,10 +198,10 @@ const reportUser = asyncHandler(async (req, res) => {
   if (isRedisAvailable()) {
     const redis = getRedis();
     const reportKey = keyWithPrefix(`reports_received:${targetId}`);
-    
+
     // Thêm người tố cáo vào Set (chống báo cáo 1 người nhiều lần)
     const isNewReport = await redis.sAdd(reportKey, reporterId);
-    
+
     if (isNewReport) {
       await redis.expire(reportKey, 7 * 24 * 60 * 60); // 7 ngày
       const totalReports = await redis.sCard(reportKey);
@@ -224,25 +224,32 @@ const reportUser = asyncHandler(async (req, res) => {
  */
 const getAllUsers = asyncHandler(async (req, res) => {
   const users = await User.find({ deletedAt: null })
-                          .select('-passwordHash -tokenVersion -resetPasswordToken')
-                          .sort({ createdAt: -1 })
-                          .lean(); 
-                          
+    .select('-passwordHash -tokenVersion -resetPasswordToken')
+    .sort({ createdAt: -1 })
+    .lean();
+
   const redis = isRedisAvailable() ? getRedis() : null;
 
   const usersWithWarnings = await Promise.all(users.map(async (user) => {
     let warnings = 0;
+    let reportCount = 0;
     if (redis) {
       try {
         const warnKey = keyWithPrefix(`warnings:${user._id.toString()}`);
         const val = await redis.get(warnKey);
         if (val) warnings = parseInt(val, 10);
       } catch (e) { /* ignore */ }
+      try {
+        const reportKey = keyWithPrefix(`reports_received:${user._id.toString()}`);
+        const count = await redis.sCard(reportKey);
+        if (count) reportCount = count;
+      } catch (e) { /* ignore */ }
     }
     return {
       ...user,
-      id: user._id, 
-      warningCount: warnings
+      id: user._id,
+      warningCount: warnings,
+      reportCount,
     };
   }));
 
@@ -256,6 +263,6 @@ module.exports = {
   blockOrUnblockUser,
   getBlockedUsers,
   updateUserStatus,
-  getAllUsers, 
+  getAllUsers,
   reportUser,
 };

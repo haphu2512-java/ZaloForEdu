@@ -36,10 +36,22 @@ const conversationPreferenceSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+    // ── Ghim hội thoại lên đầu danh sách ──
+    isPinned: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+    pinnedAt: {
+      type: Date,
+      default: null,
+    },
   },
   { timestamps: true },
 );
 
 conversationPreferenceSchema.index({ userId: 1, conversationId: 1 }, { unique: true });
+// Index để sort: pinned conversations của user trước
+conversationPreferenceSchema.index({ userId: 1, isPinned: -1, pinnedAt: -1 });
 
 module.exports = mongoose.model('ConversationPreference', conversationPreferenceSchema);

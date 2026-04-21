@@ -31,7 +31,7 @@ export const conversationService = {
   // ==========================================
   // 1. QUẢN LÝ DANH SÁCH & TẠO HỘI THOẠI
   // ==========================================
-  
+
   // Lấy danh sách bạn bè (dùng để chọn người khi tạo nhóm)
   getFriendList: async (limit = 100) => {
     const res = await axios.get(`${API_URL}/friends?limit=${limit}`, getAuthHeaders());
@@ -63,18 +63,20 @@ export const conversationService = {
     return res.data;
   },
 
-  // Cập nhật trạng thái ẩn/hiện của cuộc trò chuyện (Archive)
-  updateConversationPreference: async (conversationId, isHidden) => {
+  // Cập nhật preference của hội thoại (isHidden, isPinned, category, mutedUntil...)
+  updateConversationPreference: async (conversationId, prefData) => {
+    // Tương thích ngược: nếu truyền boolean thì coi là isHidden
+    const body = typeof prefData === 'boolean' ? { isHidden: prefData } : prefData;
     const res = await axios.put(
       `${API_URL}/conversations/${conversationId}/preferences`,
-      { isHidden },
+      body,
       getAuthHeaders()
     );
     return res.data;
   },
 
   archiveConversation: async (conversationId) => {
-    return conversationService.updateConversationPreference(conversationId, true);
+    return conversationService.updateConversationPreference(conversationId, { isHidden: true });
   },
 
   deleteConversation: async (conversationId) => {
@@ -83,7 +85,30 @@ export const conversationService = {
   },
 
   unarchiveConversation: async (conversationId) => {
-    return conversationService.updateConversationPreference(conversationId, false);
+    return conversationService.updateConversationPreference(conversationId, { isHidden: false });
+  },
+
+  // Ẩn hội thoại (khỏi danh sách, không xoá)
+  hideConversation: async (conversationId) => {
+    return conversationService.updateConversationPreference(conversationId, { isHidden: true });
+  },
+
+  // Bỏ ẩn hội thoại
+  unhideConversation: async (conversationId) => {
+    return conversationService.updateConversationPreference(conversationId, { isHidden: false });
+  },
+
+  // Ghim / bỏ ghim hội thoại
+  pinConversation: async (conversationId, isPinned) => {
+    return conversationService.updateConversationPreference(conversationId, {
+      isPinned,
+      pinnedAt: isPinned ? new Date().toISOString() : null,
+    });
+  },
+
+  // Phân loại hội thoại
+  classifyConversation: async (conversationId, category) => {
+    return conversationService.updateConversationPreference(conversationId, { category });
   },
 
   // ==========================================
