@@ -51,6 +51,15 @@ const createApp = () => {
     });
     next();
   });
+  // Tắt ETag để tránh HTTP 304 gây axios trả về body rỗng với API động
+  app.set('etag', false);
+  app.use('/api', (_req, res, next) => {
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    next();
+  });
+
   app.use(express.json({ limit: '50mb' }));
   app.use(express.urlencoded({ extended: true }));
 

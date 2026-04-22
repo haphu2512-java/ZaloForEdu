@@ -22,7 +22,7 @@ export const friendService = {
   // Lấy danh sách yêu cầu kết bạn ĐẾN
   getIncomingRequests: async (page = 1, limit = 20) => {
     const response = await api.get(`/friends/request/incoming`, {
-      params: { page, limit },
+      params: { page, limit, _t: Date.now() },
     });
     return response.data.data;
   },
@@ -30,7 +30,7 @@ export const friendService = {
   // Lấy danh sách yêu cầu kết bạn ĐI (Pending)
   getOutgoingRequests: async (page = 1, limit = 20) => {
     const response = await api.get(`/friends/request/outgoing`, {
-      params: { page, limit },
+      params: { page, limit, _t: Date.now() },
     });
     return response.data.data;
   },
@@ -50,7 +50,7 @@ export const friendService = {
   // Lấy danh sách bạn bè
   getFriendList: async (page = 1, limit = 20) => {
     const response = await api.get(`/friends/list`, {
-      params: { page, limit },
+      params: { page, limit, _t: Date.now() },
     });
     return response.data.data;
   },
