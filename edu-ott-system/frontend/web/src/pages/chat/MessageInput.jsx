@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { FaSpinner, FaPaperPlane, FaThumbsUp, FaSmile, FaMicrophone, FaPoll } from 'react-icons/fa';
+import { VoiceRecorder } from '../../components/shared/VoiceRecorder';
 
 export const MessageInput = ({ 
   theme, 
@@ -16,6 +17,7 @@ export const MessageInput = ({
   const [text, setText] = useState('');
   const [showEmoji, setShowEmoji] = useState(false);
   const [isSending, setIsSending] = useState(false);
+  const [showRecorder, setShowRecorder] = useState(false);
   const [mentionQuery, setMentionQuery] = useState(null); // 'all' or partial name
   const [mentionIndex, setMentionIndex] = useState(0);
   const inputRef = useRef(null);
@@ -201,6 +203,10 @@ export const MessageInput = ({
           </button>
         )}
 
+        <button type="button" className="mdc-tool-btn" title="Gửi ghi âm" onClick={() => setShowRecorder(true)}>
+          <FaMicrophone size={18} />
+        </button>
+
         {showEmoji && (
           <div ref={emojiRef} style={{ position: 'absolute', bottom: '100%', left: '10px', marginBottom: '10px', zIndex: 50, background: theme === 'dark' ? '#242526' : '#fff', border: '1px solid var(--border-color, #E5E7EB)', padding: '8px 12px', borderRadius: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', display: 'flex', gap: '12px' }}>
             {['😀', '😂', '❤️', '👍', '😢', '🙏'].map(e => (
@@ -218,29 +224,62 @@ export const MessageInput = ({
         )}
       </div>
 
-      <div className="mdc-input-row">
-        <div className="mdc-input-wrap">
-          <input
-            ref={inputRef}
-            className="mdc-input"
-            placeholder={placeholder}
-            value={text}
-            onChange={handleTextChange}
-            onKeyDown={handleKeyDown}
-            autoFocus
+      {/* Voice Recorder hoặc Text Input */}
+      {showRecorder ? (
+        <div className="mdc-input-row" style={{ height: 60 }}>
+          <VoiceRecorder 
+            onCancel={() => setShowRecorder(false)} 
+            onSend={(blob, duration) => {
+              // Universal extension mapping dựa trên mimeType
+              let extension = '.webm';
+              if (blob.type.includes('mp4')) {
+                extension = '.mp4';
+              } else if (blob.type.includes('mpeg') || blob.type.includes('mp3')) {
+                extension = '.mp3';
+              } else if (blob.type.includes('ogg')) {
+                extension = '.ogg';
+              } else if (blob.type.includes('wav')) {
+                extension = '.wav';
+              } else if (blob.type.includes('m4a') || blob.type.includes('mp4a')) {
+                extension = '.m4a';
+              } else if (blob.type.includes('aac')) {
+                extension = '.aac';
+              } else if (blob.type.includes('webm')) {
+                extension = '.webm';
+              }
+
+              const file = new File([blob], `voice_${Date.now()}${extension}`, { type: blob.type });
+              onUploadFiles([file]);
+              setShowRecorder(false);
+              if (onCancelReply) onCancelReply();
+            }}
           />
         </div>
+      ) : (
+        <div className="mdc-input-row">
+          <div className="mdc-input-wrap">
+            <input
+              ref={inputRef}
+              className="mdc-input"
+              placeholder={placeholder}
+              value={text}
+              onChange={handleTextChange}
+              onKeyDown={handleKeyDown}
+              autoFocus
+            />
+          </div>
 
-        {text.trim() ? (
-          <button className="mdc-send-btn" onClick={handleSend} disabled={isSending}>
-            {isSending ? <FaSpinner className="animate-spin" /> : <FaPaperPlane size={15} />}
-          </button>
-        ) : (
-          <button className="mdc-like-btn" onClick={onSendLike}>
-            <FaThumbsUp size={16} />
-          </button>
-        )}
-      </div>
+          {text.trim() ? (
+            <button className="mdc-send-btn" onClick={handleSend} disabled={isSending}>
+              {isSending ? <FaSpinner className="animate-spin" /> : <FaPaperPlane size={15} />}
+            </button>
+          ) : (
+            <button className="mdc-like-btn" onClick={onSendLike}>
+              <FaThumbsUp size={16} />
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 };
