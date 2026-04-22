@@ -1,39 +1,15 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FaPhone, FaVideo, FaEllipsisV, FaUsers, FaFileAlt, FaUserPlus, FaCheck, FaSpinner, FaTimes } from 'react-icons/fa';
+import { FaPhone, FaVideo, FaEllipsisV, FaUsers, FaFileAlt } from 'react-icons/fa';
 import { useAuthStore } from '../../store/authStore';
 import { socketService } from '../../services/socketService';
 import { useTheme } from '../../contexts/ThemeContext';
-import { friendService } from '../../services/friendService';
-import { useFriendStore } from '../../store/friendStore';
 
 export const ChatHeader = ({ room, onCall, onVideo, onInfo }) => {
   const navigate = useNavigate();
   const currentUser = useAuthStore((state) => state.user);
   const { appliedTheme } = useTheme();
   const isDark = appliedTheme === 'dark';
-  const { outgoingRequests, incomingRequests, fetchOutgoingRequests, fetchIncomingRequests, acceptRequest, rejectRequest } = useFriendStore();
-  const [friendRequestSent, setFriendRequestSent] = useState(false);
-  const [cancelLoading, setCancelLoading] = useState(false);
-  const [acceptLoading, setAcceptLoading] = useState(false);
-  const [rejectLoading, setRejectLoading] = useState(false);
-
-  const hasOutgoingRequest = outgoingRequests.some(r =>
-    String(r.toUserId?._id || r.toUserId || '') === String(room?.strangerId || '')
-  );
-  const outgoingRequest = outgoingRequests.find(r =>
-    String(r.toUserId?._id || r.toUserId || '') === String(room?.strangerId || '')
-  );
-  const incomingRequest = incomingRequests.find(r =>
-    String(r.fromUserId?._id || r.fromUserId || '') === String(room?.strangerId || '')
-  );
-
-  useEffect(() => {
-    if (room?.isStranger) {
-      fetchOutgoingRequests();
-      fetchIncomingRequests();
-    }
-  }, [room?.strangerId, room?.isStranger]);
 
   if (!room) return null;
 
@@ -41,7 +17,6 @@ export const ChatHeader = ({ room, onCall, onVideo, onInfo }) => {
   const isClass = room.type?.toLowerCase() === 'class' || room.roomModel === 'Class';
   const isGroup = room.type === 'group' || room.roomModel === 'Group';
   const isStranger = room.isStranger && room.type === 'direct';
-  const alreadySentRequest = isStranger && (hasOutgoingRequest || friendRequestSent);
 
   const formatLastSeen = (lastSeen) => {
     if (!lastSeen) return 'Ngoại tuyến';
@@ -53,56 +28,6 @@ export const ChatHeader = ({ room, onCall, onVideo, onInfo }) => {
     if (hours < 24) return `Truy cập ${hours} giờ trước`;
     const days = Math.floor(hours / 24);
     return `Truy cập ${days} ngày trước`;
-  };
-
-  const handleSendFriendRequest = async () => {
-    try {
-      await friendService.sendFriendRequest(room.strangerId);
-      setFriendRequestSent(true);
-      fetchOutgoingRequests();
-    } catch (err) {
-      const code = err.response?.data?.error?.code;
-      if (code === 'REVERSE_REQUEST_EXISTS') {
-        fetchIncomingRequests();
-      } else {
-        alert(err.response?.data?.error?.message || err.response?.data?.message || 'Không thể gửi lời mời kết bạn');
-      }
-    }
-  };
-
-  const handleCancelFriendRequest = async () => {
-    const requestId = outgoingRequest?._id;
-    if (!requestId) return;
-    setCancelLoading(true);
-    try {
-      await friendService.cancelFriendRequest(requestId);
-      setFriendRequestSent(false);
-      fetchOutgoingRequests();
-    } catch (err) {
-      alert(err.response?.data?.message || 'Không thể hủy lời mời');
-    } finally { setCancelLoading(false); }
-  };
-
-  const handleAcceptRequest = async () => {
-    if (!incomingRequest?._id) return;
-    setAcceptLoading(true);
-    try {
-      await acceptRequest(incomingRequest._id);
-      fetchIncomingRequests();
-    } catch (err) {
-      alert(err.response?.data?.message || 'Không thể chấp nhận');
-    } finally { setAcceptLoading(false); }
-  };
-
-  const handleRejectRequest = async () => {
-    if (!incomingRequest?._id) return;
-    setRejectLoading(true);
-    try {
-      await rejectRequest(incomingRequest._id);
-      fetchIncomingRequests();
-    } catch (err) {
-      alert(err.response?.data?.message || 'Không thể từ chối');
-    } finally { setRejectLoading(false); }
   };
 
   // ─── 1-1 Call handler ───
@@ -259,43 +184,6 @@ export const ChatHeader = ({ room, onCall, onVideo, onInfo }) => {
               <FaUsers size={14} /> Thành viên
             </button>
           </div>
-        )}
-
-        {/* Friend request bar (người lạ) */}
-        {isStranger && incomingRequest && (
-          <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginRight: 8 }}>
-            <span style={{ fontSize: 12, color: '#888' }}>Đã gửi lời mời kết bạn</span>
-            <button
-              onClick={handleAcceptRequest} disabled={acceptLoading}
-              style={{ background: '#0084ff', color: '#fff', border: 'none', borderRadius: 8, padding: '5px 12px', cursor: 'pointer', fontSize: 12, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}
-            >
-              {acceptLoading ? <FaSpinner className="spin" size={11} /> : <FaCheck size={11} />} Chấp nhận
-            </button>
-            <button
-              onClick={handleRejectRequest} disabled={rejectLoading}
-              style={{ background: '#f3f4f6', color: '#555', border: 'none', borderRadius: 8, padding: '5px 12px', cursor: 'pointer', fontSize: 12, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}
-            >
-              {rejectLoading ? <FaSpinner className="spin" size={11} /> : <FaTimes size={11} />} Từ chối
-            </button>
-          </div>
-        )}
-
-        {isStranger && !incomingRequest && (
-          alreadySentRequest ? (
-            <button
-              onClick={handleCancelFriendRequest} disabled={cancelLoading}
-              className={`text-xs font-semibold ${subTextColor} flex items-center gap-1.5 px-3 py-1.5 rounded border ${isDark ? 'border-gray-600' : 'border-gray-300'} ${iconBgHover} transition mr-2`}
-            >
-              {cancelLoading ? <FaSpinner className="spin" size={11} /> : <FaTimes size={11} />} Hủy lời mời
-            </button>
-          ) : (
-            <button
-              onClick={handleSendFriendRequest}
-              className="text-xs font-semibold text-blue-500 hover:text-blue-600 flex items-center gap-1.5 px-3 py-1.5 rounded hover:bg-blue-50 transition mr-2"
-            >
-              <FaUserPlus size={13} /> Kết bạn
-            </button>
-          )
         )}
 
         {/* Nút gọi – ẩn với group lớp học */}

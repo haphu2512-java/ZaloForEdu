@@ -1,0 +1,35 @@
+fix: Persist friend request state across page reloads
+
+Problem:
+- Friend request state (outgoingRequests, incomingRequests) was lost on page reload
+- Users would send friend request, reload page, and see "Send Friend Request" button again
+- State was only stored in memory (Zustand store without persistence)
+
+Solution:
+1. Added Zustand persist middleware to friendStore
+   - Persists friends, incomingRequests, outgoingRequests to localStorage
+   - Uses key "friend-storage" for storage
+   - Only persists necessary state (not isLoading, error, searchResults)
+
+2. Removed friend request buttons from ChatHeader
+   - Simplified header component
+   - Friend requests now only managed via banner in ChatPage
+   - Removed unused imports and handlers
+
+3. Cleaned up ChatHeader component
+   - Removed friendService, useFriendStore imports
+   - Removed useState for loading states
+   - Removed useEffect for fetching requests
+   - Removed all friend request handlers
+
+Changes:
+- frontend/web/src/store/friendStore.js: Added persist middleware
+- frontend/web/src/pages/chat/ChatHeader.jsx: Removed friend request UI
+- frontend/web/TEST_PERSIST.md: Added testing guide
+
+Testing:
+1. Send friend request in chat
+2. Reload page
+3. Verify banner "Đã gửi lời mời kết bạn" still shows
+4. Verify "Hủy lời mời" button works
+5. Check localStorage has "friend-storage" key with data

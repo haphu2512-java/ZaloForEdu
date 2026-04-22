@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Debug Persist</title>
+</head>
+<body>
+    <h1>Debug Friend Store Persist</h1>
+    <button onclick="checkLocalStorage()">Check LocalStorage</button>
+    <button onclick="clearLocalStorage()">Clear LocalStorage</button>
+    <pre id="output"></pre>
+
+    <script>
+        function checkLocalStorage() {
+            const data = localStorage.getItem('friend-storage');
+            const output = document.getElementById('output');
+            if (data) {
+                try {
+                    const parsed = JSON.parse(data);
+                    output.textContent = JSON.stringify(parsed, null, 2);
+                } catch (e) {
+                    output.textContent = 'Error parsing: ' + e.message + '\n\nRaw data:\n' + data;
+                }
+            } else {
+                output.textContent = 'No friend-storage found in localStorage';
+            }
+        }
+
+        function clearLocalStorage() {
+            localStorage.removeItem('friend-storage');
+            alert('Cleared friend-storage');
+            checkLocalStorage();
+        }
+
+        // Auto check on load
+        checkLocalStorage();
+    </script>
+</body>
+</html>

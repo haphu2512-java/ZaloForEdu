@@ -279,12 +279,28 @@ export default function ChatPage() {
   const activeConversationRef = useRef(null);
   const conversationsRef = useRef([]);
 
-  const { friends, fetchFriends, fetchOutgoingRequests, fetchIncomingRequests } = useFriendStore();
+  const { friends, outgoingRequests, incomingRequests, fetchFriends, fetchOutgoingRequests, fetchIncomingRequests } = useFriendStore();
 
+  console.log('🔵 [ChatPage] Render - outgoingRequests:', outgoingRequests);
+
+  // Fetch một lần duy nhất khi app khởi động
+  const hasFetchedRef = useRef(false);
   useEffect(() => {
-    fetchFriends();
-    fetchOutgoingRequests();
-    fetchIncomingRequests();
+    console.log('🔵 [ChatPage] Mount effect - hasFetched:', hasFetchedRef.current);
+    console.log('🔵 [ChatPage] Mount effect - outgoingRequests:', outgoingRequests);
+    
+    if (hasFetchedRef.current) return;
+    hasFetchedRef.current = true;
+    
+    // Delay nhỏ để persist có thời gian restore
+    setTimeout(() => {
+      console.log('🔄 [ChatPage] Fetching after 100ms delay...');
+      console.log('🔵 [ChatPage] outgoingRequests before fetch:', outgoingRequests);
+      
+      fetchFriends();
+      fetchOutgoingRequests(1, true); // skipIfHasData = true
+      fetchIncomingRequests();
+    }, 100);
   }, []);
 
   const userId = useMemo(() => {
@@ -423,13 +439,22 @@ export default function ChatPage() {
   // Phân loại: bạn bè vs người lạ
   const friendIds = useMemo(() => new Set(friends.map(f => String(f._id || f.id))), [friends]);
 
-  const { outgoingRequests, incomingRequests, acceptRequest, rejectRequest } = useFriendStore();
-  const outgoingRequestIds = useMemo(() =>
-    new Set(outgoingRequests.map(r =>
-      r.toUserId?._id ? String(r.toUserId._id) : String(r.toUserId || '')
-    )),
-    [outgoingRequests]
-  );
+  const { acceptRequest, rejectRequest } = useFriendStore();
+  const outgoingRequestIds = useMemo(() => {
+    const ids = new Set(outgoingRequests.map(r => {
+      // toUserId có thể là object {_id, username, ...} hoặc chỉ là string ID
+      let id;
+      if (typeof r.toUserId === 'object' && r.toUserId !== null) {
+        id = String(r.toUserId._id || r.toUserId.id || '');
+      } else {
+        id = String(r.toUserId || '');
+      }
+      console.log('🔍 [outgoingRequestIds] Request:', r, '→ ID:', id);
+      return id;
+    }));
+    console.log('🔍 [outgoingRequestIds] Final Set:', ids);
+    return ids;
+  }, [outgoingRequests]);
 
   const activeIdStr = String(activeConversation?._id || '');
   const { friendConvs, strangerConvs } = useMemo(() => {
@@ -1771,9 +1796,15 @@ const handleJoinRequestProcessed = ({ conversationName, action }) => {
               const otherId = other && typeof other === 'object' ? String(other._id || other.id) : null;
               const otherName = other && typeof other === 'object' ? (other.username || other.fullName || 'Người dùng') : 'Người dùng';
               const isStranger = otherId && !friendIds.has(otherId);
+              
+              console.log('🔍 [Banner] otherId:', otherId, 'isStranger:', isStranger);
+              console.log('🔍 [Banner] outgoingRequestIds:', outgoingRequestIds);
+              console.log('🔍 [Banner] justSentRequestTo:', justSentRequestTo);
+              
               if (!isStranger) return null;
 
               const hasOutgoing = outgoingRequestIds.has(otherId) || justSentRequestTo === otherId;
+              console.log('🔍 [Banner] hasOutgoing:', hasOutgoing, '(has in Set:', outgoingRequestIds.has(otherId), ', justSent:', justSentRequestTo === otherId, ')');
               const incomingReq = incomingRequests.find(r => {
                 const fromId = r.fromUserId?._id
                   ? String(r.fromUserId._id)
@@ -1852,12 +1883,48 @@ const handleJoinRequestProcessed = ({ conversationName, action }) => {
                   </span>
                   <button
                     onClick={async () => {
+                      console.log('🔵 [ChatPage] Send friend request button clicked');
+                      console.log('🔵 [ChatPage] otherId:', otherId);
+                      console.log('🔵 [ChatPage] Current outgoingRequests:', outgoingRequests);
+                      
                       try {
                         const { friendService } = await import('../../services/friendService');
-                        await friendService.sendFriendRequest(otherId);
-                        setJustSentRequestTo(otherId); // optimistic update ngay lập tức
-                        fetchOutgoingRequests();
+                        const result = await friendService.sendFriendRequest(otherId);
+                        console.log('✅ [ChatPage] API SUCCESS - result:', result);
+                        
+                        // Optimistic update local state
+                        setJustSentRequestTo(otherId);
+                        console.log('🟢 [ChatPage] justSentRequestTo updated:', otherId);
+                        
+                        // Optimistic update store
+                        const reqId = result?._id || `temp_${Date.now()}`;
+                        const currentRequests = useFriendStore.getState().outgoingRequests;
+                        console.log('🔵 [ChatPage] Current store outgoingRequests:', currentRequests);
+                        
+                        const updatedRequests = [
+                          ...currentRequests.filter(r => String(r.toUserId?._id || r.toUserId || '') !== otherId),
+                          { _id: reqId, toUserId: { _id: otherId }, status: 'pending', createdAt: new Date().toISOString() }
+                        ];
+                        console.log('🟢 [ChatPage] Updating store with:', updatedRequests);
+                        
+                        useFriendStore.setState({
+                          outgoingRequests: updatedRequests
+                        });
+                        
+                        console.log('🟢 [ChatPage] Store updated, checking localStorage...');
+                        setTimeout(() => {
+                          const stored = localStorage.getItem('friend-storage');
+                          console.log('💾 [ChatPage] localStorage after 100ms:', stored ? JSON.parse(stored) : 'empty');
+                          console.log('🔵 [ChatPage] Store state after 100ms:', useFriendStore.getState().outgoingRequests);
+                        }, 100);
+                        
+                        // Fetch sau delay để sync
+                        setTimeout(() => {
+                          console.log('🔄 [ChatPage] Fetching from server after 500ms...');
+                          fetchOutgoingRequests();
+                        }, 500);
                       } catch (e) {
+                        console.error('❌ [ChatPage] ERROR:', e.response?.data || e.message);
                         const code = e.response?.data?.error?.code;
                         if (code === 'REVERSE_REQUEST_EXISTS') fetchIncomingRequests();
                       }
