@@ -121,6 +121,12 @@ export async function leaveGroup(conversationId: string): Promise<Conversation> 
   return normalizeConversation(res.data);
 }
 
+export async function disbandGroup(conversationId: string): Promise<void> {
+  await fetchAPI(`${CONVERSATIONS_ENDPOINT}/${conversationId}/disband`, {
+    method: 'DELETE',
+  });
+}
+
 export async function updateGroupAvatar(conversationId: string, avatarUrl: string): Promise<Conversation> {
   const res = await fetchAPI(`${CONVERSATIONS_ENDPOINT}/${conversationId}/avatar`, {
     method: 'PUT',

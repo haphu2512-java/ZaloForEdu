@@ -100,7 +100,7 @@ export default function App() {
         <Route path="/group-call/:roomId" element={<PrivateRoute><GroupCallPage /></PrivateRoute>} />
 
         {/* ─── Join group via invite link ─── */}
-        <Route path="/join/:code" element={<PrivateRoute><JoinGroupPage /></PrivateRoute>} />
+        <Route path="/join/:code" element={<JoinGroupPage />} />
 
         {/* ─── Admin ─── */}
         <Route

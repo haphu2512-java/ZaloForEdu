@@ -14,10 +14,12 @@ import {
   Switch,
   Clipboard,
   Share,
+  Linking,
 } from 'react-native';
 import { useLocalSearchParams, useRouter, Stack, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
+import Constants from 'expo-constants';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useAuth } from '@/context/auth';
@@ -25,6 +27,7 @@ import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
 import {
   getConversations,
+  getMessages,
   updateGroupName,
   addGroupMembers,
   removeGroupMember,
@@ -32,6 +35,7 @@ import {
   demoteGroupAdmin,
   transferGroupOwner,
   leaveGroup,
+  disbandGroup,
   updateGroupAvatar,
   updateGroupNickname,
   updateConversationPreference,
@@ -63,6 +67,7 @@ export default function ConversationDetailsScreen() {
   // Modals state
   const [addMembersVisible, setAddMembersVisible] = useState(false);
   const [selectedMembersToAdd, setSelectedMembersToAdd] = useState<string[]>([]);
+  const [membersVisible, setMembersVisible] = useState(false);
   const [editorVisible, setEditorVisible] = useState(false);
   const [editorTitle, setEditorTitle] = useState('');
   const [editorValue, setEditorValue] = useState('');
@@ -76,8 +81,23 @@ export default function ConversationDetailsScreen() {
   const [onlyAdminChat, setOnlyAdminChat] = useState(false);
   const [markAdminMessages, setMarkAdminMessages] = useState(false);
   const [notificationMode, setNotificationMode] = useState<'all' | 'mention_only' | 'mute'>('all');
+  const [sharedMedia, setSharedMedia] = useState<any[]>([]);
+  const [sharedFiles, setSharedFiles] = useState<any[]>([]);
+  const [sharedLinks, setSharedLinks] = useState<string[]>([]);
+  const [sharedLoading, setSharedLoading] = useState(false);
 
   const currentUserId = user?.id || '';
+  const linkRegex = /(mobileapp:\/\/[^\s]+|https?:\/\/[^\s]+)/gi;
+
+  const isImageMedia = (mimeType?: string, fileName?: string) => {
+    if (mimeType?.startsWith('image/')) return true;
+    return /\.(jpg|jpeg|png|gif|webp|bmp)$/i.test(fileName || '');
+  };
+
+  const isFileMedia = (mimeType?: string, fileName?: string) => {
+    if (!mimeType && !fileName) return false;
+    return !isImageMedia(mimeType, fileName);
+  };
 
   const loadData = useCallback(async () => {
     if (!id) return;
@@ -98,8 +118,32 @@ export default function ConversationDetailsScreen() {
       if (matched?.preference?.notificationMode) {
         setNotificationMode(matched.preference.notificationMode);
       }
+
+      setSharedLoading(true);
+      const msgRes = await getMessages({ conversationId: String(id), limit: 80 });
+      const medias: any[] = [];
+      const files: any[] = [];
+      const links = new Set<string>();
+
+      (msgRes?.items || []).forEach((m: any) => {
+        const content = m?.content || '';
+        const foundLinks = content.match(linkRegex);
+        if (foundLinks?.length) foundLinks.forEach((l: string) => links.add(l));
+
+        (m?.mediaIds || []).forEach((media: any) => {
+          if (!media || typeof media === 'string') return;
+          if (isImageMedia(media.mimeType, media.fileName)) medias.push(media);
+          else if (isFileMedia(media.mimeType, media.fileName)) files.push(media);
+        });
+      });
+
+      setSharedMedia(medias.slice(0, 8));
+      setSharedFiles(files.slice(0, 8));
+      setSharedLinks(Array.from(links).slice(0, 8));
     } catch (error: any) {
       console.log('Failed to load conversation details', error.message);
+    } finally {
+      setSharedLoading(false);
     }
   }, [id]);
 
@@ -163,7 +207,10 @@ export default function ConversationDetailsScreen() {
   const handleAction = async (actionFn: () => Promise<any>, successMsg: string) => {
     try {
       setActionLoading(true);
-      await actionFn();
+      const res = await actionFn();
+      if (res && (res._id || res.id)) {
+        setConversation((prev) => prev ? { ...prev, ...res } : res);
+      }
       await loadData();
       Alert.alert('Thành công', successMsg);
     } catch (error: any) {
@@ -337,6 +384,98 @@ export default function ConversationDetailsScreen() {
           <Text style={[styles.mainTitle, { color: colors.text }]}>{title}</Text>
         </View>
 
+        {isGroup && (
+          <View style={[styles.quickActionsWrap, { backgroundColor: colors.surface }]}>
+            <TouchableOpacity style={styles.quickActionItem} onPress={() => router.push({ pathname: '/search-messages', params: { id: conversation._id } } as any)}>
+              <View style={styles.quickIconCircle}><Ionicons name="search" size={24} color={colors.text} /></View>
+              <Text style={[styles.quickActionLabel, { color: colors.text }]}>Tìm{'\n'}tin nhắn</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.quickActionItem}
+              onPress={() => {
+                if (!iAmAdmin) {
+                  Alert.alert('Thông báo', 'Chỉ quản trị viên mới có thể thêm thành viên');
+                  return;
+                }
+                setSelectedMembersToAdd([]);
+                setAddMembersVisible(true);
+              }}
+            >
+              <View style={styles.quickIconCircle}><Ionicons name="person-add" size={24} color={colors.text} /></View>
+              <Text style={[styles.quickActionLabel, { color: colors.text }]}>Thêm{'\n'}thành viên</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.quickActionItem} onPress={() => router.push({ pathname: '/pinned-messages', params: { id: conversation._id } } as any)}>
+              <View style={styles.quickIconCircle}><Ionicons name="pin-outline" size={24} color={colors.text} /></View>
+              <Text style={[styles.quickActionLabel, { color: colors.text }]}>Tin nhắn{'\n'}đã ghim</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.quickActionItem}
+              onPress={async () => {
+                try {
+                  const next = notificationMode === 'mute' ? 'all' : 'mute';
+                  setNotificationMode(next);
+                  await updateConversationPreference(conversation._id, { notificationMode: next });
+                  Alert.alert('Thành công', next === 'mute' ? 'Đã tắt thông báo' : 'Đã bật thông báo');
+                } catch (err: any) {
+                  Alert.alert('Lỗi', err.message || 'Không thể cập nhật thông báo');
+                }
+              }}
+            >
+              <View style={styles.quickIconCircle}><Ionicons name={notificationMode === 'mute' ? 'notifications-off-outline' : 'notifications-outline'} size={24} color={colors.text} /></View>
+              <Text style={[styles.quickActionLabel, { color: colors.text }]}>Tắt{'\n'}thông báo</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {isGroup && (
+          <View style={[styles.section, { backgroundColor: colors.surface, marginTop: 8 }]}>
+            <TouchableOpacity style={[styles.optionItem, { justifyContent: 'space-between' }]}>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <Ionicons name="folder-open-outline" size={22} color={colors.text} style={{ width: 30, marginRight: 10 }} />
+                <Text style={{ color: colors.text, fontSize: 16, fontWeight: '600' }}>Ảnh, file, link</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color={colors.muted} />
+            </TouchableOpacity>
+
+            {sharedLoading ? (
+              <ActivityIndicator size="small" color={brand} style={{ marginVertical: 10 }} />
+            ) : (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.sharedRow}>
+                {sharedMedia.map((media: any) => (
+                  <TouchableOpacity key={media._id || media.id || media.url} onPress={() => media.url && Linking.openURL(media.url)}>
+                    <Image source={{ uri: media.url }} style={styles.sharedThumb} />
+                  </TouchableOpacity>
+                ))}
+
+                {sharedFiles.map((file: any) => (
+                  <TouchableOpacity key={file._id || file.id || file.fileName} style={[styles.sharedFileCard, { borderColor: colors.border }]} onPress={() => file.url && Linking.openURL(file.url)}>
+                    <Ionicons name="document-attach-outline" size={20} color={colors.text} />
+                    <Text numberOfLines={2} style={{ color: colors.text, fontSize: 12, marginTop: 4 }}>
+                      {file.fileName || 'File'}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+
+                {sharedLinks.map((link) => (
+                  <TouchableOpacity key={link} style={[styles.sharedFileCard, { borderColor: colors.border }]} onPress={() => Linking.openURL(link)}>
+                    <Ionicons name="link-outline" size={20} color={colors.text} />
+                    <Text numberOfLines={2} style={{ color: colors.text, fontSize: 12, marginTop: 4 }}>
+                      {link}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+
+                {sharedMedia.length === 0 && sharedFiles.length === 0 && sharedLinks.length === 0 && (
+                  <Text style={{ color: colors.muted, paddingVertical: 12 }}>Chưa có ảnh, file hoặc link</Text>
+                )}
+              </ScrollView>
+            )}
+          </View>
+        )}
+
         {!isGroup && (
           <View style={{ marginTop: 20 }}>
             <View style={[styles.section, { backgroundColor: colors.surface }]}>
@@ -490,7 +629,8 @@ export default function ConversationDetailsScreen() {
                 try {
                   setInviteLoading(true);
                   const res = await getInviteLink(conversation._id);
-                  setInviteLink(res.inviteLink);
+                  const scheme = Constants.expoConfig?.scheme || 'mobileapp';
+                  setInviteLink(`${scheme}://join-group?code=${encodeURIComponent(res.inviteCode)}`);
                   setQrModalVisible(true);
                 } catch (err: any) {
                   Alert.alert('Lỗi', err.message);
@@ -530,8 +670,15 @@ export default function ConversationDetailsScreen() {
         )}
 
         <View style={[styles.section, { backgroundColor: colors.surface }]}>
-          <Text style={[styles.sectionTitle, { color: brand }]}>Thành viên ({conversation.participants?.length || 0})</Text>
-          {(conversation.participants || []).map(renderMember)}
+          <TouchableOpacity style={[styles.optionItem, { justifyContent: 'space-between' }]} onPress={() => setMembersVisible(true)}>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <Ionicons name="people-outline" size={24} color={colors.text} style={{ width: 30, marginRight: 15 }} />
+              <Text style={{ color: colors.text, fontSize: 16, fontWeight: '600' }}>
+                Xem thành viên ({conversation.participants?.length || 0})
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color={colors.muted} />
+          </TouchableOpacity>
         </View>
 
         {isGroup && (
@@ -552,6 +699,31 @@ export default function ConversationDetailsScreen() {
               <Ionicons name="exit-outline" size={24} color="#EF4444" />
               <Text style={styles.dangerBtnText}>Rời nhóm</Text>
             </TouchableOpacity>
+            {iAmOwner ? (
+              <TouchableOpacity
+                style={styles.dangerBtn}
+                onPress={() =>
+                  Alert.alert(
+                    'Giai tan nhom',
+                    'Hanh dong nay se xoa nhom va toan bo tin nhan. Ban co chac chan?',
+                    [
+                      { text: 'Huy', style: 'cancel' },
+                      {
+                        text: 'Giai tan',
+                        style: 'destructive',
+                        onPress: () =>
+                          handleAction(() => disbandGroup(conversation._id), 'Da giai tan nhom').then(() =>
+                            router.replace('/(tabs)'),
+                          ),
+                      },
+                    ],
+                  )
+                }
+              >
+                <Ionicons name="trash-outline" size={24} color="#EF4444" />
+                <Text style={styles.dangerBtnText}>Giai tan nhom</Text>
+              </TouchableOpacity>
+            ) : null}
           </View>
         )}
       </ScrollView>
@@ -593,6 +765,24 @@ export default function ConversationDetailsScreen() {
                 </TouchableOpacity>
               );
             })}
+          </ScrollView>
+        </View>
+      </Modal>
+
+      {/* Members Modal */}
+      <Modal visible={membersVisible} animationType="slide" onRequestClose={() => setMembersVisible(false)}>
+        <View style={[styles.fullModal, { backgroundColor: colors.background }]}>
+          <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
+            <TouchableOpacity onPress={() => setMembersVisible(false)}>
+              <Text style={{ color: brand, fontWeight: 'bold' }}>Đóng</Text>
+            </TouchableOpacity>
+            <Text style={{ fontSize: 18, fontWeight: 'bold', color: colors.text }}>
+              Thành viên ({conversation.participants?.length || 0})
+            </Text>
+            <View style={{ width: 30 }} />
+          </View>
+          <ScrollView>
+            {(conversation.participants || []).map(renderMember)}
           </ScrollView>
         </View>
       </Modal>
@@ -722,6 +912,24 @@ const styles = StyleSheet.create({
   headerProfile: { alignItems: 'center', paddingVertical: 24 },
   mainAvatar: { width: 100, height: 100, borderRadius: 50, marginBottom: 16 },
   mainTitle: { fontSize: 24, fontWeight: 'bold' },
+  quickActionsWrap: {
+    marginHorizontal: 12,
+    borderRadius: 14,
+    paddingVertical: 14,
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginBottom: 12,
+  },
+  quickActionItem: { alignItems: 'center', gap: 8, width: '24%' },
+  quickIconCircle: {
+    width: 54,
+    height: 54,
+    borderRadius: 27,
+    backgroundColor: '#F3F4F6',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  quickActionLabel: { fontSize: 12, fontWeight: '600', textAlign: 'center', lineHeight: 18 },
   actionGrid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 12, marginBottom: 20, gap: 8 },
   gridBtn: { width: '30%', alignItems: 'center', padding: 12, borderRadius: 16, elevation: 1, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 5 },
   iconCircle: { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center', marginBottom: 8 },
@@ -744,4 +952,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 12,
   },
+  sharedRow: { paddingBottom: 8, gap: 10 },
+  sharedThumb: { width: 88, height: 88, borderRadius: 10, backgroundColor: '#E5E7EB' },
+  sharedFileCard: { width: 120, height: 88, borderRadius: 10, borderWidth: 1, padding: 8, justifyContent: 'center' },
 });

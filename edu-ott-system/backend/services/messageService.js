@@ -51,7 +51,17 @@ const parseMentions = async (content, conversation) => {
   return { mentions, mentionAll };
 };
 
-const createMessage = async ({ conversationId, senderId, content = '', mediaIds = [], replyTo, forwardFrom }) => {
+const createMessage = async ({
+  conversationId,
+  senderId,
+  content = '',
+  mediaIds = [],
+  replyTo,
+  forwardFrom,
+  channelId = null,
+  type = 'text',
+  isPinnedAnnouncement = false,
+}) => {
   const conversation = await ensureConversationMember(conversationId, senderId);
 
   // Parse @mentions
@@ -62,6 +72,9 @@ const createMessage = async ({ conversationId, senderId, content = '', mediaIds 
     senderId,
     content,
     mediaIds,
+    channelId,
+    type,
+    isPinnedAnnouncement: type === 'announcement' ? Boolean(isPinnedAnnouncement) : false,
     replyTo: replyTo || null,
     forwardFrom: forwardFrom || null,
     deliveredTo: [senderId],
@@ -71,6 +84,18 @@ const createMessage = async ({ conversationId, senderId, content = '', mediaIds 
   });
 
   await Conversation.findByIdAndUpdate(conversationId, { lastMessageAt: new Date() });
+
+  // Keep only the latest N messages per channel for large communities.
+  const limit = conversation.messageHistoryLimitPerChannel || 2000;
+  const scope = { conversationId, channelId: channelId || null };
+  const staleIds = await Message.find(scope)
+    .sort({ createdAt: -1, _id: -1 })
+    .skip(limit)
+    .select('_id')
+    .lean();
+  if (staleIds.length > 0) {
+    await Message.deleteMany({ _id: { $in: staleIds.map((m) => m._id) } });
+  }
 
   return await Message.findById(message._id)
     .populate('mediaIds', 'fileName url size mimeType providerResourceType')

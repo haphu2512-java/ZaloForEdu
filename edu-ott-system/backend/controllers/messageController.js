@@ -3,6 +3,7 @@ const mongoose = require('mongoose');
 const Message = require('../models/Message');
 const User = require('../models/User');
 const ConversationPreference = require('../models/ConversationPreference');
+const GroupMember = require('../models/GroupMember');
 const { createMessage, ensureConversationMember } = require('../services/messageService');
 const { decodeCursor, encodeCursor } = require('../utils/cursor');
 const asyncHandler = require('../utils/asyncHandler');
@@ -13,7 +14,7 @@ const socketService = require('../services/socketService');
 const toStr = (id) => id?.toString();
 
 const sendMessage = asyncHandler(async (req, res) => {
-  const { conversationId, content, mediaIds, replyTo, forwardFrom } = req.body;
+  const { conversationId, content, mediaIds, replyTo, forwardFrom, channelId, type, isPinnedAnnouncement } = req.body;
   if (!content && (!mediaIds || mediaIds.length === 0)) {
     throw new ApiError(400, 'INVALID_PAYLOAD', 'Message content or media is required');
   }
@@ -25,6 +26,21 @@ const sendMessage = asyncHandler(async (req, res) => {
 
   const isOwner = toStr(conversation.ownerId || conversation.createdBy) === toStr(req.user._id);
   const isAdmin = (conversation.adminIds || []).some((a) => toStr(a) === toStr(req.user._id));
+
+  let communityMember = null;
+  if (conversation.type === 'community') {
+    communityMember = await GroupMember.findOne({ groupId: conversationId, userId: req.user._id });
+    if (!communityMember || communityMember.status !== 'active') {
+      throw new ApiError(403, 'FORBIDDEN', 'You are not an active member of this community');
+    }
+    if (communityMember.mutedUntil && new Date(communityMember.mutedUntil) > new Date()) {
+      throw new ApiError(403, 'FORBIDDEN', 'You are muted in this community');
+    }
+    if (type === 'announcement' && !['owner', 'admin', 'mod'].includes(communityMember.role)) {
+      throw new ApiError(403, 'FORBIDDEN', 'Only admin/mod can post announcements');
+    }
+  }
+
   if (!isOwner && !isAdmin) {
     if (conversation.settings?.canMembersSendMessages === false) {
       throw new ApiError(403, 'FORBIDDEN', 'Only admin/owner can send messages in this group');
@@ -59,6 +75,9 @@ const sendMessage = asyncHandler(async (req, res) => {
     mediaIds,
     replyTo,
     forwardFrom,
+    channelId: channelId || null,
+    type: type || 'text',
+    isPinnedAnnouncement: Boolean(isPinnedAnnouncement),
   });
 
   // Set firstSenderId nếu chưa có (tin nhắn đầu tiên)
@@ -77,7 +96,21 @@ const sendMessage = asyncHandler(async (req, res) => {
     { $set: { isHidden: false } }
   );
 
-  socketService.emitToConversation(conversationId, 'new_message', message);
+  if (message.type === 'announcement') {
+    socketService.emitToCommunityChannel(
+      conversationId,
+      message.channelId || null,
+      'announcement',
+      message,
+    );
+  } else {
+    socketService.emitToCommunityChannel(
+      conversationId,
+      message.channelId || null,
+      'new_message',
+      message,
+    );
+  }
   await socketService.emitConversationUpdated(conversationId, {
     conversationId,
     latestMessage: message,
@@ -90,11 +123,13 @@ const listMessagesByConversation = asyncHandler(async (req, res) => {
   const conversationId = req.params.id;
   const limit = Number(req.query.limit);
   const { cursor } = req.query;
+  const channelId = req.query.channelId || null;
 
   await ensureConversationMember(conversationId, req.user._id);
 
   const query = {
     conversationId,
+    channelId,
     deletedBy: { $ne: req.user._id } // Do not fetch messages deleted by this user
   };
 

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+﻿import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
   View,
   Text,
@@ -53,15 +53,11 @@ import PollBubble from '@/components/chat/PollBubble';
 import { TypingIndicator } from '@/components/chat/TypingIndicator';
 import { AudioBubbleMobile } from '@/components/chat/AudioBubbleMobile';
 import { VoiceRecorderMobile } from '@/components/chat/VoiceRecorderMobile';
+import ChatMediaMenuModal from '@/components/chat/ChatMediaMenuModal';
+import ChatForwardModal from '@/components/chat/ChatForwardModal';
+import ChatActionMenuModal, { type ChatActionMenuOption } from '@/components/chat/ChatActionMenuModal';
 
 const QUICK_EMOJIS = ['😀', '😂', '😍', '🥰', '👍', '❤️', '🔥', '😭', '🙏', '🎉'];
-
-type ActionMenuOption = {
-  text: string;
-  onPress: () => void;
-  isDestructive?: boolean;
-  style?: 'default' | 'cancel' | 'destructive';
-};
 
 function getMessageSenderId(msg: Message): string {
   if (typeof msg.senderId === 'string') return msg.senderId;
@@ -143,6 +139,16 @@ function isAudioAttachment(media?: MediaItem | null): boolean {
   return /\.(mp3|m4a|aac|wav|ogg|opus|webm)$/i.test(fileName);
 }
 
+function isValidObjectId(value?: string): boolean {
+  return !!value && /^[a-fA-F0-9]{24}$/.test(value);
+}
+
+function extractMediaId(mediaItem: any): string {
+  if (!mediaItem) return '';
+  if (typeof mediaItem === 'string') return mediaItem;
+  return mediaItem._id || mediaItem.id || '';
+}
+
 export default function ChatScreen() {
   const { id: conversationId } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
@@ -174,7 +180,7 @@ export default function ChatScreen() {
   const [conversation, setConversation] = useState<Conversation | null>(null);
   const [pinnedItems, setPinnedItems] = useState<any[]>([]);
   const [mediaById, setMediaById] = useState<Record<string, MediaItem>>({});
-  const [actionMenu, setActionMenu] = useState<{ visible: boolean; options: ActionMenuOption[] }>({ visible: false, options: [] });
+  const [actionMenu, setActionMenu] = useState<{ visible: boolean; options: ChatActionMenuOption[] }>({ visible: false, options: [] });
   const [viewImageUrl, setViewImageUrl] = useState<string | null>(null);
   const [reactionModal, setReactionModal] = useState<{
     visible: boolean;
@@ -185,6 +191,7 @@ export default function ChatScreen() {
     message: null,
     emojiFilter: null,
   });
+  const [reactionPickerMsg, setReactionPickerMsg] = useState<Message | null>(null);
 
   // Tránh mở Picker nhiều lần cùng lúc gây lỗi "picking in progress"
   const isPicking = useRef(false);
@@ -808,6 +815,30 @@ export default function ChatScreen() {
       Alert.alert('Lỗi', 'Không thể mở tệp trên thiết bị này');
     }
   }, []);
+  const handleInlineLinkPress = useCallback(async (url: string) => {
+    try {
+      const inviteQuery = url.match(/^mobileapp:\/\/join-group\?code=([^&\s]+)/i);
+      if (inviteQuery?.[1]) {
+        router.push((`/join-group?code=${decodeURIComponent(inviteQuery[1])}`) as any);
+        return;
+      }
+
+      const invitePath = url.match(/^mobileapp:\/\/join\/([^?\s]+)/i);
+      if (invitePath?.[1]) {
+        router.push((`/join-group?code=${decodeURIComponent(invitePath[1])}`) as any);
+        return;
+      }
+
+      const canOpen = await Linking.canOpenURL(url);
+      if (!canOpen) {
+        Alert.alert('Lỗi', 'Không mở được liên kết');
+        return;
+      }
+      await Linking.openURL(url);
+    } catch {
+      Alert.alert('Lỗi', 'Không mở được liên kết');
+    }
+  }, [router]);
 
   const openForwardModal = async (msg: Message) => {
     try {
@@ -829,8 +860,8 @@ export default function ChatScreen() {
       await sendMessage({
         conversationId: targetConversationId,
         content: fallbackContent || 'Tin nhắn được chuyển tiếp',
-        mediaIds: forwardSource.mediaIds || [],
-        forwardFrom: getMessageId(forwardSource),
+        mediaIds: (forwardSource.mediaIds || []).map((mediaItem: any) => extractMediaId(mediaItem)).filter((id: string) => isValidObjectId(id)),
+        ...(isValidObjectId(getMessageId(forwardSource)) ? { forwardFrom: getMessageId(forwardSource) } : {}),
       });
       setForwardModalVisible(false);
       setForwardSource(null);
@@ -843,23 +874,7 @@ export default function ChatScreen() {
   };
 
   const handleReactToMessage = async (msg: Message) => {
-    Alert.alert(
-      'Chọn cảm xúc', '',
-      [...QUICK_EMOJIS, 'Hủy'].map((emoji) => ({
-        text: emoji,
-        onPress: async () => {
-          if (emoji === 'Hủy') return;
-          try {
-            const reactions = await reactToMessage(getMessageId(msg), emoji);
-            setMessages((prev) =>
-              prev.map((m) => getMessageId(m) === getMessageId(msg) ? { ...m, reactions: reactions || [] } : m)
-            );
-          } catch {
-            Alert.alert('Lỗi', 'Không thể thả cảm xúc');
-          }
-        },
-      }))
-    );
+    setReactionPickerMsg(msg);
   };
 
   const handleOpenConversationOptions = () => {
@@ -904,7 +919,7 @@ export default function ChatScreen() {
 
     const messageId = getMessageId(msg);
     const isPinned = pinnedItems.some((item) => getPinnedMessageId(item) === messageId);
-    const buttons: ActionMenuOption[] = [{ text: 'Hủy', style: 'cancel', onPress: () => { } }];
+    const buttons: ChatActionMenuOption[] = [{ text: 'Hủy', style: 'cancel', onPress: () => { } }];
 
     if (!msg.isRecalled) {
       buttons.push({ text: '↩ Trả lời', onPress: () => setReplyTo(msg) });
@@ -1125,7 +1140,21 @@ export default function ChatScreen() {
 
               {item.content ? (
                 <Text style={{ color: isMine ? '#fff' : colors.text, fontSize: 16, lineHeight: 22 }}>
-                  {item.content.split(/(@[\w\._]*)/g).map((part, index) => {
+                  {item.content.split(/(mobileapp:\/\/[^\s]+|https?:\/\/[^\s]+|@[\w\._]*)/g).map((part, index) => {
+                    if (!part) return null;
+
+                    if (/^(mobileapp:\/\/[^\s]+|https?:\/\/[^\s]+)$/i.test(part)) {
+                      return (
+                        <Text
+                          key={index}
+                          style={{ fontWeight: '700', textDecorationLine: 'underline', color: isMine ? '#DBEAFE' : '#2563EB' }}
+                          onPress={() => handleInlineLinkPress(part)}
+                        >
+                          {part}
+                        </Text>
+                      );
+                    }
+
                     if (part.startsWith('@')) {
                       return (
                         <Text key={index} style={{ fontWeight: 'bold', color: isMine ? '#DBEAFE' : '#0068FF' }}>
@@ -1428,45 +1457,19 @@ export default function ChatScreen() {
         )}
       </KeyboardAvoidingView>
 
-      {/* Modal chọn media */}
-      <Modal visible={showMediaMenu} transparent animationType="slide" onRequestClose={() => setShowMediaMenu(false)}>
-        <TouchableOpacity style={styles.mediaMenuOverlay} activeOpacity={1} onPress={() => setShowMediaMenu(false)}>
-          <View style={[styles.mediaMenu, { backgroundColor: colors.surface }]}>
-            <TouchableOpacity style={styles.mediaMenuItem} onPress={handleTakeImage}>
-              <View style={[styles.mediaMenuIcon, { backgroundColor: '#FCE7F3' }]}>
-                <Ionicons name="camera" size={26} color="#DB2777" />
-              </View>
-              <Text style={{ color: colors.text, fontSize: 13, fontWeight: '600', marginTop: 4 }}>Máy ảnh</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.mediaMenuItem} onPress={handlePickImage}>
-              <View style={[styles.mediaMenuIcon, { backgroundColor: '#EEF2FF' }]}>
-                <Ionicons name="image" size={26} color="#4F46E5" />
-              </View>
-              <Text style={{ color: colors.text, fontSize: 13, fontWeight: '600', marginTop: 4 }}>Thư viện</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.mediaMenuItem} onPress={handleDocumentPick}>
-              <View style={[styles.mediaMenuIcon, { backgroundColor: '#ECFDF5' }]}>
-                <Ionicons name="document-attach" size={26} color="#10B981" />
-              </View>
-              <Text style={{ color: colors.text, fontSize: 13, fontWeight: '600', marginTop: 4 }}>Tệp tài liệu</Text>
-            </TouchableOpacity>
-            {conversation?.type === 'group' && (
-              <TouchableOpacity
-                style={styles.mediaMenuItem}
-                onPress={() => {
-                  setShowMediaMenu(false);
-                  router.push({ pathname: '/create-poll', params: { conversationId } } as any);
-                }}
-              >
-                <View style={[styles.mediaMenuIcon, { backgroundColor: '#FEF3C7' }]}>
-                  <Ionicons name="stats-chart" size={26} color="#D97706" />
-                </View>
-                <Text style={{ color: colors.text, fontSize: 13, fontWeight: '600', marginTop: 4 }}>Bình chọn</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-        </TouchableOpacity>
-      </Modal>
+      <ChatMediaMenuModal
+        visible={showMediaMenu}
+        onClose={() => setShowMediaMenu(false)}
+        colors={colors}
+        isGroup={conversation?.type === 'group'}
+        onTakeImage={handleTakeImage}
+        onPickImage={handlePickImage}
+        onPickDocument={handleDocumentPick}
+        onCreatePoll={() => {
+          setShowMediaMenu(false);
+          router.push({ pathname: '/create-poll', params: { conversationId } } as any);
+        }}
+      />
 
       {/* Modal xem ảnh */}
       <Modal visible={!!viewImageUrl} transparent animationType="fade" onRequestClose={() => setViewImageUrl(null)}>
@@ -1480,53 +1483,55 @@ export default function ChatScreen() {
         </View>
       </Modal>
 
-      {/* Modal chuyển tiếp */}
-      <Modal visible={forwardModalVisible} animationType="slide" onRequestClose={() => setForwardModalVisible(false)}>
-        <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
-          <View style={{ paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: colors.surface }}>
-            <TouchableOpacity onPress={() => setForwardModalVisible(false)}>
-              <Text style={{ color: colors.tint, fontWeight: '700' }}>Đóng</Text>
-            </TouchableOpacity>
-            <Text style={{ fontSize: 18, fontWeight: '700', color: colors.text }}>Chuyển tiếp</Text>
-            <View style={{ width: 36 }} />
-          </View>
-          <FlatList
-            data={conversations}
-            keyExtractor={(item) => item._id || item.id || ''}
-            renderItem={({ item }) => (
-              <TouchableOpacity
-                disabled={isForwarding}
-                onPress={() => handleForward(item._id || item.id || '')}
-                style={{ paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border }}
-              >
-                <Text style={{ fontSize: 16, color: colors.text }}>{getConversationTitle(item, currentUserId)}</Text>
-              </TouchableOpacity>
-            )}
-          />
-        </SafeAreaView>
-      </Modal>
+      <ChatForwardModal
+        visible={forwardModalVisible}
+        onClose={() => setForwardModalVisible(false)}
+        colors={colors}
+        conversations={conversations}
+        currentUserId={currentUserId}
+        isForwarding={isForwarding}
+        onForward={handleForward}
+        getConversationTitle={getConversationTitle}
+      />
 
-      {/* Modal action menu (long press) */}
-      <Modal visible={actionMenu.visible} transparent animationType="fade" onRequestClose={() => setActionMenu({ visible: false, options: [] })}>
-        <TouchableOpacity style={styles.actionMenuOverlay} activeOpacity={1} onPress={() => setActionMenu({ visible: false, options: [] })}>
-          <View style={[styles.actionMenuContainer, { backgroundColor: colors.surface }]}>
-            {actionMenu.options.map((opt, index) => (
-              <TouchableOpacity
-                key={index}
-                style={[styles.actionMenuBtn, index > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border }]}
-                onPress={() => {
-                  setActionMenu({ visible: false, options: [] });
-                  opt.onPress?.();
-                }}
-              >
-                <Text style={{ fontSize: 16, color: opt.isDestructive ? '#EF4444' : colors.text, fontWeight: opt.style === 'cancel' ? '700' : '400' }}>
-                  {opt.text}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
+      {/* Emoji Picker Modal */}
+      <Modal visible={!!reactionPickerMsg} transparent animationType="fade" onRequestClose={() => setReactionPickerMsg(null)}>
+        <TouchableOpacity style={styles.reactionPickerOverlay} activeOpacity={1} onPress={() => setReactionPickerMsg(null)}>
+          <Pressable style={[styles.reactionPickerBox, { backgroundColor: colors.surface }]} onPress={(e) => e.stopPropagation()}>
+            <Text style={{ textAlign: 'center', fontSize: 16, fontWeight: 'bold', marginBottom: 16, color: colors.text }}>Chọn cảm xúc</Text>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 12 }}>
+              {QUICK_EMOJIS.map((emoji) => (
+                <TouchableOpacity
+                  key={emoji}
+                  onPress={async () => {
+                    const msg = reactionPickerMsg;
+                    setReactionPickerMsg(null);
+                    if (!msg) return;
+                    try {
+                      const reactions = await reactToMessage(getMessageId(msg), emoji);
+                      setMessages((prev) =>
+                        prev.map((m) => getMessageId(m) === getMessageId(msg) ? { ...m, reactions: reactions || [] } : m)
+                      );
+                    } catch {
+                      Alert.alert('Lỗi', 'Không thể thả cảm xúc');
+                    }
+                  }}
+                  style={{ padding: 10, backgroundColor: colorScheme === 'dark' ? '#374151' : '#F3F4F6', borderRadius: 24, width: 56, height: 56, alignItems: 'center', justifyContent: 'center' }}
+                >
+                  <Text style={{ fontSize: 28 }}>{emoji}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </Pressable>
         </TouchableOpacity>
       </Modal>
+
+      <ChatActionMenuModal
+        visible={actionMenu.visible}
+        onClose={() => setActionMenu({ visible: false, options: [] })}
+        options={actionMenu.options}
+        colors={colors}
+      />
 
       <Modal visible={reactionModal.visible} transparent animationType="slide" onRequestClose={closeReactionDetails}>
         <View style={styles.reactionDetailOverlay}>
@@ -1686,4 +1691,10 @@ const styles = StyleSheet.create({
     borderBottomColor: '#E5E7EB',
   },
   reactionAvatar: { width: 44, height: 44, borderRadius: 22 },
+  reactionPickerOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
+  reactionPickerBox: { width: '85%', borderRadius: 24, padding: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 5 },
 });
+
+
+
+

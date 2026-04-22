@@ -88,6 +88,7 @@ const createPoll = asyncHandler(async (req, res) => {
     pollId: poll._id
   });
   await sysMsg2.populate('senderId', 'username avatarUrl fullName');
+  socketService.emitToConversation(conversationId, 'new_message', sysMsg2);
   await socketService.emitConversationUpdated(conversationId, {
     conversationId,
     latestMessage: sysMsg2
@@ -176,6 +177,7 @@ const votePoll = asyncHandler(async (req, res) => {
     pollId: poll._id
   });
   await sysMsg.populate('senderId', 'username avatarUrl fullName');
+  socketService.emitToConversation(poll.conversationId.toString(), 'new_message', sysMsg);
   await socketService.emitConversationUpdated(poll.conversationId.toString(), {
     conversationId: poll.conversationId,
     latestMessage: sysMsg
@@ -201,6 +203,21 @@ const closePoll = asyncHandler(async (req, res) => {
 
   poll.isClosed = true;
   await poll.save();
+
+  const senderName = req.user.fullName || req.user.username;
+  const sysMsg = await Message.create({
+    conversationId: poll.conversationId,
+    senderId: req.user._id,
+    content: `${senderName} đã đóng bình chọn: "${poll.question}"`,
+    type: 'system',
+    pollId: poll._id,
+  });
+  await sysMsg.populate('senderId', 'username avatarUrl fullName');
+  socketService.emitToConversation(poll.conversationId.toString(), 'new_message', sysMsg);
+  await socketService.emitConversationUpdated(poll.conversationId.toString(), {
+    conversationId: poll.conversationId,
+    latestMessage: sysMsg,
+  });
 
   return successResponse(res, poll, 'Poll closed');
 });

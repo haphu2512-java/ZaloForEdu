@@ -23,6 +23,15 @@ const emitToConversation = (conversationId, event, payload) => {
   io.to(`conversation:${conversationId}`).emit(event, payload);
 };
 
+const emitToCommunityChannel = (communityId, channelId, event, payload) => {
+  if (!io) return;
+  if (channelId) {
+    io.to(`community:${communityId}:channel:${channelId}`).emit(event, payload);
+    return;
+  }
+  io.to(`community:${communityId}`).emit(event, payload);
+};
+
 const emitToUser = (userId, event, payload) => {
   if (!io) return;
   io.to(`user:${userId}`).emit(event, payload);
@@ -143,7 +152,19 @@ const initSocket = (server) => {
         return;
       }
       socket.join(`conversation:${conversationId}`);
+      socket.join(`community:${conversationId}`);
       socket.emit('joined_conversation', { conversationId });
+    });
+
+    socket.on('join_community_channel', async ({ communityId, channelId }) => {
+      if (!communityId || !channelId) return;
+      const allowed = await canJoinConversation(communityId, socket.user._id);
+      if (!allowed) {
+        socket.emit('socket_error', { message: 'Not allowed to join this channel room' });
+        return;
+      }
+      socket.join(`community:${communityId}:channel:${channelId}`);
+      socket.emit('joined_community_channel', { communityId, channelId });
     });
 
     socket.on('send_message', async (payload) => {
@@ -155,8 +176,15 @@ const initSocket = (server) => {
           mediaIds: payload.mediaIds || [],
           replyTo: payload.replyTo,
           forwardFrom: payload.forwardFrom,
+          channelId: payload.channelId || null,
+          type: payload.type || 'text',
+          isPinnedAnnouncement: Boolean(payload.isPinnedAnnouncement),
         });
-        emitToConversation(payload.conversationId, 'new_message', message);
+        if (message.type === 'announcement') {
+          emitToCommunityChannel(payload.conversationId, payload.channelId || null, 'announcement', message);
+        } else {
+          emitToCommunityChannel(payload.conversationId, payload.channelId || null, 'new_message', message);
+        }
         await emitConversationUpdated(payload.conversationId, {
           conversationId: payload.conversationId,
           latestMessage: message,
@@ -301,6 +329,7 @@ const initSocket = (server) => {
 
 module.exports = initSocket;
 module.exports.emitToConversation = emitToConversation;
+module.exports.emitToCommunityChannel = emitToCommunityChannel;
 module.exports.emitConversationUpdated = emitConversationUpdated;
 module.exports.emitMessageRecalled = emitMessageRecalled;
 module.exports.emitPinnedItemsUpdated = emitPinnedItemsUpdated;

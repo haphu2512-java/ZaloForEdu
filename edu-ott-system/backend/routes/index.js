@@ -12,6 +12,8 @@ const userRoutes = require('./user.routes');
 const chatbotRoutes = require('./chatbot.routes');
 const pollRoutes = require('./poll.routes');
 const reminderRoutes = require('./reminder.routes');
+const communityRoutes = require('./community.routes');
+const channelRoutes = require('./channel.routes');
 
 const router = express.Router();
 
@@ -27,5 +29,7 @@ router.use('/settings', settingsRoutes);
 router.use('/chatbot', chatbotRoutes);
 router.use('/polls', pollRoutes);
 router.use('/reminders', reminderRoutes);
+router.use('/communities', communityRoutes);
+router.use('/channels', channelRoutes);
 
 module.exports = router;

@@ -219,7 +219,7 @@ export const conversationService = {
   },
 
   previewGroupByInviteCode: async (code) => {
-    const res = await axios.get(`${API_URL}/conversations/preview/${code}`, getAuthHeaders());
+    const res = await axios.get(`${API_URL}/conversations/preview/${code}`);
     return res.data;
   },
 

@@ -516,15 +516,27 @@
 
 .mdc-msg-emoji-tray {
   position: absolute;
-  bottom: calc(100% + 5px);
+  bottom: calc(100% + 8px);
   background: var(--z-bg-sidebar);
   border: 1px solid var(--z-border);
-  border-radius: 20px;
-  padding: 6px 12px;
+  border-radius: 24px;
+  padding: 8px 12px;
   display: flex;
-  gap: 8px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  z-index: 20;
+  gap: 12px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  z-index: 100;
+  align-items: center;
+  justify-content: center;
+  min-width: max-content;
+}
+
+.mdc-msg-emoji-tray span {
+  font-size: 20px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  user-select: none;
 }
 
 .mdc-msg-menu {
@@ -1310,4 +1322,81 @@
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.12s;
+}
+
+/* ── PUSH NOTIFICATIONS ── */
+.push-notif-card {
+  background: var(--z-bg-sidebar);
+  border: 1px solid var(--z-border);
+  border-radius: 8px;
+  padding: 12px;
+  box-shadow: 0 10px 25px rgba(0,0,0,0.15);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: 350px;
+  cursor: pointer;
+  animation: slideIn 0.3s ease-out;
+  position: relative;
+  border-left: 4px solid var(--z-primary);
+}
+
+.push-notif-card.mentioned {
+  border-left-color: #EF4444;
+  background: rgba(239, 68, 68, 0.05);
+}
+
+[data-theme="dark"] .push-notif-card.mentioned {
+  background: rgba(239, 68, 68, 0.1);
+}
+
+.push-notif-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.push-notif-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.push-notif-sender {
+  font-weight: 700;
+  font-size: 14px;
+  margin-bottom: 2px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--z-text-primary);
+}
+
+.mention-badge {
+  background: #EF4444;
+  color: white;
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 10px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.push-notif-content {
+  font-size: 13px;
+  color: var(--z-text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.push-notif-close {
+  font-size: 14px;
+  color: var(--z-text-muted);
+  padding: 4px;
+}
+
+@keyframes slideIn {
+  from { transform: translateX(100%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
 }

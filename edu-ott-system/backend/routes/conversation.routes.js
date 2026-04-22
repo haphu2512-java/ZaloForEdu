@@ -441,7 +441,6 @@ router.get(
 // POST /preview/:code - Xem preview nhóm (public, không cần auth)
 router.get(
   '/preview/:code',
-  auth,
   validate({ params: inviteCodeParamSchema }),
   groupFeatureController.previewGroupByInviteCode,
 );

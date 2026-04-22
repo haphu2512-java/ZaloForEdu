@@ -29,7 +29,14 @@ export const fetchAPI = async (endpoint: string, options: RequestInit = {}) => {
   const id = setTimeout(() => controller.abort(), 15000);
 
   try {
-    const url = `${API_BASE_URL}${endpoint}`;
+    let url = `${API_BASE_URL}${endpoint}`;
+
+    // Prevent GET caching (especially aggressive on iOS/some RN environments)
+    if (!options.method || options.method === 'GET') {
+      const char = url.includes('?') ? '&' : '?';
+      url += `${char}_t=${Date.now()}`;
+    }
+
     console.log(`Fetching: ${url}`);
 
     // Auto-attach auth token if available
