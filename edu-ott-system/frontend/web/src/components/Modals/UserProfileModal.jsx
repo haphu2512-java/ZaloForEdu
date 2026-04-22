@@ -24,8 +24,7 @@ export default function UserProfileModal({ isOpen, onClose, user, status: initia
   const [outgoingReqId, setOutgoingReqId] = useState(null);
   const [incomingReqId, setIncomingReqId] = useState(null);
 
-  // Mỗi khi modal mở với một user mới: gọi API trực tiếp để lấy status đúng
-  // Không phụ thuộc vào timing của global store → hết race condition
+  // Mỗi khi modal mở: gọi API trực tiếp để lấy status đúng cho user này
   useEffect(() => {
     if (!isOpen || !user) return;
     const uid = String(user._id || user.id);
@@ -40,20 +39,46 @@ export default function UserProfileModal({ isOpen, onClose, user, status: initia
         ]);
         if (cancelled) return;
 
-        // Đồng bộ lên global store để AddFriendModal search list cũng cập nhật badge
+        // Chỉ cập nhật store ADDITIVELY (merge, không replace) để tránh race condition
+        // với optimistic update — không dùng useFriendStore.setState toàn bộ
+        const { friends: curFriends, outgoingRequests: curOut, incomingRequests: curIn } = useFriendStore.getState();
+
+        // Merge friends (deduplicate)
+        const serverFriendIds = new Set((friendData?.items || []).map(f => String(f._id || f.id)));
+        const mergedFriends = [
+          ...(friendData?.items || []),
+          ...curFriends.filter(f => !serverFriendIds.has(String(f._id || f.id))),
+        ];
+
+        // Merge outgoing (server là source of truth nhưng giữ optimistic nếu server chưa reflect)
+        const serverOut = outData?.items || [];
+        const serverOutIds = new Set(serverOut.map(r => String(r.toUserId?._id || r.toUserId || '')));
+        const mergedOut = [
+          ...serverOut,
+          ...curOut.filter(r => !serverOutIds.has(String(r.toUserId?._id || r.toUserId || ''))),
+        ];
+
+        // Merge incoming
+        const serverIn = inData?.items || [];
+        const serverInIds = new Set(serverIn.map(r => String(r.fromUserId?._id || r.fromUserId || '')));
+        const mergedIn = [
+          ...serverIn,
+          ...curIn.filter(r => !serverInIds.has(String(r.fromUserId?._id || r.fromUserId || ''))),
+        ];
+
         useFriendStore.setState({
-          outgoingRequests: outData?.items || [],
-          incomingRequests: inData?.items || [],
-          friends: friendData?.items || [],
+          friends: mergedFriends,
+          outgoingRequests: mergedOut,
+          incomingRequests: mergedIn,
         });
 
-        // Kiểm tra từng loại quan hệ
+        // Xác định status cho user này
         const isFriend = (friendData?.items || []).some(
           f => String(f._id || f.id) === uid
         );
         if (isFriend) { setStatus("friend"); return; }
 
-        const outReq = (outData?.items || []).find(
+        const outReq = serverOut.find(
           r => String(r.toUserId?._id || r.toUserId || "") === uid
         );
         if (outReq) {
@@ -62,7 +87,7 @@ export default function UserProfileModal({ isOpen, onClose, user, status: initia
           return;
         }
 
-        const inReq = (inData?.items || []).find(
+        const inReq = serverIn.find(
           r => String(r.fromUserId?._id || r.fromUserId || "") === uid
         );
         if (inReq) {
