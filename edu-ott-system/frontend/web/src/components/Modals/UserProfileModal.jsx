@@ -14,61 +14,81 @@ const DEFAULT_AVATAR = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/
 
 export default function UserProfileModal({ isOpen, onClose, user, status: initialStatus, onStatusChange, onChatOpened }) {
   const navigate = useNavigate();
-  const { fetchFriends, fetchOutgoingRequests, fetchIncomingRequests, unfriend, blockFriend, outgoingRequests, incomingRequests, friends } = useFriendStore();
+  const { unfriend, blockFriend } = useFriendStore();
 
   const [status, setStatus] = useState(initialStatus || "none");
   const [actionLoading, setActionLoading] = useState(null);
   const [chatLoading, setChatLoading] = useState(false);
 
-  // Khi modal mở: fetch fresh data từ server để đảm bảo status luôn đúng
-  useEffect(() => {
-    if (!isOpen || !user) return;
-    // Fetch song song, không block render
-    Promise.all([fetchFriends(), fetchOutgoingRequests(), fetchIncomingRequests()]).catch(() => {});
-  }, [isOpen, user?._id, user?.id]);
+  // Request IDs để có thể cancel / accept
+  const [outgoingReqId, setOutgoingReqId] = useState(null);
+  const [incomingReqId, setIncomingReqId] = useState(null);
 
-  // Sync status từ store mỗi khi store thay đổi (sau khi fetch xong)
+  // Mỗi khi modal mở với một user mới: gọi API trực tiếp để lấy status đúng
+  // Không phụ thuộc vào timing của global store → hết race condition
   useEffect(() => {
     if (!isOpen || !user) return;
     const uid = String(user._id || user.id);
+    let cancelled = false;
 
-    const isFriend = friends?.some(f => String(f._id || f.id || f) === uid);
-    if (isFriend) { setStatus("friend"); return; }
+    const checkRelationship = async () => {
+      try {
+        const [outData, inData, friendData] = await Promise.all([
+          friendService.getOutgoingRequests(),
+          friendService.getIncomingRequests(),
+          friendService.getFriendList(),
+        ]);
+        if (cancelled) return;
 
-    const hasOutgoing = outgoingRequests?.some(
-      r => String(r.toUserId?._id || r.toUserId || "") === uid
-    );
-    if (hasOutgoing) { setStatus("outgoing"); return; }
+        // Đồng bộ lên global store để AddFriendModal search list cũng cập nhật badge
+        useFriendStore.setState({
+          outgoingRequests: outData?.items || [],
+          incomingRequests: inData?.items || [],
+          friends: friendData?.items || [],
+        });
 
-    const hasIncoming = incomingRequests?.some(
-      r => String(r.fromUserId?._id || r.fromUserId || "") === uid
-    );
-    if (hasIncoming) { setStatus("incoming"); return; }
+        // Kiểm tra từng loại quan hệ
+        const isFriend = (friendData?.items || []).some(
+          f => String(f._id || f.id) === uid
+        );
+        if (isFriend) { setStatus("friend"); return; }
 
-    // Chỉ reset về none nếu store đã có dữ liệu (không phải đang loading)
-    // Tránh flash khi store chưa load xong lần đầu
-    setStatus(initialStatus || "none");
-  }, [isOpen, user?._id, user?.id, outgoingRequests, incomingRequests, friends]);
+        const outReq = (outData?.items || []).find(
+          r => String(r.toUserId?._id || r.toUserId || "") === uid
+        );
+        if (outReq) {
+          setStatus("outgoing");
+          setOutgoingReqId(String(outReq._id));
+          return;
+        }
 
+        const inReq = (inData?.items || []).find(
+          r => String(r.fromUserId?._id || r.fromUserId || "") === uid
+        );
+        if (inReq) {
+          setStatus("incoming");
+          setIncomingReqId(String(inReq._id));
+          return;
+        }
+
+        setStatus("none");
+      } catch {
+        setStatus(initialStatus || "none");
+      }
+    };
+
+    checkRelationship();
+    return () => { cancelled = true; };
+  }, [isOpen, user?._id, user?.id]);
 
   if (!isOpen || !user) return null;
 
   const uid = String(user._id || user.id);
 
-  const getOutgoingRequestId = () => {
-    const req = outgoingRequests.find(r => String(r.toUserId?._id || r.toUserId || "") === uid);
-    return req?._id;
-  };
-
-  const getIncomingRequestId = () => {
-    const req = incomingRequests.find(r => String(r.fromUserId?._id || r.fromUserId || "") === uid);
-    return req?._id;
-  };
-
+  // --------------- handlers ---------------
   const handleChat = async () => {
     setChatLoading(true);
     try {
-      // Kiểm tra conversation đã tồn tại chưa
       const res = await api.post("/conversations", {
         type: "direct",
         participantIds: [uid],
@@ -87,17 +107,20 @@ export default function UserProfileModal({ isOpen, onClose, user, status: initia
       const res = await friendService.sendFriendRequest(uid);
       setStatus("outgoing");
 
-      // Optimistic update: thêm vào store ngay lập tức (không chờ fetch)
-      const newReq = res?.data?.data || res?.data || { _id: Date.now(), toUserId: { _id: uid } };
+      // Lưu request ID để cancel được
+      const reqId = res?._id || String(Date.now());
+      setOutgoingReqId(reqId);
+
+      // Cập nhật store ngay để AddFriendModal search row hiện "Đã gửi"
       useFriendStore.setState(prev => ({
         outgoingRequests: [
           ...prev.outgoingRequests.filter(
             r => String(r.toUserId?._id || r.toUserId || "") !== uid
           ),
-          newReq,
+          { _id: reqId, toUserId: { _id: uid } },
         ],
       }));
-      fetchOutgoingRequests(); // background refresh để lấy real data
+
       onStatusChange?.("outgoing");
     } catch (e) {
       const code = e?.response?.data?.error?.code;
@@ -107,39 +130,42 @@ export default function UserProfileModal({ isOpen, onClose, user, status: initia
   };
 
   const handleCancelRequest = async () => {
-    const requestId = getOutgoingRequestId();
-    if (!requestId) return;
+    if (!outgoingReqId) return;
     setActionLoading("cancel");
     try {
-      await friendService.cancelFriendRequest(requestId);
+      await friendService.cancelFriendRequest(outgoingReqId);
       setStatus("none");
-      fetchOutgoingRequests();
+      setOutgoingReqId(null);
+      // Xóa khỏi store
+      useFriendStore.setState(prev => ({
+        outgoingRequests: prev.outgoingRequests.filter(
+          r => String(r.toUserId?._id || r.toUserId || "") !== uid
+        ),
+      }));
       onStatusChange?.("none");
     } finally { setActionLoading(null); }
   };
 
   const handleAccept = async () => {
-    const requestId = getIncomingRequestId();
-    if (!requestId) return;
+    if (!incomingReqId) return;
     setActionLoading("accept");
     try {
       const { acceptRequest } = useFriendStore.getState();
-      await acceptRequest(requestId);
+      await acceptRequest(incomingReqId);
       setStatus("friend");
-      fetchFriends();
+      setIncomingReqId(null);
       onStatusChange?.("friend");
     } finally { setActionLoading(null); }
   };
 
   const handleReject = async () => {
-    const requestId = getIncomingRequestId();
-    if (!requestId) return;
+    if (!incomingReqId) return;
     setActionLoading("reject");
     try {
       const { rejectRequest } = useFriendStore.getState();
-      await rejectRequest(requestId);
+      await rejectRequest(incomingReqId);
       setStatus("none");
-      fetchIncomingRequests();
+      setIncomingReqId(null);
       onStatusChange?.("none");
     } finally { setActionLoading(null); }
   };
@@ -150,7 +176,6 @@ export default function UserProfileModal({ isOpen, onClose, user, status: initia
     try {
       await unfriend(uid);
       setStatus("none");
-      fetchFriends();
       onStatusChange?.("none");
       onClose();
     } finally { setActionLoading(null); }
