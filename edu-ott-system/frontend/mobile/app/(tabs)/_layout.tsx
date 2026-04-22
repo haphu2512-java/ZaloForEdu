@@ -79,17 +79,41 @@ export default function TabLayout() {
         name="contacts"
         options={{
           title: 'Danh bạ',
-          tabBarIcon: ({ color, focused }: { color: string; focused: boolean }) => (
+          tabBarIcon: ({ color, focused }) => (
             <TabBarIcon name={focused ? 'people' : 'people-outline'} color={color} />
           ),
+        }}
+      />
+      <Tabs.Screen
+        name="discover"
+        options={{
+          title: 'Khám phá',
+          tabBarIcon: ({ color, focused }) => (
+            <TabBarIcon name={focused ? 'compass' : 'compass-outline'} color={color} />
+          ),
+          headerShown: false,
         }}
       />
       <Tabs.Screen
         name="chatbot"
         options={{
           title: 'ChatBot AI',
-          tabBarIcon: ({ color, focused }: { color: string; focused: boolean }) => (
+          tabBarIcon: ({ color, focused }) => (
             <TabBarIcon name={focused ? 'sparkles' : 'sparkles-outline'} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="mydocument"
+        options={{
+          title: 'My Document',
+          tabBarIcon: ({ color, focused }: { color: string; focused: boolean }) => (
+            <TabBarIcon name={focused ? 'cloud' : 'cloud-outline'} color={color} />
+          ),
+          headerRight: () => (
+            <View style={{ paddingRight: 16 }}>
+              <Ionicons name="information-circle-outline" size={22} color={headerIconColor} />
+            </View>
           ),
         }}
       />

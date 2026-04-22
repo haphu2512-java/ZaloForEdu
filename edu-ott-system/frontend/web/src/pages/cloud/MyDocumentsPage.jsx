@@ -9,6 +9,25 @@ import toast from "react-hot-toast";
 import "./MyDocumentsPage.css";
 
 import { getCategory } from "./CloudUtils";
+
+const API_ORIGIN = (import.meta.env.VITE_API_URL || "http://localhost:5000/api/v1").replace(/\/api\/v1\/?$/, "");
+const toAbsoluteUrl = (url) => {
+  if (!url) return url;
+  if (/^https?:\/\//i.test(url)) return url;
+  return `${API_ORIGIN}${url.startsWith("/") ? "" : "/"}${url}`;
+};
+const normalizeMsg = (msg) => ({
+  ...msg,
+  mediaIds: (msg.mediaIds || []).map(m =>
+    typeof m === "object" && m.url ? { ...m, url: toAbsoluteUrl(m.url) } : m
+  ),
+  media: (msg.media || []).map(m =>
+    typeof m === "object" && m.url ? { ...m, url: toAbsoluteUrl(m.url) } : m
+  ),
+});
+
+// Kiểm tra replyTo có phải object đầy đủ không (không phải string ID)
+const isPopulatedReply = (r) => r && typeof r === "object" && (r.content !== undefined || r.mediaIds || r.media);
 import { CloudHeader } from "./CloudHeader";
 import { CloudInput } from "./CloudInput";
 import { CloudRightPanel } from "./CloudRightPanel";
@@ -32,11 +51,16 @@ export default function MyDocumentsPage(){
   
   const[searchQuery,setSearchQuery]=useState("");
   const[filterTab,setFilterTab]=useState("all");
+  const[apiSearchResults,setApiSearchResults]=useState(null); // null = chưa search API
+  const[isSearching,setIsSearching]=useState(false);
+  const searchDebounceRef=useRef(null);
   
   const[showCleanup,setShowCleanup]=useState(false);
   const[preview,setPreview]=useState(null);
   const[pinnedIds,setPinnedIds]=useState(new Set());
   const[showRightPanel, setShowRightPanel] = useState(true);
+  const[msgToDelete, setMsgToDelete] = useState(null);
+  const[removingId, setRemovingId] = useState(null);
 
   const pageRef=useRef(null);
   const messagesEndRef=useRef(null);
@@ -57,7 +81,16 @@ export default function MyDocumentsPage(){
 
   const loadMessages=useCallback(async(cid)=>{
     if(!cid)return;
-    try{const res=await chatService.getMessages(cid,null,100);const items=res.data?.data?.items||[];setMessages([...items].reverse());}
+    try{
+      const [msgRes, pinRes] = await Promise.all([
+        chatService.getMessages(cid,null,100),
+        chatService.getPinnedMessages(cid),
+      ]);
+      const items=msgRes.data?.data?.items||[];
+      setMessages([...items].reverse().map(normalizeMsg));
+      const pinned=pinRes.data?.data||[];
+      setPinnedIds(new Set(pinned.map(p=>p.messageId?._id||p.messageId||p._id)));
+    }
     catch(err){console.error("Load msgs:",err);}
   },[]);
 
@@ -68,14 +101,48 @@ export default function MyDocumentsPage(){
   },[getOrCreateSelfConv,loadMessages]);
 
   // load friend list for forward modal
-  useEffect(()=>{ fetchFriends(); },[]);
+  useEffect(()=>{ fetchFriends(); },[fetchFriends]);
+
+  // Debounced API search khi query >= 2 ký tự
+  useEffect(()=>{
+    if(searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+    if(!searchQuery.trim()||searchQuery.trim().length<2){
+      setApiSearchResults(null);
+      return;
+    }
+    searchDebounceRef.current=setTimeout(async()=>{
+      if(!convId)return;
+      setIsSearching(true);
+      try{
+        const res=await chatService.searchMessages(convId,searchQuery.trim());
+        const items=(res.data?.data?.items||[]).map(normalizeMsg);
+        setApiSearchResults(items);
+      }catch{setApiSearchResults(null);}
+      finally{setIsSearching(false);}
+    },500);
+    return()=>{if(searchDebounceRef.current)clearTimeout(searchDebounceRef.current);};
+  },[searchQuery,convId]);
 
   useEffect(()=>{messagesEndRef.current?.scrollIntoView({behavior:"smooth"});},[messages,uploads]);
 
   useEffect(()=>{
     if(!convId)return;
     socketService.connect();
-    const handler=(msg)=>{const cid=msg.conversationId?._id||msg.conversationId;if(cid===convId)setMessages(prev=>prev.some(m=>m._id===msg._id)?prev:[...prev,msg]);};
+    const handler=(msg)=>{
+      const cid=msg.conversationId?._id||msg.conversationId;
+      if(cid!==convId)return;
+      setMessages(prev=>{
+        if(prev.some(m=>m._id===msg._id))return prev;
+        const normalized=normalizeMsg(msg);
+        // Populate replyTo từ messages hiện có nếu backend trả về string ID
+        if(normalized.replyTo && !isPopulatedReply(normalized.replyTo)){
+          const replyId=typeof normalized.replyTo==="string"?normalized.replyTo:normalized.replyTo?._id;
+          const original=prev.find(m=>m._id===replyId);
+          if(original) normalized.replyTo=original;
+        }
+        return [...prev,normalized];
+      });
+    };
     socketService.on("new_message",handler);
     return()=>socketService.off("new_message",handler);
   },[convId]);
@@ -106,14 +173,23 @@ export default function MyDocumentsPage(){
       const sendRes=await chatService.sendMessage(payload);
       const newMsg=sendRes.data?.data;
       if(newMsg){
-        newMsg.media=[media];
-        if(replySnapshot && !newMsg.replyTo){
+        // Gắn media object đầy đủ vào cả media lẫn mediaIds để render ngay
+        const normalizedMedia = { ...media, url: toAbsoluteUrl(media.url) };
+        newMsg.media=[normalizedMedia];
+        newMsg.mediaIds=[normalizedMedia];
+        if(replySnapshot && !isPopulatedReply(newMsg.replyTo)){
           newMsg.replyTo = replySnapshot;
         }
-        setMessages(prev=>[...prev,newMsg]);
+        setMessages(prev=>{
+          const targetId = String(newMsg._id || newMsg.id);
+          const filtered = prev.filter(m => String(m._id || m.id) !== targetId);
+          return [...filtered, newMsg];
+        });
       }
       setUploads(prev=>prev.filter(u=>u.id!==uid));
-      toast.success("Đã lưu: "+file.name);
+      if (!file.name.startsWith("voice_")) {
+        toast.success("Đã lưu: " + file.name);
+      }
     }catch(err){setUploads(prev=>prev.filter(u=>u.id!==uid));toast.error(err.message||"Tải lên thất bại");}
   },[convId]);
 
@@ -128,7 +204,6 @@ export default function MyDocumentsPage(){
   const handleSendText=async(text, replyToId=null)=>{
     if(!text.trim()||!convId||isSending)return;
     setIsSending(true);
-    // Capture replyTo before state clears
     const replySnapshot = replyTo;
     try{
       const payload={conversationId:convId,content:text.trim()};
@@ -136,24 +211,50 @@ export default function MyDocumentsPage(){
       const res=await chatService.sendMessage(payload);
       const newMsg=res.data?.data;
       if(newMsg){
-        // Attach full replyTo object locally (backend may only return replyToId)
-        if(replySnapshot && !newMsg.replyTo){
-          newMsg.replyTo = replySnapshot;
-        }
-        setMessages(prev=>[...prev,newMsg]);
+        if(replySnapshot && !isPopulatedReply(newMsg.replyTo)) newMsg.replyTo = replySnapshot;
+        setMessages(prev=>{
+          const targetId = String(newMsg._id || newMsg.id);
+          const filtered = prev.filter(m => String(m._id || m.id) !== targetId);
+          return [...filtered, newMsg];
+        });
       }
     }
     catch(err){toast.error("Gửi thất bại: "+(err.response?.data?.message||err.message));}
     finally{setIsSending(false);setReplyTo(null);}
   };
 
-  const handleDelete=async(msgId)=>{
-    if(!window.confirm("Xóa tin nhắn này?"))return;
-    try{await chatService.deleteMessage(msgId);setMessages(prev=>prev.filter(m=>m._id!==msgId));toast.success("Đã xóa");}
-    catch(err){toast.error("Xóa thất bại: "+(err.response?.data?.message||err.message));}
+  const confirmDelete = (msgId) => {
+    setMsgToDelete(msgId);
   };
 
-  const handleBulkDelete=async(msgIds)=>{
+  const executeDelete = async () => {
+    if (!msgToDelete) return;
+    try {
+      await chatService.deleteMessage(msgToDelete);
+      // Kích hoạt hiệu ứng biến mất
+      setRemovingId(msgToDelete);
+      
+      // Đợi animation chạy xong (300ms) mới xóa khỏi state
+      setTimeout(() => {
+        setMessages(prev => prev.filter(m => m._id !== msgToDelete));
+        setRemovingId(null);
+        toast.success("Đã xóa tin nhắn", {
+          icon: '🗑️',
+          style: {
+            borderRadius: '10px',
+            background: '#333',
+            color: '#fff',
+          },
+        });
+      }, 300);
+    } catch(err) {
+      toast.error("Xóa thất bại: " + (err.response?.data?.message || err.message));
+    } finally {
+      setMsgToDelete(null);
+    }
+  };
+
+  const handleBulkDelete = async (msgIds) => {
     if(!window.confirm(`Xóa ${msgIds.length} tin nhắn đã chọn?`))return;
     try{
       await Promise.all(msgIds.map(id=>chatService.deleteMessage(id)));
@@ -164,7 +265,7 @@ export default function MyDocumentsPage(){
 
   const handleReaction=async(msgId, emoji)=>{
     try{
-      await chatService.reactMessage?.(msgId, emoji);
+      await chatService.reactToMessage?.(msgId, emoji);
       setMessages(prev=>prev.map(m=>{
         if(m._id!==msgId)return m;
         const reactions=m.reactions||[];
@@ -178,20 +279,25 @@ export default function MyDocumentsPage(){
     }catch(err){console.error("Reaction err:",err);}
   };
 
-  const handlePin=(msgId)=>{
-    setPinnedIds(prev=>{
-      const s=new Set(prev);
-      if(s.has(msgId)){s.delete(msgId);toast.success("Đã bỏ ghim");}
-      else{
-        if(s.size>=3){
-          toast.error("Chỉ được ghim tối đa 3 tin nhắn. Vui lòng bỏ ghim tin nhắn cũ trước.");
-          return prev;
-        }
-        s.add(msgId);
+  const handlePin=async(msgId)=>{
+    const isPinned=pinnedIds.has(msgId);
+    if(!isPinned&&pinnedIds.size>=3){
+      toast.error("Chỉ được ghim tối đa 3 tin nhắn. Vui lòng bỏ ghim tin nhắn cũ trước.");
+      return;
+    }
+    try{
+      if(isPinned){
+        await chatService.unpinMessage(convId,msgId);
+        setPinnedIds(prev=>{const s=new Set(prev);s.delete(msgId);return s;});
+        toast.success("Đã bỏ ghim");
+      }else{
+        await chatService.pinMessage(convId,msgId);
+        setPinnedIds(prev=>new Set([...prev,msgId]));
         toast.success("Đã ghim lên đầu");
       }
-      return s;
-    });
+    }catch(err){
+      toast.error("Thao tác ghim thất bại: "+(err.response?.data?.message||err.message));
+    }
   };
 
   const openShareModal=(msg)=>{
@@ -226,18 +332,18 @@ export default function MyDocumentsPage(){
     }
   };
 
-  // search + filter messages
-  const filtered=messages.filter(msg=>{
-    // Filter by tab
+  // Dùng kết quả API search nếu có, ngược lại dùng client-side filter
+  const baseList = apiSearchResults !== null ? apiSearchResults : messages;
+  const filtered = baseList.filter(msg=>{
     const media=msg.mediaIds?.[0]||msg.media?.[0];
     let passTab=true;
     if(filterTab==="text")passTab=!media&&!!msg.content;
     else if(filterTab==="image")passTab=!!media&&["image","video"].includes(getCategory(media.fileName||""));
     else if(filterTab==="file")passTab=!!media&&!["image","video"].includes(getCategory(media.fileName||""));
 
-    // Filter by search (tìm trong tên file và nội dung)
+    // Client-side filter chỉ áp dụng khi chưa có API results
     let passSearch=true;
-    if(searchQuery.trim()){
+    if(apiSearchResults===null&&searchQuery.trim()){
       const q=searchQuery.toLowerCase();
       const inContent=(msg.content||"").toLowerCase().includes(q);
       const inFileName=(media?.fileName||"").toLowerCase().includes(q);
@@ -302,20 +408,19 @@ export default function MyDocumentsPage(){
 
 
         {searchQuery&&(
-          <div style={{padding:'4px 16px',fontSize:12,color:'#8A8D91',background:'var(--z-bg-secondary)'}}>
-            Tìm thấy <strong>{filtered.length}</strong> kết quả cho "<strong>{searchQuery}</strong>"
+          <div style={{padding:'4px 16px',fontSize:12,color:'#8A8D91',background:'var(--z-bg-secondary)',display:'flex',alignItems:'center',gap:6}}>
+            {isSearching
+              ? <><FaSpinner className="spin" size={11}/> Đang tìm kiếm...</>
+              : <>Tìm thấy <strong>{filtered.length}</strong> kết quả cho "<strong>{searchQuery}</strong>"{apiSearchResults!==null&&<span style={{color:'#60a5fa',marginLeft:4}}>(kết quả từ server)</span>}</>
+            }
           </div>
         )}
-
-        <div className="mdc-filter-tabs">
-          {[{k:"all",l:"Tất cả"},{k:"image",l:"Ảnh/Video"},{k:"file",l:"File"},{k:"text",l:"Ghi chú"}].map(t=>(<button key={t.k} className={`mdc-ftab ${filterTab===t.k?"active":""}`} onClick={()=>setFilterTab(t.k)}>{t.l}</button>))}
-        </div>
 
         <div className="mdc-messages" style={{ flex: 1, overflowY: 'auto' }}>
           {loading?(<div className="mdc-loading"><FaSpinner className="spin" size={28}/></div>):filtered.length===0&&uploads.length===0?(
             <div className="mdc-empty"><div className="mdc-empty-icon"><FaCloud size={52}/></div><h3>{searchQuery?"Không tìm thấy kết quả":"Chưa có nội dung nào"}</h3><p>{searchQuery?`Không có file nào chứa từ khóa "${searchQuery}"`:"Gửi ảnh, video, tài liệu hoặc ghi chú để lưu trữ cá nhân"}</p></div>
           ):(
-            <>{Object.entries(grouped).map(([dateLabel,items])=>(<div key={dateLabel}><div className="mdc-date-sep">{dateLabel}</div>{items.map(msg=>(<CloudMsgBubble key={msg._id} msg={msg} onDelete={handleDelete} onPreview={(url,name)=>setPreview({url,name})} onReaction={handleReaction} pinnedIds={pinnedIds} onPin={handlePin} onForward={openShareModal} onReply={(m)=>setReplyTo(m)}/>))}</div>))}{uploads.map(u=>(<UploadBubble key={u.id} name={u.name} percent={u.percent}/>))}</>
+            <>{Object.entries(grouped).map(([dateLabel,items])=>(<div key={dateLabel}><div className="mdc-date-sep">{dateLabel}</div>{items.map(msg=>(<CloudMsgBubble key={String(msg._id || msg.id)} msg={msg} isRemoving={removingId===msg._id} onDelete={confirmDelete} onPreview={(url,name)=>setPreview({url,name})} onReaction={handleReaction} pinnedIds={pinnedIds} onPin={handlePin} onForward={openShareModal} onReply={(m)=>setReplyTo(m)} searchQuery={searchQuery}/>))}</div>))}{uploads.map(u=>(<UploadBubble key={String(u.id)} name={u.name} percent={u.percent}/>))}</>
 
           )}
           <div ref={messagesEndRef}/>
@@ -384,6 +489,33 @@ export default function MyDocumentsPage(){
                   </div>
                 ))
               }
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Modal xác nhận xóa tin nhắn */}
+      {msgToDelete && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ background: 'var(--bg-sidebar, #fff)', width: 400, borderRadius: 8, overflow: 'hidden', boxShadow: '0 4px 20px rgba(0,0,0,0.2)', animation: 'slideDown 0.2s ease-out' }}>
+            <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border-color, #E5E7EB)' }}>
+              <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: 'var(--text-primary, #111827)' }}>Xác nhận xóa</h3>
+            </div>
+            <div style={{ padding: '20px', fontSize: 14, color: 'var(--text-secondary, #4B5563)' }}>
+              Bạn có chắc chắn muốn xóa tin nhắn này không? Tin nhắn đã xóa sẽ không thể khôi phục.
+            </div>
+            <div style={{ padding: '12px 20px', display: 'flex', justifyContent: 'flex-end', gap: 12, borderTop: '1px solid var(--border-color, #E5E7EB)', background: 'var(--bg-hover, #F9FAFB)' }}>
+              <button 
+                onClick={() => setMsgToDelete(null)}
+                style={{ padding: '8px 16px', background: 'var(--bg-main, #EAECEF)', color: 'var(--text-primary, #111827)', border: 'none', borderRadius: 4, fontWeight: 600, cursor: 'pointer' }}
+              >
+                Hủy
+              </button>
+              <button 
+                onClick={executeDelete}
+                style={{ padding: '8px 16px', background: '#EF4444', color: '#fff', border: 'none', borderRadius: 4, fontWeight: 600, cursor: 'pointer' }}
+              >
+                Xóa
+              </button>
             </div>
           </div>
         </div>

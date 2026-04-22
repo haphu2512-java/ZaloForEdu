@@ -3,14 +3,11 @@ import { useNavigate } from 'react-router-dom';
 import { FaPhone, FaVideo, FaEllipsisV, FaUsers, FaFileAlt } from 'react-icons/fa';
 import { useAuthStore } from '../../store/authStore';
 import { socketService } from '../../services/socketService';
-// THÊM: Import hook useTheme của bạn
 import { useTheme } from '../../contexts/ThemeContext';
 
 export const ChatHeader = ({ room, onCall, onVideo, onInfo }) => {
   const navigate = useNavigate();
   const currentUser = useAuthStore((state) => state.user);
-  
-  // Lấy theme hiện tại từ Context
   const { appliedTheme } = useTheme();
   const isDark = appliedTheme === 'dark';
 
@@ -18,10 +15,24 @@ export const ChatHeader = ({ room, onCall, onVideo, onInfo }) => {
 
   const isOnline = room.isOnline;
   const isClass = room.type?.toLowerCase() === 'class' || room.roomModel === 'Class';
+  const isGroup = room.type === 'group' || room.roomModel === 'Group';
+  const isStranger = room.isStranger && room.type === 'direct';
 
-  const handleCallClick = (type) => {
+  const formatLastSeen = (lastSeen) => {
+    if (!lastSeen) return 'Ngoại tuyến';
+    const diff = Date.now() - new Date(lastSeen).getTime();
+    const mins = Math.floor(diff / 60000);
+    if (mins < 2) return 'Vừa truy cập';
+    if (mins < 60) return `Truy cập ${mins} phút trước`;
+    const hours = Math.floor(mins / 60);
+    if (hours < 24) return `Truy cập ${hours} giờ trước`;
+    const days = Math.floor(hours / 24);
+    return `Truy cập ${days} ngày trước`;
+  };
+
+  // ─── 1-1 Call handler ───
+  const handleDirectCallClick = (type) => {
     const myId = currentUser?._id || currentUser?.id;
-
     const targetUserId =
       room.targetUserId ||
       room.friendId ||
@@ -33,14 +44,11 @@ export const ChatHeader = ({ room, onCall, onVideo, onInfo }) => {
       return;
     }
 
-    const roomId = `room_${myId}_${targetUserId}`;
-
-    // FIX: Đã xóa cái check isConnected() ảo ma ở đây.
-    // Cứ gọi thẳng giống hệt cách bên ContactsPage đang làm.
+    const roomId = [myId, targetUserId].sort().join('_');
     const sent = socketService.callUser({
       targetUserId,
       roomId,
-      callerName: currentUser?.username || "Bạn",
+      callerName: currentUser?.username || 'Bạn',
       type,
     });
 
@@ -49,17 +57,55 @@ export const ChatHeader = ({ room, onCall, onVideo, onInfo }) => {
       return;
     }
 
-    const url = type === "audio" ? `/call/${roomId}?type=voice` : `/call/${roomId}`;
+    const url = type === 'audio' ? `/call/${roomId}?type=voice` : `/call/${roomId}`;
     navigate(url);
   };
 
-  const handleCall = (type) => {
-    if (type === 'audio' && onCall) return onCall();
-    if (type === 'video' && onVideo) return onVideo();
-    return handleCallClick(type);
+  // ─── Group Call handler ───
+  const handleGroupCallClick = (type) => {
+    const myId = currentUser?._id || currentUser?.id;
+    const conversationId = room._id || room.conversationId || room.id;
+
+    if (!myId || !conversationId) {
+      alert('Không tìm thấy thông tin nhóm.');
+      return;
+    }
+
+    // roomId duy nhất theo conversationId + timestamp (tránh trùng nếu gọi nhiều lần)
+    const roomId = `group_${conversationId}_${Date.now()}`;
+    const inviteLink = `${window.location.origin}/group-call/${roomId}${type === 'audio' ? '?type=voice' : ''}`;
+
+    const sent = socketService.startGroupCall({
+      conversationId,
+      roomId,
+      callerName: currentUser?.username || 'Trưởng nhóm',
+      type,
+      inviteLink,
+    });
+
+    if (!sent) {
+      alert('Mất kết nối realtime, vui lòng thử lại.');
+      return;
+    }
+
+    const url = type === 'audio' ? `/group-call/${roomId}?type=voice` : `/group-call/${roomId}`;
+    navigate(url);
   };
 
-  // Các class CSS thay đổi dựa trên theme (sáng/tối)
+  // ─── Dispatch call ───
+  const handleCall = (type) => {
+    // Nếu ChatPage truyền callback (cũ) thì ưu tiên dùng
+    if (type === 'audio' && onCall) return onCall();
+    if (type === 'video' && onVideo) return onVideo();
+
+    // Phân loại: nhóm → group call, 1-1 → direct call
+    if (isGroup) {
+      return handleGroupCallClick(type);
+    }
+    return handleDirectCallClick(type);
+  };
+
+  // CSS helpers
   const headerBg = isDark ? 'bg-[#242526] border-gray-700' : 'bg-white border-gray-200';
   const textColor = isDark ? 'text-gray-100' : 'text-gray-900';
   const subTextColor = isDark ? 'text-gray-400' : 'text-gray-500';
@@ -70,45 +116,56 @@ export const ChatHeader = ({ room, onCall, onVideo, onInfo }) => {
       {/* LEFT */}
       <div className="flex items-center gap-4">
         <div className="relative">
-          {/* Tăng kích thước Avatar lên w-12 h-12 */}
           <div
             className="w-12 h-12 rounded-full flex items-center justify-center text-white font-bold text-xl overflow-hidden shadow-sm"
             style={{ background: room.color || '#1b6ef3' }}
           >
             {room.avatar ? (
-              <img
-                src={room.avatar}
-                alt="avatar"
-                className="w-full h-full object-cover"
-              />
+              <img src={room.avatar} alt="avatar" className="w-full h-full object-cover" />
             ) : (
               (room.name?.[0] || '?').toUpperCase()
             )}
           </div>
 
-          {isOnline && !isClass && (
+          {isOnline && !isClass && !isGroup && (
             <div className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-green-500 border-2 border-white rounded-full"></div>
           )}
         </div>
 
         <div>
-          {/* Tăng kích thước Text Tên */}
-          <div className={`text-lg font-bold ${textColor}`}>
+          <div className={`text-lg font-bold ${textColor}`} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             {room.name}
+            {isStranger && (
+              <span style={{ fontSize: 10, fontWeight: 700, background: '#ef4444', color: '#fff', padding: '2px 6px', borderRadius: 4, letterSpacing: 1 }}>
+                NGƯỜI LẠ
+              </span>
+            )}
+            {isGroup && (
+              <span style={{ fontSize: 10, fontWeight: 700, background: '#6366f1', color: '#fff', padding: '2px 6px', borderRadius: 4, letterSpacing: 0.5 }}>
+                NHÓM
+              </span>
+            )}
           </div>
 
           <div className={`text-sm ${subTextColor}`}>
-            {isClass ? (
+            {isGroup ? (
               <span className="flex items-center gap-1.5 mt-0.5">
                 <FaUsers size={12} />
                 {room.memberCount
                   ? `${room.memberCount} thành viên`
-                  : 'Đang hoạt động'}
+                  : room.participants?.length
+                    ? `${room.participants.length} thành viên`
+                    : 'Nhóm'}
+              </span>
+            ) : isGroup ? (
+              <span className="flex items-center gap-1.5 mt-0.5">
+                <FaUsers size={12} />
+                {room.memberCount || room.participants?.length || 0} thành viên
               </span>
             ) : isOnline ? (
-              <span className="text-green-500 font-medium mt-0.5 inline-block">
-                Đang trực tuyến
-              </span>
+              <span className="text-green-500 font-medium mt-0.5 inline-block">Đang trực tuyến</span>
+            ) : room.lastSeen ? (
+              <span className="mt-0.5 inline-block">{formatLastSeen(room.lastSeen)}</span>
             ) : (
               <span className="mt-0.5 inline-block">Ngoại tuyến</span>
             )}
@@ -129,12 +186,13 @@ export const ChatHeader = ({ room, onCall, onVideo, onInfo }) => {
           </div>
         )}
 
+        {/* Nút gọi – ẩn với group lớp học */}
         {!isClass && (
           <>
             <button
               className={`text-blue-500 ${isDark ? 'hover:bg-gray-800' : 'hover:bg-blue-50'} p-2.5 rounded-full transition`}
               onClick={() => handleCall('audio')}
-              title="Gọi thoại"
+              title={isGroup ? 'Gọi thoại nhóm' : 'Gọi thoại'}
             >
               <FaPhone size={20} />
             </button>
@@ -142,7 +200,7 @@ export const ChatHeader = ({ room, onCall, onVideo, onInfo }) => {
             <button
               className={`text-blue-500 ${isDark ? 'hover:bg-gray-800' : 'hover:bg-blue-50'} p-2.5 rounded-full transition`}
               onClick={() => handleCall('video')}
-              title="Gọi video"
+              title={isGroup ? 'Gọi video nhóm' : 'Gọi video'}
             >
               <FaVideo size={20} />
             </button>

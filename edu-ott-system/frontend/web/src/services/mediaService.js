@@ -1,12 +1,27 @@
 import api from "./authService";
 
+const API_ORIGIN = (import.meta.env.VITE_API_URL || "http://localhost:5000/api/v1").replace(/\/api\/v1\/?$/, "");
+
+const toAbsoluteUrl = (url) => {
+  if (!url) return url;
+  if (/^https?:\/\//i.test(url)) return url;
+  return `${API_ORIGIN}${url.startsWith("/") ? "" : "/"}${url}`;
+};
+
+const normalizeMedia = (item) => ({
+  ...item,
+  url: toAbsoluteUrl(item.url),
+});
+
 // Các định dạng file được phép
 export const ALLOWED_EXTENSIONS = {
   image: ["jpg", "jpeg", "png", "gif", "webp", "svg"],
   video: ["mp4", "mov", "avi", "mkv", "webm"],
   doc: ["pdf", "docx", "doc", "xlsx", "xls", "pptx", "ppt", "txt"],
   archive: ["zip", "rar", "7z", "tar", "gz"],
+  audio: ["mp3", "webm", "ogg", "wav", "m4a"],
 };
+
 
 export const ALL_ALLOWED_EXTENSIONS = Object.values(ALLOWED_EXTENSIONS).flat();
 
@@ -31,6 +46,7 @@ export const getResourceType = (extension) => {
   const ext = extension.toLowerCase().replace(".", "");
   if (ALLOWED_EXTENSIONS.image.includes(ext)) return "image";
   if (ALLOWED_EXTENSIONS.video.includes(ext)) return "video";
+  if (ALLOWED_EXTENSIONS.audio.includes(ext)) return "video"; // Cloudinary treats audio as video internally sometimes, but 'video' is safer for upload
   return "raw"; // pdf, docx, zip, rar,...
 };
 
@@ -41,6 +57,7 @@ export const getFileCategory = (extension) => {
   if (ALLOWED_EXTENSIONS.video.includes(ext)) return "video";
   if (ALLOWED_EXTENSIONS.doc.includes(ext)) return "doc";
   if (ALLOWED_EXTENSIONS.archive.includes(ext)) return "archive";
+  if (ALLOWED_EXTENSIONS.audio.includes(ext)) return "audio";
   return "other";
 };
 
@@ -114,11 +131,11 @@ export const registerMedia = async ({ fileName, mimeType, size, url, publicId, r
   return response.data.data;
 };
 
-// ========== LOCAL UPLOAD (dùng cho Chat — giống mobile) ==========
+// ========== LOCAL UPLOAD (dùng cho Chat) ==========
 
 /**
- * Upload file vào /uploads (giống mobile uploadMediaBase64)
- * Đọc file → base64 → POST /media/upload
+ * Upload file vào /uploads qua Multipart FormData — POST /media/upload-form
+ * Đồng bộ với Mobile (uploadMediaForm). Không cần đọc Base64, nhẹ và nhanh hơn.
  */
 export const uploadFile = async (file, { onProgress } = {}) => {
   const extNoDot = getExtension(file.name).replace(".", "").toLowerCase();
@@ -128,20 +145,20 @@ export const uploadFile = async (file, { onProgress } = {}) => {
 
   onProgress?.(10);
 
-  // Đọc file thành base64
-  const contentBase64 = await new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result.split(",")[1]);
-    reader.onerror = () => reject(new Error("Không đọc được file"));
-    reader.readAsDataURL(file);
-  });
+  const formData = new FormData();
+  formData.append("file", file);
 
-  onProgress?.(50);
+  onProgress?.(30);
 
-  const response = await api.post("/media/upload", {
-    fileName: file.name,
-    mimeType: file.type || "application/octet-stream",
-    contentBase64,
+  const response = await api.post("/media/upload-form", formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+    onUploadProgress: (progressEvent) => {
+      if (progressEvent.total && onProgress) {
+        const pct = Math.round((progressEvent.loaded / progressEvent.total) * 100);
+        // Map 30% → 95% trong quá trình upload thực
+        onProgress(30 + Math.round(pct * 0.65));
+      }
+    },
   });
 
   onProgress?.(100);

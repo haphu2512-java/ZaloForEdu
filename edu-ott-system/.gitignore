@@ -20,7 +20,6 @@ build/
 .DS_Store
 .vscode/
 
-<<<<<<< HEAD
 # Backend specific
 backend/uploads/
 backend/logs/
@@ -53,8 +52,5 @@ tmp/
 
 # Local scripts
 backend/scripts/seedAdmin.js
-=======
-backend_review_and_mobile_plan.md
->>>>>>> Refactor_Project
 
 package-lock.json

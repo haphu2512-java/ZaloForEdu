@@ -1,9 +1,25 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { FaDownload, FaSpinner, FaCloud, FaThumbtack, FaTrash, FaCopy, FaStar, FaEllipsisH, FaTimes, FaSmile, FaShare } from 'react-icons/fa';
+import { FaDownload, FaSpinner, FaCloud, FaThumbtack, FaTrash, FaCopy, FaStar, FaEllipsisH, FaTimes, FaSmile, FaShare, FaCheck, FaPlay, FaPause } from 'react-icons/fa';
 import toast from 'react-hot-toast';
 import { fmtTime, getCategory, getExt, getFileColor, formatBytes } from './CloudUtils';
+import { AudioBubble } from '../../components/shared/AudioBubble';
 
 const EMOJIS = ['👍','❤️','😂','😲','😢','😡'];
+
+/* Highlight search keyword trong text */
+function HighlightText({ text, query }) {
+  if (!query || !text) return <>{text}</>;
+  const parts = text.split(new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi'));
+  return (
+    <>
+      {parts.map((part, i) =>
+        part.toLowerCase() === query.toLowerCase()
+          ? <mark key={i} style={{ background: '#FEF08A', color: '#1a1a1a', borderRadius: 2, padding: '0 1px' }}>{part}</mark>
+          : part
+      )}
+    </>
+  );
+}
 
 /* Zalo-style reply SVG icon */
 const ReplyIcon = () => (
@@ -44,7 +60,9 @@ export function UploadBubble({name, percent}) {
   );
 }
 
-export function CloudMsgBubble({msg, onDelete, onPreview, onReaction, pinnedIds, onPin, onForward, onReply}) {
+
+
+export function CloudMsgBubble({msg, onDelete, onPreview, onReaction, pinnedIds, onPin, onForward, onReply, isRemoving, searchQuery}) {
   const [showMenu, setShowMenu] = useState(false);
   const [showReaction, setShowReaction] = useState(false);
   const menuRef = useRef(null);
@@ -63,7 +81,9 @@ export function CloudMsgBubble({msg, onDelete, onPreview, onReaction, pinnedIds,
   const mediaList = msg.mediaIds || msg.media || msg.attachments || [];
   const hasMedia = mediaList.length > 0;
   const media = hasMedia ? mediaList[0] : null;
-  const isImage = hasMedia && getCategory(media.fileName || "") === "image";
+  const isImage = hasMedia && ((media.mimeType && media.mimeType.startsWith('image/')) || getCategory(media.fileName || "") === "image");
+  const isAudio = hasMedia && ((media.mimeType && media.mimeType.startsWith('audio/')) || getCategory(media.fileName || "") === "audio");
+  const isDocOrVideo = hasMedia && !isImage && !isAudio;
   const reactions = msg.reactions || [];
   const isPinned = pinnedIds?.has(msg._id);
 
@@ -73,22 +93,54 @@ export function CloudMsgBubble({msg, onDelete, onPreview, onReaction, pinnedIds,
     setShowMenu(false);
   };
 
+  const [menuPos, setMenuPos] = useState('bottom');
+
+  const handleMoreClick = (e) => {
+    e.stopPropagation();
+    const rect = e.currentTarget.getBoundingClientRect();
+    if (window.innerHeight - rect.bottom < 220) {
+      setMenuPos('top');
+    } else {
+      setMenuPos('bottom');
+    }
+    setShowMenu(v => !v);
+    setShowReaction(false);
+  };
+
+  const handleJumpToReply = (e) => {
+    e.stopPropagation();
+    if (!msg.replyTo?._id && !msg.replyTo?.id) return;
+    const targetId = msg.replyTo._id || msg.replyTo.id;
+    const el = document.getElementById(`msg-${targetId}`);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      el.classList.add('highlight-msg');
+      setTimeout(() => el.classList.remove('highlight-msg'), 1500);
+    } else {
+      toast.error('Không tìm thấy tin nhắn gốc hoặc đã bị xóa');
+    }
+  };
+
   return (
-    <div className="mdc-msg-wrap me" onMouseLeave={()=>{setShowMenu(false);setShowReaction(false);}}>
+    <div id={`msg-${msg._id}`} className={`mdc-msg-wrap me ${isRemoving ? 'removing' : ''}`} onMouseLeave={()=>{setShowMenu(false);setShowReaction(false);}}>
       {isPinned && <div style={{position:'absolute',top:-8,right:40,fontSize:10,color:'#F59E0B',display:'flex',alignItems:'center',gap:4}}><FaThumbtack size={9}/>Đã ghim</div>}
       <div className="mdc-msg-body">
         {/* Text bubble — wraps reply-quote + content together */}
         {(msg.replyTo || (!hasMedia && msg.content)) && (
           <div className="mdc-text-bubble" style={msg.replyTo ? {padding:0, overflow:'hidden'} : {}}>
             {msg.replyTo && (
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-                background: 'rgba(0,0,0,0.18)',
-                borderLeft: '3px solid rgba(255,255,255,0.7)',
-                padding: '8px 12px',
-              }}>
+              <div 
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  background: 'rgba(0,0,0,0.18)',
+                  borderLeft: '3px solid rgba(255,255,255,0.7)',
+                  padding: '8px 12px',
+                  cursor: 'pointer'
+                }}
+                onClick={handleJumpToReply}
+              >
                 {/* Thumbnail if reply has image */}
                 {(()=>{
                   const rm=(msg.replyTo.mediaIds||msg.replyTo.media||msg.replyTo.attachments||[])[0];
@@ -113,7 +165,9 @@ export function CloudMsgBubble({msg, onDelete, onPreview, onReaction, pinnedIds,
               </div>
             )}
             {msg.content && (
-              <div style={{padding: msg.replyTo ? '8px 12px' : undefined}}>{msg.content}</div>
+              <div style={{padding: msg.replyTo ? '8px 12px' : undefined}}>
+                <HighlightText text={msg.content} query={searchQuery} />
+              </div>
             )}
           </div>
         )}
@@ -137,7 +191,7 @@ export function CloudMsgBubble({msg, onDelete, onPreview, onReaction, pinnedIds,
         )}
 
         {/* File bubble */}
-        {hasMedia && !isImage && (
+        {hasMedia && isDocOrVideo && (
           <div className="mdc-file-bubble">
             <div className="mdc-fb-icon" style={{background:getFileColor(media.fileName)}}>
               <span>{getExt(media.fileName).toUpperCase().slice(0,4) || 'FILE'}</span>
@@ -149,8 +203,28 @@ export function CloudMsgBubble({msg, onDelete, onPreview, onReaction, pinnedIds,
                 <span className="mdc-fb-cloud"><FaCloud size={9}/> Đã có trên Cloud</span>
               </div>
             </div>
-            <a className="mdc-fb-btn" href={media.url} target="_blank" rel="noreferrer"><FaDownload size={13}/></a>
+            <div style={{display:'flex',gap:6,alignItems:'center'}}>
+              {/* Preview PDF/docx qua Google Docs Viewer — chỉ với Cloudinary URL */}
+              {media.url && media.url.includes('cloudinary.com') && (
+                <a
+                  className="mdc-fb-btn"
+                  href={`https://docs.google.com/viewer?url=${encodeURIComponent(media.url)}&embedded=true`}
+                  target="_blank"
+                  rel="noreferrer"
+                  title="Xem trước"
+                  style={{fontSize:11,padding:'3px 8px',background:'#3B82F6',color:'#fff',borderRadius:6,textDecoration:'none'}}
+                >
+                  Xem
+                </a>
+              )}
+              <a className="mdc-fb-btn" href={media.url} target="_blank" rel="noreferrer" title="Tải về"><FaDownload size={13}/></a>
+            </div>
           </div>
+        )}
+
+        {/* Audio Message */}
+        {hasMedia && isAudio && (
+          <AudioBubble url={media.url} />
         )}
 
         {/* Reactions */}
@@ -165,8 +239,7 @@ export function CloudMsgBubble({msg, onDelete, onPreview, onReaction, pinnedIds,
         )}
 
         <div className="mdc-msg-time">
-          {fmtTime(msg.createdAt)}
-          <span className="mdc-msg-sent">✓ Đã gửi</span>
+          <span className="mdc-msg-sent"><FaCheck size={10} /> Đã lưu lúc {fmtTime(msg.createdAt)}</span>
         </div>
       </div>
 
@@ -197,7 +270,7 @@ export function CloudMsgBubble({msg, onDelete, onPreview, onReaction, pinnedIds,
           </button>
 
           {/* More */}
-          <button className="mdc-pill-btn" onClick={(e)=>{e.stopPropagation();setShowMenu(v=>!v);setShowReaction(false);}} title="Thêm">
+          <button className="mdc-pill-btn" onClick={handleMoreClick} title="Thêm">
             <FaEllipsisH size={12} color="#65676B" />
           </button>
         </div>
@@ -212,7 +285,10 @@ export function CloudMsgBubble({msg, onDelete, onPreview, onReaction, pinnedIds,
         )}
 
         {showMenu && (
-          <div className="mdc-msg-menu">
+          <div className="mdc-msg-menu" style={{
+            bottom: menuPos === 'top' ? 'calc(100% + 4px)' : 'auto',
+            top: menuPos === 'bottom' ? 'calc(100% + 4px)' : 'auto'
+          }}>
             {msg.content && (<div className="mdc-mm-item" onClick={copyText}><FaCopy size={12}/> Sao chép</div>)}
             <div className="mdc-mm-item" onClick={()=>{onPin&&onPin(msg._id);setShowMenu(false);}}><FaThumbtack size={12} color="#F59E0B"/> {isPinned ? "Bỏ ghim" : "Ghim tin nhắn"}</div>
             <div className="mdc-mm-item" onClick={()=>{toast.success("Tin nhắn được đánh dấu");setShowMenu(false);}}><FaStar size={12} color="#F59E0B"/> Đánh dấu tin nhắn</div>

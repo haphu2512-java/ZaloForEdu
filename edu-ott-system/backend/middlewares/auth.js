@@ -1,5 +1,5 @@
 const User = require('../models/User');
-const { verifyAccessToken } = require('../services/tokenService');
+const { verifyAccessToken, getDeviceTokenVersion } = require('../services/tokenService');
 const { isTokenBlacklisted } = require('../services/tokenStore');
 const ApiError = require('../utils/apiError');
 const asyncHandler = require('../utils/asyncHandler');
@@ -42,8 +42,9 @@ const auth = asyncHandler(async (req, _res, next) => {
     throw new ApiError(403, 'ACCOUNT_DISABLED', user.banReason || 'Your account has been disabled. Please contact support.');
   }
 
-  if (user.tokenVersion !== payload.tokenVersion) {
-    throw new ApiError(401, 'UNAUTHORIZED', 'Token has been revoked');
+  const currentVersion = getDeviceTokenVersion(user, payload.device || 'web');
+  if (currentVersion !== payload.tokenVersion) {
+    throw new ApiError(401, 'SESSION_EXPIRED', 'Tài khoản đã đăng nhập trên thiết bị khác.');
   }
 
   req.user = user;

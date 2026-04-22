@@ -6,6 +6,9 @@ const sendMessageSchema = z.object({
   mediaIds: z.array(z.string().trim().min(24).max(24)).default([]),
   replyTo: z.string().trim().min(24).max(24).optional(),
   forwardFrom: z.string().trim().min(24).max(24).optional(),
+  channelId: z.string().trim().min(24).max(24).nullable().optional(),
+  type: z.enum(['text', 'image', 'file', 'announcement']).default('text'),
+  isPinnedAnnouncement: z.boolean().optional(),
 });
 
 const conversationParamSchema = z.object({
@@ -19,6 +22,7 @@ const messageIdParamSchema = z.object({
 const messagePaginationQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(20),
   cursor: z.string().trim().optional(),
+  channelId: z.string().trim().min(24).max(24).optional(),
 });
 
 const reactMessageSchema = z.object({

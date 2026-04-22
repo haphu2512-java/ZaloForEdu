@@ -160,6 +160,7 @@ export const useAuthStore = create((set, get) => ({
       localStorage.removeItem("token");
       localStorage.removeItem("refreshToken");
       localStorage.removeItem("user");
+      localStorage.removeItem("userId");
       set({ user: null, token: null, isAuthenticated: false });
     }
   },

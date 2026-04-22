@@ -9,11 +9,12 @@ class SocketService {
   constructor() {
     this.socket = null;
     this._notifCallback = null;
+    this._pendingListeners = []; // listeners registered before connect()
   }
 
-  connect() {
-    if (this.socket?.connected) return;
-    const token = localStorage.getItem("token");
+  connect(explicitToken = null) {
+    if (this.socket) return; 
+    const token = explicitToken || localStorage.getItem("token");
     if (!token) return;
 
     this.socket = io(getSocketUrl(), {
@@ -26,6 +27,11 @@ class SocketService {
 
     this.socket.on("connect", () => {
       console.log("Socket connected:", this.socket.id);
+      // Flush any listeners registered before socket was ready
+      this._pendingListeners.forEach(({ event, callback }) => {
+        this.socket.on(event, callback);
+      });
+      this._pendingListeners = [];
     });
 
     this.socket.on("connect_error", (err) => {
@@ -59,8 +65,12 @@ class SocketService {
   }
 
   on(event, callback) {
+    console.log(`[SocketService] Registering listener for event: ${event}`);
     if (this.socket) {
       this.socket.on(event, callback);
+    } else {
+      // Queue until socket is ready
+      this._pendingListeners.push({ event, callback });
     }
   }
 
@@ -85,6 +95,38 @@ class SocketService {
   declineCall({ callerId, roomId }) {
     if (this.socket?.connected) {
       this.socket.emit("decline_call", { callerId, roomId });
+    }
+  }
+  // ─── Group Call ───
+
+  /**
+   * Bắt đầu cuộc gọi nhóm — server sẽ broadcast tới tất cả thành viên
+   * @param {object} opts
+   * @param {string} opts.conversationId
+   * @param {string} opts.roomId
+   * @param {string} opts.callerName
+   * @param {string} opts.type  'audio' | 'video'
+   * @param {string} opts.inviteLink  link Google-Meet-style để copy
+   */
+  startGroupCall({ conversationId, roomId, callerName, type, inviteLink }) {
+    if (!this.socket?.connected) {
+      console.error("❌ Socket chưa connected, không thể gọi nhóm!");
+      return false;
+    }
+    this.socket.emit("group_call_start", {
+      conversationId,
+      roomId,
+      callerName,
+      type,
+      inviteLink,
+    });
+    return true;
+  }
+
+  /** Từ chối group call */
+  declineGroupCall({ conversationId, roomId }) {
+    if (this.socket?.connected) {
+      this.socket.emit("group_call_decline", { conversationId, roomId });
     }
   }
 }

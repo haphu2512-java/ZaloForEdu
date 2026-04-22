@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, Image, TouchableOpacity, Pressable } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import type { Message, Attachment, Reaction } from '../../types/chat';
+import { AudioBubbleMobile } from './AudioBubbleMobile';
 
 // ============================================================
 // MessageBubble - Production-ready, khớp Backend Message Schema
@@ -106,8 +107,16 @@ function AttachmentList({
           );
         }
 
+        if (att.type?.startsWith('audio/')) {
+          return (
+            <View key={`${att.url}-${index}`} className="mt-1 max-w-[260px]">
+              <AudioBubbleMobile url={att.url} isMe={false} />
+            </View>
+          );
+        }
+
         // File / Audio attachment
-        const iconName = att.type?.startsWith('audio/') ? 'musical-notes' : 'document-outline';
+        const iconName = 'document-outline';
         return (
           <TouchableOpacity
             key={`${att.url}-${index}`}

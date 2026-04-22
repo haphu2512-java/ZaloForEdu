@@ -15,7 +15,9 @@ import ArchivedConversationsPage from "./pages/archived/ArchivedConversationsPag
 import CompleteProfilePage from "./pages/auth/CompleteProfilePage";
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import VideoCallPage from './pages/chat/VideoCallPage';
+import GroupCallPage from './pages/chat/GroupCallPage';   // ← MỚI
 import CreateGroupPage from "./pages/group/CreateGroupPage";
+import JoinGroupPage from "./pages/chat/JoinGroupPage";
 
 function PrivateRoute({ children }) {
   const { isAuthenticated } = useAuthStore();
@@ -70,6 +72,7 @@ export default function App() {
         <Route path="/verify-email" element={<PublicRoute><VerifyEmailPage /></PublicRoute>} />
         <Route path="/complete-profile" element={<CompleteProfilePage />} />
 
+        {/* ─── Main app layout (private) ─── */}
         <Route
           path="/"
           element={
@@ -82,7 +85,6 @@ export default function App() {
           <Route path="chat" element={<ChatPage />} />
           <Route path="chat/:roomId" element={<ChatPage />} />
           <Route path="contacts" element={<ContactsPage />} />
-          <Route path="/call/:roomId" element={<VideoCallPage />} />
           <Route path="chatbot" element={<ChatbotPage />} />
           <Route path="cloud" element={<MyDocumentsPage />} />
           <Route path="profile" element={<ProfilePage />} />
@@ -90,6 +92,17 @@ export default function App() {
           <Route path="archived" element={<ArchivedConversationsPage />} />
           <Route path="group/create" element={<CreateGroupPage />} />
         </Route>
+
+        {/* ─── Call pages (full-screen, outside MainLayout) ─── */}
+        {/* 1-1 call */}
+        <Route path="/call/:roomId" element={<PrivateRoute><VideoCallPage /></PrivateRoute>} />
+        {/* Group call – tất cả thành viên nhóm join vào cùng 1 room, giới hạn 5 người */}
+        <Route path="/group-call/:roomId" element={<PrivateRoute><GroupCallPage /></PrivateRoute>} />
+
+        {/* ─── Join group via invite link ─── */}
+        <Route path="/join/:code" element={<JoinGroupPage />} />
+
+        {/* ─── Admin ─── */}
         <Route
           path="/admin/*"
           element={

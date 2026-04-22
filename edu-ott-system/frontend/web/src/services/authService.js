@@ -23,14 +23,12 @@ api.interceptors.response.use(
     const isSessionExpired = error.response?.data?.errorCode === "SESSION_EXPIRED";
 
     if (isAuthError || isSessionExpired) {
-      // Clear all local session data
       localStorage.removeItem("token");
       localStorage.removeItem("refreshToken");
       localStorage.removeItem("user");
-      
-      // Force reload to trigger App.jsx auth redirection logic
+      localStorage.removeItem("userId");
       if (!window.location.pathname.startsWith("/login")) {
-        window.location.href = "/login?expired=true";
+        window.location.href = "/login?reason=session_expired";
       }
     }
     return Promise.reject(error);

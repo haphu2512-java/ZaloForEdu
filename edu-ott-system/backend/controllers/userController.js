@@ -1,18 +1,32 @@
+const crypto = require('node:crypto');
 const User = require('../models/User');
 const asyncHandler = require('../utils/asyncHandler');
 const ApiError = require('../utils/apiError');
 const { successResponse } = require('../utils/apiResponse');
 const { sendEmail } = require('../utils/email');
 const { getRedis, isRedisAvailable, keyWithPrefix } = require('../services/redisClient');
+
+const OTP_EXPIRE_MINUTES = 10;
 const createEmailOtp = () => String(Math.floor(100000 + Math.random() * 900000));
 
 const sendVerificationOtp = async ({ email, otp }) => {
+  console.log(`\n╔${'═'.repeat(50)}╗`);
+  console.log(`║  [OTP EMAIL - Profile] Gửi tới : ${email.padEnd(21)}║`);
+  console.log(`║  Mã OTP                : ${otp.padEnd(26)}║`);
+  console.log(`╚${'═'.repeat(50)}╝\n`);
   await sendEmail({
     to: email,
     subject: 'Mã OTP xác thực email - Zalo Clone',
-    text: `Mã OTP xác thực email của bạn là: ${otp}. Mã có hiệu lực trong 10 phút.`,
-    html: `<p>Mã OTP xác thực email của bạn là: <strong>${otp}</strong></p><p>Mã có hiệu lực trong 10 phút.</p>`,
+    text: `Mã OTP xác thực email của bạn là: ${otp}. Mã có hiệu lực trong ${OTP_EXPIRE_MINUTES} phút.`,
+    html: `<p>Mã OTP xác thực email của bạn là: <strong>${otp}</strong></p><p>Mã có hiệu lực trong ${OTP_EXPIRE_MINUTES} phút.</p>`,
   });
+};
+
+const sendSmsOtpProfile = (phone, otp) => {
+  console.log(`\n╔${'═'.repeat(50)}╗`);
+  console.log(`║  [OTP SMS - Profile] Gửi tới : ${phone.padEnd(22)}║`);
+  console.log(`║  Mã OTP              : ${otp.padEnd(28)}║`);
+  console.log(`╚${'═'.repeat(50)}╝\n`);
 };
 
 const getUserById = asyncHandler(async (req, res) => {
@@ -37,6 +51,10 @@ const updateUserById = asyncHandler(async (req, res) => {
   if (typeof updates.username === 'string') user.username = updates.username.trim();
   if (typeof updates.phone !== 'undefined') user.phone = updates.phone || null;
   if (typeof updates.avatarUrl !== 'undefined') user.avatarUrl = updates.avatarUrl || null;
+  if (updates.messagePrivacy) user.messagePrivacy = updates.messagePrivacy;
+
+  let requiresPhoneVerification = false;
+  let requiresEmailVerification = false;
 
   // Update phone
   if (typeof updates.phone !== 'undefined') {
@@ -53,11 +71,15 @@ const updateUserById = asyncHandler(async (req, res) => {
         throw new ApiError(409, 'PHONE_EXISTS', 'Số điện thoại đã được sử dụng bởi tài khoản khác');
       }
       user.phone = nextPhone;
-      // Phone added manually (not via OTP) → mark as unverified
-      // But if user already had phone verified, keep it
-      if (!user.isPhoneVerified) {
-        user.isPhoneVerified = false;
-      }
+      user.isPhoneVerified = false;
+      // Tạo OTP và gửi SMS
+      const otp = createEmailOtp();
+      user.otpCode = otp;
+      user.otpExpires = new Date(Date.now() + OTP_EXPIRE_MINUTES * 60 * 1000);
+      user.otpType = 'phone_verify';
+      user.lastOtpSentAt = new Date();
+      sendSmsOtpProfile(nextPhone, otp);
+      requiresPhoneVerification = true;
     } else if (!nextPhone) {
       user.phone = null;
       user.isPhoneVerified = false;
@@ -76,10 +98,10 @@ const updateUserById = asyncHandler(async (req, res) => {
       user.email = nextEmail;
       user.isEmailVerified = false;
       user.emailVerificationToken = createEmailOtp();
-      user.emailVerificationExpires = new Date(Date.now() + 10 * 60 * 1000);
+      user.emailVerificationExpires = new Date(Date.now() + OTP_EXPIRE_MINUTES * 60 * 1000);
 
       await sendVerificationOtp({ email: nextEmail, otp: user.emailVerificationToken });
-      await sendVerificationOtp({ email: nextEmail, otp: user.emailVerificationToken });
+      requiresEmailVerification = true;
     } else if (!nextEmail) {
       user.email = null;
       user.isEmailVerified = false;
@@ -90,7 +112,11 @@ const updateUserById = asyncHandler(async (req, res) => {
 
   await user.save();
   const safeUser = await User.findById(user._id).select('-passwordHash -tokenVersion');
-  return successResponse(res, safeUser, 'User updated');
+  return successResponse(res, {
+    user: safeUser,
+    requiresPhoneVerification,
+    requiresEmailVerification,
+  }, 'User updated');
 });
 
 const deleteUserById = asyncHandler(async (req, res) => {
@@ -188,7 +214,7 @@ const updateUserStatus = asyncHandler(async (req, res) => {
 const reportUser = asyncHandler(async (req, res) => {
   const targetId = req.params.id;
   const reporterId = req.user._id.toString();
-  const { reason } = req.body; 
+  const { reason } = req.body;
 
   if (reporterId === targetId) throw new ApiError(400, 'INVALID_ACTION', 'Không thể tự báo cáo chính mình');
 
@@ -199,10 +225,10 @@ const reportUser = asyncHandler(async (req, res) => {
   if (isRedisAvailable()) {
     const redis = getRedis();
     const reportKey = keyWithPrefix(`reports_received:${targetId}`);
-    
+
     // Thêm người tố cáo vào Set (chống báo cáo 1 người nhiều lần)
     const isNewReport = await redis.sAdd(reportKey, reporterId);
-    
+
     if (isNewReport) {
       await redis.expire(reportKey, 7 * 24 * 60 * 60); // 7 ngày
       const totalReports = await redis.sCard(reportKey);
@@ -225,25 +251,32 @@ const reportUser = asyncHandler(async (req, res) => {
  */
 const getAllUsers = asyncHandler(async (req, res) => {
   const users = await User.find({ deletedAt: null })
-                          .select('-passwordHash -tokenVersion -resetPasswordToken')
-                          .sort({ createdAt: -1 })
-                          .lean(); 
-                          
+    .select('-passwordHash -tokenVersion -resetPasswordToken')
+    .sort({ createdAt: -1 })
+    .lean();
+
   const redis = isRedisAvailable() ? getRedis() : null;
 
   const usersWithWarnings = await Promise.all(users.map(async (user) => {
     let warnings = 0;
+    let reportCount = 0;
     if (redis) {
       try {
         const warnKey = keyWithPrefix(`warnings:${user._id.toString()}`);
         const val = await redis.get(warnKey);
         if (val) warnings = parseInt(val, 10);
       } catch (e) { /* ignore */ }
+      try {
+        const reportKey = keyWithPrefix(`reports_received:${user._id.toString()}`);
+        const count = await redis.sCard(reportKey);
+        if (count) reportCount = count;
+      } catch (e) { /* ignore */ }
     }
     return {
       ...user,
-      id: user._id, 
-      warningCount: warnings
+      id: user._id,
+      warningCount: warnings,
+      reportCount,
     };
   }));
 
@@ -257,6 +290,6 @@ module.exports = {
   blockOrUnblockUser,
   getBlockedUsers,
   updateUserStatus,
-  getAllUsers, 
+  getAllUsers,
   reportUser,
 };

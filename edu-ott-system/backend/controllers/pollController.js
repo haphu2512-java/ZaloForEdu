@@ -19,6 +19,16 @@ const ensureAdminOrOwner = (conversation, userId) => {
   if (!isOwner && !isAdmin) throw new ApiError(403, 'FORBIDDEN', 'Only owner/admin can perform this action');
 };
 
+const ensureCanCreatePolls = (conversation, userId) => {
+  const isOwner = toStr(conversation.ownerId || conversation.createdBy) === toStr(userId);
+  const isAdmin = (conversation.adminIds || []).some((a) => toStr(a) === toStr(userId));
+  if (!isOwner && !isAdmin) {
+    if (conversation.settings?.canMembersCreatePolls === false) {
+      throw new ApiError(403, 'FORBIDDEN', 'Only admin/owner can create polls in this group');
+    }
+  }
+};
+
 /**
  * POST /api/v1/polls
  * Tạo bình chọn mới trong nhóm
@@ -31,6 +41,7 @@ const createPoll = asyncHandler(async (req, res) => {
   if (!conversation) throw new ApiError(404, 'CONVERSATION_NOT_FOUND', 'Conversation not found');
   if (conversation.type !== 'group') throw new ApiError(400, 'INVALID_CONVERSATION_TYPE', 'Polls are only for group conversations');
   ensureGroupMember(conversation, req.user._id);
+  ensureCanCreatePolls(conversation, req.user._id);
 
   if (!options || options.length < 2) {
     throw new ApiError(400, 'INVALID_OPTIONS', 'Poll must have at least 2 options');
@@ -65,6 +76,22 @@ const createPoll = asyncHandler(async (req, res) => {
   await socketService.emitConversationUpdated(conversationId, {
     conversationId,
     latestMessage: message,
+  });
+
+  // Thông báo hệ thống tạo bình chọn
+  const senderName = req.user.fullName || req.user.username;
+  const sysMsg2 = await Message.create({
+    conversationId,
+    senderId: req.user._id,
+    content: `${senderName} đã tạo cuộc bình chọn: "${question}"`,
+    type: 'system',
+    pollId: poll._id
+  });
+  await sysMsg2.populate('senderId', 'username avatarUrl fullName');
+  socketService.emitToConversation(conversationId, 'new_message', sysMsg2);
+  await socketService.emitConversationUpdated(conversationId, {
+    conversationId,
+    latestMessage: sysMsg2
   });
 
   return successResponse(res, poll, 'Poll created', 201);
@@ -137,6 +164,26 @@ const votePoll = asyncHandler(async (req, res) => {
 
   await poll.save();
   await poll.populate('createdBy', 'username avatarUrl');
+  // Populate votes để FE hiển thị avatar người bình chọn
+  await poll.populate('options.votes', 'username avatarUrl');
+
+  // Thông báo hệ thống khi tham gia bình chọn
+  const senderName = req.user.fullName || req.user.username;
+  const sysMsg = await Message.create({
+    conversationId: poll.conversationId,
+    senderId: req.user._id,
+    content: `${senderName} đã tham gia bình chọn: "${poll.question}"`,
+    type: 'system',
+    pollId: poll._id
+  });
+  await sysMsg.populate('senderId', 'username avatarUrl fullName');
+  socketService.emitToConversation(poll.conversationId.toString(), 'new_message', sysMsg);
+  await socketService.emitConversationUpdated(poll.conversationId.toString(), {
+    conversationId: poll.conversationId,
+    latestMessage: sysMsg
+  });
+
+  await socketService.emitPollUpdated(poll.conversationId.toString(), poll);
 
   return successResponse(res, poll, 'Vote submitted');
 });
@@ -156,6 +203,21 @@ const closePoll = asyncHandler(async (req, res) => {
 
   poll.isClosed = true;
   await poll.save();
+
+  const senderName = req.user.fullName || req.user.username;
+  const sysMsg = await Message.create({
+    conversationId: poll.conversationId,
+    senderId: req.user._id,
+    content: `${senderName} đã đóng bình chọn: "${poll.question}"`,
+    type: 'system',
+    pollId: poll._id,
+  });
+  await sysMsg.populate('senderId', 'username avatarUrl fullName');
+  socketService.emitToConversation(poll.conversationId.toString(), 'new_message', sysMsg);
+  await socketService.emitConversationUpdated(poll.conversationId.toString(), {
+    conversationId: poll.conversationId,
+    latestMessage: sysMsg,
+  });
 
   return successResponse(res, poll, 'Poll closed');
 });

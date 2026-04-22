@@ -15,7 +15,7 @@ type CloudinarySignature = {
 
 const API_ORIGIN = API_BASE_URL.replace(/\/api\/v1$/, '');
 
-function toAbsoluteMediaUrl(url?: string): string {
+export function toAbsoluteMediaUrl(url?: string): string {
   if (!url) return '';
   if (/^https?:\/\//i.test(url)) return url;
   return `${API_ORIGIN}${url.startsWith('/') ? '' : '/'}${url}`;
@@ -99,4 +99,23 @@ export async function deleteMediaById(mediaId: string): Promise<void> {
   await fetchAPI(`/media/${mediaId}`, {
     method: 'DELETE',
   });
+}
+
+export async function uploadMediaForm(payload: {
+  uri: string;
+  fileName: string;
+  mimeType: string;
+}): Promise<MediaItem> {
+  const formData = new FormData();
+  formData.append('file', {
+    uri: payload.uri,
+    name: payload.fileName,
+    type: payload.mimeType,
+  } as any);
+
+  const res = await fetchAPI('/media/upload-form', {
+    method: 'POST',
+    body: formData,
+  });
+  return normalizeMedia(res.data);
 }
