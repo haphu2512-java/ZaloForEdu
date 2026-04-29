@@ -244,7 +244,7 @@ export const useChatSocket = ({
     };
 
     // ── Group updated (owner/admin changes) ──
-    const handleGroupUpdated = (payload) => {
+    const handleGroupUpdated = async (payload) => {
       if (!payload) return;
       const { conversationId, ownerId, adminIds, action } = payload;
       const convIdStr = String(conversationId);
@@ -252,22 +252,28 @@ export const useChatSocket = ({
       console.log('[Socket] group_updated:', payload);
 
       // Update active conversation if it's the same
-      setActiveConversation(prev => {
-        if (prev && String(prev._id) === convIdStr) {
-          // If ownerId is provided, update it (keep as string ID for consistency)
-          const updatedOwnerId = ownerId || prev.ownerId;
-          const updatedAdminIds = adminIds || prev.adminIds;
+      const isActiveConv = activeConvIdRef.current && String(activeConvIdRef.current) === convIdStr;
+      
+      if (isActiveConv) {
+        // Reload conversation detail from API to get populated fields
+        try {
+          const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api/v1";
+          const token = localStorage.getItem('token');
+          const response = await fetch(`${API_BASE_URL}/conversations`, {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          const data = await response.json();
+          const conversations = data.data?.items || data.items || [];
+          const updatedConv = conversations.find(c => String(c._id) === convIdStr);
           
-          return {
-            ...prev,
-            ownerId: updatedOwnerId,
-            adminIds: updatedAdminIds,
-            // Force re-render by creating new object reference
-            _updatedAt: Date.now()
-          };
+          if (updatedConv) {
+            console.log('[Socket] Reloaded conversation with populated fields:', updatedConv);
+            setActiveConversation(updatedConv);
+          }
+        } catch (error) {
+          console.error('[Socket] Failed to reload conversation:', error);
         }
-        return prev;
-      });
+      }
 
       // Update conversations list
       setConversations(prev => prev.map(c => {
@@ -285,9 +291,13 @@ export const useChatSocket = ({
       // Show toast notification
       if (action === 'owner_transferred') {
         toast.success('Quyền trưởng nhóm đã được chuyển', { icon: '👑' });
+      } else if (action === 'member_promoted') {
+        toast.success('Đã cấp quyền phó nhóm', { icon: '⭐' });
+      } else if (action === 'member_demoted') {
+        toast.success('Đã gỡ quyền phó nhóm', { icon: '📝' });
       }
 
-      // Refresh conversation data to get populated fields
+      // Refresh conversation list to get populated fields
       fetchConversationsData();
     };
 
