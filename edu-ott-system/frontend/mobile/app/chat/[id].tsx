@@ -1425,51 +1425,74 @@ export default function ChatScreen() {
               {unblockLoading ? <ActivityIndicator size="small" color={colors.tint} /> : <Text style={{ color: colors.tint, fontWeight: 'bold' }}>BỎ CHẶN</Text>}
             </TouchableOpacity>
           </View>
-        ) : showVoiceRecorder ? (
-          <View style={[styles.voiceRecorderWrap, { borderTopColor: colors.border, backgroundColor: colors.surface, paddingBottom: Math.max(12, insets.bottom) }]}>
-            <VoiceRecorderMobile
-              onCancel={() => setShowVoiceRecorder(false)}
-              onSend={handleSendVoice}
-            />
-          </View>
-        ) : (
-          <View style={[styles.inputBar, { borderTopColor: colors.border, backgroundColor: colors.surface, paddingBottom: Math.max(12, insets.bottom) }]}>
-            <TouchableOpacity onPress={() => setShowEmojiPanel((prev) => !prev)} style={styles.iconBtn}>
-              <Ionicons name={showEmojiPanel ? 'happy' : 'happy-outline'} size={24} color={showEmojiPanel ? colors.tint : colors.muted} />
-            </TouchableOpacity>
+        ) : (() => {
+          // Check permission to send message in group
+          const isGroupConv = conversation?.type === 'group';
+          const ownerId = (conversation?.ownerId as any)?._id || conversation?.ownerId;
+          const adminIds = conversation?.adminIds || [];
+          const isOwner = ownerId && String(ownerId) === String(currentUserId);
+          const isAdmin = adminIds.some((aid: any) => String(aid._id || aid) === String(currentUserId)) || isOwner;
+          const canSend = !isGroupConv || isAdmin || conversation?.settings?.canMembersSendMessages !== false;
 
-            <TouchableOpacity onPress={() => setShowMediaMenu(true)} style={styles.iconBtn}>
-              <Ionicons name="add-circle-outline" size={26} color={colors.muted} />
-            </TouchableOpacity>
+          if (isGroupConv && !canSend) {
+            return (
+              <View style={[styles.inputBar, { borderTopColor: colors.border, backgroundColor: colors.surface, paddingBottom: Math.max(12, insets.bottom), alignItems: 'center', justifyContent: 'center', paddingVertical: 16, flexDirection: 'column', gap: 8 }]}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <Ionicons name="information-circle" size={20} color={colors.tint} />
+                  <Text style={{ color: colors.muted, fontSize: 13, textAlign: 'center', flex: 1 }}>
+                    Chỉ trưởng nhóm và phó nhóm mới có thể gửi tin nhắn trong nhóm này
+                  </Text>
+                </View>
+              </View>
+            );
+          }
 
-            <TextInput
-              style={[styles.textInput, { backgroundColor: colors.background, borderColor: colors.border, color: colors.text }]}
-              placeholder="Nhắn tin..."
-              placeholderTextColor={colors.muted}
-              value={inputText}
-              onChangeText={handleInputChange}
-              multiline
-              onBlur={stopTypingWithEmit}
-            />
-
-            <TouchableOpacity
-              onPress={handleSendText}
-              disabled={isSending || inputText.trim().length === 0}
-              style={[styles.sendBtn, { backgroundColor: inputText.trim().length > 0 ? '#0068FF' : '#D1D5DB' }]}
-            >
-              <Ionicons name="send" size={18} color="#fff" style={{ marginLeft: 3 }} />
-            </TouchableOpacity>
-            {inputText.trim().length === 0 && (
-              <TouchableOpacity
-                onPress={() => setShowVoiceRecorder(true)}
-                disabled={isSending}
-                style={styles.iconBtn}
-              >
-                <Ionicons name="mic-outline" size={24} color={colors.muted} />
+          return showVoiceRecorder ? (
+            <View style={[styles.voiceRecorderWrap, { borderTopColor: colors.border, backgroundColor: colors.surface, paddingBottom: Math.max(12, insets.bottom) }]}>
+              <VoiceRecorderMobile
+                onCancel={() => setShowVoiceRecorder(false)}
+                onSend={handleSendVoice}
+              />
+            </View>
+          ) : (
+            <View style={[styles.inputBar, { borderTopColor: colors.border, backgroundColor: colors.surface, paddingBottom: Math.max(12, insets.bottom) }]}>
+              <TouchableOpacity onPress={() => setShowEmojiPanel((prev) => !prev)} style={styles.iconBtn}>
+                <Ionicons name={showEmojiPanel ? 'happy' : 'happy-outline'} size={24} color={showEmojiPanel ? colors.tint : colors.muted} />
               </TouchableOpacity>
-            )}
-          </View>
-        )}
+
+              <TouchableOpacity onPress={() => setShowMediaMenu(true)} style={styles.iconBtn}>
+                <Ionicons name="add-circle-outline" size={26} color={colors.muted} />
+              </TouchableOpacity>
+
+              <TextInput
+                style={[styles.textInput, { backgroundColor: colors.background, borderColor: colors.border, color: colors.text }]}
+                placeholder="Nhắn tin..."
+                placeholderTextColor={colors.muted}
+                value={inputText}
+                onChangeText={handleInputChange}
+                multiline
+                onBlur={stopTypingWithEmit}
+              />
+
+              <TouchableOpacity
+                onPress={handleSendText}
+                disabled={isSending || inputText.trim().length === 0}
+                style={[styles.sendBtn, { backgroundColor: inputText.trim().length > 0 ? '#0068FF' : '#D1D5DB' }]}
+              >
+                <Ionicons name="send" size={18} color="#fff" style={{ marginLeft: 3 }} />
+              </TouchableOpacity>
+              {inputText.trim().length === 0 && (
+                <TouchableOpacity
+                  onPress={() => setShowVoiceRecorder(true)}
+                  disabled={isSending}
+                  style={styles.iconBtn}
+                >
+                  <Ionicons name="mic-outline" size={24} color={colors.muted} />
+                </TouchableOpacity>
+              )}
+            </View>
+          );
+        })()}
       </KeyboardAvoidingView>
 
       <ChatMediaMenuModal
