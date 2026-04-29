@@ -211,6 +211,12 @@ export const useCommunityStore = create<CommunityState>((set: any, get: any) => 
       }));
     });
 
+    // Listen for conversation settings changes
+    socket.on('conversation_settings_updated', (newSettings: any) => {
+      console.log('[Mobile] conversation_settings_updated:', newSettings);
+      // Settings will be handled by individual chat screens via their own socket listeners
+    });
+
     set({ initSocketDone: true });
   },
 

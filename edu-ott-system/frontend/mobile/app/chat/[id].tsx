@@ -512,6 +512,11 @@ export default function ChatScreen() {
         );
       };
 
+      const onConversationSettingsUpdated = (newSettings: any) => {
+        console.log('[Mobile Chat] conversation_settings_updated:', newSettings);
+        setConversation((prev) => prev ? { ...prev, settings: newSettings } : prev);
+      };
+
       socket.on('connect', onConnect);
       socket.on('disconnect', onDisconnect);
       socket.on('new_message', onNewMessage);
@@ -522,6 +527,7 @@ export default function ChatScreen() {
       socket.on('stop_typing', onStopTyping);
       socket.on('pinned_items_updated', onPinnedItemsUpdated);
       socket.on('message_reacted', onMessageReacted);
+      socket.on('conversation_settings_updated', onConversationSettingsUpdated);
 
       return () => {
         socket.off('connect', onConnect);
@@ -534,6 +540,7 @@ export default function ChatScreen() {
         socket.off('stop_typing', onStopTyping);
         socket.off('pinned_items_updated', onPinnedItemsUpdated);
         socket.off('message_reacted', onMessageReacted);
+        socket.off('conversation_settings_updated', onConversationSettingsUpdated);
       };
     };
 
