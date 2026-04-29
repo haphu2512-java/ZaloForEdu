@@ -13,6 +13,8 @@ export const VoiceRecorder = ({ onCancel, onSend }) => {
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
   const timerIntervalRef = useRef(null);
+  const finalRecordingTimeRef = useRef(0); // Track final recording time
+  const isStoppedRef = useRef(false); // Prevent timer updates after stop
   
   // Web Audio API for visualization
   const audioContextRef = useRef(null);
@@ -217,11 +219,15 @@ export const VoiceRecorder = ({ onCancel, onSend }) => {
 
       mediaRecorder.start(); // Remove 1000 to avoid chunk overlap bugs
       setIsRecording(true);
+      isStoppedRef.current = false; // Reset stopped flag
       
       setRecordingTime(0);
       const startTime = Date.now();
       timerIntervalRef.current = setInterval(() => {
-        setRecordingTime(Math.floor((Date.now() - startTime) / 1000));
+        // Only update if not stopped
+        if (!isStoppedRef.current) {
+          setRecordingTime(Math.floor((Date.now() - startTime) / 1000));
+        }
       }, 250);
 
     } catch (err) {
@@ -232,9 +238,14 @@ export const VoiceRecorder = ({ onCancel, onSend }) => {
   };
 
   const stopRecording = () => {
-    // Capture final recording time before clearing interval
-    const finalRecordingTime = recordingTime;
+    // CRITICAL: Set stopped flag FIRST to prevent any interval updates
+    isStoppedRef.current = true;
     
+    // Capture final recording time from current state
+    const finalRecordingTime = recordingTime;
+    finalRecordingTimeRef.current = finalRecordingTime;
+    
+    // Clear interval
     if (timerIntervalRef.current) {
       clearInterval(timerIntervalRef.current);
       timerIntervalRef.current = null;
@@ -284,7 +295,9 @@ export const VoiceRecorder = ({ onCancel, onSend }) => {
 
   const handleSend = () => {
     if (audioBlob) {
-      onSend(audioBlob, recordingTime);
+      // Use ref to ensure we send the correct frozen recording time
+      const duration = finalRecordingTimeRef.current || recordingTime;
+      onSend(audioBlob, duration);
     }
   };
 
