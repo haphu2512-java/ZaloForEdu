@@ -88,6 +88,7 @@ export interface Attachment {
   type: string;
   url: string;
   size: number;
+  duration?: number; // Duration in seconds for audio files
 }
 
 /** Backend Message model */

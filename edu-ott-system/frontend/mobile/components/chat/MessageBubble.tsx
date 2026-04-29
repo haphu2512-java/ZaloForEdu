@@ -110,7 +110,7 @@ function AttachmentList({
         if (att.type?.startsWith('audio/')) {
           return (
             <View key={`${att.url}-${index}`} className="mt-1 max-w-[260px]">
-              <AudioBubbleMobile url={att.url} isMe={false} />
+              <AudioBubbleMobile url={att.url} isMe={false} duration={att.duration} />
             </View>
           );
         }

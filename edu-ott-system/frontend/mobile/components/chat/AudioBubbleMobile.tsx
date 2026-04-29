@@ -49,7 +49,9 @@ export const AudioBubbleMobile: React.FC<AudioBubbleMobileProps> = ({ url, isMe,
       if (newPosition !== position) {
         setPosition(newPosition);
       }
-      if (newDuration !== duration && newDuration > 0) {
+      
+      // Only update duration from metadata if we don't have it from backend
+      if (!propDuration && newDuration !== duration && newDuration > 0) {
         setDuration(newDuration);
       }
       
@@ -124,6 +126,20 @@ export const AudioBubbleMobile: React.FC<AudioBubbleMobileProps> = ({ url, isMe,
 
       const newPlayer = createAudioPlayer({ uri: url }, { downloadFirst: true, updateInterval: 100 });
       newPlayer.addListener('playbackStatusUpdate', (status: any) => onPlaybackStatusUpdate(status, newPlayer));
+      
+      // Wait for audio to load before playing
+      await new Promise((resolve) => {
+        const checkLoaded = (status: any) => {
+          if (status?.isLoaded) {
+            newPlayer.removeListener('playbackStatusUpdate', checkLoaded);
+            resolve(true);
+          }
+        };
+        newPlayer.addListener('playbackStatusUpdate', checkLoaded);
+        // Timeout after 3 seconds
+        setTimeout(() => resolve(false), 3000);
+      });
+      
       newPlayer.play();
       setPlayer(newPlayer);
       currentlyPlayingPlayer = newPlayer;

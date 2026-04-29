@@ -448,7 +448,7 @@ export default function MyDocumentScreen() {
                 const canOpen = !!media?.url;
 
                 if (isAudio && media?.url) {
-                  return <AudioBubbleMobile key={`${mediaId}-${idx}`} url={media.url} isMe={true} />;
+                  return <AudioBubbleMobile key={`${mediaId}-${idx}`} url={media.url} isMe={true} duration={media.duration} />;
                 }
 
                 if (isImage && media?.url) {
