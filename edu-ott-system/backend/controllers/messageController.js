@@ -87,7 +87,7 @@ const sendMessage = asyncHandler(async (req, res) => {
   }
 
   // Populate media để frontend hiển thị ngay
-  await message.populate('mediaIds', 'fileName url size mimeType providerResourceType');
+  await message.populate('mediaIds', 'fileName url size mimeType providerResourceType duration');
   await message.populate('senderId', 'username avatarUrl');
 
   // Un-hide conversation for all participants who had hidden it (e.g. via "delete conversation")
@@ -152,7 +152,7 @@ const listMessagesByConversation = asyncHandler(async (req, res) => {
     .sort({ createdAt: -1, _id: -1 })
     .limit(limit + 1)
     .populate('senderId', 'username avatarUrl')
-    .populate('mediaIds', 'fileName url size mimeType providerResourceType')
+    .populate('mediaIds', 'fileName url size mimeType providerResourceType duration')
     .populate('replyTo')
     .populate('forwardFrom')
     .populate({
