@@ -1,7 +1,29 @@
 import { Platform } from 'react-native';
 import Constants from 'expo-constants';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { router } from 'expo-router';
+
+// Simple event emitter for auth errors (React Native compatible)
+const authErrorCallbacks: Array<() => void> = [];
+
+export const onAuthError = (callback: () => void) => {
+  authErrorCallbacks.push(callback);
+  return () => {
+    const index = authErrorCallbacks.indexOf(callback);
+    if (index > -1) {
+      authErrorCallbacks.splice(index, 1);
+    }
+  };
+};
+
+const emitAuthError = () => {
+  authErrorCallbacks.forEach(callback => {
+    try {
+      callback();
+    } catch (e) {
+      console.error('[Auth] Error in auth error callback:', e);
+    }
+  });
+};
 
 // Get dynamically the IP address of the Expo bundler, or fallback to the local IP/Emulator
 const hostUri = Constants.expoConfig?.hostUri;
@@ -25,67 +47,7 @@ function getApiBaseUrl(): string {
 
 export const API_BASE_URL = getApiBaseUrl();
 
-// Flag to prevent multiple simultaneous refresh attempts
-let isRefreshing = false;
-let refreshPromise: Promise<string | null> | null = null;
-
-// Refresh access token using refresh token
-const refreshAccessToken = async (): Promise<string | null> => {
-  // If already refreshing, wait for that promise
-  if (isRefreshing && refreshPromise) {
-    return refreshPromise;
-  }
-
-  isRefreshing = true;
-  refreshPromise = (async () => {
-    try {
-      const refreshToken = await AsyncStorage.getItem('refreshToken');
-      if (!refreshToken) {
-        console.log('[Token] No refresh token available');
-        return null;
-      }
-
-      console.log('[Token] Refreshing access token...');
-      const response = await fetch(`${API_BASE_URL}/auth/refresh-token`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ refreshToken }),
-      });
-
-      if (!response.ok) {
-        console.error('[Token] Refresh failed:', response.status);
-        // Clear tokens if refresh fails
-        await AsyncStorage.multiRemove(['authToken', 'refreshToken', 'user']);
-        return null;
-      }
-
-      const data = await response.json();
-      const newAccessToken = data.data?.accessToken || data.accessToken;
-      const newRefreshToken = data.data?.refreshToken || data.refreshToken;
-
-      if (newAccessToken) {
-        await AsyncStorage.setItem('authToken', newAccessToken);
-        if (newRefreshToken) {
-          await AsyncStorage.setItem('refreshToken', newRefreshToken);
-        }
-        console.log('[Token] Access token refreshed successfully');
-        return newAccessToken;
-      }
-
-      return null;
-    } catch (error) {
-      console.error('[Token] Refresh error:', error);
-      return null;
-    } finally {
-      isRefreshing = false;
-      refreshPromise = null;
-    }
-  })();
-
-  return refreshPromise;
-};
-
-export const fetchAPI = async (endpoint: string, options: RequestInit = {}, retryCount = 0): Promise<any> => {
+export const fetchAPI = async (endpoint: string, options: RequestInit = {}): Promise<any> => {
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), 15000);
 
@@ -97,8 +59,6 @@ export const fetchAPI = async (endpoint: string, options: RequestInit = {}, retr
       const char = url.includes('?') ? '&' : '?';
       url += `${char}_t=${Date.now()}`;
     }
-
-    console.log(`Fetching: ${url}`);
 
     // Auto-attach auth token if available
     let authHeader: Record<string, string> = {};
@@ -147,41 +107,25 @@ export const fetchAPI = async (endpoint: string, options: RequestInit = {}, retr
       const isAuthError = response.status === 401 || 
                          (response.status === 403 && data.error?.message?.toLowerCase().includes('token'));
       
-      if (isAuthError && retryCount === 0) {
-        console.log('[Token] Auth error detected, attempting refresh...');
-        const newToken = await refreshAccessToken();
+      if (isAuthError) {
+        // Token expired or invalid → Clear session and logout
+        await AsyncStorage.multiRemove(['authToken', 'refreshToken', 'user']);
         
-        if (newToken) {
-          // Retry the request with new token
-          console.log('[Token] Retrying request with new token...');
-          return fetchAPI(endpoint, options, retryCount + 1);
-        } else {
-          // Refresh failed, user needs to login again
-          console.log('[Token] Refresh failed, clearing session and redirecting to login');
-          
-          // Clear all auth data
-          await AsyncStorage.multiRemove(['authToken', 'refreshToken', 'user']);
-          
-          // Disconnect socket
-          try {
-            const { disconnectSocket } = await import('./socketService');
-            disconnectSocket();
-          } catch (socketError) {
-            console.error('[Token] Socket disconnect error:', socketError);
-          }
-          
-          // Redirect to login
-          try {
-            router.replace('/(auth)/login' as any);
-          } catch (navError) {
-            console.error('[Token] Navigation error:', navError);
-          }
-          
-          const err: any = new Error('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
-          err.errorCode = 'TOKEN_EXPIRED';
-          err.statusCode = 401;
-          throw err;
+        // Emit event to AuthProvider for IMMEDIATE logout
+        emitAuthError();
+        
+        // Disconnect socket
+        try {
+          const { disconnectSocket } = await import('./socketService');
+          disconnectSocket();
+        } catch (e) {
+          // Ignore socket disconnect errors
         }
+        
+        const err: any = new Error('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
+        err.errorCode = 'TOKEN_EXPIRED';
+        err.statusCode = 401;
+        throw err;
       }
 
       // Backend error format: { success: false, error: { code, message } }
@@ -196,10 +140,12 @@ export const fetchAPI = async (endpoint: string, options: RequestInit = {}, retr
   } catch (error: any) {
     clearTimeout(id);
     if (error.name === 'AbortError') {
-      console.error(`API Timeout on ${endpoint}`);
       throw new Error('Lỗi kết nối tới máy chủ (Timeout). Vui lòng kiểm tra lại mạng hoặc IP backend.');
     }
-    console.error(`API Error on ${endpoint}:`, error.message);
+    // Only log non-auth errors to reduce noise
+    if (error.errorCode !== 'TOKEN_EXPIRED') {
+      console.error(`API Error on ${endpoint}:`, error.message);
+    }
     throw error; // Rethrow to preserve custom fields like errorCode
   }
 };

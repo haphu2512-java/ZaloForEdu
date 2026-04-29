@@ -90,6 +90,12 @@ export default function MessagesScreen() {
   const [activeTab, setActiveTab] = useState<FilterTab>('all');
 
   const loadConversations = useCallback(async () => {
+    // Don't fetch if user is not logged in
+    if (!user) {
+      console.log('[Conversations] User not logged in, skipping fetch');
+      return;
+    }
+    
     try {
       const res = await getConversations(null, 50);
       if (res?.items) {
@@ -98,7 +104,7 @@ export default function MessagesScreen() {
     } catch (error: any) {
       console.log('Failed to fetch conversations:', error.message);
     }
-  }, []);
+  }, [user]);
 
   useEffect(() => {
     let mounted = true;
@@ -159,13 +165,14 @@ export default function MessagesScreen() {
     useCallback(() => {
       let isActive = true;
       const init = async () => {
-        if (conversations.length === 0) setLoading(true);
+        // Only show loading if user is logged in
+        if (user && conversations.length === 0) setLoading(true);
         await loadConversations();
         if (isActive) setLoading(false);
       };
       init();
       return () => { isActive = false; };
-    }, [loadConversations])
+    }, [loadConversations, user, conversations.length])
   );
 
   const onRefresh = useCallback(async () => {

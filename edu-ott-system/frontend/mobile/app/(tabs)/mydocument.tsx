@@ -108,6 +108,11 @@ export default function MyDocumentScreen() {
 
   // ── Lấy hoặc tạo self-conversation ──────────────────────────
   const getOrCreateSelfConv = useCallback(async (): Promise<Conversation | null> => {
+    if (!user) {
+      console.log('[MyDoc] User not logged in, skipping');
+      return null;
+    }
+    
     try {
       const res = await getConversations(null, 100);
       const existing = (res?.items || []).find(
@@ -116,13 +121,13 @@ export default function MyDocumentScreen() {
       if (existing) return existing;
 
       // Tạo mới self-conversation (participantIds = [user.id])
-      const created = await createConversation({ type: 'direct', participantIds: [user?.id || ''] });
+      const created = await createConversation({ type: 'direct', participantIds: [user.id] });
       return created;
     } catch (e: any) {
       console.log('[MyDoc] getOrCreateSelfConv error:', e.message);
       return null;
     }
-  }, []);
+  }, [user]);
 
   const harvestMediaFromMessages = useCallback((msgs: Message[]) => {
     const mediaMap: Record<string, MediaItem> = {};

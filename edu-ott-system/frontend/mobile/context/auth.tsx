@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { useRouter, useSegments } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as authService from '../utils/authService';
 import type { User, LoginPayload, RegisterPayload, UpdateProfilePayload } from '../types/auth';
 import { getMySettings } from '../utils/settingsService';
@@ -81,45 +82,97 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, [user]);
 
-  // Khá»Ÿi cháº¡y App: Load cached user & try refresh token
+  // Listen for force_logout event - ALWAYS active, not dependent on user
+  useEffect(() => {
+    const { getSocket } = require('../utils/socketService');
+    
+    const handleForceLogout = async () => {
+      console.log('[Auth] Force logout received from server');
+      
+      // Clear storage and disconnect
+      disconnectSocket();
+      await authService.removeToken();
+      setUser(null);
+      
+      // AuthProvider's useEffect will detect null user and redirect to login
+    };
+
+    // Setup listener
+    const socket = getSocket();
+    if (socket) {
+      socket.on('force_logout', handleForceLogout);
+    }
+
+    // Check every 500ms if socket is connected and setup listener
+    const interval = setInterval(() => {
+      const currentSocket = getSocket();
+      if (currentSocket && !currentSocket.hasListeners('force_logout')) {
+        currentSocket.on('force_logout', handleForceLogout);
+      }
+    }, 500);
+
+    return () => {
+      clearInterval(interval);
+      const socket = getSocket();
+      if (socket) {
+        socket.off('force_logout', handleForceLogout);
+      }
+    };
+  }, []); // No dependencies - always active
+
+  // Khởi chạy App: Load cached user & try refresh token
   useEffect(() => {
     const loadUser = async () => {
       try {
         const token = await authService.getToken();
-        if (token) {
-          // Load cached user info first for instant UX
-          const cachedUser = await authService.getCachedUserInfo();
-          if (cachedUser) {
-            setUser(cachedUser);
-          }
+        if (!token) {
+          // No token, user not logged in
+          setUser(null);
+          setIsLoading(false);
+          return;
+        }
 
-          // Try to refresh token to validate session is still active
-          const refreshResult = await authService.refreshAccessToken();
-          if (refreshResult?.success && refreshResult.user) {
-            setUser(refreshResult.user);
-            // Connect socket ngay với token tươi - tránh race condition AsyncStorage
-            if (refreshResult.accessToken) {
-              connectSocket(refreshResult.accessToken);
-            }
-            await syncThemeSettings();
-          } else {
-            // Check if authService has removed the token due to expiration
-            const tokenExists = await authService.getToken();
-            if (!tokenExists) {
-              setUser(null);
-            }
+        // Load cached user info first for instant UX
+        const cachedUser = await authService.getCachedUserInfo();
+        if (cachedUser) {
+          setUser(cachedUser);
+        }
+
+        // Try to refresh token to validate session is still active
+        const refreshResult = await authService.refreshAccessToken();
+        if (refreshResult?.success && refreshResult.user) {
+          setUser(refreshResult.user);
+          // Connect socket with fresh token
+          if (refreshResult.accessToken) {
+            connectSocket(refreshResult.accessToken);
           }
+          await syncThemeSettings();
+        } else {
+          // Refresh failed, clear user
+          setUser(null);
         }
       } catch (error) {
-        console.warn('Lỗi kiểm tra session:', error);
+        console.warn('[Auth] Error loading user:', error);
         await authService.removeToken();
         setUser(null);
       } finally {
         setIsLoading(false);
       }
     };
+    
     loadUser();
-  }, []);
+    
+    // Listen for auth errors from fetchAPI - IMMEDIATE logout
+    const { onAuthError } = require('../utils/api');
+    const unsubscribe = onAuthError(async () => {
+      console.log('[Auth] Auth error detected, logging out immediately...');
+      disconnectSocket();
+      await authService.removeToken();
+      setUser(null);
+    });
+    
+    return () => unsubscribe();
+  }, []); // Run ONCE on mount
 
   // Root Navigation Router Guard
   useEffect(() => {
@@ -139,17 +192,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [user, segments, isLoading]);
 
   const login = useCallback(async (payload: LoginPayload) => {
-    // Ngắt socket cũ triệt để trước
+    // Disconnect old socket
     disconnectSocket();
-    const res = await authService.login(payload);
-    if (!res.user) throw new Error('Đăng nhập thất bại');
-    // Kết nối socket ngay với token tươi trong bộ nhớ - không đợi AsyncStorage
-    if (res.accessToken) {
-      connectSocket(res.accessToken);
+    
+    try {
+      const res = await authService.login(payload);
+      if (!res.user) throw new Error('Đăng nhập thất bại');
+      
+      // Connect socket with fresh token
+      if (res.accessToken) {
+        connectSocket(res.accessToken);
+      }
+      setUser(res.user);
+      await syncThemeSettings();
+      return res.user;
+    } catch (error) {
+      throw error;
     }
-    setUser(res.user);
-    await syncThemeSettings();
-    return res.user;
   }, []);
 
   const register = useCallback(async (payload: RegisterPayload) => {

@@ -524,9 +524,22 @@ export default function MainLayout() {
 
     socketService.on("new_message", handleNewMessage);
 
+    // Listen for force logout event (when user logs out from another device)
+    const handleForceLogout = () => {
+      console.log('[MainLayout] Force logout received from server');
+      localStorage.removeItem('token');
+      localStorage.removeItem('refreshToken');
+      sessionStorage.clear();
+      window.dispatchEvent(new Event('user-logout'));
+      navigate('/login', { replace: true });
+    };
+    
+    socketService.on("force_logout", handleForceLogout);
+
     return () => {
       clearInterval(interval);
       socketService.off("new_message", handleNewMessage);
+      socketService.off("force_logout", handleForceLogout);
     };
   }, [user?._id, navigate]);
 

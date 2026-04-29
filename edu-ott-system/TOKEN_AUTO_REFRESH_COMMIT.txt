@@ -1,0 +1,34 @@
+Thêm auto refresh token khi hết hạn
+
+Vấn đề:
+- Mobile và Web hay bị "Invalid access token" error
+- Token hết hạn → phải login lại → gây khó chịu
+- Mất dữ liệu đang nhập khi bị logout
+
+Giải pháp:
+- Detect auth error (401/403 với token message)
+- Tự động gọi refresh token API
+- Retry request ban đầu với token mới
+- Prevent multiple simultaneous refresh
+- Chỉ logout khi refresh token cũng hết hạn
+
+Mobile (React Native):
+- Thêm refreshAccessToken() function
+- Sửa fetchAPI() để auto retry
+- Dùng flag + promise để prevent race condition
+
+Web (React + Axios):
+- Thêm refreshAccessToken() function
+- Sửa axios response interceptor
+- Auto retry failed requests với token mới
+
+Kết quả:
+- Không còn "Invalid access token" error thường xuyên
+- User không bị logout khi không dùng app một lúc
+- Token tự động refresh trong background
+- Trải nghiệm mượt mà, không bị gián đoạn
+- Chỉ logout khi refresh token thực sự hết hạn
+
+Files:
+- frontend/mobile/utils/api.ts
+- frontend/web/src/services/authService.js

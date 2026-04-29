@@ -1,0 +1,58 @@
+fix: correct owner/admin role detection and add admin message badges
+
+BREAKING CHANGES:
+- Remove createdBy from owner checks (owner can be transferred)
+- Only check ownerId to determine current group owner
+- Add React Icons (FaCrown, FaStar) for owner/admin badges
+- Implement admin message highlighting with FaCrown/FaStar icons
+
+FILES CHANGED:
+- frontend/web/src/pages/chat/ChatRightPanel.jsx
+  * Remove createdBy checks in 3 places (isOwner, getMemberRole, useEffect)
+  * Replace emoji icons (👑, ⭐) with React Icons (FaCrown, FaStar)
+  * Add FaCrown and FaStar to imports
+
+- frontend/web/src/pages/chat/ChatPage.jsx
+  * Remove createdBy check from isOwner logic
+  * Pass activeConversation prop to MessageBubble
+
+- frontend/web/src/pages/chat/MessageBubble.jsx
+  * Add FaCrown and FaStar to imports
+  * Add activeConversation prop
+  * Check if sender is owner/admin
+  * Show FaCrown icon for owner messages, FaStar for admin messages
+  * Icons only show when markAdminMessages setting is enabled
+
+FEATURES:
+✅ Owner badge shows FaCrown icon (not emoji)
+✅ Admin badge shows FaStar icon (not emoji)
+✅ Owner role correctly updates after transfer ownership
+✅ Old owner becomes admin (shows FaStar, not FaCrown)
+✅ Admin messages show FaCrown/FaStar icon when setting is enabled
+✅ Icons only show for owner/admin messages in groups
+✅ FaCrown (gold) for owner, FaStar (primary) for admin
+
+TESTING:
+1. Transfer ownership: "Trang" → "nguyen"
+2. Verify "Trang" shows FaStar "Phó nhóm" (not FaCrown)
+3. Verify "nguyen" shows FaCrown "Trưởng nhóm"
+4. Enable "Đánh dấu tin nhắn từ trưởng/phó nhóm"
+5. Send message from owner
+6. Verify FaCrown icon appears next to sender name
+7. Send message from admin
+8. Verify FaStar icon appears next to sender name
+9. Disable setting, verify icons disappear
+
+ROOT CAUSE:
+- Code was checking createdBy field to determine owner
+- When ownership transfers, ownerId changes but createdBy stays same
+- This caused old owner to still show as owner
+- Solution: Only check ownerId, ignore createdBy
+
+LOGIC:
+- ownerId = current group owner (can be transferred)
+- createdBy = original creator (never changes)
+- adminIds = list of admins (old owner added here after transfer)
+- markAdminMessages = setting to show FaCrown/FaStar icons for admin messages
+- FaCrown (gold #f59e0b) = owner messages
+- FaStar (primary color) = admin messages
