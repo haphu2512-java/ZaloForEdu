@@ -604,10 +604,25 @@ export default function ChatScreen() {
       // Thay thế tin nhắn tạm bằng tin nhắn thật từ server
       setMessages((prev) => prev.map((m) => getMessageId(m) === tempId ? newMsg : m));
       if (newMsg.mediaIds?.length) harvestMediaFromMessages([newMsg]);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to send message:', error);
       setMessages((prev) => prev.filter((m) => getMessageId(m) !== tempId));
-      Alert.alert('Lỗi', 'Không thể gửi tin nhắn');
+      
+      // Hiển thị message thân thiện dựa trên error code
+      let errorTitle = 'Lỗi';
+      let errorMessage = 'Không thể gửi tin nhắn';
+      
+      if (error.errorCode === 'ONLY_ADMIN_CAN_SEND' || error.message?.includes('Only admin/owner can send messages')) {
+        errorTitle = 'Không có quyền gửi tin nhắn';
+        errorMessage = 'Chỉ trưởng nhóm và phó nhóm mới có thể gửi tin nhắn trong nhóm này.';
+      } else if (error.errorCode === 'BLOCKED_BY_USER') {
+        errorTitle = 'Không thể gửi tin nhắn';
+        errorMessage = 'Bạn đã bị người này chặn.';
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
+      Alert.alert(errorTitle, errorMessage);
       setInputText(text);
     } finally {
       setIsSending(false);
