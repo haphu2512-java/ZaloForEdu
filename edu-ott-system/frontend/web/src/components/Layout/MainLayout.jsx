@@ -380,6 +380,48 @@ function SettingsModal({ onClose }) {
                   <p className="sm-desc">{t("supportDesc")}</p>
                   <button className="sm-action-btn">{t("sendFeedback")}</button>
                 </div>
+                
+                <div className="sm-section">
+                  <h3>Về hệ thống</h3>
+                  <div className="sm-row">
+                    <span>Tên ứng dụng</span>
+                    <span style={{ fontWeight: 600, color: 'var(--primary-color)' }}>Zalo Edu Web</span>
+                  </div>
+                  <div className="sm-row">
+                    <span>Phiên bản</span>
+                    <span style={{ fontWeight: 600 }}>1.0.0</span>
+                  </div>
+                  <div className="sm-row">
+                    <span>Năm phát hành</span>
+                    <span style={{ fontWeight: 600 }}>2026</span>
+                  </div>
+                </div>
+
+                <div className="sm-section">
+                  <h3>Quản lý phiên đăng nhập</h3>
+                  <p className="sm-desc">Đăng xuất khỏi tất cả thiết bị đang đăng nhập</p>
+                  <button 
+                    className="sm-action-btn danger"
+                    onClick={async () => {
+                      if (!window.confirm('Bạn có chắc chắn muốn đăng xuất trên tất cả thiết bị?')) return;
+                      try {
+                        const { authService } = await import('../../services/authService');
+                        await authService.logoutAll();
+                        alert('Đã đăng xuất trên tất cả thiết bị thành công!');
+                        localStorage.removeItem('token');
+                        localStorage.removeItem('refreshToken');
+                        sessionStorage.clear();
+                        window.dispatchEvent(new Event('user-logout'));
+                        window.location.href = '/login';
+                      } catch (error) {
+                        console.error('Lỗi đăng xuất tất cả thiết bị:', error);
+                        alert(error.response?.data?.message || 'Đăng xuất thất bại!');
+                      }
+                    }}
+                  >
+                    Đăng xuất tất cả thiết bị
+                  </button>
+                </div>
               </div>
             )}
           </div>
