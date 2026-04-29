@@ -295,6 +295,47 @@ export default function ChatScreen() {
     loadInitialMessages();
   }, [loadInitialMessages]);
 
+  // ==================== SOCKET LISTENER FOR GROUP UPDATES ====================
+  useEffect(() => {
+    const { getSocket } = require('../../utils/socketService');
+    const socket = getSocket();
+    
+    if (!socket) return;
+
+    const handleGroupUpdated = async (payload: any) => {
+      if (!payload) return;
+      const { conversationId: updatedConvId, ownerId, adminIds, action } = payload;
+      
+      console.log('[Socket] group_updated:', payload);
+      
+      // Only update if it's the current conversation
+      if (String(updatedConvId) === String(conversationId)) {
+        // Reload conversation to get updated owner/admin info
+        try {
+          const convRes = await getConversations(null, 100);
+          const updatedConv = convRes.items.find((c: any) => String(c._id || c.id) === String(conversationId));
+          
+          if (updatedConv) {
+            console.log('[Socket] Updated conversation:', {
+              ownerId: updatedConv.ownerId,
+              adminIds: updatedConv.adminIds,
+              action,
+            });
+            setConversation(updatedConv);
+          }
+        } catch (error) {
+          console.error('[Socket] Failed to reload conversation:', error);
+        }
+      }
+    };
+
+    socket.on('group_updated', handleGroupUpdated);
+
+    return () => {
+      socket.off('group_updated', handleGroupUpdated);
+    };
+  }, [conversationId]);
+
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
 
   const filteredMembers = useMemo(() => {
