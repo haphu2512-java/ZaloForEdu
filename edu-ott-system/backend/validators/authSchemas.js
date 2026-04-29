@@ -22,6 +22,7 @@ const loginSchema = z
     username: z.string().trim().min(3).max(50).optional(),
     phone: phoneSchema.optional(),
     password: z.string().min(6).max(100),
+    device: z.enum(['web', 'mobile']).optional(), // Allow device parameter for session management
   })
   .refine((input) => input.email || input.username || input.phone, {
     message: 'Either email, username, or phone is required',
@@ -29,6 +30,7 @@ const loginSchema = z
 
 const refreshSchema = z.object({
   refreshToken: z.string().min(20),
+  device: z.enum(['web', 'mobile']).optional(), // Allow device parameter (though not used in rotation)
 });
 
 const forgotPasswordSchema = z

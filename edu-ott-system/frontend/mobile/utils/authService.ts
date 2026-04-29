@@ -208,6 +208,8 @@ export async function logout(): Promise<void> {
     console.warn('Logout API failed, continuing to clear local state', e);
   } finally {
     await removeToken();
+    // Clear theme cache on logout
+    await AsyncStorage.removeItem('userThemeMode');
   }
 }
 

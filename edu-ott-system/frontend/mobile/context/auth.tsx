@@ -54,6 +54,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  // Listen for real-time settings changes from other devices
+  useEffect(() => {
+    if (!user) return;
+
+    const { getSocket } = require('../utils/socketService');
+    const socket = getSocket();
+    
+    if (!socket) return;
+
+    const handleSettingsChanged = async (data: { theme?: string; notifications?: any }) => {
+      console.log('[Auth] Real-time settings update:', data);
+      
+      // Reload settings to sync with server
+      try {
+        await getMySettings();
+      } catch (error) {
+        console.error('[Auth] Failed to reload settings:', error);
+      }
+    };
+
+    socket.on('settings_changed', handleSettingsChanged);
+
+    return () => {
+      socket.off('settings_changed', handleSettingsChanged);
+    };
+  }, [user]);
+
   // Khá»Ÿi cháº¡y App: Load cached user & try refresh token
   useEffect(() => {
     const loadUser = async () => {

@@ -28,6 +28,7 @@ import { useLanguage } from "../../contexts/LanguageContext";
 import { useNotificationStore } from "../../store/notificationStore";
 import { userService } from "../../services/userService";
 import NotificationsPanel from "../../pages/notifications/NotificationsPanel";
+import NotificationSettings from "../NotificationSettings";
 import { socketService } from "../../services/socketService"; // Thêm import socketService
 import IncomingCallModal from '../../pages/chat/Modals/IncomingCallModal';
 import { toast, Toaster } from "react-hot-toast"; // Import toast for push notifications
@@ -59,7 +60,6 @@ function SettingsModal({ onClose }) {
   const { language, changeLanguage, t } = useLanguage();
   const { user } = useAuthStore();
   const [activeTab, setActiveTab] = useState("general");
-  const [notifications, setNotifications] = useState(true);
 
   // messagePrivacy state — load từ localStorage trước, sync backend sau
   const [messagePrivacy, setMessagePrivacyState] = useState(
@@ -177,20 +177,9 @@ function SettingsModal({ onClose }) {
                   )}
                 </div>
 
-                {/* Notifications */}
+                {/* Notifications - Now using NotificationSettings component */}
                 <div className="sm-section">
-                  <h3>{t("notifications")}</h3>
-                  <div className="sm-row">
-                    <span>{t("enableNotifs")}</span>
-                    <label className="toggle-switch">
-                      <input
-                        type="checkbox"
-                        checked={notifications}
-                        onChange={() => setNotifications(!notifications)}
-                      />
-                      <span className="toggle-slider" />
-                    </label>
-                  </div>
+                  <NotificationSettings />
                 </div>
 
                 {/* Language (shortcut) */}

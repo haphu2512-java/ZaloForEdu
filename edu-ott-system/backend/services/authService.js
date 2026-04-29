@@ -30,13 +30,17 @@ const refreshDurationMs = () => {
 
 /**
  * Issue an access+refresh token pair for a user on a specific device.
- * Bumps the device-specific tokenVersion first, invalidating any existing
- * tokens on that device type (Zalo-style forced logout of previous session).
+ * 
+ * Session Management Logic:
+ * - Allows 1 active web session + 1 active mobile session simultaneously
+ * - When logging in on same device type, bumps that device's version → force-logout previous session
+ * - Example: User has web + mobile active → login on new web → old web logs out, mobile stays active
  */
 const issueTokenPair = async (user, device = 'web') => {
   const safeDevice = VALID_DEVICES.includes(device) ? device : 'web';
 
-  // Bump device version to force-logout the old session on this device type
+  // Bump ONLY the specific device version to force-logout previous session on THAT device type
+  // This allows 1 web + 1 mobile to coexist, but prevents multiple sessions on same device type
   const versionField = safeDevice === 'web' ? 'webTokenVersion' : 'mobileTokenVersion';
   await User.findByIdAndUpdate(user._id, { $inc: { [versionField]: 1 } });
 
