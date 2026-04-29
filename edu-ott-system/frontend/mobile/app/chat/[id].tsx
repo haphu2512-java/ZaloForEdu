@@ -673,7 +673,7 @@ export default function ChatScreen() {
       
       console.log('[Voice] Upload response:', {
         mediaId: uploaded._id || uploaded.id,
-        duration: uploaded.duration,
+        duration: (uploaded as any).duration || duration, // Fallback to original duration
       });
       
       const mediaId = uploaded._id || uploaded.id;
@@ -682,7 +682,13 @@ export default function ChatScreen() {
         throw new Error('Upload voice không trả về mediaId');
       }
 
-      setMediaById((prev) => ({ ...prev, [mediaId]: uploaded }));
+      // Ensure duration is set in uploaded object
+      const uploadedWithDuration = {
+        ...uploaded,
+        duration: (uploaded as any).duration || duration, // Use backend duration or fallback
+      } as any;
+
+      setMediaById((prev) => ({ ...prev, [mediaId]: uploadedWithDuration }));
       const newMsg = await sendMessage({ conversationId, mediaIds: [mediaId], content: '' });
       setMessages((prev) =>
         prev.some((m) => getMessageId(m) === getMessageId(newMsg)) ? prev : [newMsg, ...prev]

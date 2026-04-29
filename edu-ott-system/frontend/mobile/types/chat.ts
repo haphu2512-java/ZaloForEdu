@@ -201,6 +201,7 @@ export interface MediaItem {
   url: string;
   providerPublicId?: string | null;
   providerResourceType?: string | null;
+  duration?: number; // Duration in seconds for audio/video files
   createdAt: string;
   updatedAt: string;
 }
