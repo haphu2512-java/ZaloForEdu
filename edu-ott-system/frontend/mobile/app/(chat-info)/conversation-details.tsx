@@ -244,18 +244,61 @@ export default function ConversationDetailsScreen() {
     if (!conversation) return;
 
     if (isMemAdmin) {
-      Alert.alert('Xác nhận', `Hạ quyền Phó nhóm của ${member.username}?`, [
-        { text: 'Hủy', style: 'cancel' },
-        { text: 'Hạ quyền', onPress: () => handleAction(() => demoteGroupAdmin(conversation._id, uid), 'Đã hạ quyền') }
-      ]);
+      // Phó nhóm: Có 2 options - Hạ quyền hoặc Chuyển quyền Trưởng nhóm
+      Alert.alert(
+        'Quản lý Phó nhóm',
+        `Chọn hành động cho ${member.username}`,
+        [
+          { text: 'Hủy', style: 'cancel' },
+          { text: 'Hạ quyền thành Thành viên', onPress: () => handleAction(() => demoteGroupAdmin(conversation._id, uid), 'Đã hạ quyền') },
+          { 
+            text: 'Chuyển quyền Trưởng nhóm', 
+            style: 'destructive',
+            onPress: () => {
+              // Double confirmation for transfer ownership
+              Alert.alert(
+                '⚠️ Xác nhận chuyển quyền',
+                `Bạn có chắc chắn muốn chuyển quyền Trưởng nhóm cho ${member.username}?\n\n❌ Hành động này KHÔNG THỂ HOÀN TÁC!\n❌ Bạn sẽ trở thành Phó nhóm sau khi chuyển quyền.`,
+                [
+                  { text: 'Hủy', style: 'cancel' },
+                  { 
+                    text: 'Xác nhận chuyển quyền', 
+                    style: 'destructive',
+                    onPress: () => handleAction(() => transferGroupOwner(conversation._id, { newOwnerId: uid }), 'Đã chuyển quyền Trưởng nhóm') 
+                  }
+                ]
+              );
+            }
+          },
+        ]
+      );
     } else {
+      // Thành viên: Có 2 options - Phó nhóm hoặc Trưởng nhóm
       Alert.alert(
         'Nâng quyền',
         `Chọn quyền muốn cấp cho ${member.username}`,
         [
           { text: 'Hủy', style: 'cancel' },
           { text: 'Phó nhóm', onPress: () => handleAction(() => promoteGroupAdmin(conversation._id, uid), 'Đã cấp quyền Phó nhóm') },
-          { text: 'Trưởng nhóm', onPress: () => handleAction(() => transferGroupOwner(conversation._id, { newOwnerId: uid }), 'Đã chuyển quyền Trưởng nhóm') },
+          { 
+            text: 'Trưởng nhóm', 
+            style: 'destructive',
+            onPress: () => {
+              // Double confirmation for transfer ownership
+              Alert.alert(
+                '⚠️ Xác nhận chuyển quyền',
+                `Bạn có chắc chắn muốn chuyển quyền Trưởng nhóm cho ${member.username}?\n\n❌ Hành động này KHÔNG THỂ HOÀN TÁC!\n❌ Bạn sẽ trở thành Phó nhóm sau khi chuyển quyền.`,
+                [
+                  { text: 'Hủy', style: 'cancel' },
+                  { 
+                    text: 'Xác nhận chuyển quyền', 
+                    style: 'destructive',
+                    onPress: () => handleAction(() => transferGroupOwner(conversation._id, { newOwnerId: uid }), 'Đã chuyển quyền Trưởng nhóm') 
+                  }
+                ]
+              );
+            }
+          },
         ]
       );
     }

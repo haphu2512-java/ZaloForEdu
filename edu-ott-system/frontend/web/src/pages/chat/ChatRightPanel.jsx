@@ -302,7 +302,7 @@ export const ChatRightPanel = ({
                             </div>
                           )}
                           {showMemberActionId === keyStr && (
-                            <div style={{ position: 'absolute', right: 0, top: '100%', background: 'var(--z-bg-sidebar)', border: '1px solid var(--z-border)', borderRadius: 6, zIndex: 10, boxShadow: '0 4px 12px rgba(0,0,0,0.15)', padding: '4px 0', width: 160 }}>
+                            <div style={{ position: 'absolute', right: 0, top: '100%', background: 'var(--z-bg-sidebar)', border: '1px solid var(--z-border)', borderRadius: 6, zIndex: 10, boxShadow: '0 4px 12px rgba(0,0,0,0.15)', padding: '4px 0', width: 180 }}>
                               <div className="m-action-item" onClick={async () => {
                                 const newNickname = prompt('Nhập biệt danh mới cho ' + displayName, activeConversation.nicknames?.[keyStr] || '');
                                 if (newNickname !== null) {
@@ -316,12 +316,31 @@ export const ChatRightPanel = ({
                                 }
                                 setShowMemberActionId(null);
                               }}>🖊️ Đổi biệt danh</div>
+                              
                               {isOwner && role === 'member' && (
-                                <div className="m-action-item" onClick={() => { handleGroupAction('promote', keyStr); setShowMemberActionId(null); }}>⭐ Lên Phó nhóm</div>
+                                <>
+                                  <div className="m-action-item" onClick={() => { handleGroupAction('promote', keyStr); setShowMemberActionId(null); }}>⭐ Lên Phó nhóm</div>
+                                  <div className="m-action-item" style={{ color: '#f59e0b', fontWeight: 600 }} onClick={() => {
+                                    if (window.confirm(`⚠️ XÁC NHẬN CHUYỂN QUYỀN TRƯỞNG NHÓM\n\nBạn có chắc chắn muốn chuyển quyền Trưởng nhóm cho ${displayName}?\n\n❌ Hành động này KHÔNG THỂ HOÀN TÁC!\n❌ Bạn sẽ trở thành Phó nhóm sau khi chuyển quyền.\n❌ Chỉ Trưởng nhóm mới có thể chuyển quyền lại.`)) {
+                                      handleGroupAction('transfer', keyStr);
+                                    }
+                                    setShowMemberActionId(null);
+                                  }}>👑 Chuyển quyền Trưởng nhóm</div>
+                                </>
                               )}
+                              
                               {isOwner && role === 'admin' && (
-                                <div className="m-action-item" onClick={() => { handleGroupAction('demote', keyStr); setShowMemberActionId(null); }}>Gỡ Phó nhóm</div>
+                                <>
+                                  <div className="m-action-item" onClick={() => { handleGroupAction('demote', keyStr); setShowMemberActionId(null); }}>📝 Hạ quyền thành Thành viên</div>
+                                  <div className="m-action-item" style={{ color: '#f59e0b', fontWeight: 600 }} onClick={() => {
+                                    if (window.confirm(`⚠️ XÁC NHẬN CHUYỂN QUYỀN TRƯỞNG NHÓM\n\nBạn có chắc chắn muốn chuyển quyền Trưởng nhóm cho ${displayName}?\n\n❌ Hành động này KHÔNG THỂ HOÀN TÁC!\n❌ Bạn sẽ trở thành Phó nhóm sau khi chuyển quyền.\n❌ Chỉ Trưởng nhóm mới có thể chuyển quyền lại.`)) {
+                                      handleGroupAction('transfer', keyStr);
+                                    }
+                                    setShowMemberActionId(null);
+                                  }}>👑 Chuyển quyền Trưởng nhóm</div>
+                                </>
                               )}
+                              
                               <div className="m-action-item danger" onClick={() => { if (window.confirm(`Mời ${displayName} ra khỏi nhóm?`)) handleGroupAction('remove', keyStr); setShowMemberActionId(null); }}>🚫 Mời ra khỏi nhóm</div>
                             </div>
                           )}
