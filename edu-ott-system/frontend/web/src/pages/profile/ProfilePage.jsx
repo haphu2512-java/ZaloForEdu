@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Camera, Save, Mail, Phone, Sparkles, User, Image as ImageIcon, Lock, Bell, Shield, Info, Edit3, Eye, EyeOff, Users, Circle, Trash2, AlertTriangle, X, CheckCircle, ShieldAlert } from 'lucide-react';
+import { Camera, Save, Mail, Phone, Sparkles, User, Image as ImageIcon, Lock, Bell, Shield, Info, Edit3, Eye, EyeOff, Users, Circle, Trash2, AlertTriangle, X, CheckCircle, ShieldAlert, LogOut } from 'lucide-react';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { userService } from '../../services/userService'; 
 import { authService } from '../../services/authService'; 
+import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api/v1';
@@ -28,6 +29,7 @@ const getStrength = (pw) => {
 
 export default function ProfilePage() {
   const { t } = useLanguage();
+  const navigate = useNavigate();
   
   const [profile, setProfile] = useState({
     id: '',
@@ -313,6 +315,37 @@ export default function ProfilePage() {
     }
   };
 
+  const handleLogout = () => {
+    if (window.confirm('Bạn có chắc chắn muốn đăng xuất?')) {
+      localStorage.removeItem('token');
+      localStorage.removeItem('refreshToken');
+      sessionStorage.clear();
+      // Dispatch logout event for ThemeContext
+      window.dispatchEvent(new Event('user-logout'));
+      navigate('/login');
+    }
+  };
+
+  const handleLogoutAll = async () => {
+    if (!window.confirm('Bạn có chắc chắn muốn đăng xuất trên tất cả thiết bị?')) {
+      return;
+    }
+    
+    try {
+      await authService.logoutAll();
+      alert('Đã đăng xuất trên tất cả thiết bị thành công!');
+      localStorage.removeItem('token');
+      localStorage.removeItem('refreshToken');
+      sessionStorage.clear();
+      // Dispatch logout event for ThemeContext
+      window.dispatchEvent(new Event('user-logout'));
+      navigate('/login');
+    } catch (error) {
+      console.error('Lỗi đăng xuất tất cả thiết bị:', error);
+      alert(error.response?.data?.message || 'Đăng xuất thất bại!');
+    }
+  };
+
   const togglePasswordVisibility = (field) => setShowPassword(prev => ({ ...prev, [field]: !prev[field] }));
 
   // Khởi tạo các giá trị cho thanh đo độ mạnh mật khẩu
@@ -574,11 +607,40 @@ export default function ProfilePage() {
             <div style={styles.comingSoon}>
               <Bell size={64} opacity={0.2} />
               <h2>Thông báo</h2>
-              <p>Chưa có thông báo nào mới.</p>
+              <p>Xem thông báo ở góc trên bên phải (biểu tượng chuông).</p>
             </div>
           )}
 
-          {(activeTab === 'privacy' || activeTab === 'about') && (
+          {activeTab === 'about' && (
+            <div>
+              <h3 style={styles.sectionTitle}><Info size={22} color="#4F46E5" /> Về hệ thống</h3>
+              <div style={styles.viewGrid}>
+                <div style={styles.miniCard}>
+                  <div style={styles.iconWrap}><Info size={24} /></div>
+                  <div>
+                    <p style={styles.viewLabel}>Tên ứng dụng</p>
+                    <p style={styles.viewValue}>Zalo Edu Web</p>
+                  </div>
+                </div>
+                <div style={styles.miniCard}>
+                  <div style={styles.iconWrap}><Info size={24} /></div>
+                  <div>
+                    <p style={styles.viewLabel}>Phiên bản</p>
+                    <p style={styles.viewValue}>1.0.0</p>
+                  </div>
+                </div>
+                <div style={styles.miniCard}>
+                  <div style={styles.iconWrap}><Info size={24} /></div>
+                  <div>
+                    <p style={styles.viewLabel}>Năm phát hành</p>
+                    <p style={styles.viewValue}>2026</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'privacy' && (
             <div style={styles.comingSoon}>
               <h2>Đang xây dựng...</h2>
               <p>Tính năng này sẽ sớm ra mắt.</p>
@@ -627,6 +689,14 @@ export default function ProfilePage() {
             </div>
             
             <div style={{ marginTop: '20px', paddingTop: '20px', borderTop: '1px solid var(--border-color)' }}>
+              <div style={styles.menuItem(false)} onClick={handleLogout}>
+                <LogOut size={22} style={styles.menuIcon(false)} />
+                <div style={{fontSize: '15px'}}>Đăng xuất</div>
+              </div>
+              <div style={styles.menuItem(false)} onClick={handleLogoutAll}>
+                <LogOut size={22} style={styles.menuIcon(false)} />
+                <div style={{fontSize: '15px'}}>Đăng xuất tất cả thiết bị</div>
+              </div>
               <div style={styles.menuItem(false, true)} onClick={() => setShowDeleteModal(true)}>
                 <Trash2 size={22} style={styles.menuIcon(false, true)} />
                 <div style={{fontSize: '15px'}}>Xóa tài khoản</div>
