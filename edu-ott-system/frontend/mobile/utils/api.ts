@@ -1,6 +1,7 @@
 import { Platform } from 'react-native';
 import Constants from 'expo-constants';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { router } from 'expo-router';
 
 // Get dynamically the IP address of the Expo bundler, or fallback to the local IP/Emulator
 const hostUri = Constants.expoConfig?.hostUri;
@@ -156,7 +157,26 @@ export const fetchAPI = async (endpoint: string, options: RequestInit = {}, retr
           return fetchAPI(endpoint, options, retryCount + 1);
         } else {
           // Refresh failed, user needs to login again
-          console.log('[Token] Refresh failed, user needs to login');
+          console.log('[Token] Refresh failed, clearing session and redirecting to login');
+          
+          // Clear all auth data
+          await AsyncStorage.multiRemove(['authToken', 'refreshToken', 'user']);
+          
+          // Disconnect socket
+          try {
+            const { disconnectSocket } = await import('./socketService');
+            disconnectSocket();
+          } catch (socketError) {
+            console.error('[Token] Socket disconnect error:', socketError);
+          }
+          
+          // Redirect to login
+          try {
+            router.replace('/(auth)/login' as any);
+          } catch (navError) {
+            console.error('[Token] Navigation error:', navError);
+          }
+          
           const err: any = new Error('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
           err.errorCode = 'TOKEN_EXPIRED';
           err.statusCode = 401;
