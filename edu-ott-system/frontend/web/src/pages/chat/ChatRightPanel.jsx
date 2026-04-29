@@ -9,6 +9,7 @@ import { toAbsoluteUrl } from './MessageBubble';
 import PinnedMessagesPanel from './Modals/PinnedMessagesPanel';
 import ReportUserModal from './Modals/ReportUserModal';
 import ClassifyConversationModal from './Modals/ClassifyConversationModal';
+import ConfirmTransferModal from './Modals/ConfirmTransferModal';
 
 // Tooltip component
 const Tooltip = ({ text, children }) => {
@@ -107,6 +108,8 @@ export const ChatRightPanel = ({
   const [showReportModal, setShowReportModal] = useState(false);
   const [showClassifyModal, setShowClassifyModal] = useState(false);
   const [convCategory, setConvCategory] = useState('primary');
+  const [showConfirmTransfer, setShowConfirmTransfer] = useState(false);
+  const [transferTarget, setTransferTarget] = useState(null);
 
   // Sync category từ preference khi đổi conversation
   useEffect(() => {
@@ -321,9 +324,8 @@ export const ChatRightPanel = ({
                                 <>
                                   <div className="m-action-item" onClick={() => { handleGroupAction('promote', keyStr); setShowMemberActionId(null); }}>⭐ Lên Phó nhóm</div>
                                   <div className="m-action-item" style={{ color: '#f59e0b', fontWeight: 600 }} onClick={() => {
-                                    if (window.confirm(`⚠️ XÁC NHẬN CHUYỂN QUYỀN TRƯỞNG NHÓM\n\nBạn có chắc chắn muốn chuyển quyền Trưởng nhóm cho ${displayName}?\n\n❌ Hành động này KHÔNG THỂ HOÀN TÁC!\n❌ Bạn sẽ trở thành Phó nhóm sau khi chuyển quyền.\n❌ Chỉ Trưởng nhóm mới có thể chuyển quyền lại.`)) {
-                                      handleGroupAction('transfer', keyStr);
-                                    }
+                                    setTransferTarget({ id: keyStr, name: displayName });
+                                    setShowConfirmTransfer(true);
                                     setShowMemberActionId(null);
                                   }}>👑 Chuyển quyền Trưởng nhóm</div>
                                 </>
@@ -333,9 +335,8 @@ export const ChatRightPanel = ({
                                 <>
                                   <div className="m-action-item" onClick={() => { handleGroupAction('demote', keyStr); setShowMemberActionId(null); }}>📝 Hạ quyền thành Thành viên</div>
                                   <div className="m-action-item" style={{ color: '#f59e0b', fontWeight: 600 }} onClick={() => {
-                                    if (window.confirm(`⚠️ XÁC NHẬN CHUYỂN QUYỀN TRƯỞNG NHÓM\n\nBạn có chắc chắn muốn chuyển quyền Trưởng nhóm cho ${displayName}?\n\n❌ Hành động này KHÔNG THỂ HOÀN TÁC!\n❌ Bạn sẽ trở thành Phó nhóm sau khi chuyển quyền.\n❌ Chỉ Trưởng nhóm mới có thể chuyển quyền lại.`)) {
-                                      handleGroupAction('transfer', keyStr);
-                                    }
+                                    setTransferTarget({ id: keyStr, name: displayName });
+                                    setShowConfirmTransfer(true);
                                     setShowMemberActionId(null);
                                   }}>👑 Chuyển quyền Trưởng nhóm</div>
                                 </>
@@ -1126,6 +1127,23 @@ export const ChatRightPanel = ({
           </div>
         </div>
       )}
+
+      {/* MODAL XÁC NHẬN CHUYỂN QUYỀN */}
+      <ConfirmTransferModal
+        isOpen={showConfirmTransfer}
+        onClose={() => {
+          setShowConfirmTransfer(false);
+          setTransferTarget(null);
+        }}
+        onConfirm={() => {
+          if (transferTarget) {
+            handleGroupAction('transfer', transferTarget.id);
+          }
+          setShowConfirmTransfer(false);
+          setTransferTarget(null);
+        }}
+        memberName={transferTarget?.name || ''}
+      />
     </>
   );
 };
