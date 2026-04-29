@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { FaBell, FaBellSlash, FaThumbtack, FaUserPlus, FaUserSecret, FaArrowLeft, FaTrashAlt, FaSignOutAlt, FaLink, FaEllipsisH, FaChevronDown, FaChevronUp, FaCalendarAlt, FaUserTimes, FaKey, FaSync, FaPen, FaCheck, FaTimes, FaFlag, FaTag, FaPoll, FaCrown, FaStar } from 'react-icons/fa';
+import { FaBell, FaBellSlash, FaThumbtack, FaUserPlus, FaUserSecret, FaArrowLeft, FaTrashAlt, FaSignOutAlt, FaLink, FaEllipsisH, FaChevronDown, FaChevronUp, FaCalendarAlt, FaUserTimes, FaKey, FaSync, FaPen, FaCheck, FaTimes, FaFlag, FaTag, FaPoll, FaCrown, FaStar, FaEdit, FaLevelUpAlt, FaLevelDownAlt, FaBan } from 'react-icons/fa';
 import toast from 'react-hot-toast';
 import { conversationService } from '../../services/conversationService';
 import { pollService } from '../../services/pollService';
@@ -305,7 +305,7 @@ export const ChatRightPanel = ({
                             </div>
                           )}
                           {showMemberActionId === keyStr && (
-                            <div style={{ position: 'absolute', right: 0, top: '100%', background: 'var(--z-bg-sidebar)', border: '1px solid var(--z-border)', borderRadius: 6, zIndex: 10, boxShadow: '0 4px 12px rgba(0,0,0,0.15)', padding: '4px 0', width: 180 }}>
+                            <div style={{ position: 'absolute', right: 0, top: '100%', background: 'var(--z-bg-sidebar)', border: '1px solid var(--z-border)', borderRadius: 6, zIndex: 10, boxShadow: '0 4px 12px rgba(0,0,0,0.15)', padding: '4px 0', width: 200 }}>
                               <div className="m-action-item" onClick={async () => {
                                 const newNickname = prompt('Nhập biệt danh mới cho ' + displayName, activeConversation.nicknames?.[keyStr] || '');
                                 if (newNickname !== null) {
@@ -318,31 +318,49 @@ export const ChatRightPanel = ({
                                   }
                                 }
                                 setShowMemberActionId(null);
-                              }}>🖊️ Đổi biệt danh</div>
+                              }}>
+                                <FaEdit size={12} style={{ marginRight: 8 }} />
+                                Đổi biệt danh
+                              </div>
                               
                               {isOwner && role === 'member' && (
                                 <>
-                                  <div className="m-action-item" onClick={() => { handleGroupAction('promote', keyStr); setShowMemberActionId(null); }}>⭐ Lên Phó nhóm</div>
+                                  <div className="m-action-item" onClick={() => { handleGroupAction('promote', keyStr); setShowMemberActionId(null); }}>
+                                    <FaStar size={12} style={{ marginRight: 8, color: 'var(--z-primary)' }} />
+                                    Lên Phó nhóm
+                                  </div>
                                   <div className="m-action-item" style={{ color: '#f59e0b', fontWeight: 600 }} onClick={() => {
                                     setTransferTarget({ id: keyStr, name: displayName });
                                     setShowConfirmTransfer(true);
                                     setShowMemberActionId(null);
-                                  }}>👑 Chuyển quyền Trưởng nhóm</div>
+                                  }}>
+                                    <FaCrown size={12} style={{ marginRight: 8 }} />
+                                    Chuyển quyền Trưởng nhóm
+                                  </div>
                                 </>
                               )}
                               
                               {isOwner && role === 'admin' && (
                                 <>
-                                  <div className="m-action-item" onClick={() => { handleGroupAction('demote', keyStr); setShowMemberActionId(null); }}>📝 Hạ quyền thành Thành viên</div>
+                                  <div className="m-action-item" onClick={() => { handleGroupAction('demote', keyStr); setShowMemberActionId(null); }}>
+                                    <FaLevelDownAlt size={12} style={{ marginRight: 8 }} />
+                                    Hạ quyền thành Thành viên
+                                  </div>
                                   <div className="m-action-item" style={{ color: '#f59e0b', fontWeight: 600 }} onClick={() => {
                                     setTransferTarget({ id: keyStr, name: displayName });
                                     setShowConfirmTransfer(true);
                                     setShowMemberActionId(null);
-                                  }}>👑 Chuyển quyền Trưởng nhóm</div>
+                                  }}>
+                                    <FaCrown size={12} style={{ marginRight: 8 }} />
+                                    Chuyển quyền Trưởng nhóm
+                                  </div>
                                 </>
                               )}
                               
-                              <div className="m-action-item danger" onClick={() => { if (window.confirm(`Mời ${displayName} ra khỏi nhóm?`)) handleGroupAction('remove', keyStr); setShowMemberActionId(null); }}>🚫 Mời ra khỏi nhóm</div>
+                              <div className="m-action-item danger" onClick={() => { if (window.confirm(`Mời ${displayName} ra khỏi nhóm?`)) handleGroupAction('remove', keyStr); setShowMemberActionId(null); }}>
+                                <FaBan size={12} style={{ marginRight: 8 }} />
+                                Mời ra khỏi nhóm
+                              </div>
                             </div>
                           )}
                         </div>
