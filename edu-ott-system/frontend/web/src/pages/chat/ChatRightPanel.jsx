@@ -10,6 +10,7 @@ import PinnedMessagesPanel from './Modals/PinnedMessagesPanel';
 import ReportUserModal from './Modals/ReportUserModal';
 import ClassifyConversationModal from './Modals/ClassifyConversationModal';
 import ConfirmTransferModal from './Modals/ConfirmTransferModal';
+import './MemberMenu.css';
 
 // Tooltip component
 const Tooltip = ({ text, children }) => {
@@ -305,9 +306,9 @@ export const ChatRightPanel = ({
                             </div>
                           )}
                           {showMemberActionId === keyStr && (
-                            <div style={{ position: 'absolute', right: 0, top: '100%', background: 'var(--z-bg-sidebar)', border: '1px solid var(--z-border)', borderRadius: 8, zIndex: 10, boxShadow: '0 4px 12px rgba(0,0,0,0.15)', padding: '6px 0', minWidth: 220 }}>
+                            <div className="member-action-menu">
                               {/* Đổi biệt danh */}
-                              <div className="m-action-item" onClick={async () => {
+                              <div className="member-action-item" onClick={async () => {
                                 const newNickname = prompt('Nhập biệt danh mới cho ' + displayName, activeConversation.nicknames?.[keyStr] || '');
                                 if (newNickname !== null) {
                                   try {
@@ -320,26 +321,26 @@ export const ChatRightPanel = ({
                                 }
                                 setShowMemberActionId(null);
                               }}>
-                                <FaEdit size={13} style={{ marginRight: 10, flexShrink: 0 }} />
+                                <FaEdit />
                                 <span>Đổi biệt danh</span>
                               </div>
                               
                               {/* Divider */}
-                              {isOwner && <div style={{ height: 1, background: 'var(--z-border)', margin: '6px 0' }} />}
+                              {isOwner && <div className="member-menu-divider" />}
                               
                               {/* Nâng quyền / Hạ quyền */}
                               {isOwner && role === 'member' && (
                                 <>
-                                  <div className="m-action-item" onClick={() => { handleGroupAction('promote', keyStr); setShowMemberActionId(null); }}>
-                                    <FaStar size={13} style={{ marginRight: 10, color: 'var(--z-primary)', flexShrink: 0 }} />
+                                  <div className="member-action-item primary" onClick={() => { handleGroupAction('promote', keyStr); setShowMemberActionId(null); }}>
+                                    <FaStar />
                                     <span>Lên Phó nhóm</span>
                                   </div>
-                                  <div className="m-action-item" style={{ color: '#f59e0b', fontWeight: 600 }} onClick={() => {
+                                  <div className="member-action-item warning" onClick={() => {
                                     setTransferTarget({ id: keyStr, name: displayName });
                                     setShowConfirmTransfer(true);
                                     setShowMemberActionId(null);
                                   }}>
-                                    <FaCrown size={13} style={{ marginRight: 10, flexShrink: 0 }} />
+                                    <FaCrown />
                                     <span>Chuyển quyền Trưởng nhóm</span>
                                   </div>
                                 </>
@@ -347,27 +348,27 @@ export const ChatRightPanel = ({
                               
                               {isOwner && role === 'admin' && (
                                 <>
-                                  <div className="m-action-item" onClick={() => { handleGroupAction('demote', keyStr); setShowMemberActionId(null); }}>
-                                    <FaLevelDownAlt size={13} style={{ marginRight: 10, flexShrink: 0 }} />
+                                  <div className="member-action-item" onClick={() => { handleGroupAction('demote', keyStr); setShowMemberActionId(null); }}>
+                                    <FaLevelDownAlt />
                                     <span>Hạ quyền</span>
                                   </div>
-                                  <div className="m-action-item" style={{ color: '#f59e0b', fontWeight: 600 }} onClick={() => {
+                                  <div className="member-action-item warning" onClick={() => {
                                     setTransferTarget({ id: keyStr, name: displayName });
                                     setShowConfirmTransfer(true);
                                     setShowMemberActionId(null);
                                   }}>
-                                    <FaCrown size={13} style={{ marginRight: 10, flexShrink: 0 }} />
+                                    <FaCrown />
                                     <span>Chuyển quyền Trưởng nhóm</span>
                                   </div>
                                 </>
                               )}
                               
                               {/* Divider */}
-                              {isOwner && <div style={{ height: 1, background: 'var(--z-border)', margin: '6px 0' }} />}
+                              {isOwner && <div className="member-menu-divider" />}
                               
                               {/* Mời ra khỏi nhóm */}
-                              <div className="m-action-item danger" onClick={() => { if (window.confirm(`Mời ${displayName} ra khỏi nhóm?`)) handleGroupAction('remove', keyStr); setShowMemberActionId(null); }}>
-                                <FaBan size={13} style={{ marginRight: 10, flexShrink: 0 }} />
+                              <div className="member-action-item danger" onClick={() => { if (window.confirm(`Mời ${displayName} ra khỏi nhóm?`)) handleGroupAction('remove', keyStr); setShowMemberActionId(null); }}>
+                                <FaBan />
                                 <span>Mời ra khỏi nhóm</span>
                               </div>
                             </div>
