@@ -207,7 +207,7 @@ export const AudioBubbleMobile: React.FC<AudioBubbleMobileProps> = ({ url, isMe,
       </View>
 
       <Text style={[styles.timeText, isMe ? styles.timeTextMe : styles.timeTextThem]}>
-        {formatTime(isPlaying || position > 0 ? position : duration || 0)}
+        {formatTime(isPlaying ? position : duration || 0)}
       </Text>
     </View>
   );
