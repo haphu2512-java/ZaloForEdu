@@ -249,6 +249,8 @@ export const MessageInput = ({
               }
 
               const file = new File([blob], `voice_${Date.now()}${extension}`, { type: blob.type });
+              // Pass duration as metadata
+              file.duration = duration;
               onUploadFiles([file]);
               setShowRecorder(false);
               if (onCancelReply) onCancelReply();

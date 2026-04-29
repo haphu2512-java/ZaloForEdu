@@ -286,7 +286,7 @@ export const MessageBubble = ({
                     })}
 
                     {audios.length > 0 && audios.map((att, i) => (
-                      <AudioBubble key={`audio-${i}`} url={att.url} />
+                      <AudioBubble key={`audio-${i}`} url={att.url} duration={att.duration} />
                     ))}
                   </div>
                 )}

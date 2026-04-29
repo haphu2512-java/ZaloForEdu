@@ -222,7 +222,7 @@ export default function MyDocumentScreen() {
   }, [messages.length]);
 
   // ── Gửi tin nhắn giọng nói ────────────────────────────────────────
-  const handleSendVoice = async (uri: string) => {
+  const handleSendVoice = async (uri: string, duration: number) => {
     if (!uri || !selfConv?._id || sending) return;
     setShowVoiceRecorder(false);
     setSending(true);
@@ -237,7 +237,7 @@ export default function MyDocumentScreen() {
                        ext === 'aac' ? 'audio/aac' : 
                        ext === 'webm' ? 'audio/webm' : 'audio/mp4';
 
-      const uploaded = await uploadMediaForm({ uri, fileName, mimeType });
+      const uploaded = await uploadMediaForm({ uri, fileName, mimeType, duration });
       const mediaId = uploaded?._id || uploaded?.id;
 
       if (!mediaId) throw new Error('Upload ghi âm không thành công');

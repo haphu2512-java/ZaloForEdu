@@ -232,8 +232,40 @@ export const VoiceRecorder = ({ onCancel, onSend }) => {
   };
 
   const stopRecording = () => {
-    cleanupAudio();
+    // Capture final recording time before clearing interval
+    const finalRecordingTime = recordingTime;
+    
+    if (timerIntervalRef.current) {
+      clearInterval(timerIntervalRef.current);
+      timerIntervalRef.current = null;
+    }
+    
+    // Stop media recorder
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+      mediaRecorderRef.current.stop();
+    }
+    
+    // Clean up audio context and streams
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+    }
+    if (sourceRef.current) {
+      sourceRef.current.disconnect();
+      if (sourceRef.current.mediaStream) {
+        sourceRef.current.mediaStream.getTracks().forEach(t => t.stop());
+      }
+    }
+    if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
+      audioContextRef.current.close().catch(console.error);
+    }
+    const tracks = mediaRecorderRef.current?.stream?.getTracks();
+    if (tracks) {
+      tracks.forEach(track => track.stop());
+    }
+    
     setIsRecording(false);
+    // Ensure recording time is frozen at final value
+    setRecordingTime(finalRecordingTime);
   };
 
   const togglePlayback = () => {
@@ -302,7 +334,12 @@ export const VoiceRecorder = ({ onCancel, onSend }) => {
                  <div key={i} className="vr-wave-bar" style={{height: `${h}%`}}></div>
                ))}
             </div>
-            <div className="vr-timer">{formatTime(isPlaying ? playbackTime : recordingTime)}</div>
+            <div className="vr-timer">
+              {isPlaying && playbackTime > 0 
+                ? `${formatTime(playbackTime)} / ${formatTime(recordingTime)}`
+                : formatTime(recordingTime)
+              }
+            </div>
           </div>
           
           <button className="vr-btn vr-send-btn" onClick={handleSend}>

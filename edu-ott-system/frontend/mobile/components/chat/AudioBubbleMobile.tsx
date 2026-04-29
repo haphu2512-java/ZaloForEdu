@@ -3,17 +3,21 @@ import { View, Text, TouchableOpacity, ActivityIndicator, StyleSheet, Alert } fr
 import { Ionicons } from '@expo/vector-icons';
 import { createAudioPlayer, setAudioModeAsync } from 'expo-audio';
 
+// Global audio manager to ensure only one audio plays at a time
+let currentlyPlayingPlayer: any = null;
+
 interface AudioBubbleMobileProps {
   url: string;
   isMe: boolean;
+  duration?: number; // Duration in seconds from backend
 }
 
-export const AudioBubbleMobile: React.FC<AudioBubbleMobileProps> = ({ url, isMe }) => {
+export const AudioBubbleMobile: React.FC<AudioBubbleMobileProps> = ({ url, isMe, duration: propDuration }) => {
   const [player, setPlayer] = useState<any | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [position, setPosition] = useState(0);
-  const [duration, setDuration] = useState(0);
+  const [duration, setDuration] = useState((propDuration || 0) * 1000); // Convert to milliseconds
 
   useEffect(() => {
     return () => {
@@ -33,14 +37,24 @@ export const AudioBubbleMobile: React.FC<AudioBubbleMobileProps> = ({ url, isMe 
     setIsPlaying(false);
     setIsLoading(false);
     setPosition(0);
-    setDuration(0);
-  }, [url]);
+    setDuration((propDuration || 0) * 1000); // Reset to prop duration
+  }, [url, propDuration]);
 
   const onPlaybackStatusUpdate = (status: any, activePlayer?: any) => {
     if (status?.isLoaded) {
-      setPosition(Math.floor((status.currentTime || 0) * 1000));
-      setDuration(Math.floor((status.duration || 0) * 1000));
+      const newPosition = Math.floor((status.currentTime || 0) * 1000);
+      const newDuration = Math.floor((status.duration || 0) * 1000);
+      
+      // Only update if changed to avoid unnecessary re-renders
+      if (newPosition !== position) {
+        setPosition(newPosition);
+      }
+      if (newDuration !== duration && newDuration > 0) {
+        setDuration(newDuration);
+      }
+      
       setIsPlaying(!!status.playing);
+      
       if (status.didJustFinish) {
         setIsPlaying(false);
         setPosition(0);
@@ -65,13 +79,24 @@ export const AudioBubbleMobile: React.FC<AudioBubbleMobileProps> = ({ url, isMe 
           setPlayer(null);
           setIsPlaying(false);
           setPosition(0);
-          setDuration(0);
+          setDuration((propDuration || 0) * 1000);
+          if (currentlyPlayingPlayer === player) {
+            currentlyPlayingPlayer = null;
+          }
           return;
         }
 
         if (isPlaying) {
           player.pause();
+          if (currentlyPlayingPlayer === player) {
+            currentlyPlayingPlayer = null;
+          }
           return;
+        }
+
+        // Pause any currently playing audio
+        if (currentlyPlayingPlayer && currentlyPlayingPlayer !== player) {
+          currentlyPlayingPlayer.pause();
         }
 
         const nearEnd = !!duration && position >= duration - 250;
@@ -80,10 +105,16 @@ export const AudioBubbleMobile: React.FC<AudioBubbleMobileProps> = ({ url, isMe 
           setPosition(0);
         }
         player.play();
+        currentlyPlayingPlayer = player;
         return;
       }
 
       setIsLoading(true);
+
+      // Pause any currently playing audio
+      if (currentlyPlayingPlayer) {
+        currentlyPlayingPlayer.pause();
+      }
 
       await setAudioModeAsync({
         allowsRecording: false,
@@ -91,10 +122,11 @@ export const AudioBubbleMobile: React.FC<AudioBubbleMobileProps> = ({ url, isMe 
         shouldPlayInBackground: false,
       });
 
-      const newPlayer = createAudioPlayer({ uri: url }, { downloadFirst: true, updateInterval: 250 });
+      const newPlayer = createAudioPlayer({ uri: url }, { downloadFirst: true, updateInterval: 100 });
       newPlayer.addListener('playbackStatusUpdate', (status: any) => onPlaybackStatusUpdate(status, newPlayer));
       newPlayer.play();
       setPlayer(newPlayer);
+      currentlyPlayingPlayer = newPlayer;
       setIsLoading(false);
     } catch (error: any) {
       console.error('Loi khi phat am thanh:', error);

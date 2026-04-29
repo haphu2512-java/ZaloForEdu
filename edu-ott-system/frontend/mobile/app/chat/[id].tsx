@@ -654,16 +654,28 @@ export default function ChatScreen() {
     }
   };
 
-  const handleSendVoice = async (uri: string) => {
+  const handleSendVoice = async (uri: string, duration: number) => {
     if (!uri || isSending) return;
     setShowVoiceRecorder(false);
     setIsSending(true);
+
+    console.log('[Voice] Sending voice with duration:', duration, 'seconds');
 
     try {
       const ext = uri.split('.').pop()?.toLowerCase() || 'm4a';
       const fileName = `voice-${Date.now()}.${ext}`;
       const mimeType = getAudioMimeTypeFromUri(uri);
-      const uploaded = await uploadMediaForm({ uri, fileName, mimeType });
+      
+      console.log('[Voice] Uploading:', { fileName, mimeType, duration });
+      
+      // Upload with duration
+      const uploaded = await uploadMediaForm({ uri, fileName, mimeType, duration });
+      
+      console.log('[Voice] Upload response:', {
+        mediaId: uploaded._id || uploaded.id,
+        duration: uploaded.duration,
+      });
+      
       const mediaId = uploaded._id || uploaded.id;
 
       if (!mediaId) {
@@ -1211,7 +1223,7 @@ export default function ChatScreen() {
                     if (isAudio && media?.url) {
                       return (
                         <View key={`${mediaId}-${idx}`} style={styles.audioAttachment}>
-                          <AudioBubbleMobile url={media.url} isMe={isMine} />
+                          <AudioBubbleMobile url={media.url} isMe={isMine} duration={media.duration} />
                         </View>
                       );
                     }

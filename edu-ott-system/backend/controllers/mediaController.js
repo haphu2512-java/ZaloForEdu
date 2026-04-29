@@ -112,6 +112,14 @@ const uploadMediaForm = asyncHandler(async (req, res) => {
     size: finalSize,
     storage: 'local',
     url: finalUrl,
+    duration: req.body.duration ? parseInt(req.body.duration) : null,
+  });
+
+  console.log('[Media Upload] Created media:', {
+    fileName: media.fileName,
+    mimeType: media.mimeType,
+    duration: media.duration,
+    receivedDuration: req.body.duration,
   });
 
   return successResponse(res, media, 'Media uploaded', 201);
