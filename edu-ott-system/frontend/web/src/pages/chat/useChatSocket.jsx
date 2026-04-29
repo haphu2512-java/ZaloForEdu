@@ -243,6 +243,54 @@ export const useChatSocket = ({
       }
     };
 
+    // ── Group updated (owner/admin changes) ──
+    const handleGroupUpdated = (payload) => {
+      if (!payload) return;
+      const { conversationId, ownerId, adminIds, action } = payload;
+      const convIdStr = String(conversationId);
+
+      console.log('[Socket] group_updated:', payload);
+
+      // Update active conversation if it's the same
+      setActiveConversation(prev => {
+        if (prev && String(prev._id) === convIdStr) {
+          // If ownerId is provided, update it (keep as string ID for consistency)
+          const updatedOwnerId = ownerId || prev.ownerId;
+          const updatedAdminIds = adminIds || prev.adminIds;
+          
+          return {
+            ...prev,
+            ownerId: updatedOwnerId,
+            adminIds: updatedAdminIds,
+            // Force re-render by creating new object reference
+            _updatedAt: Date.now()
+          };
+        }
+        return prev;
+      });
+
+      // Update conversations list
+      setConversations(prev => prev.map(c => {
+        if (String(c._id) === convIdStr) {
+          return {
+            ...c,
+            ownerId: ownerId || c.ownerId,
+            adminIds: adminIds || c.adminIds,
+            _updatedAt: Date.now()
+          };
+        }
+        return c;
+      }));
+
+      // Show toast notification
+      if (action === 'owner_transferred') {
+        toast.success('Quyền trưởng nhóm đã được chuyển', { icon: '👑' });
+      }
+
+      // Refresh conversation data to get populated fields
+      fetchConversationsData();
+    };
+
     // ── Register all listeners ──
     socketService.on("conversation_updated", handleConversationUpdated);
     socketService.on("conversation_settings_updated", handleSettingsUpdated);
@@ -257,6 +305,7 @@ export const useChatSocket = ({
     socketService.on("reminder_triggered", handleReminderTriggered);
     socketService.on("poll_updated", handlePollUpdated);
     socketService.on("pinned_items_updated", handlePinnedItemsUpdated);
+    socketService.on("group_updated", handleGroupUpdated);
 
     return () => {
       socketService.off("conversation_updated", handleConversationUpdated);
@@ -272,6 +321,7 @@ export const useChatSocket = ({
       socketService.off("reminder_triggered", handleReminderTriggered);
       socketService.off("poll_updated", handlePollUpdated);
       socketService.off("pinned_items_updated", handlePinnedItemsUpdated);
+      socketService.off("group_updated", handleGroupUpdated);
     };
   }, [token, userId, fetchConversationsData]);
 };
