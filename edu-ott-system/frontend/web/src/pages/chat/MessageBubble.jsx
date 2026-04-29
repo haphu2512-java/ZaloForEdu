@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
   FaDownload, FaCheckDouble, FaCheck, FaClock, FaSmile,
-  FaShare, FaReply, FaEllipsisH, FaUndo, FaTrash, FaCopy, FaThumbtack
+  FaShare, FaReply, FaEllipsisH, FaUndo, FaTrash, FaCopy, FaThumbtack, FaCrown, FaStar
 } from 'react-icons/fa';
 import { getExt, getCategory, getFileColor, formatBytes } from './chatUtils';
 import { AudioBubble } from '../../components/shared/AudioBubble';
@@ -47,10 +47,20 @@ export const MessageBubble = ({
   onPollVoted,
   userId,
   isGroup = false,
+  activeConversation,
 }) => {
   const sender = message.senderId || message.sender || message.actualSender;
 
   const { _id, content, type, status, isEdited, isRecalled, replyTo, createdAt, reactions, mentions, mentionAll } = message;
+
+  // Check if sender is owner or admin
+  const senderId = sender?._id || sender?.id || sender;
+  const ownerId = activeConversation?.ownerId?._id || activeConversation?.ownerId;
+  const adminIds = activeConversation?.adminIds || [];
+  const isOwner = String(senderId) === String(ownerId);
+  const isAdmin = adminIds.some(aid => String(aid._id || aid) === String(senderId));
+  const isPrivilegedSender = isOwner || isAdmin;
+  const shouldShowAdminBadge = isPrivilegedSender && activeConversation?.settings?.markAdminMessages !== false;
 
   // Highlight mentions function
   const renderContentWithMentions = (text) => {
@@ -178,7 +188,16 @@ export const MessageBubble = ({
       <div className="mdc-msg-body">
 
         {!isMe && sender && (
-          <div className="mdc-msg-sender-name">{name}</div>
+          <div className="mdc-msg-sender-name" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <span>{name}</span>
+            {shouldShowAdminBadge && (
+              isOwner ? (
+                <FaCrown size={10} color="#f59e0b" title="Trưởng nhóm" />
+              ) : (
+                <FaStar size={10} color="var(--z-primary)" title="Phó nhóm" />
+              )
+            )}
+          </div>
         )}
 
         <div style={{ display: 'flex', alignItems: 'flex-end', gap: '8px', flexDirection: isMe ? 'row-reverse' : 'row' }} ref={menuRef}>

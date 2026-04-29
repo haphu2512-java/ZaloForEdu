@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { FaBell, FaBellSlash, FaThumbtack, FaUserPlus, FaUserSecret, FaArrowLeft, FaTrashAlt, FaSignOutAlt, FaLink, FaEllipsisH, FaChevronDown, FaChevronUp, FaCalendarAlt, FaUserTimes, FaKey, FaSync, FaPen, FaCheck, FaTimes, FaFlag, FaTag, FaPoll } from 'react-icons/fa';
+import { FaBell, FaBellSlash, FaThumbtack, FaUserPlus, FaUserSecret, FaArrowLeft, FaTrashAlt, FaSignOutAlt, FaLink, FaEllipsisH, FaChevronDown, FaChevronUp, FaCalendarAlt, FaUserTimes, FaKey, FaSync, FaPen, FaCheck, FaTimes, FaFlag, FaTag, FaPoll, FaCrown, FaStar } from 'react-icons/fa';
 import toast from 'react-hot-toast';
 import { conversationService } from '../../services/conversationService';
 import { pollService } from '../../services/pollService';
@@ -133,7 +133,8 @@ export const ChatRightPanel = ({
     if (!activeConversation || activeConversation.type !== 'group') return;
     const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
     const myId = currentUser._id || currentUser.id;
-    const isOwner = activeConversation?.ownerId?._id === myId || activeConversation?.ownerId === myId || activeConversation?.createdBy === myId;
+    // Only check ownerId, not createdBy (owner can be transferred)
+    const isOwner = activeConversation?.ownerId?._id === myId || activeConversation?.ownerId === myId;
     const isAdmin = activeConversation?.adminIds?.some(aid => (aid._id || aid) === myId) || isOwner;
     if (!isOwner && !isAdmin) return;
     conversationService.getInviteLink(activeConversation._id)
@@ -150,7 +151,8 @@ export const ChatRightPanel = ({
   const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
   const myId = currentUser._id || currentUser.id;
 
-  const isOwner = activeConversation?.ownerId?._id === myId || activeConversation?.ownerId === myId || activeConversation?.createdBy === myId;
+  // Only check ownerId, not createdBy (owner can be transferred)
+  const isOwner = activeConversation?.ownerId?._id === myId || activeConversation?.ownerId === myId;
   const isAdmin = activeConversation?.adminIds?.some(aid => (aid._id || aid) === myId) || isOwner;
   const isPrivileged = isOwner || isAdmin;
   const isGroup = activeConversation?.type === 'group' || activeConversation?.roomModel === 'Group';
@@ -171,7 +173,8 @@ export const ChatRightPanel = ({
 
   const getMemberRole = (member) => {
     const mid = member._id || member.id;
-    if (activeConversation?.ownerId?._id === mid || activeConversation?.ownerId === mid || activeConversation?.createdBy === mid) return 'owner';
+    // Only check ownerId, not createdBy (owner can be transferred)
+    if (activeConversation?.ownerId?._id === mid || activeConversation?.ownerId === mid) return 'owner';
     if (activeConversation?.adminIds?.some(aid => (aid._id || aid) === mid)) return 'admin';
     return 'member';
   };
@@ -275,8 +278,18 @@ export const ChatRightPanel = ({
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--z-text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{displayName}</div>
                             {role !== 'member' && (
-                              <div style={{ fontSize: 10, color: role === 'owner' ? '#f59e0b' : 'var(--z-primary)', fontWeight: 600 }}>
-                                {role === 'owner' ? '👑 Trưởng nhóm' : '⭐ Phó nhóm'}
+                              <div style={{ fontSize: 10, color: role === 'owner' ? '#f59e0b' : 'var(--z-primary)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
+                                {role === 'owner' ? (
+                                  <>
+                                    <FaCrown size={10} color="#f59e0b" />
+                                    <span>Trưởng nhóm</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <FaStar size={10} color="var(--z-primary)" />
+                                    <span>Phó nhóm</span>
+                                  </>
+                                )}
                               </div>
                             )}
                           </div>
@@ -1036,7 +1049,8 @@ export const ChatRightPanel = ({
 
       {/* ── SLIDE-OVER: TIN NHẮN ĐÃ GHIM ── */}
       {showPinnedPanel && activeConversation && (() => {
-        const isOwnerStr = activeConversation?.ownerId?._id || activeConversation?.ownerId || activeConversation?.createdBy;
+        // Only check ownerId, not createdBy (owner can be transferred)
+        const isOwnerStr = activeConversation?.ownerId?._id || activeConversation?.ownerId;
         const isOwnerLocal = isOwnerStr && String(isOwnerStr) === String(myId);
         const isAdminLocal = activeConversation?.adminIds?.some(aid => String(aid._id || aid) === String(myId)) || isOwnerLocal;
         const canPinLocal = activeConversation?.settings?.canMembersPin !== false;

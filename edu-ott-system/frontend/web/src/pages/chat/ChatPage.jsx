@@ -1796,6 +1796,7 @@ export default function ChatPage() {
                             onPollVoted={handlePollVoted}
                             userId={userId}
                             isGroup={activeConversation.type === 'group'}
+                            activeConversation={activeConversation}
                           />
                         )}
                       </React.Fragment>
@@ -1812,7 +1813,8 @@ export default function ChatPage() {
 
           {(() => {
             const isGroupConv = activeConversation?.type === 'group' || activeConversation?.roomModel === 'Group';
-            const isOwnerStr = activeConversation?.ownerId?._id || activeConversation?.ownerId || activeConversation?.createdBy;
+            // Only check ownerId, not createdBy (owner can be transferred)
+            const isOwnerStr = activeConversation?.ownerId?._id || activeConversation?.ownerId;
             const isOwner = isOwnerStr && String(isOwnerStr) === String(userId);
             const isAdmin = activeConversation?.adminIds?.some(aid => String(aid._id || aid) === String(userId)) || isOwner;
             const isPrivileged = isOwner || isAdmin;
