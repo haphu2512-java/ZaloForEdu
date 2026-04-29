@@ -305,7 +305,8 @@ export const ChatRightPanel = ({
                             </div>
                           )}
                           {showMemberActionId === keyStr && (
-                            <div style={{ position: 'absolute', right: 0, top: '100%', background: 'var(--z-bg-sidebar)', border: '1px solid var(--z-border)', borderRadius: 6, zIndex: 10, boxShadow: '0 4px 12px rgba(0,0,0,0.15)', padding: '4px 0', width: 200 }}>
+                            <div style={{ position: 'absolute', right: 0, top: '100%', background: 'var(--z-bg-sidebar)', border: '1px solid var(--z-border)', borderRadius: 8, zIndex: 10, boxShadow: '0 4px 12px rgba(0,0,0,0.15)', padding: '6px 0', minWidth: 220 }}>
+                              {/* Đổi biệt danh */}
                               <div className="m-action-item" onClick={async () => {
                                 const newNickname = prompt('Nhập biệt danh mới cho ' + displayName, activeConversation.nicknames?.[keyStr] || '');
                                 if (newNickname !== null) {
@@ -319,23 +320,27 @@ export const ChatRightPanel = ({
                                 }
                                 setShowMemberActionId(null);
                               }}>
-                                <FaEdit size={12} style={{ marginRight: 8 }} />
-                                Đổi biệt danh
+                                <FaEdit size={13} style={{ marginRight: 10, flexShrink: 0 }} />
+                                <span>Đổi biệt danh</span>
                               </div>
                               
+                              {/* Divider */}
+                              {isOwner && <div style={{ height: 1, background: 'var(--z-border)', margin: '6px 0' }} />}
+                              
+                              {/* Nâng quyền / Hạ quyền */}
                               {isOwner && role === 'member' && (
                                 <>
                                   <div className="m-action-item" onClick={() => { handleGroupAction('promote', keyStr); setShowMemberActionId(null); }}>
-                                    <FaStar size={12} style={{ marginRight: 8, color: 'var(--z-primary)' }} />
-                                    Lên Phó nhóm
+                                    <FaStar size={13} style={{ marginRight: 10, color: 'var(--z-primary)', flexShrink: 0 }} />
+                                    <span>Lên Phó nhóm</span>
                                   </div>
                                   <div className="m-action-item" style={{ color: '#f59e0b', fontWeight: 600 }} onClick={() => {
                                     setTransferTarget({ id: keyStr, name: displayName });
                                     setShowConfirmTransfer(true);
                                     setShowMemberActionId(null);
                                   }}>
-                                    <FaCrown size={12} style={{ marginRight: 8 }} />
-                                    Chuyển quyền Trưởng nhóm
+                                    <FaCrown size={13} style={{ marginRight: 10, flexShrink: 0 }} />
+                                    <span>Chuyển quyền Trưởng nhóm</span>
                                   </div>
                                 </>
                               )}
@@ -343,23 +348,27 @@ export const ChatRightPanel = ({
                               {isOwner && role === 'admin' && (
                                 <>
                                   <div className="m-action-item" onClick={() => { handleGroupAction('demote', keyStr); setShowMemberActionId(null); }}>
-                                    <FaLevelDownAlt size={12} style={{ marginRight: 8 }} />
-                                    Hạ quyền thành Thành viên
+                                    <FaLevelDownAlt size={13} style={{ marginRight: 10, flexShrink: 0 }} />
+                                    <span>Hạ quyền</span>
                                   </div>
                                   <div className="m-action-item" style={{ color: '#f59e0b', fontWeight: 600 }} onClick={() => {
                                     setTransferTarget({ id: keyStr, name: displayName });
                                     setShowConfirmTransfer(true);
                                     setShowMemberActionId(null);
                                   }}>
-                                    <FaCrown size={12} style={{ marginRight: 8 }} />
-                                    Chuyển quyền Trưởng nhóm
+                                    <FaCrown size={13} style={{ marginRight: 10, flexShrink: 0 }} />
+                                    <span>Chuyển quyền Trưởng nhóm</span>
                                   </div>
                                 </>
                               )}
                               
+                              {/* Divider */}
+                              {isOwner && <div style={{ height: 1, background: 'var(--z-border)', margin: '6px 0' }} />}
+                              
+                              {/* Mời ra khỏi nhóm */}
                               <div className="m-action-item danger" onClick={() => { if (window.confirm(`Mời ${displayName} ra khỏi nhóm?`)) handleGroupAction('remove', keyStr); setShowMemberActionId(null); }}>
-                                <FaBan size={12} style={{ marginRight: 8 }} />
-                                Mời ra khỏi nhóm
+                                <FaBan size={13} style={{ marginRight: 10, flexShrink: 0 }} />
+                                <span>Mời ra khỏi nhóm</span>
                               </div>
                             </div>
                           )}
