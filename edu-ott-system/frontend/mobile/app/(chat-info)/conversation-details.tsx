@@ -437,10 +437,6 @@ export default function ConversationDetailsScreen() {
             <TouchableOpacity
               style={styles.quickActionItem}
               onPress={() => {
-                if (!iAmAdmin) {
-                  Alert.alert('Thông báo', 'Chỉ quản trị viên mới có thể thêm thành viên');
-                  return;
-                }
                 setSelectedMembersToAdd([]);
                 setAddMembersVisible(true);
               }}
@@ -781,9 +777,25 @@ export default function ConversationDetailsScreen() {
             <Text style={{ fontSize: 18, fontWeight: 'bold', color: colors.text }}>Thêm thành viên</Text>
             <TouchableOpacity
               disabled={actionLoading || selectedMembersToAdd.length === 0}
-              onPress={() => {
-                handleAction(() => addGroupMembers(conversation._id, selectedMembersToAdd), 'Đã thêm thành viên');
-                setAddMembersVisible(false);
+              onPress={async () => {
+                try {
+                  setActionLoading(true);
+                  const res = await addGroupMembers(conversation._id, selectedMembersToAdd);
+                  if (res?.requiresApproval) {
+                    Alert.alert('Thành công', 'Đã gửi yêu cầu tham gia để quản trị viên duyệt');
+                  } else {
+                    if (res && (res._id || res.id)) {
+                      setConversation((prev) => prev ? { ...prev, ...res } : res);
+                    }
+                    Alert.alert('Thành công', 'Đã thêm thành viên');
+                  }
+                  await loadData();
+                  setAddMembersVisible(false);
+                } catch (error: any) {
+                  Alert.alert('Lỗi', error.message || 'Thao tác thất bại');
+                } finally {
+                  setActionLoading(false);
+                }
               }}
             >
               <Text style={{ color: selectedMembersToAdd.length > 0 ? brand : colors.muted, fontWeight: 'bold' }}>Xong</Text>

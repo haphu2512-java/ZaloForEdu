@@ -242,9 +242,54 @@ const addGroupMembers = asyncHandler(async (req, res) => {
   const { memberIds } = req.body;
   const conversation = await Conversation.findById(id);
   ensureGroupConversation(conversation);
-  ensureAdminOrOwner(conversation, req.user._id);
+  const isPrivileged = toStr(getOwnerId(conversation)) === toStr(req.user._id) || (conversation.adminIds || []).some(aid => toStr(aid) === toStr(req.user._id));
   ensureGroupMember(conversation, req.user._id);
 
+  // If approval is required and user is not admin/owner, create join requests instead of adding directly
+  if (conversation.settings?.isApprovalRequired && !isPrivileged) {
+    const JoinRequest = require('../models/JoinRequest');
+    const currentIds = new Set(conversation.participants.map((p) => toStr(p)));
+    const validMemberIds = [...new Set(memberIds)].filter((m) => !currentIds.has(m));
+    if (validMemberIds.length === 0) {
+      throw new ApiError(400, 'NO_NEW_MEMBERS', 'All users are already in the group');
+    }
+
+    const createdRequests = [];
+    for (const targetUserId of validMemberIds) {
+      const existing = await JoinRequest.findOne({ conversationId: id, userId: targetUserId, status: 'pending' });
+      if (!existing) {
+        const reqDoc = await JoinRequest.create({
+          conversationId: id,
+          userId: targetUserId,
+          status: 'pending',
+          invitedBy: req.user._id,
+        });
+        createdRequests.push(reqDoc);
+      }
+    }
+
+    if (createdRequests.length > 0) {
+      const adminIds = [
+        toStr(getOwnerId(conversation)),
+        ...(conversation.adminIds || []).map(toStr),
+      ].filter(Boolean);
+      
+      for (const adminId of adminIds) {
+        for (const jr of createdRequests) {
+          socketService.emitToUser(adminId, 'join_request_received', {
+            conversationId: id,
+            conversationName: conversation.name,
+            joinRequest: jr,
+          });
+        }
+      }
+      return successResponse(res, { requiresApproval: true }, 'Join requests created for admin approval', 202);
+    } else {
+      throw new ApiError(400, 'REQUESTS_ALREADY_PENDING', 'Join requests already pending for these users');
+    }
+  }
+
+  // Otherwise, add directly
   const currentIds = new Set(conversation.participants.map((participantId) => toStr(participantId)));
   const validMemberIds = [...new Set(memberIds)].filter((memberId) => !currentIds.has(memberId));
   if (validMemberIds.length === 0) {

@@ -248,6 +248,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [user?.id]);
 
+  // Listen for new_notification to update user (e.g. friend_accepted)
+  useEffect(() => {
+    if (!user) return;
+    const { getSocket } = require('../utils/socketService');
+    
+    const handleNewNotification = async (payload: any) => {
+      console.log('[Auth] New notification:', payload);
+      if (payload?.type === 'friend_accepted') {
+        await refreshUser();
+      }
+    };
+
+    const interval = setInterval(() => {
+      const currentSocket = getSocket();
+      if (currentSocket && !currentSocket.hasListeners('new_notification')) {
+        currentSocket.on('new_notification', handleNewNotification);
+      }
+    }, 500);
+
+    return () => {
+      clearInterval(interval);
+      const socket = getSocket();
+      if (socket) {
+        socket.off('new_notification', handleNewNotification);
+      }
+    };
+  }, [user, refreshUser]);
+
   const contextValue = React.useMemo(
     () => ({ user, isLoading, login, register, logout, updateUser, refreshUser, setUser }),
     [user, isLoading, login, register, logout, updateUser, refreshUser]
