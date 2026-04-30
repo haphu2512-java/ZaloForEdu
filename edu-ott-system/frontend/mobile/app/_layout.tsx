@@ -53,6 +53,7 @@ function RootLayoutNav() {
             <Stack.Screen name="community/[id]" options={{ headerShown: false }} />
             <Stack.Screen name="(settings)/blocked-users" options={{ headerShown: false }} />
             <Stack.Screen name="(settings)/archived-conversations" options={{ headerShown: false }} />
+            <Stack.Screen name="(social)" options={{ headerShown: false }} />
           </Stack>
         </AuthProvider>
       </ThemeProvider>
