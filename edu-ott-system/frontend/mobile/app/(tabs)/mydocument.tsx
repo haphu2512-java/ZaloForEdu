@@ -108,6 +108,11 @@ export default function MyDocumentScreen() {
 
   // ── Lấy hoặc tạo self-conversation ──────────────────────────
   const getOrCreateSelfConv = useCallback(async (): Promise<Conversation | null> => {
+    if (!user) {
+      console.log('[MyDoc] User not logged in, skipping');
+      return null;
+    }
+    
     try {
       const res = await getConversations(null, 100);
       const existing = (res?.items || []).find(
@@ -116,13 +121,13 @@ export default function MyDocumentScreen() {
       if (existing) return existing;
 
       // Tạo mới self-conversation (participantIds = [user.id])
-      const created = await createConversation({ type: 'direct', participantIds: [user?.id || ''] });
+      const created = await createConversation({ type: 'direct', participantIds: [user.id] });
       return created;
     } catch (e: any) {
       console.log('[MyDoc] getOrCreateSelfConv error:', e.message);
       return null;
     }
-  }, []);
+  }, [user]);
 
   const harvestMediaFromMessages = useCallback((msgs: Message[]) => {
     const mediaMap: Record<string, MediaItem> = {};
@@ -222,7 +227,7 @@ export default function MyDocumentScreen() {
   }, [messages.length]);
 
   // ── Gửi tin nhắn giọng nói ────────────────────────────────────────
-  const handleSendVoice = async (uri: string) => {
+  const handleSendVoice = async (uri: string, duration: number) => {
     if (!uri || !selfConv?._id || sending) return;
     setShowVoiceRecorder(false);
     setSending(true);
@@ -237,7 +242,7 @@ export default function MyDocumentScreen() {
                        ext === 'aac' ? 'audio/aac' : 
                        ext === 'webm' ? 'audio/webm' : 'audio/mp4';
 
-      const uploaded = await uploadMediaForm({ uri, fileName, mimeType });
+      const uploaded = await uploadMediaForm({ uri, fileName, mimeType, duration });
       const mediaId = uploaded?._id || uploaded?.id;
 
       if (!mediaId) throw new Error('Upload ghi âm không thành công');
@@ -448,7 +453,7 @@ export default function MyDocumentScreen() {
                 const canOpen = !!media?.url;
 
                 if (isAudio && media?.url) {
-                  return <AudioBubbleMobile key={`${mediaId}-${idx}`} url={media.url} isMe={true} />;
+                  return <AudioBubbleMobile key={`${mediaId}-${idx}`} url={media.url} isMe={true} duration={media.duration} />;
                 }
 
                 if (isImage && media?.url) {

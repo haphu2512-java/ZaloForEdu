@@ -1,0 +1,38 @@
+Sửa lỗi voice chat: timer, duration và phát nhiều audio
+
+Vấn đề đã sửa:
+1. Timer không dừng khi stop recording
+   - Clear interval timer khi stop recording
+   
+2. Duration hiện 0 khi gửi voice message
+   - Thêm field duration vào Media model
+   - Lưu duration khi upload voice
+   - Hiển thị duration từ database thay vì chờ load metadata
+   - Truyền duration qua props cho AudioBubble components
+   
+3. Phát nhiều voice cùng lúc
+   - Thêm global audio manager
+   - Tự động pause audio cũ khi play audio mới
+   - Áp dụng cho cả Web và Mobile
+
+Kết quả:
+- Timer dừng ngay khi stop recording
+- Duration hiện đúng ngay khi gửi voice
+- Chỉ 1 audio phát tại 1 thời điểm
+- Hoạt động đồng bộ trên Web và Mobile
+
+Files:
+Backend:
+- backend/models/Media.js
+- backend/controllers/mediaController.js
+
+Frontend Web:
+- frontend/web/src/components/shared/VoiceRecorder.jsx
+- frontend/web/src/components/shared/AudioBubble.jsx
+- frontend/web/src/pages/chat/MessageInput.jsx
+- frontend/web/src/pages/chat/MessageBubble.jsx
+- frontend/web/src/services/mediaService.js
+
+Frontend Mobile:
+- frontend/mobile/components/chat/AudioBubbleMobile.tsx
+- frontend/mobile/app/chat/[id].tsx

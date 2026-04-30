@@ -88,6 +88,7 @@ export interface Attachment {
   type: string;
   url: string;
   size: number;
+  duration?: number; // Duration in seconds for audio files
 }
 
 /** Backend Message model */
@@ -200,6 +201,7 @@ export interface MediaItem {
   url: string;
   providerPublicId?: string | null;
   providerResourceType?: string | null;
+  duration?: number; // Duration in seconds for audio/video files
   createdAt: string;
   updatedAt: string;
 }

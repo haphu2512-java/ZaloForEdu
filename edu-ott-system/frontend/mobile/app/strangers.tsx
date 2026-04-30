@@ -84,6 +84,11 @@ export default function MessagesScreen() {
   const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null);
 
   const loadConversations = useCallback(async () => {
+    if (!user) {
+      console.log('[Strangers] User not logged in, skipping fetch');
+      return;
+    }
+    
     try {
       const res = await getConversations(null, 50);
       if (res?.items) {
@@ -92,7 +97,7 @@ export default function MessagesScreen() {
     } catch (error: any) {
       console.log('Failed to fetch conversations:', error.message);
     }
-  }, []);
+  }, [user]);
 
   useEffect(() => {
     let mounted = true;

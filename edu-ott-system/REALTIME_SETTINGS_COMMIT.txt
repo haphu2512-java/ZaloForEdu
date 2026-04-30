@@ -1,0 +1,17 @@
+Thêm real-time sync cho group settings giữa Web và Mobile
+
+Thay đổi:
+- Mobile: Thêm listener conversation_settings_updated trong chat screen
+- Mobile: Cập nhật conversation state khi nhận event settings thay đổi
+- Mobile: Input tự động disable/enable khi canMembersSendMessages thay đổi
+- CommunityStore: Thêm listener cho conversation_settings_updated event
+
+Kết quả:
+- Admin thay đổi settings trên Web, Mobile cập nhật ngay lập tức
+- Admin thay đổi settings trên Mobile, Web cập nhật ngay lập tức
+- Không cần refresh hoặc thoát ra vào lại
+- Input gửi tin nhắn tự động ẩn/hiện theo quyền
+
+Files:
+- frontend/mobile/app/chat/[id].tsx
+- frontend/mobile/stores/communityStore.ts

@@ -295,6 +295,47 @@ export default function ChatScreen() {
     loadInitialMessages();
   }, [loadInitialMessages]);
 
+  // ==================== SOCKET LISTENER FOR GROUP UPDATES ====================
+  useEffect(() => {
+    const { getSocket } = require('../../utils/socketService');
+    const socket = getSocket();
+    
+    if (!socket) return;
+
+    const handleGroupUpdated = async (payload: any) => {
+      if (!payload) return;
+      const { conversationId: updatedConvId, ownerId, adminIds, action } = payload;
+      
+      console.log('[Socket] group_updated:', payload);
+      
+      // Only update if it's the current conversation
+      if (String(updatedConvId) === String(conversationId)) {
+        // Reload conversation to get updated owner/admin info
+        try {
+          const convRes = await getConversations(null, 100);
+          const updatedConv = convRes.items.find((c: any) => String(c._id || c.id) === String(conversationId));
+          
+          if (updatedConv) {
+            console.log('[Socket] Updated conversation:', {
+              ownerId: updatedConv.ownerId,
+              adminIds: updatedConv.adminIds,
+              action,
+            });
+            setConversation(updatedConv);
+          }
+        } catch (error) {
+          console.error('[Socket] Failed to reload conversation:', error);
+        }
+      }
+    };
+
+    socket.on('group_updated', handleGroupUpdated);
+
+    return () => {
+      socket.off('group_updated', handleGroupUpdated);
+    };
+  }, [conversationId]);
+
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
 
   const filteredMembers = useMemo(() => {
@@ -512,6 +553,11 @@ export default function ChatScreen() {
         );
       };
 
+      const onConversationSettingsUpdated = (newSettings: any) => {
+        console.log('[Mobile Chat] conversation_settings_updated:', newSettings);
+        setConversation((prev) => prev ? { ...prev, settings: newSettings } : prev);
+      };
+
       socket.on('connect', onConnect);
       socket.on('disconnect', onDisconnect);
       socket.on('new_message', onNewMessage);
@@ -522,6 +568,7 @@ export default function ChatScreen() {
       socket.on('stop_typing', onStopTyping);
       socket.on('pinned_items_updated', onPinnedItemsUpdated);
       socket.on('message_reacted', onMessageReacted);
+      socket.on('conversation_settings_updated', onConversationSettingsUpdated);
 
       return () => {
         socket.off('connect', onConnect);
@@ -534,6 +581,7 @@ export default function ChatScreen() {
         socket.off('stop_typing', onStopTyping);
         socket.off('pinned_items_updated', onPinnedItemsUpdated);
         socket.off('message_reacted', onMessageReacted);
+        socket.off('conversation_settings_updated', onConversationSettingsUpdated);
       };
     };
 
@@ -604,10 +652,25 @@ export default function ChatScreen() {
       // Thay thế tin nhắn tạm bằng tin nhắn thật từ server
       setMessages((prev) => prev.map((m) => getMessageId(m) === tempId ? newMsg : m));
       if (newMsg.mediaIds?.length) harvestMediaFromMessages([newMsg]);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to send message:', error);
       setMessages((prev) => prev.filter((m) => getMessageId(m) !== tempId));
-      Alert.alert('Lỗi', 'Không thể gửi tin nhắn');
+      
+      // Hiển thị message thân thiện dựa trên error code
+      let errorTitle = 'Lỗi';
+      let errorMessage = 'Không thể gửi tin nhắn';
+      
+      if (error.errorCode === 'ONLY_ADMIN_CAN_SEND' || error.message?.includes('Only admin/owner can send messages')) {
+        errorTitle = 'Không có quyền gửi tin nhắn';
+        errorMessage = 'Chỉ trưởng nhóm và phó nhóm mới có thể gửi tin nhắn trong nhóm này.';
+      } else if (error.errorCode === 'BLOCKED_BY_USER') {
+        errorTitle = 'Không thể gửi tin nhắn';
+        errorMessage = 'Bạn đã bị người này chặn.';
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
+      Alert.alert(errorTitle, errorMessage);
       setInputText(text);
     } finally {
       setIsSending(false);
@@ -632,23 +695,41 @@ export default function ChatScreen() {
     }
   };
 
-  const handleSendVoice = async (uri: string) => {
+  const handleSendVoice = async (uri: string, duration: number) => {
     if (!uri || isSending) return;
     setShowVoiceRecorder(false);
     setIsSending(true);
+
+    console.log('[Voice] Sending voice with duration:', duration, 'seconds');
 
     try {
       const ext = uri.split('.').pop()?.toLowerCase() || 'm4a';
       const fileName = `voice-${Date.now()}.${ext}`;
       const mimeType = getAudioMimeTypeFromUri(uri);
-      const uploaded = await uploadMediaForm({ uri, fileName, mimeType });
+      
+      console.log('[Voice] Uploading:', { fileName, mimeType, duration });
+      
+      // Upload with duration
+      const uploaded = await uploadMediaForm({ uri, fileName, mimeType, duration });
+      
+      console.log('[Voice] Upload response:', {
+        mediaId: uploaded._id || uploaded.id,
+        duration: (uploaded as any).duration || duration, // Fallback to original duration
+      });
+      
       const mediaId = uploaded._id || uploaded.id;
 
       if (!mediaId) {
         throw new Error('Upload voice không trả về mediaId');
       }
 
-      setMediaById((prev) => ({ ...prev, [mediaId]: uploaded }));
+      // Ensure duration is set in uploaded object
+      const uploadedWithDuration = {
+        ...uploaded,
+        duration: (uploaded as any).duration || duration, // Use backend duration or fallback
+      } as any;
+
+      setMediaById((prev) => ({ ...prev, [mediaId]: uploadedWithDuration }));
       const newMsg = await sendMessage({ conversationId, mediaIds: [mediaId], content: '' });
       setMessages((prev) =>
         prev.some((m) => getMessageId(m) === getMessageId(newMsg)) ? prev : [newMsg, ...prev]
@@ -1189,7 +1270,7 @@ export default function ChatScreen() {
                     if (isAudio && media?.url) {
                       return (
                         <View key={`${mediaId}-${idx}`} style={styles.audioAttachment}>
-                          <AudioBubbleMobile url={media.url} isMe={isMine} />
+                          <AudioBubbleMobile url={media.url} isMe={isMine} duration={media.duration} />
                         </View>
                       );
                     }
@@ -1410,51 +1491,74 @@ export default function ChatScreen() {
               {unblockLoading ? <ActivityIndicator size="small" color={colors.tint} /> : <Text style={{ color: colors.tint, fontWeight: 'bold' }}>BỎ CHẶN</Text>}
             </TouchableOpacity>
           </View>
-        ) : showVoiceRecorder ? (
-          <View style={[styles.voiceRecorderWrap, { borderTopColor: colors.border, backgroundColor: colors.surface, paddingBottom: Math.max(12, insets.bottom) }]}>
-            <VoiceRecorderMobile
-              onCancel={() => setShowVoiceRecorder(false)}
-              onSend={handleSendVoice}
-            />
-          </View>
-        ) : (
-          <View style={[styles.inputBar, { borderTopColor: colors.border, backgroundColor: colors.surface, paddingBottom: Math.max(12, insets.bottom) }]}>
-            <TouchableOpacity onPress={() => setShowEmojiPanel((prev) => !prev)} style={styles.iconBtn}>
-              <Ionicons name={showEmojiPanel ? 'happy' : 'happy-outline'} size={24} color={showEmojiPanel ? colors.tint : colors.muted} />
-            </TouchableOpacity>
+        ) : (() => {
+          // Check permission to send message in group
+          const isGroupConv = conversation?.type === 'group';
+          const ownerId = (conversation?.ownerId as any)?._id || conversation?.ownerId;
+          const adminIds = conversation?.adminIds || [];
+          const isOwner = ownerId && String(ownerId) === String(currentUserId);
+          const isAdmin = adminIds.some((aid: any) => String(aid._id || aid) === String(currentUserId)) || isOwner;
+          const canSend = !isGroupConv || isAdmin || conversation?.settings?.canMembersSendMessages !== false;
 
-            <TouchableOpacity onPress={() => setShowMediaMenu(true)} style={styles.iconBtn}>
-              <Ionicons name="add-circle-outline" size={26} color={colors.muted} />
-            </TouchableOpacity>
+          if (isGroupConv && !canSend) {
+            return (
+              <View style={[styles.inputBar, { borderTopColor: colors.border, backgroundColor: colors.surface, paddingBottom: Math.max(12, insets.bottom), alignItems: 'center', justifyContent: 'center', paddingVertical: 16, flexDirection: 'column', gap: 8 }]}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <Ionicons name="information-circle" size={20} color={colors.tint} />
+                  <Text style={{ color: colors.muted, fontSize: 13, textAlign: 'center', flex: 1 }}>
+                    Chỉ trưởng nhóm và phó nhóm mới có thể gửi tin nhắn trong nhóm này
+                  </Text>
+                </View>
+              </View>
+            );
+          }
 
-            <TextInput
-              style={[styles.textInput, { backgroundColor: colors.background, borderColor: colors.border, color: colors.text }]}
-              placeholder="Nhắn tin..."
-              placeholderTextColor={colors.muted}
-              value={inputText}
-              onChangeText={handleInputChange}
-              multiline
-              onBlur={stopTypingWithEmit}
-            />
-
-            <TouchableOpacity
-              onPress={handleSendText}
-              disabled={isSending || inputText.trim().length === 0}
-              style={[styles.sendBtn, { backgroundColor: inputText.trim().length > 0 ? '#0068FF' : '#D1D5DB' }]}
-            >
-              <Ionicons name="send" size={18} color="#fff" style={{ marginLeft: 3 }} />
-            </TouchableOpacity>
-            {inputText.trim().length === 0 && (
-              <TouchableOpacity
-                onPress={() => setShowVoiceRecorder(true)}
-                disabled={isSending}
-                style={styles.iconBtn}
-              >
-                <Ionicons name="mic-outline" size={24} color={colors.muted} />
+          return showVoiceRecorder ? (
+            <View style={[styles.voiceRecorderWrap, { borderTopColor: colors.border, backgroundColor: colors.surface, paddingBottom: Math.max(12, insets.bottom) }]}>
+              <VoiceRecorderMobile
+                onCancel={() => setShowVoiceRecorder(false)}
+                onSend={handleSendVoice}
+              />
+            </View>
+          ) : (
+            <View style={[styles.inputBar, { borderTopColor: colors.border, backgroundColor: colors.surface, paddingBottom: Math.max(12, insets.bottom) }]}>
+              <TouchableOpacity onPress={() => setShowEmojiPanel((prev) => !prev)} style={styles.iconBtn}>
+                <Ionicons name={showEmojiPanel ? 'happy' : 'happy-outline'} size={24} color={showEmojiPanel ? colors.tint : colors.muted} />
               </TouchableOpacity>
-            )}
-          </View>
-        )}
+
+              <TouchableOpacity onPress={() => setShowMediaMenu(true)} style={styles.iconBtn}>
+                <Ionicons name="add-circle-outline" size={26} color={colors.muted} />
+              </TouchableOpacity>
+
+              <TextInput
+                style={[styles.textInput, { backgroundColor: colors.background, borderColor: colors.border, color: colors.text }]}
+                placeholder="Nhắn tin..."
+                placeholderTextColor={colors.muted}
+                value={inputText}
+                onChangeText={handleInputChange}
+                multiline
+                onBlur={stopTypingWithEmit}
+              />
+
+              <TouchableOpacity
+                onPress={handleSendText}
+                disabled={isSending || inputText.trim().length === 0}
+                style={[styles.sendBtn, { backgroundColor: inputText.trim().length > 0 ? '#0068FF' : '#D1D5DB' }]}
+              >
+                <Ionicons name="send" size={18} color="#fff" style={{ marginLeft: 3 }} />
+              </TouchableOpacity>
+              {inputText.trim().length === 0 && (
+                <TouchableOpacity
+                  onPress={() => setShowVoiceRecorder(true)}
+                  disabled={isSending}
+                  style={styles.iconBtn}
+                >
+                  <Ionicons name="mic-outline" size={24} color={colors.muted} />
+                </TouchableOpacity>
+              )}
+            </View>
+          );
+        })()}
       </KeyboardAvoidingView>
 
       <ChatMediaMenuModal

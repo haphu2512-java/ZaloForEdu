@@ -2,6 +2,29 @@ import { Platform } from 'react-native';
 import Constants from 'expo-constants';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+// Simple event emitter for auth errors (React Native compatible)
+const authErrorCallbacks: Array<() => void> = [];
+
+export const onAuthError = (callback: () => void) => {
+  authErrorCallbacks.push(callback);
+  return () => {
+    const index = authErrorCallbacks.indexOf(callback);
+    if (index > -1) {
+      authErrorCallbacks.splice(index, 1);
+    }
+  };
+};
+
+const emitAuthError = () => {
+  authErrorCallbacks.forEach(callback => {
+    try {
+      callback();
+    } catch (e) {
+      console.error('[Auth] Error in auth error callback:', e);
+    }
+  });
+};
+
 // Get dynamically the IP address of the Expo bundler, or fallback to the local IP/Emulator
 const hostUri = Constants.expoConfig?.hostUri;
 const localhost = hostUri ? hostUri.split(':')[0] : '10.126.202.133';
@@ -24,7 +47,7 @@ function getApiBaseUrl(): string {
 
 export const API_BASE_URL = getApiBaseUrl();
 
-export const fetchAPI = async (endpoint: string, options: RequestInit = {}) => {
+export const fetchAPI = async (endpoint: string, options: RequestInit = {}): Promise<any> => {
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), 15000);
 
@@ -36,8 +59,6 @@ export const fetchAPI = async (endpoint: string, options: RequestInit = {}) => {
       const char = url.includes('?') ? '&' : '?';
       url += `${char}_t=${Date.now()}`;
     }
-
-    console.log(`Fetching: ${url}`);
 
     // Auto-attach auth token if available
     let authHeader: Record<string, string> = {};
@@ -82,6 +103,31 @@ export const fetchAPI = async (endpoint: string, options: RequestInit = {}) => {
     }
 
     if (!response.ok) {
+      // Check if it's an authentication error (401 or 403 with invalid token)
+      const isAuthError = response.status === 401 || 
+                         (response.status === 403 && data.error?.message?.toLowerCase().includes('token'));
+      
+      if (isAuthError) {
+        // Token expired or invalid → Clear session and logout
+        await AsyncStorage.multiRemove(['authToken', 'refreshToken', 'user']);
+        
+        // Emit event to AuthProvider for IMMEDIATE logout
+        emitAuthError();
+        
+        // Disconnect socket
+        try {
+          const { disconnectSocket } = await import('./socketService');
+          disconnectSocket();
+        } catch (e) {
+          // Ignore socket disconnect errors
+        }
+        
+        const err: any = new Error('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
+        err.errorCode = 'TOKEN_EXPIRED';
+        err.statusCode = 401;
+        throw err;
+      }
+
       // Backend error format: { success: false, error: { code, message } }
       const errorInfo = data.error || {};
       const err: any = new Error(errorInfo.message || data.message || 'Error executing request');
@@ -94,10 +140,12 @@ export const fetchAPI = async (endpoint: string, options: RequestInit = {}) => {
   } catch (error: any) {
     clearTimeout(id);
     if (error.name === 'AbortError') {
-      console.error(`API Timeout on ${endpoint}`);
       throw new Error('Lỗi kết nối tới máy chủ (Timeout). Vui lòng kiểm tra lại mạng hoặc IP backend.');
     }
-    console.error(`API Error on ${endpoint}:`, error.message);
+    // Only log non-auth errors to reduce noise
+    if (error.errorCode !== 'TOKEN_EXPIRED') {
+      console.error(`API Error on ${endpoint}:`, error.message);
+    }
     throw error; // Rethrow to preserve custom fields like errorCode
   }
 };

@@ -334,10 +334,20 @@ const promoteGroupAdmin = asyncHandler(async (req, res) => {
   const targetUser = await User.findById(memberId).select('fullName username');
   const targetName = targetUser?.fullName || targetUser?.username || 'một thành viên';
   const senderName = req.user.fullName || req.user.username;
+  
+  // Emit system message
   await emitGroupSystemMessage({
     conversationId: conversation._id,
     senderId: req.user._id,
     content: `${senderName} đã cấp quyền phó nhóm cho ${targetName}`,
+  });
+
+  // Emit group_updated event for real-time sync
+  await socketService.emitGroupUpdated(conversation._id.toString(), {
+    conversationId: conversation._id.toString(),
+    ownerId: conversation.ownerId,
+    adminIds: conversation.adminIds,
+    action: 'member_promoted',
   });
 
   return successResponse(res, conversation, 'Member promoted to admin');
@@ -359,10 +369,20 @@ const demoteGroupAdmin = asyncHandler(async (req, res) => {
   const targetUser = await User.findById(memberId).select('fullName username');
   const targetName = targetUser?.fullName || targetUser?.username || 'một thành viên';
   const senderName = req.user.fullName || req.user.username;
+  
+  // Emit system message
   await emitGroupSystemMessage({
     conversationId: conversation._id,
     senderId: req.user._id,
     content: `${senderName} đã gỡ quyền phó nhóm của ${targetName}`,
+  });
+
+  // Emit group_updated event for real-time sync
+  await socketService.emitGroupUpdated(conversation._id.toString(), {
+    conversationId: conversation._id.toString(),
+    ownerId: conversation.ownerId,
+    adminIds: conversation.adminIds,
+    action: 'member_demoted',
   });
 
   return successResponse(res, conversation, 'Admin role removed');
@@ -393,10 +413,26 @@ const transferGroupOwner = asyncHandler(async (req, res) => {
   const newOwner = await User.findById(newOwnerId).select('fullName username');
   const newOwnerName = newOwner?.fullName || newOwner?.username || 'một thành viên';
   const senderName = req.user.fullName || req.user.username;
+  
+  // Emit system message
   await emitGroupSystemMessage({
     conversationId: conversation._id,
     senderId: req.user._id,
     content: `${senderName} đã chuyển quyền trưởng nhóm cho ${newOwnerName}`,
+  });
+
+  // Emit group_updated event for real-time sync
+  console.log('[transferGroupOwner] Emitting group_updated event:', {
+    conversationId: conversation._id.toString(),
+    ownerId: newOwnerId,
+    adminIds: conversation.adminIds,
+  });
+  
+  await socketService.emitGroupUpdated(conversation._id.toString(), {
+    conversationId: conversation._id.toString(),
+    ownerId: newOwnerId,
+    adminIds: conversation.adminIds,
+    action: 'owner_transferred',
   });
 
   return successResponse(res, conversation, 'Group ownership transferred');

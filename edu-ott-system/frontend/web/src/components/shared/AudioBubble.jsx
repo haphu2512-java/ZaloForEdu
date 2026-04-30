@@ -2,9 +2,12 @@ import { useState, useRef, useEffect, useMemo } from 'react';
 import { FaPlay, FaPause } from 'react-icons/fa';
 import './AudioBubble.css';
 
-export function AudioBubble({ url }) {
+// Global audio manager to ensure only one audio plays at a time
+let currentlyPlayingAudio = null;
+
+export function AudioBubble({ url, duration: propDuration }) {
   const [isPlaying, setIsPlaying] = useState(false);
-  const [duration, setDuration] = useState(0);
+  const [duration, setDuration] = useState(propDuration || 0);
   const [currentTime, setCurrentTime] = useState(0);
   const audioRef = useRef(null);
   const waveHeights = useMemo(
@@ -17,10 +20,16 @@ export function AudioBubble({ url }) {
     audioRef.current = audio;
     setIsPlaying(false);
     setCurrentTime(0);
-    setDuration(0);
+    
+    // Use prop duration if available, otherwise wait for metadata
+    if (propDuration) {
+      setDuration(propDuration);
+    } else {
+      setDuration(0);
+    }
 
     const handleLoadedMetadata = () => {
-      if (audio.duration && audio.duration !== Infinity) {
+      if (audio.duration && audio.duration !== Infinity && !propDuration) {
         setDuration(audio.duration);
       }
     };
@@ -28,6 +37,9 @@ export function AudioBubble({ url }) {
     const handleEnded = () => {
       setIsPlaying(false);
       setCurrentTime(0);
+      if (currentlyPlayingAudio === audio) {
+        currentlyPlayingAudio = null;
+      }
     };
 
     audio.addEventListener('loadedmetadata', handleLoadedMetadata);
@@ -40,17 +52,30 @@ export function AudioBubble({ url }) {
       audio.removeEventListener('ended', handleEnded);
       audio.pause();
       audio.src = '';
+      if (currentlyPlayingAudio === audio) {
+        currentlyPlayingAudio = null;
+      }
     };
-  }, [url]);
+  }, [url, propDuration]);
 
   const togglePlay = () => {
     const audio = audioRef.current;
+    
     if (isPlaying) {
       audio.pause();
       setIsPlaying(false);
+      if (currentlyPlayingAudio === audio) {
+        currentlyPlayingAudio = null;
+      }
     } else {
+      // Pause any currently playing audio
+      if (currentlyPlayingAudio && currentlyPlayingAudio !== audio) {
+        currentlyPlayingAudio.pause();
+      }
+      
       audio.play().catch(console.error);
       setIsPlaying(true);
+      currentlyPlayingAudio = audio;
     }
   };
 

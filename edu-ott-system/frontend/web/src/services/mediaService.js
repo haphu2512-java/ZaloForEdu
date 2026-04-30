@@ -137,7 +137,7 @@ export const registerMedia = async ({ fileName, mimeType, size, url, publicId, r
  * Upload file vào /uploads qua Multipart FormData — POST /media/upload-form
  * Đồng bộ với Mobile (uploadMediaForm). Không cần đọc Base64, nhẹ và nhanh hơn.
  */
-export const uploadFile = async (file, { onProgress } = {}) => {
+export const uploadFile = async (file, { onProgress, duration } = {}) => {
   const extNoDot = getExtension(file.name).replace(".", "").toLowerCase();
   if (!ALL_ALLOWED_EXTENSIONS.includes(extNoDot)) {
     throw new Error(`Định dạng .${extNoDot} không được hỗ trợ.`);
@@ -147,6 +147,11 @@ export const uploadFile = async (file, { onProgress } = {}) => {
 
   const formData = new FormData();
   formData.append("file", file);
+  
+  // Add duration for audio/video files
+  if (duration || file.duration) {
+    formData.append("duration", duration || file.duration);
+  }
 
   onProgress?.(30);
 

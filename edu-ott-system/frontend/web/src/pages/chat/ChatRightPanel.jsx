@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { FaBell, FaBellSlash, FaThumbtack, FaUserPlus, FaUserSecret, FaArrowLeft, FaTrashAlt, FaSignOutAlt, FaLink, FaEllipsisH, FaChevronDown, FaChevronUp, FaCalendarAlt, FaUserTimes, FaKey, FaSync, FaPen, FaCheck, FaTimes, FaFlag, FaTag, FaPoll } from 'react-icons/fa';
+import { FaBell, FaBellSlash, FaThumbtack, FaUserPlus, FaUserSecret, FaArrowLeft, FaTrashAlt, FaSignOutAlt, FaLink, FaEllipsisH, FaChevronDown, FaChevronUp, FaCalendarAlt, FaUserTimes, FaKey, FaSync, FaPen, FaCheck, FaTimes, FaFlag, FaTag, FaPoll, FaCrown, FaStar, FaEdit, FaLevelUpAlt, FaLevelDownAlt, FaBan } from 'react-icons/fa';
 import toast from 'react-hot-toast';
 import { conversationService } from '../../services/conversationService';
 import { pollService } from '../../services/pollService';
@@ -9,6 +9,8 @@ import { toAbsoluteUrl } from './MessageBubble';
 import PinnedMessagesPanel from './Modals/PinnedMessagesPanel';
 import ReportUserModal from './Modals/ReportUserModal';
 import ClassifyConversationModal from './Modals/ClassifyConversationModal';
+import ConfirmTransferModal from './Modals/ConfirmTransferModal';
+import './MemberMenu.css';
 
 // Tooltip component
 const Tooltip = ({ text, children }) => {
@@ -107,6 +109,8 @@ export const ChatRightPanel = ({
   const [showReportModal, setShowReportModal] = useState(false);
   const [showClassifyModal, setShowClassifyModal] = useState(false);
   const [convCategory, setConvCategory] = useState('primary');
+  const [showConfirmTransfer, setShowConfirmTransfer] = useState(false);
+  const [transferTarget, setTransferTarget] = useState(null);
 
   // Sync category từ preference khi đổi conversation
   useEffect(() => {
@@ -133,7 +137,8 @@ export const ChatRightPanel = ({
     if (!activeConversation || activeConversation.type !== 'group') return;
     const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
     const myId = currentUser._id || currentUser.id;
-    const isOwner = activeConversation?.ownerId?._id === myId || activeConversation?.ownerId === myId || activeConversation?.createdBy === myId;
+    // Only check ownerId, not createdBy (owner can be transferred)
+    const isOwner = activeConversation?.ownerId?._id === myId || activeConversation?.ownerId === myId;
     const isAdmin = activeConversation?.adminIds?.some(aid => (aid._id || aid) === myId) || isOwner;
     if (!isOwner && !isAdmin) return;
     conversationService.getInviteLink(activeConversation._id)
@@ -150,7 +155,8 @@ export const ChatRightPanel = ({
   const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
   const myId = currentUser._id || currentUser.id;
 
-  const isOwner = activeConversation?.ownerId?._id === myId || activeConversation?.ownerId === myId || activeConversation?.createdBy === myId;
+  // Only check ownerId, not createdBy (owner can be transferred)
+  const isOwner = activeConversation?.ownerId?._id === myId || activeConversation?.ownerId === myId;
   const isAdmin = activeConversation?.adminIds?.some(aid => (aid._id || aid) === myId) || isOwner;
   const isPrivileged = isOwner || isAdmin;
   const isGroup = activeConversation?.type === 'group' || activeConversation?.roomModel === 'Group';
@@ -171,7 +177,8 @@ export const ChatRightPanel = ({
 
   const getMemberRole = (member) => {
     const mid = member._id || member.id;
-    if (activeConversation?.ownerId?._id === mid || activeConversation?.ownerId === mid || activeConversation?.createdBy === mid) return 'owner';
+    // Only check ownerId, not createdBy (owner can be transferred)
+    if (activeConversation?.ownerId?._id === mid || activeConversation?.ownerId === mid) return 'owner';
     if (activeConversation?.adminIds?.some(aid => (aid._id || aid) === mid)) return 'admin';
     return 'member';
   };
@@ -275,8 +282,18 @@ export const ChatRightPanel = ({
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--z-text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{displayName}</div>
                             {role !== 'member' && (
-                              <div style={{ fontSize: 10, color: role === 'owner' ? '#f59e0b' : 'var(--z-primary)', fontWeight: 600 }}>
-                                {role === 'owner' ? '👑 Trưởng nhóm' : '⭐ Phó nhóm'}
+                              <div style={{ fontSize: 10, color: role === 'owner' ? '#f59e0b' : 'var(--z-primary)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
+                                {role === 'owner' ? (
+                                  <>
+                                    <FaCrown size={10} color="#f59e0b" />
+                                    <span>Trưởng nhóm</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <FaStar size={10} color="var(--z-primary)" />
+                                    <span>Phó nhóm</span>
+                                  </>
+                                )}
                               </div>
                             )}
                           </div>
@@ -289,8 +306,9 @@ export const ChatRightPanel = ({
                             </div>
                           )}
                           {showMemberActionId === keyStr && (
-                            <div style={{ position: 'absolute', right: 0, top: '100%', background: 'var(--z-bg-sidebar)', border: '1px solid var(--z-border)', borderRadius: 6, zIndex: 10, boxShadow: '0 4px 12px rgba(0,0,0,0.15)', padding: '4px 0', width: 160 }}>
-                              <div className="m-action-item" onClick={async () => {
+                            <div className="member-action-menu">
+                              {/* Đổi biệt danh */}
+                              <div className="member-action-item" onClick={async () => {
                                 const newNickname = prompt('Nhập biệt danh mới cho ' + displayName, activeConversation.nicknames?.[keyStr] || '');
                                 if (newNickname !== null) {
                                   try {
@@ -302,14 +320,57 @@ export const ChatRightPanel = ({
                                   }
                                 }
                                 setShowMemberActionId(null);
-                              }}>🖊️ Đổi biệt danh</div>
+                              }}>
+                                <FaEdit />
+                                <span>Đổi biệt danh</span>
+                              </div>
+                              
+                              {/* Divider */}
+                              {isOwner && <div className="member-menu-divider" />}
+                              
+                              {/* Nâng quyền / Hạ quyền */}
                               {isOwner && role === 'member' && (
-                                <div className="m-action-item" onClick={() => { handleGroupAction('promote', keyStr); setShowMemberActionId(null); }}>⭐ Lên Phó nhóm</div>
+                                <>
+                                  <div className="member-action-item primary" onClick={() => { handleGroupAction('promote', keyStr); setShowMemberActionId(null); }}>
+                                    <FaStar />
+                                    <span>Lên Phó nhóm</span>
+                                  </div>
+                                  <div className="member-action-item warning" onClick={() => {
+                                    setTransferTarget({ id: keyStr, name: displayName });
+                                    setShowConfirmTransfer(true);
+                                    setShowMemberActionId(null);
+                                  }}>
+                                    <FaCrown />
+                                    <span>Chuyển quyền Trưởng nhóm</span>
+                                  </div>
+                                </>
                               )}
+                              
                               {isOwner && role === 'admin' && (
-                                <div className="m-action-item" onClick={() => { handleGroupAction('demote', keyStr); setShowMemberActionId(null); }}>Gỡ Phó nhóm</div>
+                                <>
+                                  <div className="member-action-item" onClick={() => { handleGroupAction('demote', keyStr); setShowMemberActionId(null); }}>
+                                    <FaLevelDownAlt />
+                                    <span>Hạ quyền</span>
+                                  </div>
+                                  <div className="member-action-item warning" onClick={() => {
+                                    setTransferTarget({ id: keyStr, name: displayName });
+                                    setShowConfirmTransfer(true);
+                                    setShowMemberActionId(null);
+                                  }}>
+                                    <FaCrown />
+                                    <span>Chuyển quyền Trưởng nhóm</span>
+                                  </div>
+                                </>
                               )}
-                              <div className="m-action-item danger" onClick={() => { if (window.confirm(`Mời ${displayName} ra khỏi nhóm?`)) handleGroupAction('remove', keyStr); setShowMemberActionId(null); }}>🚫 Mời ra khỏi nhóm</div>
+                              
+                              {/* Divider */}
+                              {isOwner && <div className="member-menu-divider" />}
+                              
+                              {/* Mời ra khỏi nhóm */}
+                              <div className="member-action-item danger" onClick={() => { if (window.confirm(`Mời ${displayName} ra khỏi nhóm?`)) handleGroupAction('remove', keyStr); setShowMemberActionId(null); }}>
+                                <FaBan />
+                                <span>Mời ra khỏi nhóm</span>
+                              </div>
                             </div>
                           )}
                         </div>
@@ -1036,7 +1097,8 @@ export const ChatRightPanel = ({
 
       {/* ── SLIDE-OVER: TIN NHẮN ĐÃ GHIM ── */}
       {showPinnedPanel && activeConversation && (() => {
-        const isOwnerStr = activeConversation?.ownerId?._id || activeConversation?.ownerId || activeConversation?.createdBy;
+        // Only check ownerId, not createdBy (owner can be transferred)
+        const isOwnerStr = activeConversation?.ownerId?._id || activeConversation?.ownerId;
         const isOwnerLocal = isOwnerStr && String(isOwnerStr) === String(myId);
         const isAdminLocal = activeConversation?.adminIds?.some(aid => String(aid._id || aid) === String(myId)) || isOwnerLocal;
         const canPinLocal = activeConversation?.settings?.canMembersPin !== false;
@@ -1093,6 +1155,23 @@ export const ChatRightPanel = ({
           </div>
         </div>
       )}
+
+      {/* MODAL XÁC NHẬN CHUYỂN QUYỀN */}
+      <ConfirmTransferModal
+        isOpen={showConfirmTransfer}
+        onClose={() => {
+          setShowConfirmTransfer(false);
+          setTransferTarget(null);
+        }}
+        onConfirm={() => {
+          if (transferTarget) {
+            handleGroupAction('transfer', transferTarget.id);
+          }
+          setShowConfirmTransfer(false);
+          setTransferTarget(null);
+        }}
+        memberName={transferTarget?.name || ''}
+      />
     </>
   );
 };

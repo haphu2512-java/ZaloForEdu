@@ -142,18 +142,31 @@ export async function register(payload: RegisterPayload): Promise<AuthResponse> 
  * Refresh token
  * POST /auth/refresh-token { refreshToken }
  * Response: { success, data: { user, accessToken, refreshToken }, message }
+ * 
+ * IMPORTANT: This function uses direct fetch() instead of fetchAPI() to avoid
+ * infinite loop when refresh token fails (fetchAPI has auth error handling).
  */
 export async function refreshAccessToken(): Promise<AuthResponse | null> {
   const currentRefreshToken = await getRefreshToken();
   if (!currentRefreshToken) return null;
 
   try {
-    const res = await fetchAPI(`${AUTH_ENDPOINT}/refresh-token`, {
+    // Import API_BASE_URL directly to avoid circular dependency
+    const { API_BASE_URL } = await import('./api');
+    
+    const response = await fetch(`${API_BASE_URL}${AUTH_ENDPOINT}/refresh-token`, {
       method: 'POST',
-      // Gửi device:'mobile' để backend tạo token với mobileTokenVersion đúng
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ refreshToken: currentRefreshToken, device: 'mobile' }),
     });
 
+    if (!response.ok) {
+      console.error('[AuthService] Refresh token failed:', response.status);
+      await removeToken();
+      return null;
+    }
+
+    const res = await response.json();
     const authData = res.data || {};
     const { user, accessToken, refreshToken } = authData;
 
@@ -169,7 +182,7 @@ export async function refreshAccessToken(): Promise<AuthResponse | null> {
 
     return { success: true, user, accessToken, refreshToken };
   } catch (error) {
-    console.error('Failed to refresh token:', error);
+    console.error('[AuthService] Failed to refresh token:', error);
     await removeToken();
     return null;
   }
@@ -208,6 +221,8 @@ export async function logout(): Promise<void> {
     console.warn('Logout API failed, continuing to clear local state', e);
   } finally {
     await removeToken();
+    // Clear theme cache on logout
+    await AsyncStorage.removeItem('userThemeMode');
   }
 }
 

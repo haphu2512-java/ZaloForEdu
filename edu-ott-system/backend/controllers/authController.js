@@ -411,7 +411,15 @@ const logout = asyncHandler(async (req, res) => {
 });
 
 const logoutAll = asyncHandler(async (req, res) => {
-  await revokeAllSessions(req.user._id);
+  const userId = req.user._id;
+  await revokeAllSessions(userId);
+  
+  // Emit force_logout event to all connected clients of this user
+  const socketService = require('../services/socketService');
+  socketService.emitToUser(userId, 'force_logout', { 
+    message: 'Bạn đã bị đăng xuất khỏi thiết bị này do đăng xuất tất cả thiết bị từ thiết bị khác' 
+  });
+  
   return successResponse(res, {}, 'Đã đăng xuất khỏi tất cả thiết bị');
 });
 

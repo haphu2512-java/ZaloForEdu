@@ -192,6 +192,31 @@ export const useCommunityStore = create<CommunityState>((set: any, get: any) => 
       get().addIncomingMessage(communityId, channelId, message);
     });
 
+    // Listen for group ownership/admin changes
+    socket.on('group_updated', (payload: { conversationId: string; ownerId?: string; adminIds?: string[]; action?: string }) => {
+      const { conversationId, ownerId, adminIds } = payload;
+      console.log('[Mobile] group_updated:', payload);
+
+      set((state: any) => ({
+        communities: state.communities.map((c: any) => {
+          if (c._id === conversationId) {
+            return {
+              ...c,
+              ownerId: ownerId || c.ownerId,
+              adminIds: adminIds || c.adminIds,
+            };
+          }
+          return c;
+        }),
+      }));
+    });
+
+    // Listen for conversation settings changes
+    socket.on('conversation_settings_updated', (newSettings: any) => {
+      console.log('[Mobile] conversation_settings_updated:', newSettings);
+      // Settings will be handled by individual chat screens via their own socket listeners
+    });
+
     set({ initSocketDone: true });
   },
 

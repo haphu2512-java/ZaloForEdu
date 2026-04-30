@@ -1,0 +1,43 @@
+fix(auth): allow device parameter in login and refresh schemas
+
+Fix session management issue where Web and Mobile could not coexist.
+
+## Problem
+
+When logging in with same account on Web and Mobile, only the last
+logged-in device would work. The other device would get "logged out
+from another device" error.
+
+Root cause: Zod validation was stripping the `device` parameter from
+login requests, causing both Web and Mobile to use `webTokenVersion`,
+leading to session conflicts.
+
+## Solution
+
+Added `device` field to validation schemas:
+- `loginSchema`: Allow `device: 'web' | 'mobile'` (optional)
+- `refreshSchema`: Allow `device: 'web' | 'mobile'` (optional)
+
+## Changes
+
+- backend/validators/authSchemas.js
+  * Added `device: z.enum(['web', 'mobile']).optional()` to loginSchema
+  * Added `device: z.enum(['web', 'mobile']).optional()` to refreshSchema
+
+- backend/services/authService.js
+  * Updated JSDoc comment to clarify session management logic
+
+## Expected Behavior
+
+✅ 1 account can have 1 Web + 1 Mobile session simultaneously
+✅ Login on 2nd Web → logout 1st Web (Mobile unaffected)
+✅ Login on 2nd Mobile → logout 1st Mobile (Web unaffected)
+
+## Testing
+
+- [x] Code fixed
+- [x] No diagnostics errors
+- [ ] Test on staging (Web + Mobile coexist)
+- [ ] Deploy to production
+
+Fixes #SESSION-MANAGEMENT-ISSUE

@@ -98,7 +98,7 @@ const createMessage = async ({
   }
 
   return await Message.findById(message._id)
-    .populate('mediaIds', 'fileName url size mimeType providerResourceType')
+    .populate('mediaIds', 'fileName url size mimeType providerResourceType duration')
     .populate('senderId', 'username avatarUrl');
 };
 

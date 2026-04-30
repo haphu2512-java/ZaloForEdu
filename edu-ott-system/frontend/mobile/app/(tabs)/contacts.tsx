@@ -118,6 +118,12 @@ export default function ContactsScreen() {
   const getUserId = useCallback((u: UserInfo) => u._id || u.id || '', []);
 
   const loadContacts = useCallback(async () => {
+    // Don't fetch if user is not logged in
+    if (!user) {
+      console.log('[Contacts] User not logged in, skipping fetch');
+      return;
+    }
+    
     try {
       const [friendsRes, incomingRes, outgoingRes, conversationsRes] = await Promise.all([
         getFriendList(null, 100),
@@ -141,13 +147,14 @@ export default function ContactsScreen() {
     } catch (error: any) {
       console.log('Failed to fetch contacts:', error.message);
     }
-  }, []);
+  }, [user]);
 
   useFocusEffect(
     useCallback(() => {
       let isActive = true;
       const init = async () => {
-        if (friends.length === 0 && groups.length === 0) setLoading(true); // Don't block UI if we already have data
+        // Only show loading if user is logged in
+        if (user && friends.length === 0 && groups.length === 0) setLoading(true);
         await loadContacts();
         if (isActive) setLoading(false);
       };
@@ -155,7 +162,7 @@ export default function ContactsScreen() {
       return () => {
         isActive = false;
       };
-    }, [loadContacts])
+    }, [loadContacts, user, friends.length, groups.length])
   );
 
   const onRefresh = useCallback(async () => {

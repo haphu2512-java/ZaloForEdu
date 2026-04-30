@@ -13,6 +13,8 @@ export const VoiceRecorder = ({ onCancel, onSend }) => {
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
   const timerIntervalRef = useRef(null);
+  const finalRecordingTimeRef = useRef(0); // Track final recording time
+  const isStoppedRef = useRef(false); // Prevent timer updates after stop
   
   // Web Audio API for visualization
   const audioContextRef = useRef(null);
@@ -217,11 +219,15 @@ export const VoiceRecorder = ({ onCancel, onSend }) => {
 
       mediaRecorder.start(); // Remove 1000 to avoid chunk overlap bugs
       setIsRecording(true);
+      isStoppedRef.current = false; // Reset stopped flag
       
       setRecordingTime(0);
       const startTime = Date.now();
       timerIntervalRef.current = setInterval(() => {
-        setRecordingTime(Math.floor((Date.now() - startTime) / 1000));
+        // Only update if not stopped
+        if (!isStoppedRef.current) {
+          setRecordingTime(Math.floor((Date.now() - startTime) / 1000));
+        }
       }, 250);
 
     } catch (err) {
@@ -232,8 +238,45 @@ export const VoiceRecorder = ({ onCancel, onSend }) => {
   };
 
   const stopRecording = () => {
-    cleanupAudio();
+    // CRITICAL: Set stopped flag FIRST to prevent any interval updates
+    isStoppedRef.current = true;
+    
+    // Capture final recording time from current state
+    const finalRecordingTime = recordingTime;
+    finalRecordingTimeRef.current = finalRecordingTime;
+    
+    // Clear interval
+    if (timerIntervalRef.current) {
+      clearInterval(timerIntervalRef.current);
+      timerIntervalRef.current = null;
+    }
+    
+    // Stop media recorder
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+      mediaRecorderRef.current.stop();
+    }
+    
+    // Clean up audio context and streams
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+    }
+    if (sourceRef.current) {
+      sourceRef.current.disconnect();
+      if (sourceRef.current.mediaStream) {
+        sourceRef.current.mediaStream.getTracks().forEach(t => t.stop());
+      }
+    }
+    if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
+      audioContextRef.current.close().catch(console.error);
+    }
+    const tracks = mediaRecorderRef.current?.stream?.getTracks();
+    if (tracks) {
+      tracks.forEach(track => track.stop());
+    }
+    
     setIsRecording(false);
+    // Ensure recording time is frozen at final value
+    setRecordingTime(finalRecordingTime);
   };
 
   const togglePlayback = () => {
@@ -252,7 +295,9 @@ export const VoiceRecorder = ({ onCancel, onSend }) => {
 
   const handleSend = () => {
     if (audioBlob) {
-      onSend(audioBlob, recordingTime);
+      // Use ref to ensure we send the correct frozen recording time
+      const duration = finalRecordingTimeRef.current || recordingTime;
+      onSend(audioBlob, duration);
     }
   };
 
@@ -302,7 +347,12 @@ export const VoiceRecorder = ({ onCancel, onSend }) => {
                  <div key={i} className="vr-wave-bar" style={{height: `${h}%`}}></div>
                ))}
             </div>
-            <div className="vr-timer">{formatTime(isPlaying ? playbackTime : recordingTime)}</div>
+            <div className="vr-timer">
+              {isPlaying && playbackTime > 0 
+                ? `${formatTime(playbackTime)} / ${formatTime(recordingTime)}`
+                : formatTime(recordingTime)
+              }
+            </div>
           </div>
           
           <button className="vr-btn vr-send-btn" onClick={handleSend}>

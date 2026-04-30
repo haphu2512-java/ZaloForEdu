@@ -28,6 +28,7 @@ import { useLanguage } from "../../contexts/LanguageContext";
 import { useNotificationStore } from "../../store/notificationStore";
 import { userService } from "../../services/userService";
 import NotificationsPanel from "../../pages/notifications/NotificationsPanel";
+import NotificationSettings from "../NotificationSettings";
 import { socketService } from "../../services/socketService"; // Thêm import socketService
 import IncomingCallModal from '../../pages/chat/Modals/IncomingCallModal';
 import { toast, Toaster } from "react-hot-toast"; // Import toast for push notifications
@@ -59,7 +60,6 @@ function SettingsModal({ onClose }) {
   const { language, changeLanguage, t } = useLanguage();
   const { user } = useAuthStore();
   const [activeTab, setActiveTab] = useState("general");
-  const [notifications, setNotifications] = useState(true);
 
   // messagePrivacy state — load từ localStorage trước, sync backend sau
   const [messagePrivacy, setMessagePrivacyState] = useState(
@@ -177,20 +177,9 @@ function SettingsModal({ onClose }) {
                   )}
                 </div>
 
-                {/* Notifications */}
+                {/* Notifications - Now using NotificationSettings component */}
                 <div className="sm-section">
-                  <h3>{t("notifications")}</h3>
-                  <div className="sm-row">
-                    <span>{t("enableNotifs")}</span>
-                    <label className="toggle-switch">
-                      <input
-                        type="checkbox"
-                        checked={notifications}
-                        onChange={() => setNotifications(!notifications)}
-                      />
-                      <span className="toggle-slider" />
-                    </label>
-                  </div>
+                  <NotificationSettings />
                 </div>
 
                 {/* Language (shortcut) */}
@@ -391,6 +380,48 @@ function SettingsModal({ onClose }) {
                   <p className="sm-desc">{t("supportDesc")}</p>
                   <button className="sm-action-btn">{t("sendFeedback")}</button>
                 </div>
+                
+                <div className="sm-section">
+                  <h3>Về hệ thống</h3>
+                  <div className="sm-row">
+                    <span>Tên ứng dụng</span>
+                    <span style={{ fontWeight: 600, color: 'var(--primary-color)' }}>Zalo Edu Web</span>
+                  </div>
+                  <div className="sm-row">
+                    <span>Phiên bản</span>
+                    <span style={{ fontWeight: 600 }}>1.0.0</span>
+                  </div>
+                  <div className="sm-row">
+                    <span>Năm phát hành</span>
+                    <span style={{ fontWeight: 600 }}>2026</span>
+                  </div>
+                </div>
+
+                <div className="sm-section">
+                  <h3>Quản lý phiên đăng nhập</h3>
+                  <p className="sm-desc">Đăng xuất khỏi tất cả thiết bị đang đăng nhập</p>
+                  <button 
+                    className="sm-action-btn danger"
+                    onClick={async () => {
+                      if (!window.confirm('Bạn có chắc chắn muốn đăng xuất trên tất cả thiết bị?')) return;
+                      try {
+                        const { authService } = await import('../../services/authService');
+                        await authService.logoutAll();
+                        alert('Đã đăng xuất trên tất cả thiết bị thành công!');
+                        localStorage.removeItem('token');
+                        localStorage.removeItem('refreshToken');
+                        sessionStorage.clear();
+                        window.dispatchEvent(new Event('user-logout'));
+                        window.location.href = '/login';
+                      } catch (error) {
+                        console.error('Lỗi đăng xuất tất cả thiết bị:', error);
+                        alert(error.response?.data?.message || 'Đăng xuất thất bại!');
+                      }
+                    }}
+                  >
+                    Đăng xuất tất cả thiết bị
+                  </button>
+                </div>
               </div>
             )}
           </div>
@@ -493,9 +524,22 @@ export default function MainLayout() {
 
     socketService.on("new_message", handleNewMessage);
 
+    // Listen for force logout event (when user logs out from another device)
+    const handleForceLogout = () => {
+      console.log('[MainLayout] Force logout received from server');
+      localStorage.removeItem('token');
+      localStorage.removeItem('refreshToken');
+      sessionStorage.clear();
+      window.dispatchEvent(new Event('user-logout'));
+      navigate('/login', { replace: true });
+    };
+    
+    socketService.on("force_logout", handleForceLogout);
+
     return () => {
       clearInterval(interval);
       socketService.off("new_message", handleNewMessage);
+      socketService.off("force_logout", handleForceLogout);
     };
   }, [user?._id, navigate]);
 

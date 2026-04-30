@@ -1,0 +1,22 @@
+Sửa lỗi real-time sync, voice chat duration và auto refresh token
+
+- Thêm real-time sync cho group settings giữa Web và Mobile
+  * Mobile tự động cập nhật khi admin thay đổi quyền gửi tin nhắn
+  * Input disable/enable theo permission real-time
+  
+- Sửa lỗi voice chat timer và duration
+  * Web: Dừng timer khi stop recording, freeze thời gian ở giá trị cuối
+  * Backend: Thêm field duration vào Media model và lưu khi upload
+  * Web và Mobile: Hiển thị duration ngay khi gửi voice message
+  * Chỉ cho phép phát 1 audio tại 1 thời điểm (global audio manager)
+  
+- Thêm auto refresh token khi hết hạn
+  * Mobile và Web tự động refresh access token khi gặp lỗi 401/403
+  * Retry request ban đầu với token mới
+  * Chỉ logout khi refresh token cũng hết hạn
+  * Tránh multiple simultaneous refresh requests
+
+Files changed:
+- Backend: Media model, mediaController (thêm duration field)
+- Web: VoiceRecorder, AudioBubble, MessageInput, MessageBubble, authService, mediaService, chatStore
+- Mobile: VoiceRecorderMobile, AudioBubbleMobile, chat screen, api.ts, mediaService

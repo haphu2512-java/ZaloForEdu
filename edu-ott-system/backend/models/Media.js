@@ -20,6 +20,11 @@ const mediaSchema = new mongoose.Schema(
       type: Number,
       required: true,
     },
+    duration: {
+      type: Number,
+      default: null,
+      // Duration in seconds for audio/video files
+    },
     storage: {
       type: String,
       enum: ['local', 'cloudinary', 's3'],
