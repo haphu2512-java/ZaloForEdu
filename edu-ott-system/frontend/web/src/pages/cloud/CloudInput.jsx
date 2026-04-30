@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { FaSpinner, FaPaperPlane, FaThumbsUp, FaSmile, FaTimes } from 'react-icons/fa';
+import { FaSpinner, FaPaperPlane, FaThumbsUp, FaSmile, FaTimes, FaMicrophone } from 'react-icons/fa';
+import { VoiceRecorder } from '../../components/shared/VoiceRecorder';
 
 /* Zalo reply icon */
 const ReplyIconSmall = () => (
@@ -12,6 +13,7 @@ const ReplyIconSmall = () => (
 export const CloudInput = ({ onSendText, isSending, onUploadFiles, replyTo, onClearReply }) => {
   const [textInput, setTextInput] = useState("");
   const [showEmoji, setShowEmoji] = useState(false);
+  const [showRecorder, setShowRecorder] = useState(false);
 
   const imageInputRef = useRef(null);
   const videoInputRef = useRef(null);
@@ -37,9 +39,11 @@ export const CloudInput = ({ onSendText, isSending, onUploadFiles, replyTo, onCl
 
   const handleSend = () => {
     if (!textInput.trim() || isSending) return;
-    onSendText(textInput, replyTo?._id || null);
-    setTextInput("");
+    const currentText = textInput;
+    setTextInput("");      // Đảm bảo UI xóa text ngay lập tức
     setShowEmoji(false);
+    setShowRecorder(false);
+    onSendText(currentText, replyTo?._id || null);
     onClearReply?.();
   };
 
@@ -58,9 +62,14 @@ export const CloudInput = ({ onSendText, isSending, onUploadFiles, replyTo, onCl
     if (msg.content) return msg.content;
     const m = (msg.mediaIds || msg.media || msg.attachments || [])[0];
     if (!m) return "Tin nhắn";
+    
+    if ((m.mimeType && m.mimeType.startsWith('audio/')) || (m.fileName && ["mp3","wav","ogg","webm"].includes(m.fileName.split('.').pop().toLowerCase()))) {
+      return "[Tin nhắn thoại]";
+    }
+
     const cat = m.fileName ? m.fileName.split('.').pop().toLowerCase() : "";
-    if (["jpg","jpeg","png","gif","webp","svg","bmp"].includes(cat)) return "[Hình ảnh]";
-    if (["mp4","mov","avi","mkv","webm"].includes(cat)) return "[Video]";
+    if (["jpg","jpeg","png","gif","webp","svg","bmp"].includes(cat) || (m.mimeType && m.mimeType.startsWith('image/'))) return "[Hình ảnh]";
+    if (["mp4","mov","avi","mkv","webm"].includes(cat) || (m.mimeType && m.mimeType.startsWith('video/'))) return "[Video]";
     return `[${m.fileName || "Tệp đính kèm"}]`;
   };
 
@@ -116,6 +125,9 @@ export const CloudInput = ({ onSendText, isSending, onUploadFiles, replyTo, onCl
         <button type="button" className="mdc-tool-btn" title="Gửi thư mục" onClick={() => { if(folderInputRef.current){ folderInputRef.current.setAttribute("webkitdirectory",""); folderInputRef.current.click(); } }}>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
         </button>
+        <button type="button" className="mdc-tool-btn" title="Gửi ghi âm" onClick={() => setShowRecorder(true)}>
+          <FaMicrophone size={16} />
+        </button>
 
         {/* Emoji picker */}
         {showEmoji && (
@@ -131,28 +143,61 @@ export const CloudInput = ({ onSendText, isSending, onUploadFiles, replyTo, onCl
         )}
       </div>
 
-      {/* Text input row */}
-      <div className="mdc-input-row">
-        <div className="mdc-input-wrap">
-          <input
-            ref={inputRef}
-            className="mdc-input"
-            value={textInput}
-            onChange={e=>setTextInput(e.target.value)}
-            placeholder="Nhập @, tin nhắn tới My Documents..."
-            onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();handleSend();}}}
+      {/* Text input row / Voice Recorder */}
+      {showRecorder ? (
+        <div className="mdc-input-row" style={{ height: 60 }}>
+          <VoiceRecorder 
+            onCancel={() => setShowRecorder(false)} 
+            onSend={(blob, duration) => {
+              // Universal extension mapping dựa trên mimeType
+              let extension = '.webm'; // fallback
+              if (blob.type.includes('mpeg') || blob.type.includes('mp3')) {
+                extension = '.mp3';
+              } else if (blob.type.includes('wav')) {
+                extension = '.wav';
+              } else if (blob.type.includes('mp4') || blob.type.includes('m4a')) {
+                extension = '.m4a'; // Use .m4a for better mobile compatibility
+              } else if (blob.type.includes('webm')) {
+                extension = '.webm';
+              }
+              
+              console.log('📤 Sending universal audio:', { 
+                type: blob.type, 
+                extension, 
+                duration: `${duration}s`,
+                size: `${Math.round(blob.size/1024)}KB`,
+                universalCompatible: extension === '.mp3' || extension === '.wav' || extension === '.m4a'
+              });
+              const file = new File([blob], `voice_message_${Date.now()}${extension}`, { type: blob.type });
+              onUploadFiles([file], replyTo?._id || null);
+              setShowRecorder(false);
+              onClearReply?.();
+            }}
           />
         </div>
-        {textInput.trim() ? (
-          <button className="mdc-send-btn" onClick={handleSend} disabled={isSending}>
-            {isSending ? <FaSpinner className="spin" size={14}/> : <FaPaperPlane size={15}/>}
-          </button>
-        ) : (
-          <button className="mdc-like-btn" onClick={() => onSendText("👍", null)}>
-            <FaThumbsUp size={16}/>
-          </button>
-        )}
-      </div>
+      ) : (
+        <div className="mdc-input-row">
+          <div className="mdc-input-wrap">
+            <input
+              ref={inputRef}
+              className="mdc-input"
+              value={textInput}
+              onChange={e=>setTextInput(e.target.value)}
+              placeholder="Nhập @, tin nhắn tới My Documents..."
+              onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();handleSend();}}}
+            />
+          </div>
+          {textInput.trim() ? (
+            <button className="mdc-send-btn" onClick={handleSend}>
+              <FaPaperPlane size={15}/>
+            </button>
+          ) : (
+            <button className="mdc-like-btn" onClick={() => onSendText("👍", null)}>
+              <FaThumbsUp size={16}/>
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 };

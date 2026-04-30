@@ -1,0 +1,66 @@
+/* ── MESSAGE BUBBLES (Zalo Style from MyDocumentsPage) ── */
+.mdc-msg-wrap {
+  display: flex; align-items: flex-end; gap: 8px; margin-bottom: 6px; position: relative;
+}
+.mdc-msg-wrap.me { flex-direction: row-reverse; }
+
+.mdc-msg-body { max-width: 75%; display: flex; flex-direction: column; }
+.mdc-msg-wrap.them .mdc-msg-body { align-items: flex-start; }
+.mdc-msg-wrap.me .msg-body, .mdc-msg-wrap.me .mdc-msg-body { align-items: flex-end; }
+
+.mdc-msg-sender-name { font-size: 12px; color: var(--z-text-secondary); margin-bottom: 4px; margin-left: 4px; font-weight: 500; }
+.mdc-msg-avatar { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
+
+.mdc-text-bubble {
+  background: white; border: 1px solid var(--z-border); border-radius: 4px 16px 16px 16px;
+  padding: 10px 14px; font-size: 14.5px; line-height: 1.4; color: var(--z-text-primary);
+  word-break: break-word; box-shadow: 0 1px 2px rgba(0,0,0,0.05); position: relative;
+}
+[data-theme="dark"] .mdc-text-bubble { background: var(--z-bubble-them); border-color: var(--z-border); color: var(--z-bubble-them-text); }
+
+.mdc-msg-wrap.me .mdc-text-bubble {
+  background: var(--z-bubble-me); color: var(--z-bubble-me-text);
+  border-radius: 16px 16px 4px 16px; border: 1px solid transparent;
+}
+
+.mdc-file-bubble {
+  display: flex; align-items: center; gap: 12px; background: white;
+  border: 1px solid var(--z-border); border-radius: 12px 12px 12px 4px;
+  padding: 12px 14px; min-width: 240px; box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+}
+.mdc-msg-wrap.me .mdc-file-bubble { border-radius: 12px 12px 4px 12px; }
+[data-theme="dark"] .mdc-file-bubble { background: var(--z-bg-sidebar); border-color: var(--z-border); }
+
+.mdc-fb-icon { width: 44px; height: 50px; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: white; font-size: 11px; font-weight: 800; flex-shrink: 0; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+.mdc-fb-info { flex: 1; min-width: 0; }
+.mdc-fb-name { display: block; font-size: 14px; font-weight: 600; color: var(--z-text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 4px; }
+.mdc-fb-meta { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--z-text-secondary); }
+.mdc-fb-btn { width: 30px; height: 30px; border-radius: 50%; background: var(--z-bg-main); border: 1px solid var(--z-border); color: var(--z-text-secondary); display: flex; align-items: center; justify-content: center; transition: all 0.15s; }
+.mdc-fb-btn:hover { background: var(--z-bg-hover); color: var(--z-primary); }
+
+.mdc-img-bubble { position: relative; max-width: 320px; border-radius: 12px; overflow: hidden; cursor: pointer; box-shadow: 0 1px 3px rgba(0,0,0,0.1); display: block; }
+.mdc-img-thumb { width: 100%; max-height: 280px; object-fit: cover; display: block; }
+.mdc-img-dl-btn { position: absolute; bottom: 8px; right: 8px; width: 28px; height: 28px; border-radius: 50%; background: rgba(0,0,0,0.48); color: white; display: flex; align-items: center; justify-content: center; opacity: 0; transition: opacity 0.18s; backdrop-filter: blur(4px); }
+.mdc-img-bubble:hover .mdc-img-dl-btn { opacity: 1; }
+
+.mdc-msg-time { font-size: 11px; color: var(--z-text-tertiary, #9CA3AF); margin-top: 4px; display: flex; align-items: center; gap: 4px; }
+.mdc-msg-wrap.them .mdc-msg-time { justify-content: flex-start; }
+.mdc-msg-wrap.me .mdc-msg-time { justify-content: flex-end; color: rgba(255,255,255,0.7); }
+.mdc-msg-sent { font-weight: 600; }
+
+.mdc-msg-menu-wrap { position: relative; display: flex; flex-direction: row; gap: 2px; align-items: center; padding-bottom: 12px; }
+.mdc-msg-menu-pill { display: flex; gap: 4px; background: var(--z-bg-sidebar); border: 1px solid var(--z-border); border-radius: 20px; padding: 4px 8px; opacity: 0; transition: opacity 0.2s; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+.mdc-msg-wrap:hover .mdc-msg-menu-pill, .mdc-msg-wrap:hover .mdc-msg-menu-btn { opacity: 1; position: relative; z-index: 10;}
+.mdc-pill-btn { width: 24px; height: 24px; border-radius: 50%; background: none; border: none; color: var(--z-text-tertiary, #6B7280); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.15s; }
+.mdc-pill-btn:hover { background: var(--z-bg-hover); color: var(--z-primary); }
+.mdc-msg-emoji-tray { position: absolute; bottom: calc(100% + 5px); background: var(--z-bg-sidebar); border: 1px solid var(--z-border); border-radius: 20px; padding: 6px 12px; display: flex; gap: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); z-index: 20; }
+.mdc-msg-menu { position: absolute; background: var(--z-bg-sidebar); border: 1px solid var(--z-border); border-radius: 8px; width: 170px; z-index: 20; padding: 6px 0; box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
+.mdc-mm-item { padding: 10px 16px; display: flex; align-items: center; gap: 10px; cursor: pointer; color: var(--z-text-primary); font-size: 14px; transition: background 0.1s; }
+.mdc-mm-item:hover { background: var(--z-bg-hover); }
+.mdc-mm-item.danger { color: #E11D48; }
+
+.mdc-uploading-bubble { display: flex; align-items: center; gap: 12px; background: white; border: 1px solid var(--z-border); border-radius: 12px 12px 12px 4px; padding: 12px 14px; min-width: 220px; }
+.mdc-msg-wrap.me .mdc-uploading-bubble { border-radius: 12px 12px 4px 12px; }
+[data-theme="dark"] .mdc-uploading-bubble { background: var(--z-bg-sidebar); border-color: var(--z-border); }
+
+/* Remove old conflicting bubble styles in later replaces */

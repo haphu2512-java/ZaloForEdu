@@ -1,9 +1,11 @@
 import { format } from "date-fns";
 
 const IMAGE_EXTS = ["jpg","jpeg","png","gif","webp","svg"];
-const VIDEO_EXTS = ["mp4","mov","avi","mkv","webm"];
+const VIDEO_EXTS = ["mp4","mov","avi","mkv"];
 const DOC_EXTS = ["pdf","doc","docx","xls","xlsx","ppt","pptx","txt"];
 const ARCHIVE_EXTS = ["zip","rar","7z","tar","gz"];
+const AUDIO_EXTS = ["mp3","webm","ogg","wav","m4a"];
+
 
 export function getExt(s=""){return(s.split(".").pop()||"").toLowerCase();}
 
@@ -13,6 +15,7 @@ export function getCategory(n=""){
   if(VIDEO_EXTS.includes(e))return"video";
   if(DOC_EXTS.includes(e))return"doc";
   if(ARCHIVE_EXTS.includes(e))return"archive";
+  if(AUDIO_EXTS.includes(e))return"audio";
   return"other";
 }
 

@@ -1,4 +1,3 @@
-import api from "./authService";
 import axios from "axios";
 
 const API_URL = 'http://localhost:5000/api/v1';
@@ -32,7 +31,7 @@ export const conversationService = {
   // ==========================================
   // 1. QUẢN LÝ DANH SÁCH & TẠO HỘI THOẠI
   // ==========================================
-  
+
   // Lấy danh sách bạn bè (dùng để chọn người khi tạo nhóm)
   getFriendList: async (limit = 100) => {
     const res = await axios.get(`${API_URL}/friends?limit=${limit}`, getAuthHeaders());
@@ -64,22 +63,52 @@ export const conversationService = {
     return res.data;
   },
 
-  // Cập nhật trạng thái ẩn/hiện của cuộc trò chuyện (Archive)
-  updateConversationPreference: async (conversationId, isHidden) => {
+  // Cập nhật preference của hội thoại (isHidden, isPinned, category, mutedUntil...)
+  updateConversationPreference: async (conversationId, prefData) => {
+    // Tương thích ngược: nếu truyền boolean thì coi là isHidden
+    const body = typeof prefData === 'boolean' ? { isHidden: prefData } : prefData;
     const res = await axios.put(
       `${API_URL}/conversations/${conversationId}/preferences`,
-      { isHidden },
+      body,
       getAuthHeaders()
     );
     return res.data;
   },
 
   archiveConversation: async (conversationId) => {
-    return conversationService.updateConversationPreference(conversationId, true);
+    return conversationService.updateConversationPreference(conversationId, { isHidden: true });
+  },
+
+  deleteConversation: async (conversationId) => {
+    const res = await axios.delete(`${API_URL}/conversations/${conversationId}`, getAuthHeaders());
+    return res.data;
   },
 
   unarchiveConversation: async (conversationId) => {
-    return conversationService.updateConversationPreference(conversationId, false);
+    return conversationService.updateConversationPreference(conversationId, { isHidden: false });
+  },
+
+  // Ẩn hội thoại (khỏi danh sách, không xoá)
+  hideConversation: async (conversationId) => {
+    return conversationService.updateConversationPreference(conversationId, { isHidden: true });
+  },
+
+  // Bỏ ẩn hội thoại
+  unhideConversation: async (conversationId) => {
+    return conversationService.updateConversationPreference(conversationId, { isHidden: false });
+  },
+
+  // Ghim / bỏ ghim hội thoại
+  pinConversation: async (conversationId, isPinned) => {
+    return conversationService.updateConversationPreference(conversationId, {
+      isPinned,
+      pinnedAt: isPinned ? new Date().toISOString() : null,
+    });
+  },
+
+  // Phân loại hội thoại
+  classifyConversation: async (conversationId, category) => {
+    return conversationService.updateConversationPreference(conversationId, { category });
   },
 
   // ==========================================
@@ -108,6 +137,11 @@ export const conversationService = {
 
   leaveGroup: async (id) => {
     const res = await axios.post(`${API_URL}/conversations/${id}/leave`, {}, getAuthHeaders());
+    return res.data;
+  },
+
+  disbandGroup: async (id) => {
+    const res = await axios.delete(`${API_URL}/conversations/${id}/disband`, getAuthHeaders());
     return res.data;
   },
 
@@ -185,7 +219,7 @@ export const conversationService = {
   },
 
   previewGroupByInviteCode: async (code) => {
-    const res = await axios.get(`${API_URL}/conversations/preview/${code}`, getAuthHeaders());
+    const res = await axios.get(`${API_URL}/conversations/preview/${code}`);
     return res.data;
   },
 
@@ -195,4 +229,60 @@ export const conversationService = {
   },
   leaveGroup: async (id) => axios.post(`${API_URL}/conversations/${id}/leave`, {}, getAuthHeaders()),
   updateGroupName: async (id, name) => axios.put(`${API_URL}/conversations/${id}/name`, { name }, getAuthHeaders()),
+
+  // TẮT THÔNG BÁO (MUTE)
+  muteConversation: async (id, mutedUntil) => {
+    const res = await axios.put(`${API_URL}/conversations/${id}/preferences`, { mutedUntil }, getAuthHeaders());
+    return res.data;
+  },
+
+  // NHẮC HẸN (REMINDERS)
+  getReminders: async (conversationId) => {
+    const res = await axios.get(`${API_URL}/reminders/conversation/${conversationId}`, getAuthHeaders());
+    return res.data;
+  },
+  createReminder: async (data) => {
+    const res = await axios.post(`${API_URL}/reminders`, data, getAuthHeaders());
+    return res.data;
+  },
+  deleteReminder: async (id) => {
+    const res = await axios.delete(`${API_URL}/reminders/${id}`, getAuthHeaders());
+    return res.data;
+  },
+  updateReminder: async (id, data) => {
+    const res = await axios.put(`${API_URL}/reminders/${id}`, data, getAuthHeaders());
+    return res.data;
+  },
+  joinReminder: async (id) => {
+    const res = await axios.post(`${API_URL}/reminders/${id}/join`, {}, getAuthHeaders());
+    return res.data;
+  },
+  declineReminder: async (id) => {
+    const res = await axios.post(`${API_URL}/reminders/${id}/decline`, {}, getAuthHeaders());
+    return res.data;
+  },
+  listJoinRequests: async (conversationId) => {
+    const res = await axios.get(`${API_URL}/conversations/${conversationId}/join-requests`, getAuthHeaders());
+    return res.data;
+  },
+  processJoinRequest: async (conversationId, requestId, action) => {
+    const res = await axios.put(`${API_URL}/conversations/${conversationId}/join-requests/${requestId}`, { action }, getAuthHeaders());
+    return res.data;
+  },
+  blockMember: async (conversationId, memberId) => {
+    const res = await axios.post(`${API_URL}/conversations/${conversationId}/block`, { memberId }, getAuthHeaders());
+    return res.data;
+  },
+  unblockMember: async (conversationId, memberId) => {
+    const res = await axios.delete(`${API_URL}/conversations/${conversationId}/block/${memberId}`, getAuthHeaders());
+    return res.data;
+  },
+  listBlockedMembers: async (conversationId) => {
+    const res = await axios.get(`${API_URL}/conversations/${conversationId}/blocked`, getAuthHeaders());
+    return res.data;
+  },
+  updateNickname: async (id, memberId, nickname) => {
+    const res = await axios.put(`${API_URL}/conversations/${id}/nicknames/${memberId}`, { nickname }, getAuthHeaders());
+    return res.data;
+  },
 };

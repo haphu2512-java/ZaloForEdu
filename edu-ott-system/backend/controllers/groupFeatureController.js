@@ -2,6 +2,7 @@ const crypto = require('crypto');
 const Conversation = require('../models/Conversation');
 const JoinRequest = require('../models/JoinRequest');
 const Message = require('../models/Message');
+const User = require('../models/User');
 const asyncHandler = require('../utils/asyncHandler');
 const ApiError = require('../utils/apiError');
 const { successResponse } = require('../utils/apiResponse');
@@ -20,6 +21,32 @@ const ensureAdminOrOwner = (conversation, userId) => {
   if (!isOwner && !isAdmin) throw new ApiError(403, 'FORBIDDEN', 'Only owner/admin can perform this action');
 };
 
+const ensureCanPin = (conversation, userId) => {
+  if (conversation.type !== 'group') return;
+  const isOwner = toStr(conversation.ownerId || conversation.createdBy) === toStr(userId);
+  const isAdmin = (conversation.adminIds || []).some((a) => toStr(a) === toStr(userId));
+  if (!isOwner && !isAdmin) {
+    if (conversation.settings?.canMembersPin === false) {
+      throw new ApiError(403, 'FORBIDDEN', 'Only admin/owner can pin messages');
+    }
+  }
+};
+
+const emitGroupSystemMessage = async ({ conversationId, senderId, content }) => {
+  const sysMsg = await Message.create({
+    conversationId,
+    senderId,
+    content,
+    type: 'system',
+  });
+  await sysMsg.populate('senderId', 'username avatarUrl fullName');
+  socketService.emitToConversation(conversationId.toString(), 'new_message', sysMsg);
+  await socketService.emitConversationUpdated(conversationId.toString(), {
+    conversationId,
+    latestMessage: sysMsg,
+  });
+};
+
 // ==================== FEATURE 2: PINNED ITEMS (Bảng tin) ====================
 
 /**
@@ -33,15 +60,15 @@ const pinMessage = asyncHandler(async (req, res) => {
   const conversation = await Conversation.findById(id);
   if (!conversation) throw new ApiError(404, 'CONVERSATION_NOT_FOUND', 'Conversation not found');
   ensureGroupMember(conversation, req.user._id);
+  ensureCanPin(conversation, req.user._id);
 
   const message = await Message.findById(messageId);
   if (!message || toStr(message.conversationId) !== toStr(id)) {
     throw new ApiError(404, 'MESSAGE_NOT_FOUND', 'Message does not belong to this conversation');
   }
 
-  // Kiểm tra đã ghim chưa
-  const alreadyPinned = (conversation.pinnedItems || []).some(
-    (item) => toStr(item.messageId) === toStr(messageId),
+  const alreadyPinned = (conversation.pinnedItems || []).some(item =>
+    (item.messageId._id || item.messageId).toString() === messageId.toString()
   );
   if (alreadyPinned) throw new ApiError(400, 'ALREADY_PINNED', 'Message is already pinned');
 
@@ -57,14 +84,36 @@ const pinMessage = asyncHandler(async (req, res) => {
   });
   await conversation.save();
   await conversation.populate([
-    { 
+    {
       path: 'pinnedItems.messageId',
       populate: { path: 'senderId', select: 'username avatarUrl' }
     },
     { path: 'pinnedItems.pinnedBy', select: 'username avatarUrl' }
   ]);
 
-  socketService.emitToConversation(id, 'pinned_items_updated', conversation.pinnedItems);
+  await socketService.emitPinnedItemsUpdated(id, {
+    conversationId: id,
+    pinnedItems: conversation.pinnedItems
+  });
+
+  // Thông báo hệ thống
+  const senderName = req.user.fullName || req.user.username;
+  const shortContent = message.content
+    ? (message.content.length > 50 ? message.content.substring(0, 50) + '...' : message.content)
+    : '[Hình ảnh/File]';
+
+  const pinSysMsg = await Message.create({
+    conversationId: id,
+    senderId: req.user._id,
+    content: `${senderName} đã ghim tin nhắn: "${shortContent}"`,
+    type: 'system'
+  });
+  await pinSysMsg.populate('senderId', 'username avatarUrl fullName');
+  socketService.emitToConversation(id, 'new_message', pinSysMsg);
+  await socketService.emitConversationUpdated(id, {
+    conversationId: id,
+    latestMessage: pinSysMsg
+  });
 
   return successResponse(res, conversation.pinnedItems, 'Message pinned');
 });
@@ -79,26 +128,50 @@ const unpinMessage = asyncHandler(async (req, res) => {
   const conversation = await Conversation.findById(id);
   if (!conversation) throw new ApiError(404, 'CONVERSATION_NOT_FOUND', 'Conversation not found');
   ensureGroupMember(conversation, req.user._id);
+  ensureCanPin(conversation, req.user._id);
 
-  const prevLen = (conversation.pinnedItems || []).length;
+  const initialCount = (conversation.pinnedItems || []).length;
+  // Cho phép xóa bằng cả messageId hoặc pinId (ID của entry trong mảng pinnedItems)
   conversation.pinnedItems = (conversation.pinnedItems || []).filter(
-    (item) => toStr(item.messageId) !== messageId,
+    (item) => {
+      const itemMsgId = (item.messageId._id || item.messageId).toString();
+      const itemPinId = item._id.toString();
+      return itemMsgId !== messageId.toString() && itemPinId !== messageId.toString();
+    }
   );
 
-  if (conversation.pinnedItems.length === prevLen) {
+  if (conversation.pinnedItems.length === initialCount) {
     throw new ApiError(404, 'NOT_PINNED', 'This message is not pinned');
   }
 
   await conversation.save();
   await conversation.populate([
-    { 
+    {
       path: 'pinnedItems.messageId',
       populate: { path: 'senderId', select: 'username avatarUrl' }
     },
     { path: 'pinnedItems.pinnedBy', select: 'username avatarUrl' }
   ]);
-  
-  socketService.emitToConversation(id, 'pinned_items_updated', conversation.pinnedItems);
+
+  await socketService.emitPinnedItemsUpdated(id, {
+    conversationId: id,
+    pinnedItems: conversation.pinnedItems
+  });
+
+  // Thông báo hệ thống khi bỏ ghim
+  const senderName = req.user.fullName || req.user.username;
+  const unpinSysMsg = await Message.create({
+    conversationId: id,
+    senderId: req.user._id,
+    content: `${senderName} đã bỏ ghim tin nhắn.`,
+    type: 'system'
+  });
+  await unpinSysMsg.populate('senderId', 'username avatarUrl fullName');
+  socketService.emitToConversation(id, 'new_message', unpinSysMsg);
+  await socketService.emitConversationUpdated(id, {
+    conversationId: id,
+    latestMessage: unpinSysMsg
+  });
 
   return successResponse(res, conversation.pinnedItems, 'Message unpinned');
 });
@@ -131,17 +204,32 @@ const getPinnedMessages = asyncHandler(async (req, res) => {
  */
 const updateGroupSettings = asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const { isApprovalRequired } = req.body;
+  const { isApprovalRequired, canMembersUpdateInfo, canMembersPin, canMembersCreateReminders, canMembersCreatePolls, canMembersSendMessages } = req.body;
 
   const conversation = await Conversation.findById(id);
   if (!conversation) throw new ApiError(404, 'CONVERSATION_NOT_FOUND', 'Conversation not found');
   if (conversation.type !== 'group') throw new ApiError(400, 'INVALID_CONVERSATION_TYPE', 'Only for group conversations');
   ensureAdminOrOwner(conversation, req.user._id);
 
-  if (typeof isApprovalRequired === 'boolean') {
-    conversation.settings = { ...conversation.settings, isApprovalRequired };
-  }
+  const updates = {};
+  if (typeof isApprovalRequired === 'boolean') updates.isApprovalRequired = isApprovalRequired;
+  if (typeof canMembersUpdateInfo === 'boolean') updates.canMembersUpdateInfo = canMembersUpdateInfo;
+  if (typeof canMembersPin === 'boolean') updates.canMembersPin = canMembersPin;
+  if (typeof canMembersCreateReminders === 'boolean') updates.canMembersCreateReminders = canMembersCreateReminders;
+  if (typeof canMembersCreatePolls === 'boolean') updates.canMembersCreatePolls = canMembersCreatePolls;
+  if (typeof canMembersSendMessages === 'boolean') updates.canMembersSendMessages = canMembersSendMessages;
+  if (typeof req.body.markAdminMessages === 'boolean') updates.markAdminMessages = req.body.markAdminMessages;
+
+  conversation.settings = { ...conversation.settings, ...updates };
   await conversation.save();
+
+  socketService.emitToConversation(id, 'conversation_settings_updated', conversation.settings);
+  const senderName = req.user.fullName || req.user.username;
+  await emitGroupSystemMessage({
+    conversationId: conversation._id,
+    senderId: req.user._id,
+    content: `${senderName} đã cập nhật cài đặt nhóm`,
+  });
 
   return successResponse(res, conversation.settings, 'Group settings updated');
 });
@@ -171,10 +259,23 @@ const requestToJoin = asyncHandler(async (req, res) => {
   const joinRequest = await JoinRequest.findOneAndUpdate(
     { conversationId: id, userId: req.user._id },
     { status: 'pending', reason: reason?.trim() || '', processedBy: null, processedAt: null },
-    { new: true, upsert: true },
+    { returnDocument: 'after', upsert: true },
   );
 
   await joinRequest.populate('userId', 'username avatarUrl email');
+
+  // Notify admins/owner about new join request
+  const adminIds = [
+    toStr(conversation.ownerId || conversation.createdBy),
+    ...(conversation.adminIds || []).map(toStr),
+  ].filter(Boolean);
+  adminIds.forEach((adminId) => {
+    socketService.emitToUser(adminId, 'join_request_received', {
+      conversationId: id,
+      conversationName: conversation.name,
+      joinRequest,
+    });
+  });
 
   return successResponse(res, joinRequest, 'Join request sent', 201);
 });
@@ -235,6 +336,23 @@ const processJoinRequest = asyncHandler(async (req, res) => {
   joinRequest.processedAt = new Date();
   await joinRequest.save();
   await joinRequest.populate('userId', 'username avatarUrl');
+
+  // Notify the requester of the decision
+  socketService.emitToUser(toStr(joinRequest.userId._id || joinRequest.userId), 'join_request_processed', {
+    conversationId: id,
+    conversationName: conversation.name,
+    action,
+  });
+
+  const senderName = req.user.fullName || req.user.username;
+  const requesterName = joinRequest.userId?.fullName || joinRequest.userId?.username || 'một thành viên';
+  await emitGroupSystemMessage({
+    conversationId: conversation._id,
+    senderId: req.user._id,
+    content: action === 'approve'
+      ? `${senderName} đã duyệt ${requesterName} vào nhóm`
+      : `${senderName} đã từ chối yêu cầu tham gia của ${requesterName}`,
+  });
 
   return successResponse(res, joinRequest, `Join request ${action}d`);
 });
@@ -343,7 +461,7 @@ const joinByInviteLink = asyncHandler(async (req, res) => {
     const joinRequest = await JoinRequest.findOneAndUpdate(
       { conversationId: conversation._id, userId: req.user._id },
       { status: 'pending', invitedBy: null, processedBy: null, processedAt: null },
-      { new: true, upsert: true },
+      { returnDocument: 'after', upsert: true },
     );
 
     return successResponse(res, { requiresApproval: true, joinRequest }, 'Join request sent, waiting for approval', 202);
@@ -353,7 +471,80 @@ const joinByInviteLink = asyncHandler(async (req, res) => {
   conversation.participants.push(req.user._id);
   await conversation.save();
 
+  const senderName = req.user.fullName || req.user.username;
+  await emitGroupSystemMessage({
+    conversationId: conversation._id,
+    senderId: req.user._id,
+    content: `${senderName} đã tham gia nhóm qua link mời`,
+  });
+
   return successResponse(res, conversation, 'Joined group successfully');
+});
+
+// ==================== FEATURE 6: BLOCK MEMBERS (Chặn khỏi nhóm) ====================
+
+const blockMember = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const { memberId } = req.body;
+
+  const conversation = await Conversation.findById(id);
+  if (!conversation) throw new ApiError(404, 'CONVERSATION_NOT_FOUND', 'Conversation not found');
+  ensureAdminOrOwner(conversation, req.user._id);
+
+  const targetStr = toStr(memberId);
+  const ownerStr = toStr(conversation.ownerId || conversation.createdBy);
+  if (targetStr === ownerStr) throw new ApiError(403, 'FORBIDDEN', 'Cannot block the group owner');
+
+  conversation.participants = conversation.participants.filter(p => toStr(p) !== targetStr);
+  if (!conversation.blockedMembers) conversation.blockedMembers = [];
+  if (!conversation.blockedMembers.some(b => toStr(b) === targetStr)) {
+    conversation.blockedMembers.push(memberId);
+  }
+  await conversation.save();
+
+  socketService.emitToUser(targetStr, 'removed_from_group', { conversationId: id, reason: 'blocked' });
+  socketService.emitToConversation(id, 'member_blocked', { conversationId: id, memberId: targetStr });
+  const targetUser = await User.findById(memberId).select('fullName username');
+  const targetName = targetUser?.fullName || targetUser?.username || 'một thành viên';
+  const senderName = req.user.fullName || req.user.username;
+  await emitGroupSystemMessage({
+    conversationId: conversation._id,
+    senderId: req.user._id,
+    content: `${senderName} đã chặn và mời ${targetName} khỏi nhóm`,
+  });
+
+  return successResponse(res, {}, 'Member blocked');
+});
+
+const unblockMember = asyncHandler(async (req, res) => {
+  const { id, memberId } = req.params;
+
+  const conversation = await Conversation.findById(id);
+  if (!conversation) throw new ApiError(404, 'CONVERSATION_NOT_FOUND', 'Conversation not found');
+  ensureAdminOrOwner(conversation, req.user._id);
+
+  conversation.blockedMembers = (conversation.blockedMembers || []).filter(b => toStr(b) !== toStr(memberId));
+  await conversation.save();
+  const targetUser = await User.findById(memberId).select('fullName username');
+  const targetName = targetUser?.fullName || targetUser?.username || 'một thành viên';
+  const senderName = req.user.fullName || req.user.username;
+  await emitGroupSystemMessage({
+    conversationId: conversation._id,
+    senderId: req.user._id,
+    content: `${senderName} đã bỏ chặn ${targetName}`,
+  });
+
+  return successResponse(res, {}, 'Member unblocked');
+});
+
+const listBlockedMembers = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+
+  const conversation = await Conversation.findById(id).populate('blockedMembers', 'username avatarUrl');
+  if (!conversation) throw new ApiError(404, 'CONVERSATION_NOT_FOUND', 'Conversation not found');
+  ensureAdminOrOwner(conversation, req.user._id);
+
+  return successResponse(res, conversation.blockedMembers || [], 'Blocked members fetched');
 });
 
 module.exports = {
@@ -371,4 +562,8 @@ module.exports = {
   resetInviteLink,
   previewGroupByInviteCode,
   joinByInviteLink,
+  // Feature 6: Block members
+  blockMember,
+  unblockMember,
+  listBlockedMembers,
 };

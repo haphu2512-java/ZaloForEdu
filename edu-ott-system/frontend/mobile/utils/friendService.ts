@@ -100,3 +100,43 @@ export async function getIncomingFriendRequests(
   );
   return res.data;
 }
+
+/**
+ * Lấy danh sách lời mời kết bạn đi (pending)
+ * GET /friends/request/outgoing?limit=&cursor=
+ */
+export async function getOutgoingFriendRequests(
+  cursor: string | null = null,
+  limit: number = 20,
+): Promise<PaginatedResponse<FriendRequest>> {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (cursor) params.append('cursor', cursor);
+  const res = await fetchAPI(
+    `${FRIENDS_ENDPOINT}/request/outgoing?${params.toString()}`,
+  );
+  return res.data;
+}
+
+/**
+ * Gửi lời mời kết bạn theo danh sách user id.
+ * Dùng cho các flow đồng bộ danh bạ / gợi ý bạn bè.
+ */
+export async function sendFriendRequestsBulk(
+  userIds: string[],
+): Promise<{ successIds: string[]; failedIds: string[] }> {
+  const uniqueIds = Array.from(new Set(userIds.filter(Boolean)));
+  const results = await Promise.allSettled(
+    uniqueIds.map((toUserId) => sendFriendRequest({ toUserId })),
+  );
+
+  const successIds: string[] = [];
+  const failedIds: string[] = [];
+
+  results.forEach((result, index) => {
+    const id = uniqueIds[index];
+    if (result.status === 'fulfilled') successIds.push(id);
+    else failedIds.push(id);
+  });
+
+  return { successIds, failedIds };
+}

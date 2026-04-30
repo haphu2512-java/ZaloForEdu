@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Audio Format Support</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+        }
+        .format-test {
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .supported {
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+        }
+        .not-supported {
+            background: #f8d7da;
+            border: 1px solid #f5c6cb;
+        }
+        .format-name {
+            font-weight: 600;
+            font-family: monospace;
+        }
+        .badge {
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        .badge-success {
+            background: #28a745;
+            color: white;
+        }
+        .badge-danger {
+            background: #dc3545;
+            color: white;
+        }
+        .badge-warning {
+            background: #ffc107;
+            color: #333;
+        }
+        .info-box {
+            background: #e7f3ff;
+            border: 1px solid #b3d9ff;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 20px;
+        }
+        .info-box h3 {
+            margin-top: 0;
+            color: #0066cc;
+        }
+        .recommendation {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 20px;
+        }
+        .recommendation h3 {
+            margin-top: 0;
+            color: #856404;
+        }
+        ul {
+            margin: 10px 0;
+            padding-left: 20px;
+        }
+        li {
+            margin: 5px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎤 Audio Format Support Test</h1>
+        <p class="subtitle">Kiểm tra browser của bạn hỗ trợ format audio nào</p>
+        
+        <div id="results"></div>
+        
+        <div class="info-box">
+            <h3>📱 Tương thích iOS:</h3>
+            <ul>
+                <li><strong>✅ Tốt:</strong> audio/mp4, audio/mpeg (MP3), audio/wav</li>
+                <li><strong>❌ Không tương thích:</strong> audio/webm</li>
+            </ul>
+        </div>
+        
+        <div id="recommendation"></div>
+    </div>
+
+    <script>
+        const formats = [
+            { mime: 'audio/mp4', name: 'MP4 (AAC)', ios: true },
+            { mime: 'audio/mpeg', name: 'MP3', ios: true },
+            { mime: 'audio/wav', name: 'WAV', ios: true },
+            { mime: 'audio/webm', name: 'WebM', ios: false },
+            { mime: 'audio/webm;codecs=opus', name: 'WebM (Opus)', ios: false },
+            { mime: 'audio/ogg;codecs=opus', name: 'OGG (Opus)', ios: false },
+        ];
+
+        const resultsDiv = document.getElementById('results');
+        const recommendationDiv = document.getElementById('recommendation');
+        
+        let hasIOSCompatible = false;
+        let recommendedFormat = null;
+
+        formats.forEach(format => {
+            const supported = MediaRecorder.isTypeSupported(format.mime);
+            
+            if (supported && format.ios && !recommendedFormat) {
+                recommendedFormat = format;
+                hasIOSCompatible = true;
+            }
+            
+            const div = document.createElement('div');
+            div.className = `format-test ${supported ? 'supported' : 'not-supported'}`;
+            
+            const nameSpan = document.createElement('span');
+            nameSpan.className = 'format-name';
+            nameSpan.textContent = format.name;
+            
+            const badgeSpan = document.createElement('span');
+            badgeSpan.className = `badge ${supported ? 'badge-success' : 'badge-danger'}`;
+            badgeSpan.textContent = supported ? '✅ Hỗ trợ' : '❌ Không hỗ trợ';
+            
+            div.appendChild(nameSpan);
+            div.appendChild(badgeSpan);
+            resultsDiv.appendChild(div);
+        });
+
+        // Show recommendation
+        if (hasIOSCompatible) {
+            recommendationDiv.innerHTML = `
+                <div class="recommendation">
+                    <h3>✅ Khuyến nghị:</h3>
+                    <p>Browser của bạn hỗ trợ <strong>${recommendedFormat.name}</strong> - tương thích tốt với iOS!</p>
+                    <p>Bạn có thể ghi âm và gửi cho người dùng iOS mà không gặp vấn đề.</p>
+                </div>
+            `;
+        } else {
+            recommendationDiv.innerHTML = `
+                <div class="recommendation">
+                    <h3>⚠️ Cảnh báo:</h3>
+                    <p>Browser của bạn <strong>KHÔNG hỗ trợ</strong> format tương thích với iOS.</p>
+                    <p><strong>Giải pháp:</strong></p>
+                    <ul>
+                        <li>Sử dụng Chrome hoặc Safari thay vì Firefox</li>
+                        <li>Hoặc ghi âm từ thiết bị iOS/Android</li>
+                    </ul>
+                </div>
+            `;
+        }
+
+        // Log to console
+        console.log('=== Audio Format Support ===');
+        formats.forEach(format => {
+            const supported = MediaRecorder.isTypeSupported(format.mime);
+            console.log(`${format.name}: ${supported ? '✅' : '❌'}`);
+        });
+        console.log('===========================');
+    </script>
+</body>
+</html>

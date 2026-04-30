@@ -89,9 +89,10 @@ const searchUsers = asyncHandler(async (req, res) => {
   
   const filter = {
     deletedAt: null,
+    _id: { $ne: req.user._id },
     $or: [
-      { username: queryRegex }, 
-      { email: queryRegex }, 
+      { username: queryRegex },
+      { email: queryRegex },
       { phone: isPhoneSearch ? q : queryRegex }
     ],
   };

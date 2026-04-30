@@ -1,6 +1,9 @@
 const mongoose = require('mongoose');
 
 const Message = require('../models/Message');
+const User = require('../models/User');
+const ConversationPreference = require('../models/ConversationPreference');
+const GroupMember = require('../models/GroupMember');
 const { createMessage, ensureConversationMember } = require('../services/messageService');
 const { decodeCursor, encodeCursor } = require('../utils/cursor');
 const asyncHandler = require('../utils/asyncHandler');
@@ -8,10 +11,61 @@ const ApiError = require('../utils/apiError');
 const { successResponse } = require('../utils/apiResponse');
 const socketService = require('../services/socketService');
 
+const toStr = (id) => id?.toString();
+
 const sendMessage = asyncHandler(async (req, res) => {
-  const { conversationId, content, mediaIds, replyTo, forwardFrom } = req.body;
+  const { conversationId, content, mediaIds, replyTo, forwardFrom, channelId, type, isPinnedAnnouncement } = req.body;
   if (!content && (!mediaIds || mediaIds.length === 0)) {
     throw new ApiError(400, 'INVALID_PAYLOAD', 'Message content or media is required');
+  }
+
+  const Conversation = require('../models/Conversation');
+  const User = require('../models/User');
+  const conversation = await Conversation.findById(conversationId);
+  if (!conversation) throw new ApiError(404, 'CONVERSATION_NOT_FOUND', 'Conversation not found');
+
+  const isOwner = toStr(conversation.ownerId || conversation.createdBy) === toStr(req.user._id);
+  const isAdmin = (conversation.adminIds || []).some((a) => toStr(a) === toStr(req.user._id));
+
+  let communityMember = null;
+  if (conversation.type === 'community') {
+    communityMember = await GroupMember.findOne({ groupId: conversationId, userId: req.user._id });
+    if (!communityMember || communityMember.status !== 'active') {
+      throw new ApiError(403, 'FORBIDDEN', 'You are not an active member of this community');
+    }
+    if (communityMember.mutedUntil && new Date(communityMember.mutedUntil) > new Date()) {
+      throw new ApiError(403, 'FORBIDDEN', 'You are muted in this community');
+    }
+    if (type === 'announcement' && !['owner', 'admin', 'mod'].includes(communityMember.role)) {
+      throw new ApiError(403, 'FORBIDDEN', 'Only admin/mod can post announcements');
+    }
+  }
+
+  if (!isOwner && !isAdmin) {
+    if (conversation.settings?.canMembersSendMessages === false) {
+      throw new ApiError(403, 'FORBIDDEN', 'Only admin/owner can send messages in this group');
+    }
+  }
+
+  // Chat 1-1: kiểm tra block + messagePrivacy
+  if (conversation.type === 'direct') {
+    const otherParticipantId = conversation.participants.find(p => toStr(p) !== toStr(req.user._id));
+    if (otherParticipantId) {
+      const currentUser = await User.findById(req.user._id);
+      const otherUser = await User.findById(otherParticipantId).select('blockedUsers messagePrivacy friends');
+      if (currentUser?.blockedUsers?.some(id => toStr(id) === toStr(otherParticipantId))) {
+        throw new ApiError(403, 'FORBIDDEN', 'Bạn đã chặn người này');
+      }
+      if (otherUser?.blockedUsers?.some(id => toStr(id) === toStr(req.user._id))) {
+        throw new ApiError(403, 'FORBIDDEN', 'Bạn đã bị người này chặn');
+      }
+      if (otherUser?.messagePrivacy === 'friends') {
+        const isFriend = (otherUser.friends || []).some(f => toStr(f) === toStr(req.user._id));
+        if (!isFriend) {
+          throw new ApiError(403, 'PRIVACY_RESTRICTED', 'Người dùng này chỉ nhận tin nhắn từ bạn bè');
+        }
+      }
+    }
   }
 
   const message = await createMessage({
@@ -21,13 +75,42 @@ const sendMessage = asyncHandler(async (req, res) => {
     mediaIds,
     replyTo,
     forwardFrom,
+    channelId: channelId || null,
+    type: type || 'text',
+    isPinnedAnnouncement: Boolean(isPinnedAnnouncement),
   });
+
+  // Set firstSenderId nếu chưa có (tin nhắn đầu tiên)
+  if (!conversation.firstSenderId) {
+    conversation.firstSenderId = req.user._id;
+    await conversation.save();
+  }
 
   // Populate media để frontend hiển thị ngay
   await message.populate('mediaIds', 'fileName url size mimeType providerResourceType');
   await message.populate('senderId', 'username avatarUrl');
 
-  socketService.emitToConversation(conversationId, 'new_message', message);
+  // Un-hide conversation for all participants who had hidden it (e.g. via "delete conversation")
+  await ConversationPreference.updateMany(
+    { conversationId, isHidden: true },
+    { $set: { isHidden: false } }
+  );
+
+  if (message.type === 'announcement') {
+    socketService.emitToCommunityChannel(
+      conversationId,
+      message.channelId || null,
+      'announcement',
+      message,
+    );
+  } else {
+    socketService.emitToCommunityChannel(
+      conversationId,
+      message.channelId || null,
+      'new_message',
+      message,
+    );
+  }
   await socketService.emitConversationUpdated(conversationId, {
     conversationId,
     latestMessage: message,
@@ -40,11 +123,13 @@ const listMessagesByConversation = asyncHandler(async (req, res) => {
   const conversationId = req.params.id;
   const limit = Number(req.query.limit);
   const { cursor } = req.query;
+  const channelId = req.query.channelId || null;
 
   await ensureConversationMember(conversationId, req.user._id);
 
   const query = {
     conversationId,
+    channelId,
     deletedBy: { $ne: req.user._id } // Do not fetch messages deleted by this user
   };
 
@@ -72,8 +157,12 @@ const listMessagesByConversation = asyncHandler(async (req, res) => {
     .populate('forwardFrom')
     .populate({
       path: 'pollId',
-      populate: { path: 'createdBy', select: 'username avatarUrl' }
-    });
+      populate: [
+        { path: 'createdBy', select: 'username avatarUrl' },
+        { path: 'options.votes', select: 'username avatarUrl' }
+      ]
+    })
+    .populate('reminderId', 'title remindAt participants declinedBy createdBy');
 
   let nextCursor = null;
   let finalItems = messages;
@@ -142,8 +231,21 @@ const recallMessage = asyncHandler(async (req, res) => {
     throw new ApiError(404, 'MESSAGE_NOT_FOUND', 'Message not found');
   }
 
-  if (!message.senderId.equals(req.user._id)) {
-    throw new ApiError(403, 'FORBIDDEN', 'Only sender can recall this message');
+  const isSender = message.senderId.equals(req.user._id);
+
+  // Nếu không phải người gửi → kiểm tra quyền Admin/Owner trong nhóm
+  if (!isSender) {
+    const Conversation = require('../models/Conversation');
+    const conversation = await Conversation.findById(message.conversationId);
+    if (!conversation || conversation.type !== 'group') {
+      throw new ApiError(403, 'FORBIDDEN', 'Only sender can recall this message');
+    }
+    const ownerId = (conversation.ownerId || conversation.createdBy)?.toString();
+    const isOwner = ownerId === toStr(req.user._id);
+    const isAdmin = (conversation.adminIds || []).some((a) => toStr(a) === toStr(req.user._id));
+    if (!isOwner && !isAdmin) {
+      throw new ApiError(403, 'FORBIDDEN', 'Only sender or group admin can recall this message');
+    }
   }
 
   message.isRecalled = true;

@@ -27,6 +27,11 @@ const createOtp = () => String(Math.floor(100000 + Math.random() * 900000));
 
 // ─── Email helpers ────────────────────────────────────────────
 const sendEmailOtp = async (email, otp, subject = 'Mã OTP xác thực - ZaloApp') => {
+  // In rõ mã OTP ra Terminal luôn (để dev test dễ dàng)
+  console.log(`\n╔${'═'.repeat(50)}╗`);
+  console.log(`║  [OTP EMAIL] Gửi tới : ${email.padEnd(35)}║`);
+  console.log(`║  Mã OTP      : ${otp.padEnd(38)}║`);
+  console.log(`╚${'═'.repeat(50)}╝\n`);
   await sendEmail({
     to: email,
     subject,
@@ -37,14 +42,12 @@ const sendEmailOtp = async (email, otp, subject = 'Mã OTP xác thực - ZaloApp
 
 // ─── Phone SMS mock (giả lập - bạn có thể tích hợp Twilio sau) ─
 const sendSmsOtp = (phone, otp, type = 'verify') => {
-  const msg = type === 'forgot_password'
-    ? `[SMS] Mã OTP đặt lại mật khẩu ZaloApp: ${otp} (${OTP_EXPIRE_MINUTES} phút)`
-    : `[SMS] Mã OTP xác thực số ĐT ZaloApp: ${otp} (${OTP_EXPIRE_MINUTES} phút)`;
-  // In ra Terminal Backend để dev xem mã (thay thế bằng Twilio/ESMS khi go-live)
-  console.log(`\n══════════════════════════════════════
-${msg}
-Gửi tới: ${phone}
-══════════════════════════════════════\n`);
+  const label = type === 'forgot_password' ? 'Đặt lại mật khẩu' : 'Xác thực số ĐT';
+  console.log(`\n╔${'═'.repeat(50)}╗`);
+  console.log(`║  [OTP SMS] ${label.padEnd(41)}║`);
+  console.log(`║  Gửi tới  : ${phone.padEnd(38)}║`);
+  console.log(`║  Mã OTP   : ${otp.padEnd(39)}║`);
+  console.log(`╚${'═'.repeat(50)}╝\n`);
 };
 
 // ─── Anti-spam OTP guard ──────────────────────────────────────
@@ -233,6 +236,17 @@ const login = asyncHandler(async (req, res) => {
   // 1. Kiểm tra tài khoản có bị khóa không
   if (user.isActive === false) {
     throw new ApiError(403, 'ACCOUNT_LOCKED', user.banReason || 'Tài khoản của bạn đã bị khóa.');
+  }
+
+  // 2. Kiểm tra tài khoản đã xác thực chưa (chỉ check contact đang dùng để login)
+  const loginByEmail = !!email;
+  const loginByPhone = !!phone;
+
+  if (loginByEmail && user.email && !user.isEmailVerified) {
+    throw new ApiError(403, 'EMAIL_NOT_VERIFIED', 'Email chưa được xác thực. Vui lòng nhập mã OTP đã gửi đến email.');
+  }
+  if (loginByPhone && user.phone && !user.isPhoneVerified) {
+    throw new ApiError(403, 'PHONE_NOT_VERIFIED', 'Số điện thoại chưa được xác thực. Vui lòng nhập mã OTP đã gửi đến điện thoại.');
   }
 
   const passwordToCompare = user.passwordHash || user.password;

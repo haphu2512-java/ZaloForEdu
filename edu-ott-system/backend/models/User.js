@@ -47,6 +47,14 @@ const userSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
+    webTokenVersion: {
+      type: Number,
+      default: 0,
+    },
+    mobileTokenVersion: {
+      type: Number,
+      default: 0,
+    },
     isOnline: {
       type: Boolean,
       default: false,
@@ -54,6 +62,11 @@ const userSchema = new mongoose.Schema(
     lastSeen: {
       type: Date,
       default: null,
+    },
+    messagePrivacy: {
+      type: String,
+      enum: ['everyone', 'friends'],
+      default: 'everyone',
     },
     isEmailVerified: {
       type: Boolean,
@@ -75,6 +88,26 @@ const userSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+    isPhoneVerified: {
+      type: Boolean,
+      default: false,
+    },
+    otpCode: {
+      type: String,
+      default: null,
+    },
+    otpExpires: {
+      type: Date,
+      default: null,
+    },
+    otpType: {
+      type: String,
+      default: null,
+    },
+    lastOtpSentAt: {
+      type: Date,
+      default: null,
+    },
     isActive: {
       type: Boolean,
       default: true,
@@ -85,14 +118,6 @@ const userSchema = new mongoose.Schema(
     },
     deletedAt: {
       type: Date,
-      default: null,
-    },
-    isActive: {
-      type: Boolean,
-      default: true,
-    },
-    banReason: {
-      type: String,
       default: null,
     },
   },

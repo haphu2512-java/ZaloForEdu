@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useFocusEffect } from 'expo-router';
 import {
   FlatList,
@@ -12,7 +12,7 @@ import {
   TouchableWithoutFeedback,
   ScrollView,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { getConversations } from '@/utils/messageService';
 import { connectSocket } from '@/utils/socketService';
 import { useAuth } from '@/context/auth';
@@ -21,7 +21,8 @@ import { useColorScheme } from '@/components/useColorScheme';
 import type { Conversation } from '@/types/chat';
 import { useRouter } from 'expo-router';
 import { Alert } from 'react-native';
-import { updateConversationPreference } from '@/utils/messageService';
+import { updateConversationPreference, pinConversation, muteConversation, reportConversation } from '@/utils/messageService';
+import { blockOrUnblockUser } from '@/utils/userService';
 import { ChatListItem } from '@/components/chat/ChatListItem';
 
 type FilterTab = 'all' | 'work' | 'family';
@@ -140,7 +141,7 @@ export default function MessagesScreen() {
 
       socket.on('conversation_updated', onConversationUpdated);
       socket.on('message_seen', onMessageSeen);
-      
+
       off = () => {
         socket.off('conversation_updated', onConversationUpdated);
         socket.off('message_seen', onMessageSeen);
@@ -201,17 +202,59 @@ export default function MessagesScreen() {
         await loadConversations();
       } else if (actionType === 'details') {
         router.push({ pathname: '/conversation-details', params: { id: item._id } });
+      } else if (actionType === 'pin') {
+        const isPinned = item.preference?.isPinned;
+        await pinConversation(item._id, !isPinned);
+        await loadConversations();
+        Alert.alert('✅', isPinned ? 'Đã bỏ ghim' : 'Đã ghim');
+      } else if (actionType === 'mute') {
+        const isMuted = item.preference?.isMuted;
+        await muteConversation(item._id, !isMuted);
+        await loadConversations();
+        Alert.alert('✅', isMuted ? 'Đã bật thông báo' : 'Đã tắt thông báo');
+      } else if (actionType === 'report') {
+        await reportConversation(item._id, 'Báo cáo vi phạm');
+        Alert.alert('✅', 'Đã gửi báo cáo');
+      } else if (actionType === 'block') {
+        const currentUserId = user?.id || '';
+        const otherUser = item.participants?.find((p) => (p._id || p.id || '') !== currentUserId);
+        if (otherUser) {
+          await blockOrUnblockUser(otherUser._id || otherUser.id || '');
+          await loadConversations();
+          Alert.alert('✅', 'Đã chặn người dùng');
+        }
       }
     } catch (error: any) {
       Alert.alert('Lỗi', error.message || 'Thao tác thất bại');
     }
   };
 
-  // Filter conversations based on active tab
-  const filteredConversations = conversations.filter((conv) => {
-    if (activeTab === 'all') return true;
-    return conv.preference?.category === activeTab;
-  });
+  // Filter conversations based on active tab and sort them with pinned on top
+  const filteredConversations = useMemo(() => {
+    return [...conversations.filter((conv) => {
+      if (activeTab === 'all') return true;
+      return conv.preference?.category === activeTab;
+    })].sort((a, b) => {
+      if (a.preference?.isPinned && !b.preference?.isPinned) return -1;
+      if (!a.preference?.isPinned && b.preference?.isPinned) return 1;
+      const timeA = new Date(a.latestMessage?.createdAt || a.lastMessageAt || 0).getTime();
+      const timeB = new Date(b.latestMessage?.createdAt || b.lastMessageAt || 0).getTime();
+      return timeB - timeA;
+    });
+  }, [conversations, activeTab]);
+
+  // Calculate Strangers vs Normal
+  const currentUserFriends = useMemo(() => (user?.friends || []).map((f: any) => typeof f === 'string' ? f : f._id || f.id), [user]);
+  
+  const strangerConversations = useMemo(() => filteredConversations.filter(conv => {
+    if (conv.type === 'group') return false;
+    const other = conv.participants?.find((p) => (p._id || p.id || '') !== (user?.id || ''));
+    if (!other) return false;
+    const targetId = other._id || other.id || '';
+    return !currentUserFriends.includes(targetId);
+  }), [filteredConversations, user?.id, currentUserFriends]);
+
+  const normalConversations = useMemo(() => filteredConversations.filter(c => !strangerConversations.includes(c)), [filteredConversations, strangerConversations]);
 
   const renderItem = ({ item }: { item: Conversation }) => {
     const currentUserId = user?.id || '';
@@ -228,9 +271,9 @@ export default function MessagesScreen() {
     // Check if the latest message is unread by the current user
     let isUnread = false;
     if (latestMsg) {
-      const msgSenderId = typeof latestMsg.senderId === 'string' ? latestMsg.senderId : latestMsg.senderId?._id || latestMsg.senderId?.id;
+      const msgSenderId = typeof latestMsg.senderId === 'string' ? latestMsg.senderId : (latestMsg.senderId as any)?._id || (latestMsg.senderId as any)?.id;
       if (msgSenderId && msgSenderId !== currentUserId) {
-        const seenByList = (latestMsg.seenBy || []).map((u: any) => typeof u === 'string' ? u : u._id || u.id);
+        const seenByList = (latestMsg.seenBy || []).map((u: any) => typeof u === 'string' ? u : (u as any)?._id || (u as any)?.id);
         if (!seenByList.includes(currentUserId)) {
           isUnread = true;
         }
@@ -244,6 +287,7 @@ export default function MessagesScreen() {
       <ChatListItem
         id={item._id}
         name={displayName}
+        isPinned={item.preference?.isPinned}
         avatar={displayAvatar}
         lastMessage={senderName && latestMsg ? `${senderName}: ${lastMessageText}` : lastMessageText}
         time={formatTime(lastMessageTime)}
@@ -307,7 +351,7 @@ export default function MessagesScreen() {
       </View>
 
       <FlatList
-        data={filteredConversations}
+        data={normalConversations}
         keyExtractor={(item) => item._id}
         renderItem={renderItem}
         ListEmptyComponent={renderEmpty}
@@ -315,6 +359,20 @@ export default function MessagesScreen() {
         contentContainerStyle={filteredConversations.length === 0 ? { flex: 1 } : undefined}
         showsVerticalScrollIndicator={false}
         ItemSeparatorComponent={() => <View style={{ height: 1, backgroundColor: colors.border, marginLeft: 76 }} />}
+        ListHeaderComponent={strangerConversations.length > 0 && activeTab === 'all' ? (
+          <TouchableOpacity onPress={() => router.push('/strangers')} style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, backgroundColor: colors.surface, borderBottomWidth: 1, borderBottomColor: colors.border }}>
+            <View style={{ width: 48, height: 48, borderRadius: 24, backgroundColor: '#0068FF', alignItems: 'center', justifyContent: 'center', marginRight: 14 }}>
+              <MaterialCommunityIcons name="incognito" size={28} color="#fff" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 16, fontWeight: '500', color: colors.text }}>Tin nhắn từ người lạ</Text>
+              <Text style={{ fontSize: 14, color: colors.muted, marginTop: 2 }}>Gửi từ người chưa có trong danh bạ</Text>
+            </View>
+            {strangerConversations.some(c => c.latestMessage && c.latestMessage.senderId !== user?.id && !c.latestMessage.seenBy?.some((s: any) => (s._id || s.id || s) === user?.id)) && (
+              <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#EF4444', marginLeft: 8 }} />
+            )}
+          </TouchableOpacity>
+        ) : null}
       />
 
       {/* Action Sheet Modal */}
@@ -370,20 +428,55 @@ export default function MessagesScreen() {
                         <Text style={[styles.actionOptionText, { color: colors.text }]}>Quản lý nhóm</Text>
                       </TouchableOpacity>
                     )}
+
+                    <View style={{ height: StyleSheet.hairlineWidth, backgroundColor: colors.border, marginVertical: 4, marginHorizontal: 16 }} />
+
+                    <TouchableOpacity style={styles.actionOption} onPress={() => handleAction('pin', selectedConversation)}>
+                      <View style={[styles.actionIconWrap, { backgroundColor: 'transparent' }]}>
+                        <Ionicons name="pin" size={22} color={colors.text} />
+                      </View>
+                      <Text style={[styles.actionOptionText, { color: colors.text }]}>Ghim</Text>
+                    </TouchableOpacity>
+
                     <TouchableOpacity style={styles.actionOption} onPress={() => handleAction('archive', selectedConversation)}>
-                      <View style={[styles.actionIconWrap, { backgroundColor: '#F3E8FF' }]}>
-                        <Ionicons name="archive-outline" size={20} color="#9333EA" />
+                      <View style={[styles.actionIconWrap, { backgroundColor: 'transparent' }]}>
+                        <Ionicons name="archive-outline" size={22} color={colors.text} />
                       </View>
-                      <Text style={[styles.actionOptionText, { color: colors.text }]}>Lưu trữ tin nhắn</Text>
+                      <Text style={[styles.actionOptionText, { color: colors.text }]}>Lưu trữ</Text>
                     </TouchableOpacity>
+
+                    <TouchableOpacity style={styles.actionOption} onPress={() => handleAction('mute', selectedConversation)}>
+                      <View style={[styles.actionIconWrap, { backgroundColor: 'transparent' }]}>
+                        <Ionicons name="notifications-off-outline" size={22} color={colors.text} />
+                      </View>
+                      <Text style={[styles.actionOptionText, { color: colors.text }]}>Tắt tiếng</Text>
+                    </TouchableOpacity>
+
+                    {selectedConversation.type !== 'group' && (
+                      <TouchableOpacity style={styles.actionOption} onPress={() => handleAction('block', selectedConversation)}>
+                        <View style={[styles.actionIconWrap, { backgroundColor: 'transparent' }]}>
+                          <Ionicons name="ban-outline" size={22} color={colors.text} />
+                        </View>
+                        <Text style={[styles.actionOptionText, { color: colors.text }]}>Chặn</Text>
+                      </TouchableOpacity>
+                    )}
+
+                    <TouchableOpacity style={styles.actionOption} onPress={() => handleAction('report', selectedConversation)}>
+                      <View style={[styles.actionIconWrap, { backgroundColor: 'transparent' }]}>
+                        <Ionicons name="flag-outline" size={22} color={colors.text} />
+                      </View>
+                      <Text style={[styles.actionOptionText, { color: colors.text }]}>Báo cáo</Text>
+                    </TouchableOpacity>
+
                     <TouchableOpacity style={styles.actionOption} onPress={() => handleAction('delete', selectedConversation)}>
-                      <View style={[styles.actionIconWrap, { backgroundColor: '#FEE2E2' }]}>
-                        <Ionicons name="trash-outline" size={20} color="#EF4444" />
+                      <View style={[styles.actionIconWrap, { backgroundColor: 'transparent' }]}>
+                        <Ionicons name="trash-outline" size={22} color="#EF4444" />
                       </View>
-                      <Text style={[styles.actionOptionText, { color: '#EF4444' }]}>Xóa khỏi danh sách</Text>
+                      <Text style={[styles.actionOptionText, { color: '#EF4444' }]}>Xóa</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity style={[styles.actionOption, { paddingBottom: 16 }]} onPress={closeActionSheet}>
-                      <Text style={[styles.actionOptionText, { color: colors.muted, textAlign: 'center', width: '100%' }]}>Hủy</Text>
+
+                    <TouchableOpacity style={[styles.actionOption, { paddingVertical: 16, justifyContent: 'center' }]} onPress={closeActionSheet}>
+                      <Text style={[{ color: colors.muted, textAlign: 'center', width: '100%', fontSize: 16, fontWeight: '700' }]}>Hủy</Text>
                     </TouchableOpacity>
                   </View>
                 )}

@@ -1,283 +1,168 @@
-import { useState, useEffect } from "react";
-import { 
-  FaSearch, FaUserPlus, FaTimes, FaSpinner, FaCheck, 
-  FaInfoCircle, FaCommentDots, FaClock, FaHistory 
-} from "react-icons/fa";
+import { useState, useEffect, useRef } from "react";
+import { FaSearch, FaTimes, FaSpinner } from "react-icons/fa";
 import { friendService } from "../../services/friendService";
-import { useLanguage } from "../../contexts/LanguageContext";
 import { useFriendStore } from "../../store/friendStore";
 import { useAuthStore } from "../../store/authStore";
-import { useNavigate } from "react-router-dom";
-import "./AddFriendModal.css";
-import axios from 'axios';
+import UserProfileModal from "./UserProfileModal";
+
+const DEFAULT_AVATAR = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' rx='20' fill='%23bdbdbd'/%3E%3Ccircle cx='20' cy='15' r='7' fill='%23fff'/%3E%3Cellipse cx='20' cy='35' rx='12' ry='9' fill='%23fff'/%3E%3C/svg%3E";
+
 export default function AddFriendModal({ isOpen, onClose }) {
-  const { t } = useLanguage();
-  const navigate = useNavigate();
   const { user: currentUser } = useAuthStore();
-  const { 
-    friends, 
-    incomingRequests, 
-    outgoingRequests, 
-    fetchFriends, 
-    fetchIncomingRequests, 
-    fetchOutgoingRequests 
-  } = useFriendStore();
+  const { friends, incomingRequests, outgoingRequests, fetchFriends, fetchIncomingRequests, fetchOutgoingRequests } = useFriendStore();
 
-  const [phone, setPhone] = useState("");
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState(null);
-  const [error, setError] = useState("");
-  const [success, setSuccess] = useState(false);
-  const [recentSearches, setRecentSearches] = useState([]);
+  const [selectedUser, setSelectedUser] = useState(null);
+  const timerRef = useRef(null);
 
-  // Load friends and requests once to ensure status checks are accurate
   useEffect(() => {
     if (isOpen && currentUser) {
-      if (friends.length === 0) fetchFriends();
-      if (incomingRequests.length === 0) fetchIncomingRequests();
-      if (outgoingRequests.length === 0) fetchOutgoingRequests();
-      
-      const storageKey = `recentSearches_${currentUser._id}`;
-      const saved = JSON.parse(localStorage.getItem(storageKey) || "[]");
-      setRecentSearches(saved);
-      setPhone("");
-      setResult(null);
-      setError("");
-      setSuccess(false);
+      Promise.all([fetchFriends(), fetchIncomingRequests(), fetchOutgoingRequests()]);
     }
   }, [isOpen, currentUser]);
 
+  useEffect(() => {
+    if (!isOpen) { setQuery(""); setResults([]); setSelectedUser(null); }
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    if (!query.trim() || query.trim().length < 2) { setResults([]); return; }
+    timerRef.current = setTimeout(async () => {
+      setLoading(true);
+      try {
+        const data = await friendService.searchUsers(query.trim());
+        setResults(data?.items || data?.users || data || []);
+      } catch { setResults([]); }
+      finally { setLoading(false); }
+    }, 400);
+    return () => clearTimeout(timerRef.current);
+  }, [query]);
+
   if (!isOpen) return null;
 
-  const saveRecentSearch = (phoneNum) => {
-    if (!currentUser) return;
-    const storageKey = `recentSearches_${currentUser._id}`;
-    let updated = [phoneNum, ...recentSearches.filter(p => p !== phoneNum)];
-    updated = updated.slice(0, 5); // Keep last 5
-    setRecentSearches(updated);
-    localStorage.setItem(storageKey, JSON.stringify(updated));
-  };
-
-  const handleSearch = async (e) => {
-    if (e) e.preventDefault();
-    if (!phone.trim()) return;
-
-    setLoading(true);
-    setError("");
-    setResult(null);
-    setSuccess(false);
-
-    try {
-      const data = await friendService.searchUsers(phone.trim());
-      if (data.items && data.items.length > 0) {
-        // Zalo priorities exact phone match
-        const found = data.items.find(u => u.phone === phone.trim()) || data.items[0];
-        setResult(found);
-        saveRecentSearch(phone.trim());
-      } else {
-        setError("Không tìm thấy kết quả. Vui lòng thử tìm bằng SĐT, email hoặc tên người dùng khác.");
-      }
-    } catch (err) {
-      setError("Đã xảy ra lỗi khi kết nối với máy chủ.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleAddFriend = async () => {
-    if (!result) return;
-    setLoading(true);
-    try {
-      await friendService.sendFriendRequest(result._id || result.id);
-      setSuccess(true);
-      fetchOutgoingRequests(); // Refresh status
-    } catch (err) {
-      setError(err.response?.data?.message || "Không thể gửi lời mời kết bạn.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const removeRecent = (e, p) => {
-    e.stopPropagation();
-    if (!currentUser) return;
-    const storageKey = `recentSearches_${currentUser._id}`;
-    const updated = recentSearches.filter(item => item !== p);
-    setRecentSearches(updated);
-    localStorage.setItem(storageKey, JSON.stringify(updated));
-  };
-
-  // Determine relationship status for UI
-  const getFriendStatus = () => {
-    if (!result || !currentUser) return null;
-    const targetId = result._id || result.id;
-    
-    if (targetId === currentUser._id) return "self";
-    if (friends.some(f => (f._id || f.id) === targetId)) return "friend";
-    if (outgoingRequests.some(r => r.toUserId?._id === targetId || r.toUserId === targetId)) return "outgoing";
-    if (incomingRequests.some(r => r.fromUserId?._id === targetId || r.fromUserId === targetId)) return "incoming";
-    
+  const getStatus = (userId) => {
+    const id = String(userId);
+    const myId = String(currentUser?._id || currentUser?.id);
+    if (id === myId) return "self";
+    if (friends.some(f => String(f._id || f.id) === id)) return "friend";
+    if (outgoingRequests.some(r => String(r.toUserId?._id || r.toUserId || "") === id)) return "outgoing";
+    if (incomingRequests.some(r => String(r.fromUserId?._id || r.fromUserId || "") === id)) return "incoming";
     return "none";
   };
 
-  const status = getFriendStatus();
-
- const handleAction = async () => {
-    if (status === "friend") {
-      try {
-        setLoading(true);
-        const targetId = result._id || result.id;
-        const token = localStorage.getItem("token"); // Lấy token xác thực
-
-        // Gọi API để lấy hoặc tạo mới cuộc trò chuyện 1-1
-        const res = await axios.post(
-          "http://localhost:5000/api/v1/conversations", 
-          { 
-            type: "direct", 
-            participantIds: [targetId] 
-          },
-          { headers: { Authorization: `Bearer ${token}` } }
-        );
-
-        onClose(); // Đóng modal
-
-        // Chuyển hướng sang trang Chat và truyền ID của hội thoại qua state
-        const conversationId = res.data.data._id;
-        navigate("/chat", { state: { activeConversationId: conversationId } });
-
-      } catch (err) {
-        setError("Không thể mở cuộc trò chuyện lúc này.");
-      } finally {
-        setLoading(false);
-      }
-
-    } else if (status === "none") {
-      handleAddFriend();
-    }
-  };
-
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content add-friend-modal" onClick={e => e.stopPropagation()}>
-        <div className="modal-header">
-          <div className="header-text">
-            <h3>Thêm bạn mới</h3>
-            <p>Tìm kiếm qua số điện thoại, email hoặc tên người dùng</p>
-          </div>
-          <button className="close-btn" onClick={onClose}><FaTimes /></button>
-        </div>
-
-        <div className="modal-body">
-          <div className="search-section">
-            <form onSubmit={handleSearch} className="search-container">
-              <div className="premium-input-group">
-                <FaSearch className="input-icon" />
-                <input
-                  type="text"
-                  placeholder="Nhập SĐT, email hoặc tên người dùng..."
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  autoFocus
-                />
-                {phone && (
-                  <button type="button" className="clear-search-btn" onClick={() => setPhone("")}>
-                    <FaTimes />
-                  </button>
-                )}
-              </div>
-              <button 
-                type="submit" 
-                className="search-btn-premium" 
-                disabled={loading || !phone.trim()}
-              >
-                {loading ? <FaSpinner className="spin" /> : "Tìm kiếm"}
-              </button>
-            </form>
-            {error && <div className="search-error"><FaInfoCircle /> {error}</div>}
-          </div>
-
-          {!result && recentSearches.length > 0 && (
-            <div className="recent-searches">
-              <span className="section-label"><FaHistory /> Tìm kiếm gần đây</span>
-              <div className="recent-list">
-                {recentSearches.map((p, idx) => (
-                  <div key={idx} className="recent-chip" onClick={() => { setPhone(p); }}>
-                    {p}
-                    <button className="remove-recent" onClick={(e) => removeRecent(e, p)}>
-                      <FaTimes fontSize={10} />
-                    </button>
-                  </div>
-                ))}
-              </div>
+    <>
+      <div
+        style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 9998, display: "flex", alignItems: "center", justifyContent: "center" }}
+        onClick={onClose}
+      >
+        <div
+          style={{ background: "var(--bg-primary)", borderRadius: 14, width: 420, maxWidth: "95vw", boxShadow: "0 20px 60px rgba(0,0,0,0.2)", overflow: "hidden", display: "flex", flexDirection: "column", maxHeight: "80vh" }}
+          onClick={e => e.stopPropagation()}
+        >
+          {/* Header */}
+          <div style={{ padding: "16px 20px 12px", borderBottom: "1px solid var(--border-color)", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
+            <div>
+              <div style={{ fontWeight: 700, fontSize: 15, color: "var(--text-primary)" }}>Thêm bạn</div>
+              <div style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 2 }}>Tìm qua số điện thoại, email hoặc tên</div>
             </div>
-          )}
+            <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-secondary)", padding: 4 }}>
+              <FaTimes size={15} />
+            </button>
+          </div>
 
-          {result && (
-            <div className="profile-card-premium">
-              <div className="profile-avatar-wrap">
-                <div className="status-ring"></div>
-                <div className="premium-avatar">
-                  {result.avatarUrl ? (
-                    <img src={result.avatarUrl} alt="" />
-                  ) : (
-                    result.username?.[0]?.toUpperCase() || "U"
+          {/* Search */}
+          <div style={{ padding: "12px 16px", flexShrink: 0 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, background: "var(--bg-secondary)", borderRadius: 10, padding: "8px 12px" }}>
+              <FaSearch size={13} color="var(--text-tertiary)" />
+              <input
+                autoFocus
+                value={query}
+                onChange={e => setQuery(e.target.value)}
+                placeholder="Nhập SĐT, email hoặc tên..."
+                style={{ flex: 1, border: "none", background: "transparent", outline: "none", fontSize: 13.5, color: "var(--text-primary)" }}
+              />
+              {loading && <FaSpinner className="spin" size={13} color="var(--text-tertiary)" />}
+              {query && !loading && (
+                <button onClick={() => setQuery("")} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-tertiary)", padding: 0 }}>
+                  <FaTimes size={12} />
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Results list */}
+          <div style={{ flex: 1, overflowY: "auto", padding: "0 0 8px" }}>
+            {query.trim().length < 2 && (
+              <div style={{ textAlign: "center", padding: "30px 0", color: "var(--text-tertiary)", fontSize: 13 }}>
+                Nhập ít nhất 2 ký tự để tìm kiếm
+              </div>
+            )}
+            {query.trim().length >= 2 && !loading && results.length === 0 && (
+              <div style={{ textAlign: "center", padding: "30px 0", color: "var(--text-tertiary)", fontSize: 13 }}>
+                Không tìm thấy kết quả
+              </div>
+            )}
+            {results.map(u => {
+              const uid = String(u._id || u.id);
+              const status = getStatus(uid);
+              if (status === "self") return null;
+              const displayName = u.username || u.fullName || "Người dùng";
+              const sub = u.phone || u.email || "";
+              return (
+                <div
+                  key={uid}
+                  onClick={() => setSelectedUser({ user: u, status })}
+                  style={{ display: "flex", alignItems: "center", padding: "10px 16px", gap: 12, cursor: "pointer", transition: "background 0.12s" }}
+                  onMouseEnter={e => e.currentTarget.style.background = "var(--bg-secondary)"}
+                  onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+                >
+                  <div style={{ width: 44, height: 44, borderRadius: "50%", flexShrink: 0, overflow: "hidden", background: "#e5e7eb" }}>
+                    <img
+                      src={u.avatarUrl || DEFAULT_AVATAR}
+                      alt=""
+                      style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                      onError={e => { e.target.src = DEFAULT_AVATAR; }}
+                    />
+                  </div>
+                  <div style={{ flex: 1, overflow: "hidden" }}>
+                    <div style={{ fontWeight: 600, fontSize: 13.5, color: "var(--text-primary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                      {displayName}
+                    </div>
+                    {sub && <div style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 2 }}>{sub}</div>}
+                  </div>
+                  {status === "friend" && (
+                    <span style={{ fontSize: 11.5, color: "#16a34a", fontWeight: 600, flexShrink: 0 }}>Bạn bè</span>
+                  )}
+                  {status === "outgoing" && (
+                    <span style={{ fontSize: 11.5, color: "var(--text-tertiary)", flexShrink: 0 }}>Đã gửi</span>
+                  )}
+                  {status === "incoming" && (
+                    <span style={{ fontSize: 11.5, color: "#d97706", fontWeight: 600, flexShrink: 0 }}>Chờ xác nhận</span>
                   )}
                 </div>
-              </div>
-              
-              <div className="profile-info">
-                <h4>{result.username}</h4>
-                <p className="phone-sub">{result.phone || result.email || ""}</p>
-              </div>
-
-              <div className={`relationship-badge ${status}`}>
-                {status === "friend" && <><FaCheck /> Đã là bạn bè</>}
-                {status === "outgoing" && <><FaClock /> Đã gửi lời mời</>}
-                {status === "incoming" && <><FaClock /> Đang chờ bạn xác nhận</>}
-                {status === "self" && <>Đây là bạn</>}
-                {status === "none" && success && <><FaCheck /> Gửi yêu cầu thành công</>}
-                {status === "none" && !success && <>Chưa có kết nối</>}
-              </div>
-
-              <div className="profile-actions">
-                {status === "friend" && (
-                  <button className="action-btn-premium btn-primary-premium" onClick={handleAction}>
-                    <FaCommentDots /> Nhắn tin ngay
-                  </button>
-                )}
-                
-                {status === "none" && !success && (
-                  <button 
-                    className="action-btn-premium btn-primary-premium" 
-                    onClick={handleAction}
-                    disabled={loading}
-                  >
-                    {loading ? <FaSpinner className="spin" /> : <><FaUserPlus /> Kết bạn</>}
-                  </button>
-                )}
-
-                {status === "outgoing" && (
-                  <button className="action-btn-premium btn-disabled-premium" disabled>
-                    Đã gửi yêu cầu
-                  </button>
-                )}
-
-                {status === "incoming" && (
-                  <button className="action-btn-premium btn-primary-premium" onClick={() => navigate("/contacts")}>
-                    Xem lời mời kết bạn
-                  </button>
-                )}
-              </div>
-            </div>
-          )}
-        </div>
-        
-        <div className="modal-footer">
-          <div className="footer-tip">
-            <FaInfoCircle /> Tìm kiếm bằng số điện thoại, email hoặc tên người dùng.
+              );
+            })}
           </div>
         </div>
       </div>
-    </div>
+
+      {selectedUser && (
+        <UserProfileModal
+          isOpen={true}
+          onClose={() => setSelectedUser(null)}
+          user={selectedUser.user}
+          status={selectedUser.status}
+          onChatOpened={onClose}
+          onStatusChange={(newStatus) => {
+            setSelectedUser(prev => prev ? { ...prev, status: newStatus } : null);
+            Promise.all([fetchFriends(), fetchOutgoingRequests(), fetchIncomingRequests()]);
+          }}
+        />
+      )}
+    </>
   );
 }

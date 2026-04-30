@@ -10,9 +10,12 @@ import { useFriendStore } from "../../store/friendStore";
 import { useChatStore } from "../../store/chatStore";
 import { useNavigate } from "react-router-dom";
 import AddFriendModal from "../../components/Modals/AddFriendModal";
+import UserProfileModal from "../../components/Modals/UserProfileModal";
+import CreateGroupModal from "../chat/Modals/CreateGroupModal";
 import { socketService } from "../../services/socketService";
 import { useAuthStore } from "../../store/authStore";
 import axios from "axios";
+import { friendService } from "../../services/friendService";
 import "./ContactsPage.css";
 
 
@@ -146,6 +149,7 @@ export default function ContactsPage() {
   const [activeTab, setActiveTab] = useState("friends");
   const [searchQuery, setSearchQuery] = useState("");
   const [showAddFriend, setShowAddFriend] = useState(false);
+  const [showCreateGroup, setShowCreateGroup] = useState(false);
   const [openMenuId, setOpenMenuId] = useState(null);
   const [selectedFriend, setSelectedFriend] = useState(null);
   const [sortBy, setSortBy] = useState("name");
@@ -222,7 +226,7 @@ export default function ContactsPage() {
         return;
       }
 
-      const roomId = `room_${myId}_${id}`;
+      const roomId = [myId, id].sort().join('_');
       const callType = action === "video" ? "video" : "audio";
 
       const sent = socketService.callUser({
@@ -265,9 +269,14 @@ export default function ContactsPage() {
       <div className="contacts-sidebar">
         <div className="cs-header">
           <span className="cs-title">Danh bạ</span>
-          <button className="cs-add-btn" onClick={() => setShowAddFriend(true)} title="Thêm bạn">
-            <FaUserPlus size={16} />
-          </button>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button className="cs-add-btn" onClick={() => setShowAddFriend(true)} title="Thêm bạn">
+              <FaUserPlus size={16} />
+            </button>
+            <button className="cs-add-btn" onClick={() => setShowCreateGroup(true)} title="Tạo nhóm">
+              <FaUsers size={16} />
+            </button>
+          </div>
         </div>
 
         <div className="cs-search">
@@ -359,20 +368,28 @@ export default function ContactsPage() {
         </div>
       </div>
 
-      {/* ── DETAIL PANEL ── */}
-      {selectedFriend && (
-        <FriendDetailPanel
-          friend={selectedFriend}
-          onClose={() => setSelectedFriend(null)}
-          onChat={(f) => { navigate("/chat"); setSelectedFriend(null); }}
-          onBlock={(f) => handleAction("block", f)}
-          onUnfriend={(f) => handleAction("unfriend", f)}
-          onVideoCall={(f) => handleAction("video", f)}
-          onAudioCall={(f) => handleAction("audio", f)}
-        />
-      )}
+      {/* ── PROFILE MODAL ── */}
+      <UserProfileModal
+        isOpen={!!selectedFriend}
+        onClose={() => setSelectedFriend(null)}
+        user={selectedFriend}
+        status="friend"
+        onStatusChange={(newStatus) => {
+          if (newStatus !== "friend") setSelectedFriend(null);
+          fetchFriends();
+        }}
+      />
 
       <AddFriendModal isOpen={showAddFriend} onClose={() => setShowAddFriend(false)} />
+      <CreateGroupModal 
+        isOpen={showCreateGroup} 
+        onClose={() => setShowCreateGroup(false)} 
+        friends={friends} 
+        onCreated={(newGroup) => {
+          setGroups(prev => [newGroup, ...prev]);
+          navigate(`/chat/${newGroup._id}`);
+        }} 
+      />
     </div>
   );
 }
@@ -561,6 +578,18 @@ function RequestsTab({ requests, onAccept, onReject, onRefresh }) {
 
 // ── Sent Requests Tab ────────────────────────────────────────
 function SentRequestsTab({ requests, onRefresh }) {
+  const [cancellingId, setCancellingId] = useState(null);
+
+  const handleCancel = async (requestId) => {
+    setCancellingId(requestId);
+    try {
+      await friendService.cancelFriendRequest(requestId);
+      onRefresh();
+    } catch (err) {
+      alert(err.response?.data?.message || "Không thể hủy lời mời.");
+    } finally { setCancellingId(null); }
+  };
+
   if (requests.length === 0) {
     return (
       <div className="cp-empty">
@@ -576,6 +605,7 @@ function SentRequestsTab({ requests, onRefresh }) {
       {requests.map((req) => {
         const id = req._id || req.id;
         const receiver = req.toUserId || req.to || {};
+        const isCancelling = cancellingId === id;
         return (
           <div key={id} className="request-card">
             <Avatar user={receiver} size={52} />
@@ -584,9 +614,15 @@ function SentRequestsTab({ requests, onRefresh }) {
               <span className="rc-msg">Đang chờ xác nhận...</span>
               <span className="rc-time">{req.createdAt ? new Date(req.createdAt).toLocaleDateString("vi") : ""}</span>
             </div>
-            <div className="rc-status pending">
-              <FaUserClock size={13} /> Đang chờ
-            </div>
+            <button
+              onClick={() => handleCancel(id)}
+              disabled={isCancelling}
+              className="rc-action-btn"
+              style={{ background:'transparent', border:'1px solid #ef4444', color:'#ef4444', borderRadius:8, padding:'6px 14px', fontWeight:600, fontSize:13, cursor:'pointer', display:'flex', alignItems:'center', gap:6 }}
+            >
+              {isCancelling ? <FaSpinner size={12} className="spin" /> : <FaTimes size={12} />}
+              Hủy lời mời
+            </button>
           </div>
         );
       })}

@@ -77,8 +77,13 @@ export const getPinnedMessages = async (conversationId: string): Promise<PinnedI
 /** Cập nhật cài đặt nhóm (bật/tắt duyệt thành viên) */
 export const updateGroupSettings = async (
   conversationId: string,
-  settings: { isApprovalRequired?: boolean },
-): Promise<{ isApprovalRequired: boolean }> => {
+  settings: {
+    isApprovalRequired?: boolean;
+    canMembersSendMessages?: boolean;
+    markAdminMessages?: boolean;
+    allowNewMembersReadHistory?: boolean;
+  },
+): Promise<any> => {
   const res = await fetchAPI(`/conversations/${conversationId}/settings`, {
     method: 'PUT',
     body: JSON.stringify(settings),

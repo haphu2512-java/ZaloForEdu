@@ -1,8 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { socketService } from '../../../services/socketService';
-import { FaPhoneAlt, FaVideo, FaTimes, FaCheck } from 'react-icons/fa';
+import { FaPhoneAlt, FaVideo, FaTimes, FaCheck, FaUsers } from 'react-icons/fa';
 
+/**
+ * IncomingCallModal
+ * Xử lý cả 2 loại cuộc gọi:
+ *  - incoming_call       → gọi 1-1
+ *  - incoming_group_call → gọi nhóm (tất cả thành viên đều nhận)
+ */
 export default function IncomingCallModal() {
   const [incomingCall, setIncomingCall] = useState(null);
   const navigate = useNavigate();
@@ -11,58 +17,101 @@ export default function IncomingCallModal() {
     const socket = socketService.socket;
     if (!socket) return;
 
-    // Lắng nghe sự kiện gọi đến. 
-    // Tùy backend của bạn code, có thể nó trả về event "incoming_call" hoặc giữ nguyên "call_user"
+    // ── 1-1 call ──
     const handleIncomingCall = (data) => {
-      setIncomingCall(data);
+      setIncomingCall({ ...data, isGroup: false });
+    };
+
+    // ── Group call ──
+    const handleIncomingGroupCall = (data) => {
+      setIncomingCall({ ...data, isGroup: true });
     };
 
     socket.on("incoming_call", handleIncomingCall);
-    socket.on("call_user", handleIncomingCall); 
+    socket.on("incoming_group_call", handleIncomingGroupCall);
 
-    // Cleanup khi component unmount
     return () => {
       socket.off("incoming_call", handleIncomingCall);
-      socket.off("call_user", handleIncomingCall);
+      socket.off("incoming_group_call", handleIncomingGroupCall);
     };
   }, []);
 
   const acceptCall = () => {
-    if (incomingCall) {
-      // Khi nhấn Nghe máy, tài khoản B mới được chuyển hướng vào chung Room với A
-      const url = incomingCall.type === "audio" 
-        ? `/call/${incomingCall.roomId}?type=voice` 
+    if (!incomingCall) return;
+
+    let url;
+    if (incomingCall.isGroup) {
+      // Group call → /group-call/:roomId?type=voice (nếu audio)
+      url = incomingCall.type === "audio"
+        ? `/group-call/${incomingCall.roomId}?type=voice`
+        : `/group-call/${incomingCall.roomId}`;
+    } else {
+      // 1-1 call → /call/:roomId?type=voice
+      url = incomingCall.type === "audio"
+        ? `/call/${incomingCall.roomId}?type=voice`
         : `/call/${incomingCall.roomId}`;
-      setIncomingCall(null);
-      navigate(url);
     }
+
+    setIncomingCall(null);
+    navigate(url);
   };
 
   const declineCall = () => {
-    // Báo cho A biết B đã từ chối - gửi callerId (fromUserId của A) để server forward đúng
-    socketService.declineCall({
-      callerId: incomingCall.fromUserId,
-      roomId: incomingCall.roomId,
-    });
+    if (!incomingCall) return;
+
+    if (incomingCall.isGroup) {
+      socketService.declineGroupCall({
+        conversationId: incomingCall.conversationId,
+        roomId: incomingCall.roomId,
+      });
+    } else {
+      socketService.declineCall({
+        callerId: incomingCall.fromUserId,
+        roomId: incomingCall.roomId,
+      });
+    }
     setIncomingCall(null);
   };
 
-  // Nếu không có ai gọi thì không hiển thị gì cả
   if (!incomingCall) return null;
+
+  const isAudio = incomingCall.type === 'audio';
+  const Icon = incomingCall.isGroup ? FaUsers : (isAudio ? FaPhoneAlt : FaVideo);
+  const callTypeLabel = incomingCall.isGroup
+    ? `Cuộc gọi nhóm ${isAudio ? '(thoại)' : '(video)'}`
+    : `Cuộc gọi ${isAudio ? 'thoại' : 'video'} đến`;
 
   return (
     <div style={styles.overlay}>
       <div style={styles.box}>
-        <h3 style={{ margin: '0 0 10px 0' }}>
-          {incomingCall.type === 'audio' ? <FaPhoneAlt size={16}/> : <FaVideo size={16}/>} Cuộc gọi đến
-        </h3>
-        <p><strong>{incomingCall.callerName || "Một người bạn"}</strong> đang gọi cho bạn...</p>
-        
+        {/* Icon + tiêu đề */}
+        <div style={styles.iconWrap}>
+          <div style={{ ...styles.iconCircle, background: incomingCall.isGroup ? '#6366f1' : '#0084ff' }}>
+            <Icon size={22} color="#fff" />
+          </div>
+        </div>
+
+        <h3 style={styles.title}>{callTypeLabel}</h3>
+        <p style={styles.caller}>
+          <strong>{incomingCall.callerName || 'Một người bạn'}</strong>
+          {incomingCall.isGroup ? ' đang khởi động cuộc gọi nhóm...' : ' đang gọi cho bạn...'}
+        </p>
+
+        {/* Invite link cho group call */}
+        {incomingCall.isGroup && incomingCall.inviteLink && (
+          <p style={styles.inviteHint}>
+            Bạn cũng có thể tham gia qua link:{' '}
+            <a href={incomingCall.inviteLink} target="_blank" rel="noreferrer" style={{ color: '#0084ff', fontSize: 12 }}>
+              {incomingCall.inviteLink}
+            </a>
+          </p>
+        )}
+
         <div style={styles.actions}>
-          <button style={{...styles.btn, backgroundColor: '#ef4444'}} onClick={declineCall}>
+          <button style={{ ...styles.btn, backgroundColor: '#ef4444' }} onClick={declineCall}>
             <FaTimes /> Từ chối
           </button>
-          <button style={{...styles.btn, backgroundColor: '#16a34a'}} onClick={acceptCall}>
+          <button style={{ ...styles.btn, backgroundColor: '#16a34a' }} onClick={acceptCall}>
             <FaCheck /> Nghe máy
           </button>
         </div>
@@ -71,21 +120,31 @@ export default function IncomingCallModal() {
   );
 }
 
-// Inline styles cho nhanh, bạn có thể chuyển qua file CSS sau
 const styles = {
-  overlay: { 
-    position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, 
-    backgroundColor: 'rgba(0,0,0,0.6)', 
-    display: 'flex', justifyContent: 'center', alignItems: 'center', 
-    zIndex: 9999 
+  overlay: {
+    position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    display: 'flex', justifyContent: 'center', alignItems: 'center',
+    zIndex: 9999,
   },
-  box: { 
-    backgroundColor: '#fff', padding: '20px 30px', borderRadius: '12px', 
-    textAlign: 'center', minWidth: '300px', boxShadow: '0 4px 15px rgba(0,0,0,0.2)' 
+  box: {
+    backgroundColor: '#fff', padding: '28px 36px', borderRadius: '16px',
+    textAlign: 'center', minWidth: '320px', maxWidth: '400px',
+    boxShadow: '0 8px 32px rgba(0,0,0,0.2)',
   },
-  actions: { display: 'flex', justifyContent: 'space-around', marginTop: '20px' },
-  btn: { 
-    padding: '10px 20px', color: '#fff', border: 'none', borderRadius: '8px', 
-    cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px', fontWeight: 'bold' 
-  }
+  iconWrap: { display: 'flex', justifyContent: 'center', marginBottom: 16 },
+  iconCircle: {
+    width: 56, height: 56, borderRadius: '50%',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+  },
+  title: { margin: '0 0 6px', fontSize: 16, fontWeight: 700, color: '#111' },
+  caller: { margin: '0 0 16px', color: '#444', fontSize: 14 },
+  inviteHint: { fontSize: 12, color: '#888', margin: '0 0 14px', wordBreak: 'break-all' },
+  actions: { display: 'flex', justifyContent: 'space-around', marginTop: 8 },
+  btn: {
+    padding: '10px 22px', color: '#fff', border: 'none', borderRadius: '10px',
+    cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px',
+    fontSize: '14px', fontWeight: 'bold',
+  },
 };

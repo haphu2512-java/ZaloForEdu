@@ -11,10 +11,15 @@ import {
   Alert,
   Modal,
   TextInput,
+  Switch,
+  Clipboard,
+  Share,
+  Linking,
 } from 'react-native';
 import { useLocalSearchParams, useRouter, Stack, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
+import Constants from 'expo-constants';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useAuth } from '@/context/auth';
@@ -22,6 +27,7 @@ import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
 import {
   getConversations,
+  getMessages,
   updateGroupName,
   addGroupMembers,
   removeGroupMember,
@@ -29,6 +35,7 @@ import {
   demoteGroupAdmin,
   transferGroupOwner,
   leaveGroup,
+  disbandGroup,
   updateGroupAvatar,
   updateGroupNickname,
   updateConversationPreference,
@@ -36,7 +43,6 @@ import {
 import { uploadImageToCloudinary } from '@/utils/mediaService';
 import type { Conversation, UserInfo } from '@/types/chat';
 import { getFriendList } from '@/utils/friendService';
-import { Share, Clipboard } from 'react-native';
 import {
   getInviteLink,
   resetInviteLink,
@@ -61,6 +67,7 @@ export default function ConversationDetailsScreen() {
   // Modals state
   const [addMembersVisible, setAddMembersVisible] = useState(false);
   const [selectedMembersToAdd, setSelectedMembersToAdd] = useState<string[]>([]);
+  const [membersVisible, setMembersVisible] = useState(false);
   const [editorVisible, setEditorVisible] = useState(false);
   const [editorTitle, setEditorTitle] = useState('');
   const [editorValue, setEditorValue] = useState('');
@@ -70,8 +77,27 @@ export default function ConversationDetailsScreen() {
   const [approvalEnabled, setApprovalEnabled] = useState(false);
   const [inviteLink, setInviteLink] = useState<string | null>(null);
   const [inviteLoading, setInviteLoading] = useState(false);
+  const [qrModalVisible, setQrModalVisible] = useState(false);
+  const [onlyAdminChat, setOnlyAdminChat] = useState(false);
+  const [markAdminMessages, setMarkAdminMessages] = useState(false);
+  const [notificationMode, setNotificationMode] = useState<'all' | 'mention_only' | 'mute'>('all');
+  const [sharedMedia, setSharedMedia] = useState<any[]>([]);
+  const [sharedFiles, setSharedFiles] = useState<any[]>([]);
+  const [sharedLinks, setSharedLinks] = useState<string[]>([]);
+  const [sharedLoading, setSharedLoading] = useState(false);
 
   const currentUserId = user?.id || '';
+  const linkRegex = /(mobileapp:\/\/[^\s]+|https?:\/\/[^\s]+)/gi;
+
+  const isImageMedia = (mimeType?: string, fileName?: string) => {
+    if (mimeType?.startsWith('image/')) return true;
+    return /\.(jpg|jpeg|png|gif|webp|bmp)$/i.test(fileName || '');
+  };
+
+  const isFileMedia = (mimeType?: string, fileName?: string) => {
+    if (!mimeType && !fileName) return false;
+    return !isImageMedia(mimeType, fileName);
+  };
 
   const loadData = useCallback(async () => {
     if (!id) return;
@@ -83,12 +109,41 @@ export default function ConversationDetailsScreen() {
       const matched = (convRes?.items || []).find((c) => c._id === id || c.id === id);
       setConversation(matched || null);
       setFriends(friendsRes?.items || []);
-      // Sync approval setting
-      if (matched?.settings?.isApprovalRequired !== undefined) {
-        setApprovalEnabled(matched.settings.isApprovalRequired);
+      // Sync settings
+      if (matched?.settings) {
+        setApprovalEnabled(!!matched.settings.isApprovalRequired);
+        setOnlyAdminChat(matched.settings.canMembersSendMessages === false);
+        setMarkAdminMessages(!!matched.settings.markAdminMessages);
       }
+      if (matched?.preference?.notificationMode) {
+        setNotificationMode(matched.preference.notificationMode);
+      }
+
+      setSharedLoading(true);
+      const msgRes = await getMessages({ conversationId: String(id), limit: 80 });
+      const medias: any[] = [];
+      const files: any[] = [];
+      const links = new Set<string>();
+
+      (msgRes?.items || []).forEach((m: any) => {
+        const content = m?.content || '';
+        const foundLinks = content.match(linkRegex);
+        if (foundLinks?.length) foundLinks.forEach((l: string) => links.add(l));
+
+        (m?.mediaIds || []).forEach((media: any) => {
+          if (!media || typeof media === 'string') return;
+          if (isImageMedia(media.mimeType, media.fileName)) medias.push(media);
+          else if (isFileMedia(media.mimeType, media.fileName)) files.push(media);
+        });
+      });
+
+      setSharedMedia(medias.slice(0, 8));
+      setSharedFiles(files.slice(0, 8));
+      setSharedLinks(Array.from(links).slice(0, 8));
     } catch (error: any) {
       console.log('Failed to load conversation details', error.message);
+    } finally {
+      setSharedLoading(false);
     }
   }, [id]);
 
@@ -152,11 +207,26 @@ export default function ConversationDetailsScreen() {
   const handleAction = async (actionFn: () => Promise<any>, successMsg: string) => {
     try {
       setActionLoading(true);
-      await actionFn();
+      const res = await actionFn();
+      if (res && (res._id || res.id)) {
+        setConversation((prev) => prev ? { ...prev, ...res } : res);
+      }
       await loadData();
       Alert.alert('Thành công', successMsg);
     } catch (error: any) {
       Alert.alert('Lỗi', error.message || 'Thao tác thất bại');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const toggleGroupSetting = async (key: string, value: boolean) => {
+    try {
+      setActionLoading(true);
+      await updateGroupSettings(conversation._id, { [key]: value });
+      await loadData();
+    } catch (err: any) {
+      Alert.alert('Lỗi', err.message);
     } finally {
       setActionLoading(false);
     }
@@ -172,7 +242,7 @@ export default function ConversationDetailsScreen() {
   const handlePromoteClick = (member: any, isMemAdmin: boolean) => {
     const uid = getUserId(member);
     if (!conversation) return;
-    
+
     if (isMemAdmin) {
       Alert.alert('Xác nhận', `Hạ quyền Phó nhóm của ${member.username}?`, [
         { text: 'Hủy', style: 'cancel' },
@@ -242,45 +312,52 @@ export default function ConversationDetailsScreen() {
             {member.username} {isMe && '(Bạn)'}
           </Text>
           {isGroup && (
-            <Text style={{ color: isMemOwner ? '#EF4444' : isMemAdmin ? '#F59E0B' : colors.muted, fontSize: 12, fontWeight: '500' }}>
-              {isMemOwner ? 'Trưởng nhóm' : isMemAdmin ? 'Phó nhóm' : 'Thành viên'}
-            </Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+              <Ionicons
+                name={isMemOwner ? 'ribbon' : isMemAdmin ? 'shield-checkmark' : 'person'}
+                size={12}
+                color={isMemOwner ? '#EF4444' : isMemAdmin ? '#F59E0B' : colors.muted}
+              />
+              <Text style={{ color: isMemOwner ? '#EF4444' : isMemAdmin ? '#F59E0B' : colors.muted, fontSize: 12, fontWeight: '600' }}>
+                {isMemOwner ? 'Trưởng nhóm' : isMemAdmin ? 'Phó nhóm' : 'Thành viên'}
+              </Text>
+            </View>
           )}
         </View>
 
         {isGroup && !isMe && iAmAdmin && (
           <View style={{ flexDirection: 'row', gap: 6 }}>
             {iAmOwner && !isMemOwner && (
-               <TouchableOpacity
-                 style={[styles.smallBtn, { backgroundColor: '#E0E7FF' }]}
-                 onPress={() => handlePromoteClick(member, isMemAdmin)}
-               >
-                 <Text style={{ color: '#3730A3', fontWeight: 'bold', fontSize: 11 }}>{isMemAdmin ? 'Hạ quyền' : 'Nâng quyền'}</Text>
-               </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.smallBtn, { backgroundColor: '#E0E7FF' }]}
+                onPress={() => handlePromoteClick(member, isMemAdmin)}
+              >
+                <Text style={{ color: '#3730A3', fontWeight: 'bold', fontSize: 11 }}>{isMemAdmin ? 'Hạ quyền' : 'Nâng quyền'}</Text>
+              </TouchableOpacity>
             )}
-            {iAmAdmin && !isMemOwner && (
-               <TouchableOpacity
-                 style={[styles.smallBtn, { backgroundColor: '#FEE2E2' }]}
-                 onPress={() =>
-                   Alert.alert('Xác nhận', `Đuổi ${member.username} khỏi nhóm?`, [
-                     { text: 'Hủy', style: 'cancel' },
-                     { text: 'Đuổi', style: 'destructive', onPress: () => handleAction(() => removeGroupMember(conversation._id, uid), 'Đã xóa thành viên') }
-                   ])
-                 }
-               >
-                 <Text style={{ color: '#991B1B', fontWeight: 'bold', fontSize: 11 }}>Xóa</Text>
-               </TouchableOpacity>
+            {iAmAdmin && !isMemOwner && (iAmOwner || !isMemAdmin) && (
+              <TouchableOpacity
+                style={[styles.smallBtn, { backgroundColor: '#FEE2E2' }]}
+                onPress={() =>
+                  Alert.alert('Xác nhận', `Mời ${member.username} ra khỏi nhóm?`, [
+                    { text: 'Hủy', style: 'cancel' },
+                    { text: 'Mời ra', style: 'destructive', onPress: () => handleAction(() => removeGroupMember(conversation._id, uid), 'Đã mời thành viên ra khỏi nhóm') }
+                  ])
+                }
+              >
+                <Text style={{ color: '#991B1B', fontWeight: 'bold', fontSize: 11 }}>Mời ra</Text>
+              </TouchableOpacity>
             )}
             <TouchableOpacity
-               style={[styles.smallBtn, { backgroundColor: '#FEF3C7' }]}
-               onPress={() =>
-                 openEditor('Biệt danh', '', (val) =>
-                   handleAction(() => updateGroupNickname(conversation._id, uid, val), 'Đã cập nhật biệt danh')
-                 )
-               }
-             >
-               <Text style={{ color: '#92400E', fontWeight: 'bold', fontSize: 11 }}>Biệt danh</Text>
-             </TouchableOpacity>
+              style={[styles.smallBtn, { backgroundColor: '#FEF3C7' }]}
+              onPress={() =>
+                openEditor('Biệt danh', '', (val) =>
+                  handleAction(() => updateGroupNickname(conversation._id, uid, val), 'Đã cập nhật biệt danh')
+                )
+              }
+            >
+              <Text style={{ color: '#92400E', fontWeight: 'bold', fontSize: 11 }}>Biệt danh</Text>
+            </TouchableOpacity>
           </View>
         )}
       </View>
@@ -297,7 +374,7 @@ export default function ConversationDetailsScreen() {
           headerTintColor: colors.text,
         }}
       />
-      
+
       <ScrollView
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={brand} />}
@@ -307,11 +384,103 @@ export default function ConversationDetailsScreen() {
           <Text style={[styles.mainTitle, { color: colors.text }]}>{title}</Text>
         </View>
 
+        {isGroup && (
+          <View style={[styles.quickActionsWrap, { backgroundColor: colors.surface }]}>
+            <TouchableOpacity style={styles.quickActionItem} onPress={() => router.push({ pathname: '/search-messages', params: { id: conversation._id } } as any)}>
+              <View style={styles.quickIconCircle}><Ionicons name="search" size={24} color={colors.text} /></View>
+              <Text style={[styles.quickActionLabel, { color: colors.text }]}>Tìm{'\n'}tin nhắn</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.quickActionItem}
+              onPress={() => {
+                if (!iAmAdmin) {
+                  Alert.alert('Thông báo', 'Chỉ quản trị viên mới có thể thêm thành viên');
+                  return;
+                }
+                setSelectedMembersToAdd([]);
+                setAddMembersVisible(true);
+              }}
+            >
+              <View style={styles.quickIconCircle}><Ionicons name="person-add" size={24} color={colors.text} /></View>
+              <Text style={[styles.quickActionLabel, { color: colors.text }]}>Thêm{'\n'}thành viên</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.quickActionItem} onPress={() => router.push({ pathname: '/pinned-messages', params: { id: conversation._id } } as any)}>
+              <View style={styles.quickIconCircle}><Ionicons name="pin-outline" size={24} color={colors.text} /></View>
+              <Text style={[styles.quickActionLabel, { color: colors.text }]}>Tin nhắn{'\n'}đã ghim</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.quickActionItem}
+              onPress={async () => {
+                try {
+                  const next = notificationMode === 'mute' ? 'all' : 'mute';
+                  setNotificationMode(next);
+                  await updateConversationPreference(conversation._id, { notificationMode: next });
+                  Alert.alert('Thành công', next === 'mute' ? 'Đã tắt thông báo' : 'Đã bật thông báo');
+                } catch (err: any) {
+                  Alert.alert('Lỗi', err.message || 'Không thể cập nhật thông báo');
+                }
+              }}
+            >
+              <View style={styles.quickIconCircle}><Ionicons name={notificationMode === 'mute' ? 'notifications-off-outline' : 'notifications-outline'} size={24} color={colors.text} /></View>
+              <Text style={[styles.quickActionLabel, { color: colors.text }]}>Tắt{'\n'}thông báo</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {isGroup && (
+          <View style={[styles.section, { backgroundColor: colors.surface, marginTop: 8 }]}>
+            <TouchableOpacity style={[styles.optionItem, { justifyContent: 'space-between' }]}>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <Ionicons name="folder-open-outline" size={22} color={colors.text} style={{ width: 30, marginRight: 10 }} />
+                <Text style={{ color: colors.text, fontSize: 16, fontWeight: '600' }}>Ảnh, file, link</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color={colors.muted} />
+            </TouchableOpacity>
+
+            {sharedLoading ? (
+              <ActivityIndicator size="small" color={brand} style={{ marginVertical: 10 }} />
+            ) : (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.sharedRow}>
+                {sharedMedia.map((media: any) => (
+                  <TouchableOpacity key={media._id || media.id || media.url} onPress={() => media.url && Linking.openURL(media.url)}>
+                    <Image source={{ uri: media.url }} style={styles.sharedThumb} />
+                  </TouchableOpacity>
+                ))}
+
+                {sharedFiles.map((file: any) => (
+                  <TouchableOpacity key={file._id || file.id || file.fileName} style={[styles.sharedFileCard, { borderColor: colors.border }]} onPress={() => file.url && Linking.openURL(file.url)}>
+                    <Ionicons name="document-attach-outline" size={20} color={colors.text} />
+                    <Text numberOfLines={2} style={{ color: colors.text, fontSize: 12, marginTop: 4 }}>
+                      {file.fileName || 'File'}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+
+                {sharedLinks.map((link) => (
+                  <TouchableOpacity key={link} style={[styles.sharedFileCard, { borderColor: colors.border }]} onPress={() => Linking.openURL(link)}>
+                    <Ionicons name="link-outline" size={20} color={colors.text} />
+                    <Text numberOfLines={2} style={{ color: colors.text, fontSize: 12, marginTop: 4 }}>
+                      {link}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+
+                {sharedMedia.length === 0 && sharedFiles.length === 0 && sharedLinks.length === 0 && (
+                  <Text style={{ color: colors.muted, paddingVertical: 12 }}>Chưa có ảnh, file hoặc link</Text>
+                )}
+              </ScrollView>
+            )}
+          </View>
+        )}
+
         {!isGroup && (
           <View style={{ marginTop: 20 }}>
             <View style={[styles.section, { backgroundColor: colors.surface }]}>
               <Text style={[styles.sectionTitle, { color: colors.muted, fontSize: 13, textTransform: 'uppercase' }]}>Hành động khác</Text>
-              
+
               <TouchableOpacity style={styles.optionItem} onPress={() => router.push({ pathname: '/create-group', params: { preselectedUserId: getUserId(otherParticipant) } } as any)}>
                 <Ionicons name="people" size={24} color={colors.text} style={{ width: 30, marginRight: 15 }} />
                 <Text style={{ flex: 1, color: colors.text, fontSize: 16 }}>Tạo nhóm chat với {otherParticipant?.username}</Text>
@@ -331,7 +500,7 @@ export default function ConversationDetailsScreen() {
                 <Ionicons name="pin" size={24} color={colors.text} style={{ width: 30, marginRight: 15 }} />
                 <Text style={{ flex: 1, color: colors.text, fontSize: 16 }}>Tin nhắn đã ghim</Text>
               </TouchableOpacity>
-              
+
               <TouchableOpacity style={styles.optionItem} onPress={() => Alert.alert('Thông báo', 'Tính năng đang cập nhật')}>
                 <Ionicons name="search" size={24} color={colors.text} style={{ width: 30, marginRight: 15 }} />
                 <Text style={{ flex: 1, color: colors.text, fontSize: 16 }}>Tìm kiếm trong cuộc trò chuyện</Text>
@@ -341,18 +510,78 @@ export default function ConversationDetailsScreen() {
             <View style={[styles.section, { backgroundColor: colors.surface, marginTop: 15 }]}>
               <Text style={[styles.sectionTitle, { color: colors.muted, fontSize: 13, textTransform: 'uppercase' }]}>Quyền riêng tư và hỗ trợ</Text>
 
-              <TouchableOpacity style={styles.optionItem} onPress={() => Alert.alert('Thông báo', 'Tính năng đang cập nhật')}>
-                <Ionicons name="shield-checkmark" size={24} color={colors.text} style={{ width: 30, marginRight: 15 }} />
-                <Text style={{ flex: 1, color: colors.text, fontSize: 16 }}>Quyền với tin nhắn</Text>
-              </TouchableOpacity>
+              {/* Cài đặt cá nhân */}
+              <View style={{ marginTop: 16 }}>
+                <Text style={[styles.sectionTitle, { color: colors.muted }]}>Cài đặt cá nhân</Text>
 
-              <TouchableOpacity style={styles.optionItem} onPress={() => Alert.alert('Thông báo', 'Tính năng đang cập nhật')}>
-                <Ionicons name="timer" size={24} color={colors.text} style={{ width: 30, marginRight: 15 }} />
-                <View style={{ flex: 1 }}>
-                  <Text style={{ color: colors.text, fontSize: 16 }}>Tin nhắn tự hủy</Text>
-                  <Text style={{ color: colors.muted, fontSize: 12, marginTop: 2 }}>Tắt</Text>
+                <View style={[styles.optionItem, { justifyContent: 'space-between' }]}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ color: colors.text, fontSize: 16 }}>Thông báo</Text>
+                  </View>
+                  <View style={{ flexDirection: 'row', gap: 6 }}>
+                    {(['all', 'mention_only', 'mute'] as const).map((mode) => (
+                      <TouchableOpacity
+                        key={mode}
+                        onPress={async () => {
+                          try {
+                            setNotificationMode(mode);
+                            await updateConversationPreference(conversation._id, { notificationMode: mode });
+                          } catch (err: any) { Alert.alert('Lỗi', err.message); }
+                        }}
+                        style={{
+                          paddingHorizontal: 10,
+                          paddingVertical: 6,
+                          borderRadius: 20,
+                          backgroundColor: notificationMode === mode ? brand : '#F3F4F6',
+                        }}
+                      >
+                        <Text style={{ fontSize: 11, fontWeight: '700', color: notificationMode === mode ? '#fff' : '#4B5563' }}>
+                          {mode === 'all' ? 'Tất cả' : mode === 'mention_only' ? '@Mention' : 'Tắt'}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
                 </View>
-              </TouchableOpacity>
+              </View>
+
+              {/* Cài đặt nhóm (Chỉ cho Admin) */}
+              {isGroup && iAmAdmin && (
+                <View style={{ marginTop: 20, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border, paddingTop: 16 }}>
+                  <Text style={[styles.sectionTitle, { color: colors.muted }]}>Cài đặt nhóm (Chỉ Admin)</Text>
+
+                  <View style={[styles.optionItem, { justifyContent: 'space-between' }]}>
+                    <Text style={{ color: colors.text, fontSize: 16 }}>Duyệt thành viên mới</Text>
+                    <Switch
+                      value={approvalEnabled}
+                      onValueChange={(val) => { setApprovalEnabled(val); toggleGroupSetting('isApprovalRequired', val); }}
+                      trackColor={{ false: '#D1D5DB', true: brand + '80' }}
+                      thumbColor={approvalEnabled ? brand : '#F3F4F6'}
+                    />
+                  </View>
+
+                  <View style={[styles.optionItem, { justifyContent: 'space-between' }]}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ color: colors.text, fontSize: 16 }}>Chế độ chỉ Admin nhắn tin</Text>
+                    </View>
+                    <Switch
+                      value={onlyAdminChat}
+                      onValueChange={(val) => { setOnlyAdminChat(val); toggleGroupSetting('canMembersSendMessages', !val); }}
+                      trackColor={{ false: '#D1D5DB', true: brand + '80' }}
+                      thumbColor={onlyAdminChat ? brand : '#F3F4F6'}
+                    />
+                  </View>
+
+                  <View style={[styles.optionItem, { justifyContent: 'space-between' }]}>
+                    <Text style={{ color: colors.text, fontSize: 16 }}>Đánh dấu tin nhắn Admin</Text>
+                    <Switch
+                      value={markAdminMessages}
+                      onValueChange={(val) => { setMarkAdminMessages(val); toggleGroupSetting('markAdminMessages', val); }}
+                      trackColor={{ false: '#D1D5DB', true: brand + '80' }}
+                      thumbColor={markAdminMessages ? brand : '#F3F4F6'}
+                    />
+                  </View>
+                </View>
+              )}
             </View>
           </View>
         )}
@@ -400,16 +629,9 @@ export default function ConversationDetailsScreen() {
                 try {
                   setInviteLoading(true);
                   const res = await getInviteLink(conversation._id);
-                  setInviteLink(res.inviteLink);
-                  Alert.alert(
-                    '🔗 Link mời',
-                    res.inviteLink,
-                    [
-                      { text: 'Sao chép', onPress: () => { Clipboard.setString(res.inviteLink); Alert.alert('Đã sao chép!'); } },
-                      { text: 'Chia sẻ', onPress: () => Share.share({ message: res.inviteLink }) },
-                      { text: 'Đóng', style: 'cancel' },
-                    ]
-                  );
+                  const scheme = Constants.expoConfig?.scheme || 'mobileapp';
+                  setInviteLink(`${scheme}://join-group?code=${encodeURIComponent(res.inviteCode)}`);
+                  setQrModalVisible(true);
                 } catch (err: any) {
                   Alert.alert('Lỗi', err.message);
                 } finally {
@@ -448,8 +670,15 @@ export default function ConversationDetailsScreen() {
         )}
 
         <View style={[styles.section, { backgroundColor: colors.surface }]}>
-          <Text style={[styles.sectionTitle, { color: brand }]}>Thành viên ({conversation.participants?.length || 0})</Text>
-          {(conversation.participants || []).map(renderMember)}
+          <TouchableOpacity style={[styles.optionItem, { justifyContent: 'space-between' }]} onPress={() => setMembersVisible(true)}>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <Ionicons name="people-outline" size={24} color={colors.text} style={{ width: 30, marginRight: 15 }} />
+              <Text style={{ color: colors.text, fontSize: 16, fontWeight: '600' }}>
+                Xem thành viên ({conversation.participants?.length || 0})
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color={colors.muted} />
+          </TouchableOpacity>
         </View>
 
         {isGroup && (
@@ -470,6 +699,31 @@ export default function ConversationDetailsScreen() {
               <Ionicons name="exit-outline" size={24} color="#EF4444" />
               <Text style={styles.dangerBtnText}>Rời nhóm</Text>
             </TouchableOpacity>
+            {iAmOwner ? (
+              <TouchableOpacity
+                style={styles.dangerBtn}
+                onPress={() =>
+                  Alert.alert(
+                    'Giai tan nhom',
+                    'Hanh dong nay se xoa nhom va toan bo tin nhan. Ban co chac chan?',
+                    [
+                      { text: 'Huy', style: 'cancel' },
+                      {
+                        text: 'Giai tan',
+                        style: 'destructive',
+                        onPress: () =>
+                          handleAction(() => disbandGroup(conversation._id), 'Da giai tan nhom').then(() =>
+                            router.replace('/(tabs)'),
+                          ),
+                      },
+                    ],
+                  )
+                }
+              >
+                <Ionicons name="trash-outline" size={24} color="#EF4444" />
+                <Text style={styles.dangerBtnText}>Giai tan nhom</Text>
+              </TouchableOpacity>
+            ) : null}
           </View>
         )}
       </ScrollView>
@@ -497,7 +751,7 @@ export default function ConversationDetailsScreen() {
               const fid = getUserId(friend);
               const isAlreadyMember = (conversation.participants || []).some((p) => getUserId(p) === fid);
               if (isAlreadyMember) return null;
-              
+
               const checked = selectedMembersToAdd.includes(fid);
               return (
                 <TouchableOpacity
@@ -511,6 +765,24 @@ export default function ConversationDetailsScreen() {
                 </TouchableOpacity>
               );
             })}
+          </ScrollView>
+        </View>
+      </Modal>
+
+      {/* Members Modal */}
+      <Modal visible={membersVisible} animationType="slide" onRequestClose={() => setMembersVisible(false)}>
+        <View style={[styles.fullModal, { backgroundColor: colors.background }]}>
+          <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
+            <TouchableOpacity onPress={() => setMembersVisible(false)}>
+              <Text style={{ color: brand, fontWeight: 'bold' }}>Đóng</Text>
+            </TouchableOpacity>
+            <Text style={{ fontSize: 18, fontWeight: 'bold', color: colors.text }}>
+              Thành viên ({conversation.participants?.length || 0})
+            </Text>
+            <View style={{ width: 30 }} />
+          </View>
+          <ScrollView>
+            {(conversation.participants || []).map(renderMember)}
           </ScrollView>
         </View>
       </Modal>
@@ -539,9 +811,9 @@ export default function ConversationDetailsScreen() {
                   onPress={() => {
                     Alert.alert('Xác nhận', `Nhường quyền Trưởng nhóm cho ${member.username} và rời khỏi nhóm này?`, [
                       { text: 'Hủy', style: 'cancel' },
-                      { 
-                        text: 'Chuyển và Rời', 
-                        style: 'destructive', 
+                      {
+                        text: 'Chuyển và Rời',
+                        style: 'destructive',
                         onPress: async () => {
                           try {
                             setActionLoading(true);
@@ -597,6 +869,39 @@ export default function ConversationDetailsScreen() {
         </View>
       </Modal>
 
+      {/* QR Code Modal */}
+      <Modal visible={qrModalVisible} transparent animationType="fade" onRequestClose={() => setQrModalVisible(false)}>
+        <TouchableOpacity style={styles.editorOverlay} activeOpacity={1} onPress={() => setQrModalVisible(false)}>
+          <View style={[styles.editorCard, { backgroundColor: colors.surface, alignItems: 'center' }]}>
+            <Text style={{ fontSize: 18, fontWeight: 'bold', color: colors.text, marginBottom: 16 }}>Mã QR của nhóm</Text>
+            {inviteLink ? (
+              <View style={{ backgroundColor: '#fff', padding: 10, borderRadius: 12 }}>
+                <Image
+                  source={{ uri: `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(inviteLink)}` }}
+                  style={{ width: 250, height: 250 }}
+                />
+              </View>
+            ) : <ActivityIndicator size="large" color={brand} />}
+            <Text style={{ color: colors.muted, marginTop: 12, textAlign: 'center', fontSize: 13 }}>Thành viên có thể quét mã này để tham gia nhóm</Text>
+
+            <View style={{ flexDirection: 'row', gap: 12, marginTop: 24, width: '100%' }}>
+              <TouchableOpacity
+                style={{ flex: 1, padding: 12, backgroundColor: '#F3F4F6', borderRadius: 8, alignItems: 'center' }}
+                onPress={() => { setQrModalVisible(false); Clipboard.setString(inviteLink || ''); Alert.alert('Đã sao chép link!'); }}
+              >
+                <Text style={{ fontWeight: 'bold', color: '#374151' }}>Sao chép link</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={{ flex: 1, padding: 12, backgroundColor: brand, borderRadius: 8, alignItems: 'center' }}
+                onPress={() => setQrModalVisible(false)}
+              >
+                <Text style={{ fontWeight: 'bold', color: '#fff' }}>Đóng</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
     </SafeAreaView>
   );
 }
@@ -607,6 +912,24 @@ const styles = StyleSheet.create({
   headerProfile: { alignItems: 'center', paddingVertical: 24 },
   mainAvatar: { width: 100, height: 100, borderRadius: 50, marginBottom: 16 },
   mainTitle: { fontSize: 24, fontWeight: 'bold' },
+  quickActionsWrap: {
+    marginHorizontal: 12,
+    borderRadius: 14,
+    paddingVertical: 14,
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginBottom: 12,
+  },
+  quickActionItem: { alignItems: 'center', gap: 8, width: '24%' },
+  quickIconCircle: {
+    width: 54,
+    height: 54,
+    borderRadius: 27,
+    backgroundColor: '#F3F4F6',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  quickActionLabel: { fontSize: 12, fontWeight: '600', textAlign: 'center', lineHeight: 18 },
   actionGrid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 12, marginBottom: 20, gap: 8 },
   gridBtn: { width: '30%', alignItems: 'center', padding: 12, borderRadius: 16, elevation: 1, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 5 },
   iconCircle: { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center', marginBottom: 8 },
@@ -629,4 +952,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 12,
   },
+  sharedRow: { paddingBottom: 8, gap: 10 },
+  sharedThumb: { width: 88, height: 88, borderRadius: 10, backgroundColor: '#E5E7EB' },
+  sharedFileCard: { width: 120, height: 88, borderRadius: 10, borderWidth: 1, padding: 8, justifyContent: 'center' },
 });

@@ -13,12 +13,12 @@ function getConvName(conv, myUserId) {
   return other?.username || "Người dùng";
 }
 
+const DEFAULT_AVATAR = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' rx='20' fill='%23d8dadf'/%3E%3Ccircle cx='20' cy='15' r='7' fill='%23bcc0c4'/%3E%3Cpath d='M6 35 Q6 26 20 26 Q34 26 34 35' fill='%23bcc0c4'/%3E%3C/svg%3E";
+
 function getConvAvatar(conv, myUserId) {
-  if (conv.type === "group") {
-    return conv.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(conv.name || "G")}&background=16a34a&color=fff`;
-  }
+  if (conv.type === "group") return conv.avatarUrl || DEFAULT_AVATAR;
   const other = conv.participants?.find((p) => (p._id || p.id) !== myUserId);
-  return other?.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(other?.username || "U")}&background=9333ea&color=fff`;
+  return other?.avatarUrl || DEFAULT_AVATAR;
 }
 
 export default function ArchivedConversationsPage({ myUserId }) {
@@ -136,7 +136,7 @@ export default function ArchivedConversationsPage({ myUserId }) {
               return (
                 <div key={id} className="archived-item" onClick={() => handleOpen(conv)}>
                   <div className="ai-avatar-wrap">
-                    <img src={avatar} className="ai-avatar" alt="" />
+                    <img src={avatar} className="ai-avatar" alt="" onError={e => { e.currentTarget.src = DEFAULT_AVATAR; }} />
                     <div className={`ai-type-badge ${isGroup ? "group" : "dm"}`}>
                       {isGroup ? <FaUsers size={8} /> : <FaUser size={8} />}
                     </div>

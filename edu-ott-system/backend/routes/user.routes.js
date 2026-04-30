@@ -141,7 +141,6 @@ router.post(
  *                 type: string
  */
 router.post('/admin/status', auth, userController.updateUserStatus);
-router.post('/report/:id', auth, userController.reportUser);
 
 // Cho phép người dùng report tài khoản khác
 router.post('/report/:id', auth, userController.reportUser);

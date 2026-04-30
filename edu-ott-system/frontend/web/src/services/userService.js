@@ -1,4 +1,4 @@
-import api from "./authService"; 
+import api from "./authService";
 
 export const userService = {
   // ── LẤY PROFILE ──
@@ -13,9 +13,9 @@ export const userService = {
     return response.data;
   },
 
-  // ── UPLOAD ẢNH CLOUDINARY CHUẨN 100% ──
+  // ── UPLOAD ẢNH CLOUDINARY % ──
   uploadAvatar: async (file) => {
-    // Bước 1: Gọi ĐÚNG đường dẫn xin chữ ký trong media.routes.js
+    // Bước 1: Gọi đường dẫn trong media.routes.js
     const sigResponse = await api.post('/media/cloudinary/signature', {
       folder: 'edu-ott/profile-avatars',
       resourceType: 'image'
@@ -26,7 +26,7 @@ export const userService = {
       throw new Error("Không lấy được chữ ký từ Backend");
     }
 
-    // Bước 2: Đóng gói và bắn thẳng lên Cloudinary
+    // Bước 2: gửi lên Cloudinary
     const formData = new FormData();
     formData.append('file', file);
     formData.append('api_key', sigData.apiKey);
@@ -59,7 +59,7 @@ export const userService = {
     return { url: cloudinaryData.secure_url };
   },
 
-  // ── CÁC API ADMIN (GIỮ NGUYÊN) ──
+  // ── CÁC API ADMIN  ──
   getAllUsers: async () => {
     const response = await api.get('/users');
     return response.data;
@@ -86,5 +86,8 @@ export const userService = {
     const response = await api.delete(`/users/${id}`);
     return response.data;
   },
-
+  reportUser: async (id, reason) => {
+    const response = await api.post(`/users/report/${id}`, { reason });
+    return response.data;
+  },
 };

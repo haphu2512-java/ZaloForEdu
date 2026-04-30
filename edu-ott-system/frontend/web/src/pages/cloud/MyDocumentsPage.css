@@ -147,7 +147,7 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
-  background: #f0f2f5;
+  background: var(--bg-tertiary);
 }
 
 [data-theme="dark"] .mdc-messages { background: #141414; }
@@ -225,6 +225,25 @@
 }
 .mdc-msg-wrap.me {
   flex-direction: row-reverse;
+}
+
+.highlight-msg {
+  animation: bg-pulse-blue 1.5s ease-out;
+  border-radius: 8px;
+}
+@keyframes bg-pulse-blue {
+  0% { background-color: rgba(0, 104, 255, 0.2); }
+  100% { background-color: transparent; }
+}
+
+.mdc-msg-wrap.removing {
+  animation: msgFadeOut 0.3s forwards;
+  pointer-events: none;
+}
+
+@keyframes msgFadeOut {
+  0% { opacity: 1; transform: scale(1); max-height: 500px; margin-bottom: 4px; }
+  100% { opacity: 0; transform: scale(0.9); max-height: 0; margin-bottom: 0; padding: 0; overflow: hidden; }
 }
 
 .mdc-msg-body { max-width: 70%; }
@@ -389,6 +408,8 @@
   margin: 0;
   font-size: 11px;
 }
+
+/* Removed Audio bubble styles (moved to AudioBubble.css) */
 
 /* Message time */
 .mdc-msg-time {

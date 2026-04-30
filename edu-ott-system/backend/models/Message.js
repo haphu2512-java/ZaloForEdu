@@ -54,13 +54,40 @@ const messageSchema = new mongoose.Schema(
     },
     type: {
       type: String,
-      enum: ['text', 'poll', 'system'],
+      enum: ['text', 'image', 'file', 'poll', 'system', 'system_reminder', 'announcement'],
       default: 'text',
+    },
+    channelId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Channel',
+      default: null,
+      index: true,
+    },
+    isPinnedAnnouncement: {
+      type: Boolean,
+      default: false,
     },
     pollId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Poll',
       default: null,
+    },
+    reminderId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Reminder',
+      default: null,
+    },
+    // @Mention: danh sách user được nhắc đến
+    mentions: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+      },
+    ],
+    // @all: nhắc tất cả thành viên
+    mentionAll: {
+      type: Boolean,
+      default: false,
     },
     deletedBy: [
       {
@@ -79,5 +106,6 @@ const messageSchema = new mongoose.Schema(
 );
 
 messageSchema.index({ conversationId: 1, createdAt: -1 });
+messageSchema.index({ conversationId: 1, channelId: 1, createdAt: -1 });
 
 module.exports = mongoose.model('Message', messageSchema);

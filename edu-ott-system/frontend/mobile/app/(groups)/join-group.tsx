@@ -39,6 +39,7 @@ export default function JoinGroupScreen() {
     try {
       setJoining(true);
       const result = await joinGroupByCode(code);
+      const conversationId = result.conversation?._id || (result as any)?._id;
 
       if (result.requiresApproval) {
         Alert.alert(
@@ -50,7 +51,7 @@ export default function JoinGroupScreen() {
         Alert.alert(
           '🎉 Tham gia thành công!',
           `Bạn đã vào nhóm "${preview?.name}"`,
-          [{ text: 'Vào nhóm', onPress: () => router.replace(`/chat/${result.conversation?._id}` as any) }],
+          [{ text: 'Vào nhóm', onPress: () => router.replace(conversationId ? (`/chat/${conversationId}` as any) : '/(tabs)') }],
         );
       }
     } catch (err: any) {

@@ -7,21 +7,15 @@ import { useEffect } from 'react';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import 'react-native-reanimated';
 
-// 🔑 Use the CUSTOM hook (respects user's saved theme preference: light/dark/system)
-// NOT the React Native built-in hook, which only reads device system setting
 import { useColorScheme } from '@/components/useColorScheme';
+import { AuthProvider } from '../context/auth';
 
-export {
-  // Catch any errors thrown by the Layout component.
-  ErrorBoundary,
-} from 'expo-router';
+export { ErrorBoundary } from 'expo-router';
 
 export const unstable_settings = {
-  // Ensure that reloading on `/modal` keeps a back button present.
   initialRouteName: '(tabs)',
 };
 
-// Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
@@ -30,25 +24,17 @@ export default function RootLayout() {
     ...FontAwesome.font,
   });
 
-  // Expo Router uses Error Boundaries to catch errors in the navigation tree.
   useEffect(() => {
     if (error) throw error;
   }, [error]);
 
   useEffect(() => {
-    if (loaded) {
-      SplashScreen.hideAsync();
-    }
+    if (loaded) SplashScreen.hideAsync();
   }, [loaded]);
 
-  if (!loaded) {
-    return null;
-  }
-
+  if (!loaded) return null;
   return <RootLayoutNav />;
 }
-
-import { AuthProvider } from '../context/auth';
 
 function RootLayoutNav() {
   const colorScheme = useColorScheme();
@@ -61,6 +47,10 @@ function RootLayoutNav() {
             <Stack.Screen name="(auth)" options={{ headerShown: false }} />
             <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
             <Stack.Screen name="chat/[id]" options={{ headerShown: true, title: 'Trò chuyện' }} />
+            <Stack.Screen name="community" options={{ headerShown: false }} />
+            <Stack.Screen name="community/index" options={{ headerShown: false }} />
+            <Stack.Screen name="community/create" options={{ headerShown: false }} />
+            <Stack.Screen name="community/[id]" options={{ headerShown: false }} />
             <Stack.Screen name="(settings)/blocked-users" options={{ headerShown: false }} />
             <Stack.Screen name="(settings)/archived-conversations" options={{ headerShown: false }} />
           </Stack>
@@ -69,4 +59,3 @@ function RootLayoutNav() {
     </SafeAreaProvider>
   );
 }
-

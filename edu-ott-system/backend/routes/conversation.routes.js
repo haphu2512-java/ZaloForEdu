@@ -294,6 +294,34 @@ router.post(
   validate({ params: conversationIdParamSchema }),
   conversationController.leaveGroup,
 );
+/**
+ * @openapi
+ * /conversations/{id}/disband:
+ *   delete:
+ *     tags: [Conversations]
+ *     summary: Disband group (owner only)
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Group disbanded successfully
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ *       403:
+ *         description: Forbidden
+ */
+router.delete(
+  '/:id/disband',
+  auth,
+  validate({ params: conversationIdParamSchema }),
+  conversationController.disbandGroup,
+);
 router.put(
   '/:id/avatar',
   auth,
@@ -354,6 +382,14 @@ router.get(
 // ==================== FEATURE 4: JOIN APPROVAL ====================
 const groupSettingsSchema = z.object({
   isApprovalRequired: z.boolean().optional(),
+  canMembersUpdateInfo: z.boolean().optional(),
+  canMembersPin: z.boolean().optional(),
+  canMembersCreateReminders: z.boolean().optional(),
+  canMembersCreatePolls: z.boolean().optional(),
+  canMembersSendMessages: z.boolean().optional(),
+  markAdminMessages: z.boolean().optional(),
+  allowNewMembersReadHistory: z.boolean().optional(),
+  allowInviteLink: z.boolean().optional(),
 });
 const joinRequestBodySchema = z.object({
   reason: z.string().max(300).optional(),
@@ -405,7 +441,6 @@ router.get(
 // POST /preview/:code - Xem preview nhóm (public, không cần auth)
 router.get(
   '/preview/:code',
-  auth,
   validate({ params: inviteCodeParamSchema }),
   groupFeatureController.previewGroupByInviteCode,
 );
@@ -422,6 +457,32 @@ router.post(
   auth,
   validate({ params: inviteCodeParamSchema }),
   groupFeatureController.resetInviteLink,
+);
+
+// ==================== FEATURE 6: BLOCK MEMBERS (Chặn khỏi nhóm) ====================
+const blockMemberBodySchema = z.object({ memberId: z.string().min(1) });
+const blockedMemberParamSchema = z.object({ id: z.string().min(1), memberId: z.string().min(1) });
+
+// POST /:id/block - Chặn thành viên
+router.post(
+  '/:id/block',
+  auth,
+  validate({ params: conversationIdParamSchema, body: blockMemberBodySchema }),
+  groupFeatureController.blockMember,
+);
+// DELETE /:id/block/:memberId - Bỏ chặn
+router.delete(
+  '/:id/block/:memberId',
+  auth,
+  validate({ params: blockedMemberParamSchema }),
+  groupFeatureController.unblockMember,
+);
+// GET /:id/blocked - Danh sách bị chặn
+router.get(
+  '/:id/blocked',
+  auth,
+  validate({ params: conversationIdParamSchema }),
+  groupFeatureController.listBlockedMembers,
 );
 
 module.exports = router;

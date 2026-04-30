@@ -23,6 +23,20 @@ const emitToConversation = (conversationId, event, payload) => {
   io.to(`conversation:${conversationId}`).emit(event, payload);
 };
 
+const emitToCommunityChannel = (communityId, channelId, event, payload) => {
+  if (!io) return;
+  if (channelId) {
+    io.to(`community:${communityId}:channel:${channelId}`).emit(event, payload);
+    return;
+  }
+  io.to(`community:${communityId}`).emit(event, payload);
+};
+
+const emitToUser = (userId, event, payload) => {
+  if (!io) return;
+  io.to(`user:${userId}`).emit(event, payload);
+};
+
 const emitConversationUpdated = async (conversationId, payload) => {
   if (!io) return;
   const conversation = await Conversation.findById(conversationId).select('participants');
@@ -38,6 +52,24 @@ const emitMessageRecalled = async (conversationId, payload) => {
   if (!conversation) return;
   conversation.participants.forEach((participantId) => {
     io.to(`user:${participantId.toString()}`).emit('message_recalled', payload);
+  });
+};
+
+const emitPinnedItemsUpdated = async (conversationId, payload) => {
+  if (!io) return;
+  const conversation = await Conversation.findById(conversationId).select('participants');
+  if (!conversation) return;
+  conversation.participants.forEach((participantId) => {
+    io.to(`user:${participantId.toString()}`).emit('pinned_items_updated', payload);
+  });
+};
+
+const emitPollUpdated = async (conversationId, payload) => {
+  if (!io) return;
+  const conversation = await Conversation.findById(conversationId).select('participants');
+  if (!conversation) return;
+  conversation.participants.forEach((participantId) => {
+    io.to(`user:${participantId.toString()}`).emit('poll_updated', payload);
   });
 };
 
@@ -120,7 +152,19 @@ const initSocket = (server) => {
         return;
       }
       socket.join(`conversation:${conversationId}`);
+      socket.join(`community:${conversationId}`);
       socket.emit('joined_conversation', { conversationId });
+    });
+
+    socket.on('join_community_channel', async ({ communityId, channelId }) => {
+      if (!communityId || !channelId) return;
+      const allowed = await canJoinConversation(communityId, socket.user._id);
+      if (!allowed) {
+        socket.emit('socket_error', { message: 'Not allowed to join this channel room' });
+        return;
+      }
+      socket.join(`community:${communityId}:channel:${channelId}`);
+      socket.emit('joined_community_channel', { communityId, channelId });
     });
 
     socket.on('send_message', async (payload) => {
@@ -132,8 +176,15 @@ const initSocket = (server) => {
           mediaIds: payload.mediaIds || [],
           replyTo: payload.replyTo,
           forwardFrom: payload.forwardFrom,
+          channelId: payload.channelId || null,
+          type: payload.type || 'text',
+          isPinnedAnnouncement: Boolean(payload.isPinnedAnnouncement),
         });
-        emitToConversation(payload.conversationId, 'new_message', message);
+        if (message.type === 'announcement') {
+          emitToCommunityChannel(payload.conversationId, payload.channelId || null, 'announcement', message);
+        } else {
+          emitToCommunityChannel(payload.conversationId, payload.channelId || null, 'new_message', message);
+        }
         await emitConversationUpdated(payload.conversationId, {
           conversationId: payload.conversationId,
           latestMessage: message,
@@ -166,7 +217,7 @@ const initSocket = (server) => {
       const message = await Message.findByIdAndUpdate(
         messageId,
         { $addToSet: { deliveredTo: socket.user._id } },
-        { new: true },
+        { returnDocument: 'after' },
       );
       if (!message) return;
       emitToConversation(message.conversationId.toString(), 'message_delivered', {
@@ -180,7 +231,7 @@ const initSocket = (server) => {
       const message = await Message.findByIdAndUpdate(
         messageId,
         { $addToSet: { seenBy: socket.user._id, deliveredTo: socket.user._id } },
-        { new: true },
+        { returnDocument: 'after' },
       );
       if (!message) return;
       emitToConversation(message.conversationId.toString(), 'message_seen', {
@@ -213,7 +264,64 @@ const initSocket = (server) => {
       });
     });
     // --------------------------------------
+
+    // ─────────────────────────────────────────────
+    // GROUP CALL – gọi nhóm
+    // payload: { conversationId, roomId, callerName, type, inviteLink }
+    // ─────────────────────────────────────────────
+    socket.on('group_call_start', async ({ conversationId, roomId, callerName, type, inviteLink }) => {
+      if (!conversationId || !roomId) return;
+
+      try {
+        // Chỉ gọi những thành viên trong nhóm (trừ người gọi)
+        const conversation = await Conversation.findById(conversationId).select('participants type');
+        if (!conversation || conversation.type !== 'group') return;
+
+        // Kiểm tra người gọi có trong nhóm không
+        const isMember = conversation.participants.some(p => p.toString() === userId);
+        if (!isMember) return;
+
+        const otherParticipants = conversation.participants.filter(p => p.toString() !== userId);
+
+        // Gửi thông báo cuộc gọi tới từng thành viên đang online
+        otherParticipants.forEach((participantId) => {
+          io.to(`user:${participantId.toString()}`).emit('incoming_group_call', {
+            conversationId,
+            roomId,
+            callerName,
+            type,
+            fromUserId: userId,
+            inviteLink: inviteLink || null,
+            isGroup: true,
+          });
+        });
+
+        // Thông báo cho chính người gọi biết đã broadcast thành công
+        socket.emit('group_call_started', { conversationId, roomId });
+      } catch (err) {
+        socket.emit('socket_error', { message: err.message });
+      }
+    });
+
+    // Thành viên từ chối group call
+    socket.on('group_call_decline', ({ conversationId, roomId }) => {
+      // Broadcast cho mọi người trong conversation biết ai đã từ chối
+      io.to(`conversation:${conversationId}`).emit('group_call_member_declined', {
+        userId,
+        roomId,
+      });
+    });
+
+    // ─────────────────────────────────────────────
+    // Disconnect
+    // ─────────────────────────────────────────────
+    socket.on('disconnect', async () => {
+      const lastSeen = await presenceService.setOffline(userId);
+      socket.broadcast.emit('user_offline', { userId, lastSeen: lastSeen.toISOString() });
+    });
   });
+
+
 
   logger.info('Socket.IO initialized');
   return io;
@@ -221,6 +329,10 @@ const initSocket = (server) => {
 
 module.exports = initSocket;
 module.exports.emitToConversation = emitToConversation;
+module.exports.emitToCommunityChannel = emitToCommunityChannel;
 module.exports.emitConversationUpdated = emitConversationUpdated;
 module.exports.emitMessageRecalled = emitMessageRecalled;
+module.exports.emitPinnedItemsUpdated = emitPinnedItemsUpdated;
+module.exports.emitPollUpdated = emitPollUpdated;
+module.exports.emitToUser = emitToUser;
 module.exports.closeSocket = closeSocket;

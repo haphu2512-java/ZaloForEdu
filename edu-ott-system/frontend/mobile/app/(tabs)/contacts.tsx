@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useFocusEffect } from 'expo-router';
+import * as ExpoContacts from 'expo-contacts';
 import {
   StyleSheet,
   SectionList,
@@ -36,17 +37,30 @@ import {
   getFriendList,
   sendFriendRequest,
   getIncomingFriendRequests,
+  getOutgoingFriendRequests,
   acceptFriendRequest,
   rejectFriendRequest,
   removeFriend,
+  sendFriendRequestsBulk,
 } from '@/utils/friendService';
 import { searchUsers } from '@/utils/searchService';
+import {
+  computeSmartSuggestions,
+  lookupUsersByPhones,
+  normalizeVietnamPhone,
+  parseQrPayloadToUserId,
+} from '@/utils/friendDiscoveryService';
 import { blockOrUnblockUser } from '@/utils/userService';
+import { getUserById } from '@/utils/userService';
 import type { UserInfo, Conversation } from '@/types/chat';
 import type { FriendRequest } from '@/types/friend';
 import CreateGroupModal from '@/components/contacts/CreateGroupModal';
 import FriendRequestsModal from '@/components/contacts/FriendRequestsModal';
 import GroupManageModal from '@/components/contacts/GroupManageModal';
+import SuggestionUserRow from '@/components/contacts/SuggestionUserRow';
+import PhoneFriendModal from '@/components/contacts/PhoneFriendModal';
+import ContactSyncModal from '@/components/contacts/ContactSyncModal';
+import QrFriendModal from '@/components/contacts/QrFriendModal';
 
 type ContactTab = 'friends' | 'groups' | 'oa';
 type FilterTab = 'all' | 'recent';
@@ -67,12 +81,24 @@ export default function ContactsScreen() {
   const [friends, setFriends] = useState<UserInfo[]>([]);
   const [groups, setGroups] = useState<Conversation[]>([]);
   const [incomingRequests, setIncomingRequests] = useState<FriendRequest[]>([]);
+  const [outgoingRequests, setOutgoingRequests] = useState<FriendRequest[]>([]);
   const [searchResults, setSearchResults] = useState<UserInfo[]>([]);
+  const [syncedContactMatches, setSyncedContactMatches] = useState<UserInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [phoneSearch, setPhoneSearch] = useState('');
+  const [phoneResult, setPhoneResult] = useState<UserInfo | null>(null);
   const [isSearching, setIsSearching] = useState(false);
+  const [syncingContacts, setSyncingContacts] = useState(false);
+  const [findingPhone, setFindingPhone] = useState(false);
+  const [deviceContactsCount, setDeviceContactsCount] = useState(0);
+  const [qrInput, setQrInput] = useState('');
+  const [qrPreviewUser, setQrPreviewUser] = useState<UserInfo | null>(null);
   const [requestModalVisible, setRequestModalVisible] = useState(false);
+  const [phoneModalVisible, setPhoneModalVisible] = useState(false);
+  const [syncModalVisible, setSyncModalVisible] = useState(false);
+  const [qrModalVisible, setQrModalVisible] = useState(false);
   const [processingRequestId, setProcessingRequestId] = useState<string | null>(null);
   const [createGroupVisible, setCreateGroupVisible] = useState(false);
   const [selectedGroupMembers, setSelectedGroupMembers] = useState<string[]>([]);
@@ -93,13 +119,23 @@ export default function ContactsScreen() {
 
   const loadContacts = useCallback(async () => {
     try {
-      const [friendsRes, incomingRes, conversationsRes] = await Promise.all([
+      const [friendsRes, incomingRes, outgoingRes, conversationsRes] = await Promise.all([
         getFriendList(null, 100),
         getIncomingFriendRequests(null, 100),
+        getOutgoingFriendRequests(null, 100),
         getConversations(null, 100),
       ]);
       setFriends(friendsRes?.items || []);
       setIncomingRequests(incomingRes?.items || []);
+      setOutgoingRequests(outgoingRes?.items || []);
+      const outgoingIds = (outgoingRes?.items || [])
+        .map((request) =>
+          typeof request.toUserId === 'string'
+            ? request.toUserId
+            : request.toUserId?._id || request.toUserId?.id || '',
+        )
+        .filter(Boolean);
+      setSentFriendRequestIds(Array.from(new Set(outgoingIds)));
       const myGroups = (conversationsRes?.items || []).filter((conv) => conv.type === 'group');
       setGroups(myGroups);
     } catch (error: any) {
@@ -244,10 +280,155 @@ export default function ContactsScreen() {
     ]);
   };
 
+  const handleFindByPhone = async () => {
+    const normalizedPhone = normalizeVietnamPhone(phoneSearch);
+    if (!normalizedPhone) {
+      Alert.alert('Số điện thoại không hợp lệ', 'Vui lòng nhập số điện thoại Việt Nam hợp lệ.');
+      return;
+    }
+
+    setFindingPhone(true);
+    try {
+      const res = await searchUsers(normalizedPhone, null, 5);
+      const matched =
+        (res?.items || []).find((item) => {
+          const normalized = normalizeVietnamPhone(item.phone || '');
+          return normalized === normalizedPhone && getUserId(item) !== user?.id;
+        }) || null;
+      setPhoneResult(matched);
+      if (!matched) Alert.alert('Không tìm thấy', 'Chưa có tài khoản nào khớp số điện thoại này.');
+    } catch (error: any) {
+      Alert.alert('Lỗi', error.message || 'Không thể tìm theo số điện thoại');
+    } finally {
+      setFindingPhone(false);
+    }
+  };
+
+  const handleSyncContacts = async () => {
+    setSyncingContacts(true);
+    try {
+      const { status } = await ExpoContacts.requestPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Thiếu quyền truy cập', 'Bạn cần cấp quyền Danh bạ để đồng bộ.');
+        return;
+      }
+
+      const allPhones = new Set<string>();
+      let pageOffset = 0;
+      let hasNextPage = true;
+
+      while (hasNextPage) {
+        const response = await ExpoContacts.getContactsAsync({
+          fields: [ExpoContacts.Fields.PhoneNumbers],
+          pageSize: 200,
+          pageOffset,
+        });
+
+        for (const contact of response.data || []) {
+          for (const phoneItem of contact.phoneNumbers || []) {
+            const normalized = normalizeVietnamPhone(phoneItem.number || '');
+            if (normalized) allPhones.add(normalized);
+          }
+        }
+
+        hasNextPage = !!response.hasNextPage;
+        pageOffset += 200;
+      }
+
+      const phones = Array.from(allPhones).slice(0, 300);
+      setDeviceContactsCount(phones.length);
+      if (phones.length === 0) {
+        Alert.alert('Không có dữ liệu', 'Danh bạ của bạn chưa có số điện thoại hợp lệ.');
+        return;
+      }
+
+      const foundUsers = await lookupUsersByPhones(phones);
+      const filtered = foundUsers.filter((u) => {
+        const uid = getUserId(u);
+        return uid && uid !== user?.id && !isFriend(uid);
+      });
+      setSyncedContactMatches(filtered);
+      Alert.alert('Đồng bộ xong', `Đã quét ${phones.length} số, tìm thấy ${filtered.length} liên hệ đang dùng ứng dụng.`);
+    } catch (error: any) {
+      Alert.alert('Lỗi', error.message || 'Không thể đồng bộ danh bạ');
+    } finally {
+      setSyncingContacts(false);
+    }
+  };
+
+  const mapApiUser = (raw: any): UserInfo => ({
+    _id: raw?._id || raw?.id,
+    id: raw?.id || raw?._id,
+    username: raw?.username || 'Người dùng',
+    email: raw?.email,
+    phone: raw?.phone,
+    avatarUrl: raw?.avatarUrl,
+    isOnline: raw?.isOnline,
+    lastSeen: raw?.lastSeen,
+  });
+
+  const handleResolveQr = async () => {
+    const userId = parseQrPayloadToUserId(qrInput);
+    if (!userId) {
+      Alert.alert('Mã QR không hợp lệ', 'Vui lòng nhập lại mã QR hoặc user ID.');
+      return;
+    }
+
+    try {
+      const found = await getUserById(userId);
+      const normalizedUser = mapApiUser(found);
+      if (getUserId(normalizedUser) === user?.id) {
+        Alert.alert('Thông báo', 'Đây là mã QR của chính bạn.');
+        return;
+      }
+      setQrPreviewUser(normalizedUser);
+    } catch (error: any) {
+      Alert.alert('Không tìm thấy', error.message || 'Mã QR này không tồn tại.');
+      setQrPreviewUser(null);
+    }
+  };
+
+  const handleSendBulkFromSuggestions = async () => {
+    if (smartSuggestions.length === 0) {
+      Alert.alert('Thông báo', 'Hiện chưa có gợi ý mới.');
+      return;
+    }
+    const topSuggestionIds = smartSuggestions
+      .slice(0, 5)
+      .map((item) => getUserId(item))
+      .filter(Boolean);
+
+    try {
+      const result = await sendFriendRequestsBulk(topSuggestionIds);
+      if (result.successIds.length > 0) {
+        setSentFriendRequestIds((prev) => Array.from(new Set([...prev, ...result.successIds])));
+        Alert.alert('Đã gửi lời mời', `Gửi thành công ${result.successIds.length} lời mời.`);
+        await loadContacts();
+        return;
+      }
+      Alert.alert('Thông báo', 'Chưa gửi được lời mời nào. Có thể bạn đã gửi trước đó.');
+    } catch (error: any) {
+      Alert.alert('Lỗi', error.message || 'Không thể gửi lời mời hàng loạt');
+    }
+  };
+
   const filteredFriends = useMemo(() => {
     if (activeFilter === 'all') return friends;
     return friends.filter((f) => !!f.isOnline);
   }, [friends, activeFilter]);
+
+  const smartSuggestions = useMemo(
+    () =>
+      computeSmartSuggestions({
+        currentUserId: user?.id || '',
+        friends,
+        groups,
+        incomingRequests,
+        outgoingRequests,
+        syncedContactMatches,
+      }),
+    [friends, groups, incomingRequests, outgoingRequests, syncedContactMatches, user?.id],
+  );
 
   const friendSections = useMemo(() => {
     const sorted = [...filteredFriends].sort((a, b) =>
@@ -317,7 +498,10 @@ export default function ContactsScreen() {
   const handleGroupAction = async (action: () => Promise<any>, successMessage: string) => {
     try {
       setGroupActionLoading(true);
-      await action();
+      const res = await action();
+      if (res && (res._id || res.id) && selectedGroup && (selectedGroup._id === res._id || selectedGroup.id === res.id)) {
+        setSelectedGroup((prev) => prev ? { ...prev, ...res } : res);
+      }
       await loadContacts();
       Alert.alert('Thành công', successMessage);
     } catch (error: any) {
@@ -346,6 +530,7 @@ export default function ContactsScreen() {
     const uid = getUserId(item);
     const isBlocked = (user?.blockedUsers || []).includes(uid);
     const isRequestSent = sentFriendRequestIds.includes(uid);
+    const alreadyFriend = isFriend(uid);
     return (
       <View style={[styles.userRow, { backgroundColor: colors.surface }]}>
         <Image
@@ -359,32 +544,44 @@ export default function ContactsScreen() {
         <View style={{ flex: 1, backgroundColor: 'transparent' }}>
           <Text style={[styles.userName, { color: colors.text }]}>{item.username}</Text>
           <Text style={{ fontSize: 13, color: colors.muted }}>{item.email || item.phone || 'Người dùng'}</Text>
+          {!alreadyFriend && (
+            <Text style={{ fontSize: 11, color: colors.muted, fontStyle: 'italic', marginTop: 2 }}>Chưa kết bạn</Text>
+          )}
         </View>
-        {!isFriend(uid) ? (
-          <View style={{ gap: 8, backgroundColor: 'transparent' }}>
-            <TouchableOpacity
-              style={[styles.actionBtn, { backgroundColor: isRequestSent ? '#9CA3AF' : brand }]}
-              onPress={() => handleAddFriend(uid)}
-              disabled={isRequestSent}
-            >
-              <Text style={{ color: '#fff', fontWeight: '700', fontSize: 12 }}>
-                {isRequestSent ? 'Đã gửi' : 'Kết bạn'}
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.actionBtn, { backgroundColor: isBlocked ? '#16A34A' : '#DC2626' }]}
-              onPress={() => handleToggleBlock(uid)}
-            >
-              <Text style={{ color: '#fff', fontWeight: '700', fontSize: 12 }}>
-                {isBlocked ? 'Bỏ chặn' : 'Chặn'}
-              </Text>
-            </TouchableOpacity>
-          </View>
-        ) : (
-          <View style={[styles.badge, { backgroundColor: '#DCFCE7' }]}>
-            <Text style={{ color: '#166534', fontWeight: '700', fontSize: 12 }}>Bạn bè</Text>
-          </View>
-        )}
+        <View style={{ gap: 6, backgroundColor: 'transparent' }}>
+          {/* Nút Nhắn tin - luôn hiển thị cho mọi user (kể cả người lạ) */}
+          <TouchableOpacity
+            style={[styles.actionBtn, { backgroundColor: '#0EA5E9' }]}
+            onPress={() => handleStartChat(uid)}
+          >
+            <Text style={{ color: '#fff', fontWeight: '700', fontSize: 12 }}>Nhắn tin</Text>
+          </TouchableOpacity>
+          {!alreadyFriend ? (
+            <>
+              <TouchableOpacity
+                style={[styles.actionBtn, { backgroundColor: isRequestSent ? '#9CA3AF' : brand }]}
+                onPress={() => handleAddFriend(uid)}
+                disabled={isRequestSent}
+              >
+                <Text style={{ color: '#fff', fontWeight: '700', fontSize: 12 }}>
+                  {isRequestSent ? 'Đã gửi' : 'Kết bạn'}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.actionBtn, { backgroundColor: isBlocked ? '#16A34A' : '#DC2626' }]}
+                onPress={() => handleToggleBlock(uid)}
+              >
+                <Text style={{ color: '#fff', fontWeight: '700', fontSize: 12 }}>
+                  {isBlocked ? 'Bỏ chặn' : 'Chặn'}
+                </Text>
+              </TouchableOpacity>
+            </>
+          ) : (
+            <View style={[styles.badge, { backgroundColor: '#DCFCE7' }]}>
+              <Text style={{ color: '#166534', fontWeight: '700', fontSize: 12 }}>Bạn bè ✓</Text>
+            </View>
+          )}
+        </View>
       </View>
     );
   };
@@ -577,6 +774,27 @@ export default function ContactsScreen() {
                 </Text>
               </TouchableOpacity>
 
+              <TouchableOpacity style={styles.featureRow} onPress={() => setPhoneModalVisible(true)}>
+                <View style={[styles.featureIcon, { backgroundColor: '#2563EB' }]}>
+                  <Ionicons name="call-outline" size={20} color="#fff" />
+                </View>
+                <Text style={[styles.featureText, { color: colors.text }]}>Kết bạn bằng số điện thoại</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.featureRow} onPress={() => setSyncModalVisible(true)}>
+                <View style={[styles.featureIcon, { backgroundColor: '#16A34A' }]}>
+                  <Ionicons name="sync-outline" size={20} color="#fff" />
+                </View>
+                <Text style={[styles.featureText, { color: colors.text }]}>Đồng bộ danh bạ</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.featureRow} onPress={() => setQrModalVisible(true)}>
+                <View style={[styles.featureIcon, { backgroundColor: '#7C3AED' }]}>
+                  <Ionicons name="qr-code-outline" size={20} color="#fff" />
+                </View>
+                <Text style={[styles.featureText, { color: colors.text }]}>Kết bạn bằng QR</Text>
+              </TouchableOpacity>
+
               <View style={[styles.divider, { backgroundColor: colors.border }]} />
 
               <View style={styles.filterWrap}>
@@ -617,12 +835,84 @@ export default function ContactsScreen() {
                   </Text>
                 </TouchableOpacity>
               </View>
+
+              <View style={styles.suggestionHead}>
+                <Text style={[styles.suggestionTitle, { color: colors.text }]}>Gợi ý cho bạn</Text>
+                <TouchableOpacity onPress={handleSendBulkFromSuggestions}>
+                  <Text style={{ color: brand, fontWeight: '700' }}>Mời nhanh top 5</Text>
+                </TouchableOpacity>
+              </View>
+              {smartSuggestions.length > 0 ? (
+                <FlatList
+                  data={smartSuggestions.slice(0, 5)}
+                  keyExtractor={(item, index) => getUserId(item) || `suggest-${index}`}
+                  renderItem={({ item }) => (
+                    <SuggestionUserRow
+                      item={item}
+                      brand={brand}
+                      colors={colors}
+                      sentFriendRequestIds={sentFriendRequestIds}
+                      getUserId={getUserId}
+                      onAddFriend={handleAddFriend}
+                    />
+                  )}
+                  scrollEnabled={false}
+                />
+              ) : (
+                <Text style={[styles.suggestionEmpty, { color: colors.muted }]}>
+                  Chưa có gợi ý mới. Hãy đồng bộ danh bạ để nhận đề xuất chính xác hơn.
+                </Text>
+              )}
             </View>
           }
         />
       )}
 
-            <FriendRequestsModal
+      <PhoneFriendModal
+        visible={phoneModalVisible}
+        onClose={() => setPhoneModalVisible(false)}
+        brand={brand}
+        colors={colors}
+        phoneSearch={phoneSearch}
+        setPhoneSearch={setPhoneSearch}
+        findingPhone={findingPhone}
+        onFindByPhone={handleFindByPhone}
+        phoneResult={phoneResult}
+        sentFriendRequestIds={sentFriendRequestIds}
+        getUserId={getUserId}
+        onAddFriend={handleAddFriend}
+      />
+
+      <ContactSyncModal
+        visible={syncModalVisible}
+        onClose={() => setSyncModalVisible(false)}
+        brand={brand}
+        colors={colors}
+        syncingContacts={syncingContacts}
+        onSyncContacts={handleSyncContacts}
+        deviceContactsCount={deviceContactsCount}
+        syncedContactMatches={syncedContactMatches}
+        sentFriendRequestIds={sentFriendRequestIds}
+        getUserId={getUserId}
+        onAddFriend={handleAddFriend}
+      />
+
+      <QrFriendModal
+        visible={qrModalVisible}
+        onClose={() => setQrModalVisible(false)}
+        brand={brand}
+        colors={colors}
+        currentUserId={user?.id || ''}
+        qrInput={qrInput}
+        setQrInput={setQrInput}
+        onResolveQr={handleResolveQr}
+        qrPreviewUser={qrPreviewUser}
+        sentFriendRequestIds={sentFriendRequestIds}
+        getUserId={getUserId}
+        onAddFriend={handleAddFriend}
+      />
+
+      <FriendRequestsModal
         visible={requestModalVisible}
         onClose={() => setRequestModalVisible(false)}
         brand={brand}
@@ -653,7 +943,7 @@ export default function ContactsScreen() {
         onClose={() => setGroupManageVisible(false)}
         brand={brand}
         colors={colors}
-        colorScheme={colorScheme as 'light'|'dark'}
+        colorScheme={colorScheme as 'light' | 'dark'}
         selectedGroup={selectedGroup}
         groupActionLoading={groupActionLoading}
         currentUserId={currentUserId}
@@ -839,6 +1129,23 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '500',
   },
+  suggestionHead: {
+    paddingHorizontal: 16,
+    paddingTop: 2,
+    paddingBottom: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  suggestionTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  suggestionEmpty: {
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+    fontSize: 13,
+  },
 
   sectionHeader: {
     paddingHorizontal: 16,
@@ -909,6 +1216,12 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     paddingHorizontal: 12,
     paddingVertical: 10,
+  },
+  myQrCard: {
+    borderWidth: 1,
+    borderRadius: 12,
+    alignItems: 'center',
+    padding: 12,
   },
   requestRow: {
     flexDirection: 'row',
