@@ -1,4 +1,5 @@
 import api from "./authService";
+import { uploadFile } from "./mediaService";
 
 export const userService = {
   // ── LẤY PROFILE ──
@@ -13,50 +14,11 @@ export const userService = {
     return response.data;
   },
 
-  // ── UPLOAD ẢNH CLOUDINARY % ──
-  uploadAvatar: async (file) => {
-    // Bước 1: Gọi đường dẫn trong media.routes.js
-    const sigResponse = await api.post('/media/cloudinary/signature', {
-      folder: 'edu-ott/profile-avatars',
-      resourceType: 'image'
-    });
-
-    const sigData = sigResponse.data?.data || sigResponse.data;
-    if (!sigData || !sigData.signature) {
-      throw new Error("Không lấy được chữ ký từ Backend");
-    }
-
-    // Bước 2: gửi lên Cloudinary
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('api_key', sigData.apiKey);
-    formData.append('timestamp', sigData.timestamp);
-    formData.append('signature', sigData.signature);
-    formData.append('folder', sigData.folder);
-    if (sigData.publicId) formData.append('public_id', sigData.publicId);
-
-    const cloudinaryRes = await fetch(sigData.uploadUrl, {
-      method: 'POST',
-      body: formData,
-    });
-
-    const cloudinaryData = await cloudinaryRes.json();
-    if (!cloudinaryRes.ok) {
-      throw new Error(cloudinaryData.error?.message || 'Lỗi upload Cloudinary');
-    }
-
-    // Bước 3: Đăng ký thông tin media vừa up vào DB (Theo media.routes.js)
-    await api.post('/media/cloudinary/register', {
-      fileName: file.name,
-      mimeType: file.type,
-      size: file.size,
-      url: cloudinaryData.secure_url,
-      publicId: cloudinaryData.public_id,
-      resourceType: cloudinaryData.resource_type
-    });
-
-    // Trả về link xịn cho Profile cập nhật
-    return { url: cloudinaryData.secure_url };
+  // ── UPLOAD ẢNH (dùng upload-form giống gửi ảnh trong tin nhắn, không dùng Cloudinary) ──
+  uploadAvatar: async (file, onProgress) => {
+    // Dùng đúng hàm uploadFile từ mediaService — POST /media/upload-form
+    const media = await uploadFile(file, { onProgress });
+    return { url: media.url };
   },
 
   // ── CÁC API ADMIN  ──
