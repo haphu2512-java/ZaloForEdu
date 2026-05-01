@@ -9,6 +9,8 @@ interface CommentItemProps {
   onReply?: () => void;
   onDelete?: () => void;
   onAuthorPress?: (authorId: string) => void;
+  onToggleReplies?: () => void;
+  isExpanded?: boolean;
 }
 
 function timeAgo(dateStr: string): string {
@@ -29,6 +31,8 @@ export default function CommentItem({
   onReply,
   onDelete,
   onAuthorPress,
+  onToggleReplies,
+  isExpanded,
 }: CommentItemProps) {
   const author = comment.authorId || {};
   const authorName = author.username || 'Người dùng';
@@ -66,10 +70,10 @@ export default function CommentItem({
         </View>
 
         {comment.repliesCount > 0 && !comment.parentId && (
-          <TouchableOpacity style={s.viewReplies}>
-            <Ionicons name="return-down-forward-outline" size={14} color={colors.tint} />
+          <TouchableOpacity style={s.viewReplies} onPress={onToggleReplies}>
+            <Ionicons name={isExpanded ? "return-up-back-outline" : "return-down-forward-outline"} size={14} color={colors.tint} />
             <Text style={[s.viewRepliesText, { color: colors.tint }]}>
-              Xem {comment.repliesCount} phản hồi
+              {isExpanded ? 'Ẩn phản hồi' : `Xem ${comment.repliesCount} phản hồi`}
             </Text>
           </TouchableOpacity>
         )}

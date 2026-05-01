@@ -26,6 +26,7 @@ export default function PostDetailScreen() {
   const [comments, setComments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [replyTo, setReplyTo] = useState<string | null>(null);
+  const [expandedReplies, setExpandedReplies] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     if (!postId) return;
@@ -59,10 +60,31 @@ export default function PostDetailScreen() {
       { text: 'Hủy', style: 'cancel' },
       { text: 'Xóa', style: 'destructive', onPress: async () => {
         await deleteComment(postId!, cid);
-        setComments((prev) => prev.filter((c) => c._id !== cid));
+        setComments((prev) => prev.filter((c) => c._id !== cid && c.parentId !== cid));
         setPost((p: any) => p ? { ...p, commentsCount: Math.max(0, (p.commentsCount||0)-1) } : p);
       }},
     ]);
+  };
+
+  const handleToggleReplies = async (parentId: string) => {
+    if (expandedReplies[parentId]) {
+      setExpandedReplies((prev) => ({ ...prev, [parentId]: false }));
+      setComments((prev) => prev.filter((c) => c.parentId !== parentId));
+    } else {
+      try {
+        const res = await getComments(postId!, null, parentId);
+        setExpandedReplies((prev) => ({ ...prev, [parentId]: true }));
+        setComments((prev) => {
+          const parentIndex = prev.findIndex((c) => c._id === parentId || c.id === parentId);
+          if (parentIndex === -1) return prev;
+          const newComments = [...prev];
+          newComments.splice(parentIndex + 1, 0, ...(res.items || []));
+          return newComments;
+        });
+      } catch (e: any) {
+        Alert.alert('Lỗi', e.message);
+      }
+    }
   };
 
   const { bottom, top } = useSafeAreaInsets();
@@ -93,7 +115,7 @@ export default function PostDetailScreen() {
         keyExtractor={(item) => item._id || item.id}
         contentContainerStyle={{ paddingBottom: Math.max(bottom, 16) }}
         ListHeaderComponent={post ? <PostCard post={post} currentUserId={uid} colors={colors} onReact={handleReact} onComment={() => {}} onAuthorPress={(id) => router.push({ pathname: '/(social)/user-profile', params: { userId: id } } as any)} onDelete={() => Alert.alert('Xóa?', '', [{ text: 'Hủy' }, { text: 'Xóa', style: 'destructive', onPress: async () => { await deletePost(post._id); router.back(); } }])} /> : null}
-        renderItem={({ item }) => <CommentItem comment={item} currentUserId={uid} colors={colors} onReply={() => setReplyTo(item._id)} onDelete={() => handleDeleteComment(item._id)} onAuthorPress={(id) => router.push({ pathname: '/(social)/user-profile', params: { userId: id } } as any)} />}
+        renderItem={({ item }) => <CommentItem comment={item} currentUserId={uid} colors={colors} onReply={() => setReplyTo(item._id || item.id)} onDelete={() => handleDeleteComment(item._id || item.id)} onAuthorPress={(id) => router.push({ pathname: '/(social)/user-profile', params: { userId: id } } as any)} onToggleReplies={() => handleToggleReplies(item._id || item.id)} isExpanded={expandedReplies[item._id || item.id]} />}
         ListEmptyComponent={<View style={s.empty}><Text style={{ color: colors.muted }}>Chưa có bình luận</Text></View>}
       />
       {replyTo && <View style={[s.replyBar, { backgroundColor: colors.secondaryBackground }]}><Text style={{ color: colors.muted, fontSize: 13 }}>Đang trả lời...</Text><Text style={{ color: colors.tint, fontSize: 13, fontWeight: '700' }} onPress={() => setReplyTo(null)}>Hủy</Text></View>}
