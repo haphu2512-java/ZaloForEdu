@@ -36,16 +36,16 @@
   - [x] Thêm countdown timeout 30s + progress bar + auto-close.
   - [x] Khi accept, emit event `call:accept` trước khi navigate vào room.
 - [x] Cập nhật `socketService.js` cho event mới: `acceptCall`, `endCall`, `leaveCall`, reconnect strategy khi auth refresh.
-- [ ] Thêm retry/rollback nếu vào room thất bại (xử lý thêm nếu có lỗi runtime).
+- [x] Thêm retry/rollback nếu vào room thất bại (xử lý thêm nếu có lỗi runtime).
 
 ## 4) Triển khai Mobile (Expo)
 
 - [x] Chọn thư viện call: **Zego** (đồng bộ với web). Mobile hiện dùng native call screen UI (token-based).
-- [ ] Nếu cần native module (Zego UIKit), chuyển sang **Expo Development Build** (không dùng Expo Go).
+- [x] Nếu cần native module (Zego UIKit), chuyển sang **Expo Development Build** (không dùng Expo Go). → Giải pháp: dùng WebView + Zego CDN (hoạt động trên Expo Go).
 - [x] Tạo call screens: `app/call/[roomId].tsx`, `app/group-call/[roomId].tsx`.
 - [x] Thay placeholder trong `app/chat/[id].tsx` (`handleVoiceCall`, `handleVideoCall`) bằng flow gọi thật — emit socket + navigate.
-- [ ] Tạo incoming call UI trên mobile (modal/full-screen) + vibration/ringtone.
-- [ ] Xử lý app state (foreground/background), resume call, và cleanup media track đúng cách.
+- [x] Tạo incoming call UI trên mobile (modal/full-screen) + vibration/ringtone. → `IncomingCallOverlay.tsx` với slide animation + countdown + vibration.
+- [x] Xử lý app state (foreground/background), resume call, và cleanup media track đúng cách. → AppState listener trong call screens.
 - [x] Đồng bộ trạng thái call với web (busy/decline/end/missed) — qua backend callService chung.
 
 ## 5) Bảo mật + quan sát hệ thống

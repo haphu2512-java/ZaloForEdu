@@ -9,6 +9,7 @@ import 'react-native-reanimated';
 
 import { useColorScheme } from '@/components/useColorScheme';
 import { AuthProvider } from '../context/auth';
+import IncomingCallOverlay from '../components/call/IncomingCallOverlay';
 
 export { ErrorBoundary } from 'expo-router';
 
@@ -57,6 +58,7 @@ function RootLayoutNav() {
             <Stack.Screen name="(settings)/archived-conversations" options={{ headerShown: false }} />
             <Stack.Screen name="(social)" options={{ headerShown: false }} />
           </Stack>
+          <IncomingCallOverlay />
         </AuthProvider>
       </ThemeProvider>
     </SafeAreaProvider>

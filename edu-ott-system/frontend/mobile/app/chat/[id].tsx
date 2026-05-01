@@ -978,31 +978,41 @@ export default function ChatScreen() {
   };
 
   const handleVoiceCall = () => {
-    const roomId = `call_${conversationId}_${Date.now()}`;
     const isGroup = conversation?.type === 'group';
+    // CRITICAL: roomId must match web's formula for cross-platform calls
+    // 1-1: sort both IDs so the same room is generated regardless of who calls
+    // Group: timestamp-based since all members join from notification
+    const myId = (user as any)?._id || (user as any)?.id || '';
+    const targetId = (otherParticipant as any)?._id || (otherParticipant as any)?.id || '';
+    const roomId = isGroup
+      ? `call_${conversationId}_${Date.now()}`
+      : [myId, targetId].sort().join('_');
 
-    // Emit socket event to notify others
     try {
-      const { getSocket } = require('../../utils/socketService');
+      const { getSocket, startGroupCall, callUser } = require('../../utils/socketService');
       const socket = getSocket();
+      if (!socket?.connected) {
+        Alert.alert('Lỗi', 'Mất kết nối, vui lòng thử lại');
+        return;
+      }
+
       if (isGroup) {
-        socket?.emit('group_call_start', {
+        startGroupCall({
           conversationId,
           roomId,
           callerName: user?.username || 'Thành viên',
-          type: 'audio',
+          type: 'audio' as const,
         });
-        router.push({ pathname: '/group-call/[roomId]', params: { roomId } } as any);
+        router.push({ pathname: '/group-call/[roomId]', params: { roomId, type: 'voice' } } as any);
       } else {
-        const targetId = otherParticipant?._id || otherParticipant?.id;
-        socket?.emit('call_user', {
+        callUser({
           targetUserId: targetId,
           roomId,
           callerName: user?.username || 'Thành viên',
-          type: 'audio',
+          type: 'audio' as const,
           conversationId,
         });
-        router.push({ pathname: '/call/[roomId]', params: { roomId } } as any);
+        router.push({ pathname: '/call/[roomId]', params: { roomId, type: 'voice' } } as any);
       }
     } catch (err) {
       Alert.alert('Lỗi', 'Không thể bắt đầu cuộc gọi');
@@ -1010,30 +1020,38 @@ export default function ChatScreen() {
   };
 
   const handleVideoCall = () => {
-    const roomId = `call_${conversationId}_${Date.now()}`;
     const isGroup = conversation?.type === 'group';
+    const myId = (user as any)?._id || (user as any)?.id || '';
+    const targetId = (otherParticipant as any)?._id || (otherParticipant as any)?.id || '';
+    const roomId = isGroup
+      ? `call_${conversationId}_${Date.now()}`
+      : [myId, targetId].sort().join('_');
 
     try {
-      const { getSocket } = require('../../utils/socketService');
+      const { getSocket, startGroupCall, callUser } = require('../../utils/socketService');
       const socket = getSocket();
+      if (!socket?.connected) {
+        Alert.alert('Lỗi', 'Mất kết nối, vui lòng thử lại');
+        return;
+      }
+
       if (isGroup) {
-        socket?.emit('group_call_start', {
+        startGroupCall({
           conversationId,
           roomId,
           callerName: user?.username || 'Thành viên',
-          type: 'video',
+          type: 'video' as const,
         });
-        router.push({ pathname: '/group-call/[roomId]', params: { roomId } } as any);
+        router.push({ pathname: '/group-call/[roomId]', params: { roomId, type: 'video' } } as any);
       } else {
-        const targetId = otherParticipant?._id || otherParticipant?.id;
-        socket?.emit('call_user', {
+        callUser({
           targetUserId: targetId,
           roomId,
           callerName: user?.username || 'Thành viên',
-          type: 'video',
+          type: 'video' as const,
           conversationId,
         });
-        router.push({ pathname: '/call/[roomId]', params: { roomId } } as any);
+        router.push({ pathname: '/call/[roomId]', params: { roomId, type: 'video' } } as any);
       }
     } catch (err) {
       Alert.alert('Lỗi', 'Không thể bắt đầu cuộc gọi video');
