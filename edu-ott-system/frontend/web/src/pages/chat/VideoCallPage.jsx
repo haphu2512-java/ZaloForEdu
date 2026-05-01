@@ -11,17 +11,13 @@ export default function VideoCallPage() {
   const location = useLocation();
   const { user } = useAuthStore();
   const containerRef = useRef(null);
-  const joinedRef = useRef(false); // Guard tránh joinRoom 2 lần
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    // Đợi đến khi có thông tin user và container ref đã được render
     if (!containerRef.current) return;
 
     let zp = null;
-
-    if (joinedRef.current) return; // Đã join rồi, không join lại
-    joinedRef.current = true;
+    let isMounted = true;
 
     const startCall = async () => {
       try {
@@ -45,8 +41,20 @@ export default function VideoCallPage() {
         }
 
         const { data } = await res.json();
-        const kitToken = data.token;
+        
+        // Ensure user ID is a string without weird characters
+        const zegoUserId = (currentUser?._id || currentUser?.id || 'unknown').toString();
+        
+        const kitToken = ZegoUIKitPrebuilt.generateKitTokenForTest(
+          data.appID,
+          data.serverSecret,
+          roomId,
+          zegoUserId,
+          userName
+        );
 
+        if (!isMounted) return;
+        
         // Khởi tạo Zego instance
         zp = ZegoUIKitPrebuilt.create(kitToken);
 
@@ -89,8 +97,9 @@ export default function VideoCallPage() {
 
     startCall();
 
-    // CLEANUP: Rất quan trọng. Hủy call khi component unmount để không bị kẹt chạy ngầm
+    // CLEANUP: Rất quan trọng. Hủy call khi component unmount
     return () => {
+      isMounted = false;
       if (zp) {
         zp.destroy();
       }

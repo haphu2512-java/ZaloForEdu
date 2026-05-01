@@ -33,23 +33,32 @@ export const ChatHeader = ({ room, onCall, onVideo, onInfo }) => {
   // ─── 1-1 Call handler ───
   const handleDirectCallClick = (type) => {
     const myId = currentUser?._id || currentUser?.id;
-    const targetUserId =
-      room.targetUserId ||
-      room.friendId ||
-      room.otherUserId ||
-      room.participantId;
+    
+    // Find the other participant in the conversation
+    let targetUserId = room.targetUserId || room.friendId || room.otherUserId || room.participantId;
+    
+    if (!targetUserId && room.participants && Array.isArray(room.participants)) {
+      const otherParticipant = room.participants.find(p => {
+        const pid = typeof p === 'string' ? p : (p._id || p.id);
+        return String(pid) !== String(myId);
+      });
+      targetUserId = typeof otherParticipant === 'string' ? otherParticipant : (otherParticipant?._id || otherParticipant?.id);
+    }
 
     if (!myId || !targetUserId) {
       alert('Không tìm thấy thông tin người nhận.');
       return;
     }
 
+    const conversationId = room._id || room.conversationId || room.id;
     const roomId = [myId, targetUserId].sort().join('_');
+    
     const sent = socketService.callUser({
       targetUserId,
       roomId,
       callerName: currentUser?.username || 'Bạn',
       type,
+      conversationId,
     });
 
     if (!sent) {

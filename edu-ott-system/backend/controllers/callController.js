@@ -19,13 +19,11 @@ const getCallToken = asyncHandler(async (req, res) => {
   const userId = req.user._id.toString();
   const displayName = userName || req.user.username || 'User';
 
-  const kitToken = generateZegoToken(userId, roomId);
-
   res.json({
     success: true,
     data: {
-      token: kitToken,
       appID: Number(process.env.ZEGO_APP_ID || 0),
+      serverSecret: process.env.ZEGO_SERVER_SECRET || '',
       userID: userId,
       userName: displayName,
       roomId,

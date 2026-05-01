@@ -12,7 +12,6 @@ export default function GroupCallPage() {
   const location = useLocation();
 
   const containerRef = useRef(null);
-  const joinedRef = useRef(false);
   const zpRef = useRef(null);
 
   const [copied, setCopied] = useState(false);
@@ -32,8 +31,8 @@ export default function GroupCallPage() {
 
   useEffect(() => {
     if (!containerRef.current) return;
-    if (joinedRef.current) return;
-    joinedRef.current = true;
+    
+    let isMounted = true;
 
     const startCall = async () => {
       try {
@@ -58,7 +57,19 @@ export default function GroupCallPage() {
         }
 
         const { data } = await res.json();
-        const kitToken = data.token;
+        
+        // Ensure user ID is a string without weird characters
+        const zegoUserId = (currentUser?._id || currentUser?.id || 'unknown').toString();
+        
+        const kitToken = ZegoUIKitPrebuilt.generateKitTokenForTest(
+          data.appID,
+          data.serverSecret,
+          roomId,
+          zegoUserId,
+          userName
+        );
+
+        if (!isMounted) return;
 
         const zp = ZegoUIKitPrebuilt.create(kitToken);
         zpRef.current = zp;
@@ -119,6 +130,7 @@ export default function GroupCallPage() {
     startCall();
 
     return () => {
+      isMounted = false;
       if (zpRef.current) {
         zpRef.current.destroy();
         zpRef.current = null;

@@ -66,17 +66,8 @@ function generateZegoToken(userId, roomId = '') {
   const body = Buffer.concat([expireBuf, iv, encrypted]);
   const token = TOKEN_VERSION + body.toString('base64');
 
-  // Wrap as kit token (same format the SDK generates)
-  const kitTokenPayload = Buffer.from(
-    JSON.stringify({
-      app_id: appId,
-      token,
-      user_id: userId,
-      user_name: userId, // caller can rename via query
-    }),
-  ).toString('base64');
-
-  return TOKEN_VERSION + kitTokenPayload;
+  // Return the raw 04 token. The frontend will use generateKitTokenForProduction.
+  return token;
 }
 
 module.exports = { generateZegoToken };
