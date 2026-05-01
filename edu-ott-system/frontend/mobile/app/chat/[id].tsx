@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
   View,
   Text,
@@ -977,8 +977,68 @@ export default function ChatScreen() {
     }
   };
 
-  const handleVoiceCall = () => Alert.alert('Thông báo', 'Tính năng gọi thoại sẽ sớm được cập nhật');
-  const handleVideoCall = () => Alert.alert('Thông báo', 'Tính năng gọi video sẽ sớm được cập nhật');
+  const handleVoiceCall = () => {
+    const roomId = `call_${conversationId}_${Date.now()}`;
+    const isGroup = conversation?.type === 'group';
+
+    // Emit socket event to notify others
+    try {
+      const { getSocket } = require('../../utils/socketService');
+      const socket = getSocket();
+      if (isGroup) {
+        socket?.emit('group_call_start', {
+          conversationId,
+          roomId,
+          callerName: user?.username || 'Thành viên',
+          type: 'audio',
+        });
+        router.push({ pathname: '/group-call/[roomId]', params: { roomId } } as any);
+      } else {
+        const targetId = otherParticipant?._id || otherParticipant?.id;
+        socket?.emit('call_user', {
+          targetUserId: targetId,
+          roomId,
+          callerName: user?.username || 'Thành viên',
+          type: 'audio',
+          conversationId,
+        });
+        router.push({ pathname: '/call/[roomId]', params: { roomId } } as any);
+      }
+    } catch (err) {
+      Alert.alert('Lỗi', 'Không thể bắt đầu cuộc gọi');
+    }
+  };
+
+  const handleVideoCall = () => {
+    const roomId = `call_${conversationId}_${Date.now()}`;
+    const isGroup = conversation?.type === 'group';
+
+    try {
+      const { getSocket } = require('../../utils/socketService');
+      const socket = getSocket();
+      if (isGroup) {
+        socket?.emit('group_call_start', {
+          conversationId,
+          roomId,
+          callerName: user?.username || 'Thành viên',
+          type: 'video',
+        });
+        router.push({ pathname: '/group-call/[roomId]', params: { roomId } } as any);
+      } else {
+        const targetId = otherParticipant?._id || otherParticipant?.id;
+        socket?.emit('call_user', {
+          targetUserId: targetId,
+          roomId,
+          callerName: user?.username || 'Thành viên',
+          type: 'video',
+          conversationId,
+        });
+        router.push({ pathname: '/call/[roomId]', params: { roomId } } as any);
+      }
+    } catch (err) {
+      Alert.alert('Lỗi', 'Không thể bắt đầu cuộc gọi video');
+    }
+  };
 
   const getPinnedMessageId = (pinnedItem: any): string => {
     const messageRef = pinnedItem?.messageId;

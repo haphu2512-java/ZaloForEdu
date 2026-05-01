@@ -12,9 +12,14 @@ import Constants from 'expo-constants';
 
 // Derive the base socket URL (same logic as api.ts)
 const hostUri = Constants.expoConfig?.hostUri;
-const localhost = hostUri ? hostUri.split(':')[0] : '10.126.202.133';
+const localhost = hostUri ? hostUri.split(':')[0] : '10.0.2.2';
 
 function getSocketUrl(): string {
+  // Prefer explicit env var (staging / production)
+  const envUrl = Constants.expoConfig?.extra?.EXPO_PUBLIC_SOCKET_URL
+    || process.env.EXPO_PUBLIC_SOCKET_URL;
+  if (envUrl) return envUrl;
+
   if (Platform.OS === 'web') {
     if (typeof window !== 'undefined' && window.location) {
       return `http://${window.location.hostname}:5000`;

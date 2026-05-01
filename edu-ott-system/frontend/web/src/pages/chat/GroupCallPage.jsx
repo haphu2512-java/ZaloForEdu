@@ -4,6 +4,7 @@ import { ZegoUIKitPrebuilt } from '@zegocloud/zego-uikit-prebuilt';
 import { FaLink, FaCheck, FaCrown } from 'react-icons/fa';
 
 const MAX_PARTICIPANTS = 5;
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api/v1';
 
 export default function GroupCallPage() {
   const { roomId } = useParams();
@@ -17,6 +18,7 @@ export default function GroupCallPage() {
   const [copied, setCopied] = useState(false);
   const [participantCount, setParticipantCount] = useState(1);
   const [showProModal, setShowProModal] = useState(false);
+  const [error, setError] = useState(null);
 
   // Link mời dạng Google Meet — dùng roomId
   const inviteLink = `${window.location.origin}/group-call/${roomId}${location.search}`;
@@ -35,21 +37,28 @@ export default function GroupCallPage() {
 
     const startCall = async () => {
       try {
-        const appID = Number(import.meta.env.VITE_ZEGO_APP_ID);
-        const serverSecret = import.meta.env.VITE_ZEGO_SERVER_SECRET;
-
+        // --- Fetch token from backend (no secret on client) ---
+        const authToken = localStorage.getItem('token');
         const { useAuthStore } = await import('../../store/authStore');
         const currentUser = useAuthStore.getState().user;
-        const userID = currentUser?._id || currentUser?.id || 'guest_' + Date.now();
         const userName = currentUser?.username || 'Thành viên';
 
-        const kitToken = ZegoUIKitPrebuilt.generateKitTokenForTest(
-          appID,
-          serverSecret,
-          roomId,
-          userID,
-          userName
-        );
+        const res = await fetch(`${API_BASE_URL}/calls/token`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${authToken}`,
+          },
+          body: JSON.stringify({ roomId, userName }),
+        });
+
+        if (!res.ok) {
+          const errBody = await res.json().catch(() => ({}));
+          throw new Error(errBody.error?.message || `Token request failed (${res.status})`);
+        }
+
+        const { data } = await res.json();
+        const kitToken = data.token;
 
         const zp = ZegoUIKitPrebuilt.create(kitToken);
         zpRef.current = zp;
@@ -101,8 +110,9 @@ export default function GroupCallPage() {
             navigate(-1);
           },
         });
-      } catch (error) {
-        console.error('Lỗi khởi tạo Group Call ZegoCloud:', error);
+      } catch (err) {
+        console.error('Lỗi khởi tạo Group Call ZegoCloud:', err);
+        setError(err.message);
       }
     };
 
@@ -115,6 +125,28 @@ export default function GroupCallPage() {
       }
     };
   }, [roomId, navigate, location.search]);
+
+  if (error) {
+    return (
+      <div style={{
+        width: '100vw', height: '100vh', backgroundColor: '#111',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        color: '#fff', flexDirection: 'column', gap: 16,
+      }}>
+        <p style={{ fontSize: 18, fontWeight: 600 }}>Không thể kết nối cuộc gọi nhóm</p>
+        <p style={{ fontSize: 14, color: '#aaa' }}>{error}</p>
+        <button
+          onClick={() => navigate(-1)}
+          style={{
+            padding: '10px 24px', background: '#0084ff', color: '#fff',
+            border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 600,
+          }}
+        >
+          Quay lại
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div style={{ width: '100vw', height: '100vh', position: 'relative', backgroundColor: '#111' }}>
