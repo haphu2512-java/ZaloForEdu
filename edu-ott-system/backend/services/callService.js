@@ -181,6 +181,49 @@ const validateMembership = async (conversationId, userId) => {
   return conversation.participants.some((p) => p.toString() === userId);
 };
 
+/**
+ * Validate that a user can access a roomId via existing call session.
+ */
+const canAccessRoom = async (roomId, userId) => {
+  let session = null;
+  // Retry 3 times with 500ms delay to handle race condition with session creation
+  for (let i = 0; i < 3; i++) {
+    session = await CallSession.findOne({ roomId, status: { $in: ['ringing', 'active'] } }).select(
+      'participants conversationId',
+    );
+    if (session) break;
+    await new Promise(resolve => setTimeout(resolve, 500));
+  }
+  
+  if (session) {
+    const isParticipant = session.participants.some((p) => p.userId.toString() === userId);
+    if (isParticipant) return true;
+
+    // Fallback: verify conversation membership to avoid stale participant lists
+    if (session.conversationId) {
+      return validateMembership(session.conversationId.toString(), userId);
+    }
+  }
+
+  // Session chưa kịp tạo xong hoặc không tìm thấy:
+  // fallback theo format roomId để tránh false-negative khi caller/callee vừa navigate.
+
+  // Group/Conversation call: call_<conversationId>_<timestamp>
+  const groupMatch = /^call_([a-fA-F0-9]{24})_\d+$/.exec(roomId);
+  if (groupMatch?.[1]) {
+    return validateMembership(groupMatch[1], userId);
+  }
+
+  // Direct call: "<userA>_<userB>" (2 ObjectId đã sort)
+  const directMatch = /^([a-fA-F0-9]{24})_([a-fA-F0-9]{24})$/.exec(roomId);
+  if (directMatch) {
+    const [, userA, userB] = directMatch;
+    return userId === userA || userId === userB;
+  }
+
+  return false;
+};
+
 module.exports = {
   CALL_TIMEOUT_MS,
   isUserInCall,
@@ -193,4 +236,5 @@ module.exports = {
   timeoutCall,
   leaveCall,
   validateMembership,
+  canAccessRoom,
 };

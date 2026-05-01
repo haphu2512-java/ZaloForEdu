@@ -3,20 +3,13 @@ import {
   FaDownload, FaCheckDouble, FaCheck, FaClock, FaSmile,
   FaShare, FaReply, FaEllipsisH, FaUndo, FaTrash, FaCopy, FaThumbtack, FaCrown, FaStar
 } from 'react-icons/fa';
-import { getExt, getCategory, getFileColor, formatBytes } from './chatUtils';
+import { getExt, getCategory, getFileColor, formatBytes, toAbsoluteUrl } from './chatUtils';
 import { AudioBubble } from '../../components/shared/AudioBubble';
 import PollMessage from './PollMessage';
 import { conversationService } from '../../services/conversationService';
 import toast from 'react-hot-toast';
 
 const API_ORIGIN = (import.meta.env.VITE_API_URL || 'http://localhost:5000/api/v1').replace(/\/api\/v1\/?$/, '');
-
-/** Convert URL tương đối /uploads/... → URL tuyệt đối */
-export function toAbsoluteUrl(url) {
-  if (!url) return '';
-  if (/^https?:\/\//i.test(url)) return url;
-  return `${API_ORIGIN}${url.startsWith('/') ? '' : '/'}${url}`;
-}
 
 const EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '😡'];
 
@@ -106,7 +99,13 @@ export const MessageBubble = ({
   }, []);
 
   if (type === 'system') {
-    return <div style={{ textAlign: 'center', margin: '16px 0', fontSize: '12px', color: '#8A8D91' }}><span>{content}</span></div>;
+    return (
+      <div style={{ display: 'flex', justifyContent: 'center', margin: '16px 0' }}>
+        <div style={{ background: 'var(--z-bg-secondary, #F3F4F6)', padding: '6px 16px', borderRadius: '20px', fontSize: '12px', color: '#65676B', fontWeight: 500 }}>
+          {content}
+        </div>
+      </div>
+    );
   }
 
   // ── Render poll message ──

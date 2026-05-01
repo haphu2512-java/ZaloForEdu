@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FaPhone, FaVideo, FaEllipsisV, FaUsers, FaFileAlt } from 'react-icons/fa';
 import { useAuthStore } from '../../store/authStore';
@@ -33,10 +33,10 @@ export const ChatHeader = ({ room, onCall, onVideo, onInfo }) => {
   // ─── 1-1 Call handler ───
   const handleDirectCallClick = (type) => {
     const myId = currentUser?._id || currentUser?.id;
-    
+
     // Find the other participant in the conversation
     let targetUserId = room.targetUserId || room.friendId || room.otherUserId || room.participantId;
-    
+
     if (!targetUserId && room.participants && Array.isArray(room.participants)) {
       const otherParticipant = room.participants.find(p => {
         const pid = typeof p === 'string' ? p : (p._id || p.id);
@@ -52,7 +52,7 @@ export const ChatHeader = ({ room, onCall, onVideo, onInfo }) => {
 
     const conversationId = room._id || room.conversationId || room.id;
     const roomId = [myId, targetUserId].sort().join('_');
-    
+
     const sent = socketService.callUser({
       targetUserId,
       roomId,
@@ -70,8 +70,31 @@ export const ChatHeader = ({ room, onCall, onVideo, onInfo }) => {
     navigate(url);
   };
 
+  const [callLoading, setCallLoading] = useState(false);
+
+  useEffect(() => {
+    const onCallBusy = () => alert('Người dùng đang bận cuộc gọi khác.');
+    const onCallAccepted = () => alert('Người dùng đã chấp nhận cuộc gọi.');
+    const onMissedCall = () => alert('Cuộc gọi không được trả lời.');
+    const onCallDeclined = () => alert('Người dùng đã từ chối cuộc gọi.');
+
+    socketService.on('call_busy', onCallBusy);
+    socketService.on('call:accepted', onCallAccepted);
+    socketService.on('missed_call', onMissedCall);
+    socketService.on('call_declined', onCallDeclined);
+
+    return () => {
+      socketService.off('call_busy', onCallBusy);
+      socketService.off('call:accepted', onCallAccepted);
+      socketService.off('missed_call', onMissedCall);
+      socketService.off('call_declined', onCallDeclined);
+    };
+  }, []);
+
   // ─── Group Call handler ───
   const handleGroupCallClick = (type) => {
+    if (callLoading) return;
+
     const myId = currentUser?._id || currentUser?.id;
     const conversationId = room._id || room.conversationId || room.id;
 
@@ -80,8 +103,10 @@ export const ChatHeader = ({ room, onCall, onVideo, onInfo }) => {
       return;
     }
 
+    setCallLoading(true);
+
     // roomId duy nhất theo conversationId + timestamp (tránh trùng nếu gọi nhiều lần)
-    const roomId = `group_${conversationId}_${Date.now()}`;
+    const roomId = `call_${conversationId}_${Date.now()}`;
     const inviteLink = `${window.location.origin}/group-call/${roomId}${type === 'audio' ? '?type=voice' : ''}`;
 
     const sent = socketService.startGroupCall({
@@ -94,11 +119,15 @@ export const ChatHeader = ({ room, onCall, onVideo, onInfo }) => {
 
     if (!sent) {
       alert('Mất kết nối realtime, vui lòng thử lại.');
+      setCallLoading(false);
       return;
     }
 
     const url = type === 'audio' ? `/group-call/${roomId}?type=voice` : `/group-call/${roomId}`;
     navigate(url);
+
+    // Tự động giải phóng sau 2s đề phòng navigate không unmount header kịp
+    setTimeout(() => setCallLoading(false), 2000);
   };
 
   // ─── Dispatch call ───

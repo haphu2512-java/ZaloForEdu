@@ -557,6 +557,18 @@ export default function ChatScreen() {
         console.log('[Mobile Chat] conversation_settings_updated:', newSettings);
         setConversation((prev) => prev ? { ...prev, settings: newSettings } : prev);
       };
+      const onCallBusy = () => {
+        Alert.alert('Bận', 'Người dùng đang trong cuộc gọi khác.');
+      };
+      const onCallAccepted = () => {
+        Alert.alert('Đã kết nối', 'Người dùng đã chấp nhận cuộc gọi.');
+      };
+      const onMissedCall = () => {
+        Alert.alert('Nhỡ cuộc gọi', 'Cuộc gọi không được trả lời.');
+      };
+      const onCallDeclined = () => {
+        Alert.alert('Từ chối', 'Người dùng đã từ chối cuộc gọi.');
+      };
 
       socket.on('connect', onConnect);
       socket.on('disconnect', onDisconnect);
@@ -569,6 +581,10 @@ export default function ChatScreen() {
       socket.on('pinned_items_updated', onPinnedItemsUpdated);
       socket.on('message_reacted', onMessageReacted);
       socket.on('conversation_settings_updated', onConversationSettingsUpdated);
+      socket.on('call_busy', onCallBusy);
+      socket.on('call:accepted', onCallAccepted);
+      socket.on('missed_call', onMissedCall);
+      socket.on('call_declined', onCallDeclined);
 
       return () => {
         socket.off('connect', onConnect);
@@ -582,6 +598,10 @@ export default function ChatScreen() {
         socket.off('pinned_items_updated', onPinnedItemsUpdated);
         socket.off('message_reacted', onMessageReacted);
         socket.off('conversation_settings_updated', onConversationSettingsUpdated);
+        socket.off('call_busy', onCallBusy);
+        socket.off('call:accepted', onCallAccepted);
+        socket.off('missed_call', onMissedCall);
+        socket.off('call_declined', onCallDeclined);
       };
     };
 
@@ -997,21 +1017,29 @@ export default function ChatScreen() {
       }
 
       if (isGroup) {
-        startGroupCall({
+        const ok = startGroupCall({
           conversationId,
           roomId,
           callerName: user?.username || 'Thành viên',
           type: 'audio' as const,
         });
+        if (!ok) {
+          Alert.alert('Lỗi', 'Không thể bắt đầu cuộc gọi');
+          return;
+        }
         router.push({ pathname: '/group-call/[roomId]', params: { roomId, type: 'voice' } } as any);
       } else {
-        callUser({
+        const ok = callUser({
           targetUserId: targetId,
           roomId,
           callerName: user?.username || 'Thành viên',
           type: 'audio' as const,
           conversationId,
         });
+        if (!ok) {
+          Alert.alert('Lỗi', 'Không thể bắt đầu cuộc gọi');
+          return;
+        }
         router.push({ pathname: '/call/[roomId]', params: { roomId, type: 'voice' } } as any);
       }
     } catch (err) {
@@ -1036,21 +1064,29 @@ export default function ChatScreen() {
       }
 
       if (isGroup) {
-        startGroupCall({
+        const ok = startGroupCall({
           conversationId,
           roomId,
           callerName: user?.username || 'Thành viên',
           type: 'video' as const,
         });
+        if (!ok) {
+          Alert.alert('Lỗi', 'Không thể bắt đầu cuộc gọi video');
+          return;
+        }
         router.push({ pathname: '/group-call/[roomId]', params: { roomId, type: 'video' } } as any);
       } else {
-        callUser({
+        const ok = callUser({
           targetUserId: targetId,
           roomId,
           callerName: user?.username || 'Thành viên',
           type: 'video' as const,
           conversationId,
         });
+        if (!ok) {
+          Alert.alert('Lỗi', 'Không thể bắt đầu cuộc gọi video');
+          return;
+        }
         router.push({ pathname: '/call/[roomId]', params: { roomId, type: 'video' } } as any);
       }
     } catch (err) {

@@ -15,14 +15,24 @@ const getCallToken = asyncHandler(async (req, res) => {
   if (!roomId || typeof roomId !== 'string') {
     throw new ApiError(400, 'VALIDATION_ERROR', 'roomId is required');
   }
+  // Cho phép cả call_, group_ và định dạng Direct Call (2 ID nối nhau)
+  if (!/^(call_|group_)?[a-zA-Z0-9_:-]+$/.test(roomId)) {
+    throw new ApiError(400, 'VALIDATION_ERROR', 'Invalid roomId format');
+  }
 
   const userId = req.user._id.toString();
   const displayName = userName || req.user.username || 'User';
+  const canAccess = await callService.canAccessRoom(roomId, userId);
+  if (!canAccess) {
+    throw new ApiError(403, 'FORBIDDEN', 'You are not allowed to access this call room');
+  }
+  const token = generateZegoToken(userId, roomId);
 
   res.json({
     success: true,
     data: {
       appID: Number(process.env.ZEGO_APP_ID || 0),
+      token,
       serverSecret: process.env.ZEGO_SERVER_SECRET || '',
       userID: userId,
       userName: displayName,

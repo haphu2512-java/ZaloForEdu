@@ -2,6 +2,7 @@ import React, { useRef, useEffect, useState } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { ZegoUIKitPrebuilt } from '@zegocloud/zego-uikit-prebuilt';
 import { useAuthStore } from '../../store/authStore';
+import { socketService } from '../../services/socketService';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api/v1';
 
@@ -42,15 +43,13 @@ export default function VideoCallPage() {
 
         const { data } = await res.json();
         
-        // Ensure user ID is a string without weird characters
         const zegoUserId = (currentUser?._id || currentUser?.id || 'unknown').toString();
-        
         const kitToken = ZegoUIKitPrebuilt.generateKitTokenForTest(
           data.appID,
           data.serverSecret,
           roomId,
           zegoUserId,
-          userName
+          userName,
         );
 
         if (!isMounted) return;
@@ -86,6 +85,8 @@ export default function VideoCallPage() {
           showScreenSharingButton: isVideo,
           useFrontFacingCamera: true,
           onLeaveRoom: () => {
+            // Thông báo kết thúc cho server
+            socketService.endCall({ roomId, reason: 'normal' });
             navigate(-1);
           },
         });

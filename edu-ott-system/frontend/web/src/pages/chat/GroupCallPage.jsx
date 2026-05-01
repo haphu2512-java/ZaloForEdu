@@ -2,6 +2,7 @@ import React, { useRef, useEffect, useState } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { ZegoUIKitPrebuilt } from '@zegocloud/zego-uikit-prebuilt';
 import { FaLink, FaCheck, FaCrown } from 'react-icons/fa';
+import { socketService } from '../../services/socketService';
 
 const MAX_PARTICIPANTS = 5;
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api/v1';
@@ -66,7 +67,7 @@ export default function GroupCallPage() {
           data.serverSecret,
           roomId,
           zegoUserId,
-          userName
+          userName,
         );
 
         if (!isMounted) return;
@@ -118,6 +119,8 @@ export default function GroupCallPage() {
           },
 
           onLeaveRoom: () => {
+            // Thông báo kết thúc cho server
+            socketService.leaveCall({ roomId });
             navigate(-1);
           },
         });

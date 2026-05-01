@@ -152,6 +152,10 @@ export default function IncomingCallOverlay() {
     const socket = getSocket();
 
     if (incomingCall.isGroup) {
+      socket?.emit('call:accept', {
+        roomId: incomingCall.roomId,
+        callerId: incomingCall.fromUserId,
+      });
       router.push({
         pathname: '/group-call/[roomId]',
         params: { roomId: incomingCall.roomId, type: incomingCall.type },

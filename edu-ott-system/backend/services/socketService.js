@@ -3,6 +3,7 @@ const { Server } = require('socket.io');
 const Conversation = require('../models/Conversation');
 const Message = require('../models/Message');
 const User = require('../models/User');
+const CallSession = require('../models/CallSession');
 const env = require('../config/env');
 const { createMessage } = require('./messageService');
 const presenceService = require('./presenceService');
@@ -268,14 +269,29 @@ const initSocket = (server) => {
       // Create call session if conversationId is provided
       if (conversationId) {
         try {
-          await callService.startCallSession({
-            roomId,
-            conversationId,
-            callType: type || 'video',
-            isGroup: false,
-            initiatorId: userId,
-            targetUserIds: [targetUserId],
-          });
+          // Deduplication: only block when an active/ringing session exists for this room.
+          // For 1-1 calls, ended sessions may reuse the same roomId and should still create new system messages.
+          const existingSession = await CallSession.findOne({ roomId, status: { $in: ['ringing', 'active'] } });
+          
+          if (!existingSession) {
+            await callService.startCallSession({
+              roomId,
+              conversationId,
+              callType: type || 'video',
+              isGroup: false,
+              initiatorId: userId,
+              targetUserIds: [targetUserId],
+            });
+
+            // Emit system message for call start
+            const sysMsg = await createMessage({
+              conversationId,
+              senderId: userId,
+              type: 'system',
+              content: `${callerName || 'Người dùng'} đã gọi ${type === 'video' ? 'video' : 'thoại'}`,
+            });
+            emitToConversation(conversationId, 'receive_message', sysMsg);
+          }
         } catch (err) {
           logger.error(`Failed to create call session: ${err.message}`);
         }
@@ -306,6 +322,17 @@ const initSocket = (server) => {
               conversationId,
               timestamp: new Date().toISOString(),
             });
+
+            // Add missed call system message
+            if (conversationId) {
+              const sysMsg = await createMessage({
+                conversationId,
+                senderId: userId,
+                type: 'system',
+                content: `Cuộc gọi nhỡ từ ${callerName || 'Người dùng'}`,
+              });
+              emitToConversation(conversationId, 'receive_message', sysMsg);
+            }
           }
         } catch (_) { /* session may already be ended */ }
       }, callService.CALL_TIMEOUT_MS);
@@ -339,6 +366,18 @@ const initSocket = (server) => {
             durationSeconds: session.durationSeconds,
           });
         });
+
+        // Add system message if we have conversationId
+        if (session.conversationId) {
+          const durationStr = session.durationSeconds ? ` (${Math.floor(session.durationSeconds / 60).toString().padStart(2, '0')}:${(session.durationSeconds % 60).toString().padStart(2, '0')})` : '';
+          const sysMsg = await createMessage({
+            conversationId: session.conversationId,
+            senderId: userId,
+            type: 'system',
+            content: `Cuộc gọi đã kết thúc${durationStr}`,
+          });
+          emitToConversation(session.conversationId.toString(), 'receive_message', sysMsg);
+        }
       }
     });
 
@@ -358,14 +397,28 @@ const initSocket = (server) => {
 
         // Create group call session
         try {
-          await callService.startCallSession({
-            roomId,
-            conversationId,
-            callType: type || 'video',
-            isGroup: true,
-            initiatorId: userId,
-            targetUserIds,
-          });
+          // Deduplication: only block when an active/ringing session exists for this room.
+          const existingSession = await CallSession.findOne({ roomId, status: { $in: ['ringing', 'active'] } });
+          
+          if (!existingSession) {
+            await callService.startCallSession({
+              roomId,
+              conversationId,
+              callType: type || 'video',
+              isGroup: true,
+              initiatorId: userId,
+              targetUserIds,
+            });
+
+            // Emit system message for group call start
+            const sysMsg = await createMessage({
+              conversationId,
+              senderId: userId,
+              type: 'system',
+              content: `${callerName || 'Người dùng'} đã bắt đầu cuộc gọi nhóm`,
+            });
+            emitToConversation(conversationId, 'receive_message', sysMsg);
+          }
         } catch (err) {
           logger.error(`Failed to create group call session: ${err.message}`);
         }
@@ -397,7 +450,29 @@ const initSocket = (server) => {
     });
 
     socket.on('call:leave', async ({ roomId }) => {
-      await callService.leaveCall(roomId, userId);
+      const session = await callService.leaveCall(roomId, userId);
+      if (session && session.status === 'ended') {
+        // Notify all participants about end
+        session.participants.forEach((p) => {
+          io.to(`user:${p.userId.toString()}`).emit('call:ended', {
+            roomId,
+            reason: session.endReason,
+            durationSeconds: session.durationSeconds,
+          });
+        });
+
+        // Emit system message
+        if (session.conversationId) {
+          const durationStr = session.durationSeconds ? ` (${Math.floor(session.durationSeconds / 60).toString().padStart(2, '0')}:${(session.durationSeconds % 60).toString().padStart(2, '0')})` : '';
+          const sysMsg = await createMessage({
+            conversationId: session.conversationId,
+            senderId: userId,
+            type: 'system',
+            content: `Cuộc gọi đã kết thúc${durationStr}`,
+          });
+          emitToConversation(session.conversationId.toString(), 'receive_message', sysMsg);
+        }
+      }
     });
 
     // ─────────────────────────────────────────────
