@@ -1,5 +1,5 @@
 import api from "./authService";
-import { uploadFile } from "./mediaService";
+import { getUploadSignature, uploadToCloudinary, registerMedia } from "./mediaService";
 
 export const userService = {
   // ── LẤY PROFILE ──
@@ -14,11 +14,28 @@ export const userService = {
     return response.data;
   },
 
-  // ── UPLOAD ẢNH (dùng upload-form giống gửi ảnh trong tin nhắn, không dùng Cloudinary) ──
+  // ── UPLOAD ẢNH (Dùng Cloudinary cho avatar, không dùng folder uploads local) ──
   uploadAvatar: async (file, onProgress) => {
-    // Dùng đúng hàm uploadFile từ mediaService — POST /media/upload-form
-    const media = await uploadFile(file, { onProgress });
-    return { url: media.url };
+    onProgress?.(10);
+    const signatureData = await getUploadSignature({ resourceType: "image", folder: "avatars" });
+    
+    onProgress?.(40);
+    const { secureUrl, publicId } = await uploadToCloudinary(file, signatureData, (pct) => {
+      onProgress?.(40 + Math.round(pct * 0.4));
+    });
+    
+    onProgress?.(90);
+    await registerMedia({
+      fileName: file.name,
+      mimeType: file.type,
+      size: file.size,
+      url: secureUrl,
+      publicId,
+      resourceType: "image",
+    });
+    
+    onProgress?.(100);
+    return { url: secureUrl };
   },
 
   // ── CÁC API ADMIN  ──
