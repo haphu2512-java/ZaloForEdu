@@ -719,7 +719,7 @@ export default function ChatScreen() {
       setMessages((prev) => prev.map((m) => getMessageId(m) === tempId ? newMsg : m));
       if (newMsg.mediaIds?.length) harvestMediaFromMessages([newMsg]);
     } catch (error: any) {
-      console.error('Failed to send message:', error);
+      console.warn('Failed to send message:', error?.errorCode || error?.message);
       setMessages((prev) => prev.filter((m) => getMessageId(m) !== tempId));
       
       // Hiển thị message thân thiện dựa trên error code
