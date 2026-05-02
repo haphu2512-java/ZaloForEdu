@@ -1,7 +1,10 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { ZegoUIKitPrebuilt } from '@zegocloud/zego-uikit-prebuilt';
 import { useAuthStore } from '../../store/authStore';
+import { socketService } from '../../services/socketService';
+
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api/v1';
 
 export default function VideoCallPage() {
   const { roomId } = useParams();
@@ -9,37 +12,48 @@ export default function VideoCallPage() {
   const location = useLocation();
   const { user } = useAuthStore();
   const containerRef = useRef(null);
-  const joinedRef = useRef(false); // Guard tránh joinRoom 2 lần
+  const [error, setError] = useState(null);
 
   useEffect(() => {
-    // Đợi đến khi có thông tin user và container ref đã được render
     if (!containerRef.current) return;
 
     let zp = null;
-
-    if (joinedRef.current) return; // Đã join rồi, không join lại
-    joinedRef.current = true;
+    let isMounted = true;
 
     const startCall = async () => {
       try {
-        const appID = Number(import.meta.env.VITE_ZEGO_APP_ID);
-        const serverSecret = import.meta.env.VITE_ZEGO_SERVER_SECRET;
-
-        // Lấy user mới nhất từ store tại thời điểm gọi (tránh stale closure)
-        const { useAuthStore } = await import('../../store/authStore');
+        // --- Fetch token from backend (no secret on client) ---
+        const token = localStorage.getItem('token');
         const currentUser = useAuthStore.getState().user;
-        const userID = currentUser?._id || currentUser?.id || "guest_" + Date.now();
-        const userName = currentUser?.username || "Thành viên ZaloEdu";
+        const userName = currentUser?.username || 'Thành viên ZaloEdu';
 
-        // Tạo token
+        const res = await fetch(`${API_BASE_URL}/calls/token`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ roomId, userName }),
+        });
+
+        if (!res.ok) {
+          const errBody = await res.json().catch(() => ({}));
+          throw new Error(errBody.error?.message || `Token request failed (${res.status})`);
+        }
+
+        const { data } = await res.json();
+        
+        const zegoUserId = (currentUser?._id || currentUser?.id || 'unknown').toString();
         const kitToken = ZegoUIKitPrebuilt.generateKitTokenForTest(
-          appID,
-          serverSecret,
+          data.appID,
+          data.serverSecret,
           roomId,
-          userID,
-          userName
+          zegoUserId,
+          userName,
         );
 
+        if (!isMounted) return;
+        
         // Khởi tạo Zego instance
         zp = ZegoUIKitPrebuilt.create(kitToken);
 
@@ -48,7 +62,6 @@ export default function VideoCallPage() {
         const type = query.get("type");
         const isVideo = type !== "voice"; // Nếu là voice thì tắt video
 
-        // Tham gia phòng và render giao diện
         // Xin quyền camera/mic trước khi joinRoom để tránh màn hình đen
         if (isVideo) {
           try {
@@ -72,25 +85,50 @@ export default function VideoCallPage() {
           showScreenSharingButton: isVideo,
           useFrontFacingCamera: true,
           onLeaveRoom: () => {
+            // Thông báo kết thúc cho server
+            socketService.endCall({ roomId, reason: 'normal' });
             navigate(-1);
           },
         });
-      } catch (error) {
-        console.error("Lỗi khởi tạo ZegoCloud:", error);
+      } catch (err) {
+        console.error("Lỗi khởi tạo ZegoCloud:", err);
+        setError(err.message);
       }
     };
 
     startCall();
 
-    // CLEANUP: Rất quan trọng. Hủy call khi component unmount để không bị kẹt chạy ngầm
+    // CLEANUP: Rất quan trọng. Hủy call khi component unmount
     return () => {
+      isMounted = false;
       if (zp) {
         zp.destroy();
       }
     };
   }, [roomId, navigate, location.search]);
 
-  // Nếu user chưa load xong, hiển thị một thông báo để tránh lỗi crash
+  if (error) {
+    return (
+      <div style={{
+        width: '100vw', height: '100vh', backgroundColor: '#1a1a1a',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        color: '#fff', flexDirection: 'column', gap: 16,
+      }}>
+        <p style={{ fontSize: 18, fontWeight: 600 }}>Không thể kết nối cuộc gọi</p>
+        <p style={{ fontSize: 14, color: '#aaa' }}>{error}</p>
+        <button
+          onClick={() => navigate(-1)}
+          style={{
+            padding: '10px 24px', background: '#0084ff', color: '#fff',
+            border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 600,
+          }}
+        >
+          Quay lại
+        </button>
+      </div>
+    );
+  }
+
   return (
     // QUAN TRỌNG NHẤT LÀ ĐÂY: Thẻ div bắt buộc phải có width và height rõ ràng
     // Đã set background màu tối để dễ nhận biết UI đang load

@@ -15,6 +15,7 @@ const reminderRoutes = require('./reminder.routes');
 const communityRoutes = require('./community.routes');
 const channelRoutes = require('./channel.routes');
 const socialRoutes = require('./social.routes');
+const callRoutes = require('./call.routes');
 
 const router = express.Router();
 
@@ -33,5 +34,6 @@ router.use('/reminders', reminderRoutes);
 router.use('/communities', communityRoutes);
 router.use('/channels', channelRoutes);
 router.use('/social', socialRoutes);
+router.use('/calls', callRoutes);
 
 module.exports = router;

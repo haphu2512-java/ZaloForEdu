@@ -9,6 +9,7 @@ import 'react-native-reanimated';
 
 import { useColorScheme } from '@/components/useColorScheme';
 import { AuthProvider } from '../context/auth';
+import IncomingCallOverlay from '../components/call/IncomingCallOverlay';
 
 export { ErrorBoundary } from 'expo-router';
 
@@ -47,6 +48,8 @@ function RootLayoutNav() {
             <Stack.Screen name="(auth)" options={{ headerShown: false }} />
             <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
             <Stack.Screen name="chat/[id]" options={{ headerShown: true, title: 'Trò chuyện' }} />
+            <Stack.Screen name="call/[roomId]" options={{ headerShown: false, animation: 'fade' }} />
+            <Stack.Screen name="group-call/[roomId]" options={{ headerShown: false, animation: 'fade' }} />
             <Stack.Screen name="community" options={{ headerShown: false }} />
             <Stack.Screen name="community/index" options={{ headerShown: false }} />
             <Stack.Screen name="community/create" options={{ headerShown: false }} />
@@ -55,6 +58,7 @@ function RootLayoutNav() {
             <Stack.Screen name="(settings)/archived-conversations" options={{ headerShown: false }} />
             <Stack.Screen name="(social)" options={{ headerShown: false }} />
           </Stack>
+          <IncomingCallOverlay />
         </AuthProvider>
       </ThemeProvider>
     </SafeAreaProvider>

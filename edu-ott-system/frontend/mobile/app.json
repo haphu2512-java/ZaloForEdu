@@ -15,7 +15,11 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.anonymous.mobile-app"
+      "bundleIdentifier": "com.anonymous.mobile-app",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Cần quyền camera để thực hiện cuộc gọi video.",
+        "NSMicrophoneUsageDescription": "Cần quyền microphone để thực hiện cuộc gọi."
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -24,7 +28,12 @@
       },
       "edgeToEdgeEnabled": false,
       "softwareKeyboardLayoutMode": "resize",
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS"
+      ]
     },
     "web": {
       "bundler": "metro",

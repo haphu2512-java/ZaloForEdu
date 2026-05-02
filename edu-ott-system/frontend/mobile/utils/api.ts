@@ -25,11 +25,16 @@ const emitAuthError = () => {
   });
 };
 
-// Get dynamically the IP address of the Expo bundler, or fallback to the local IP/Emulator
+// Get dynamically the IP address of the Expo bundler, or fallback via env
 const hostUri = Constants.expoConfig?.hostUri;
-const localhost = hostUri ? hostUri.split(':')[0] : '10.126.202.133';
+const localhost = hostUri ? hostUri.split(':')[0] : '10.0.2.2';
 
 function getApiBaseUrl(): string {
+  // Prefer explicit env var (staging / production)
+  const envUrl = Constants.expoConfig?.extra?.EXPO_PUBLIC_API_URL
+    || process.env.EXPO_PUBLIC_API_URL;
+  if (envUrl) return envUrl;
+
   // Web browser: use the current window hostname (which is localhost or the LAN IP)
   if (Platform.OS === 'web') {
     if (typeof window !== 'undefined' && window.location) {

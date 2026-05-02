@@ -21,8 +21,9 @@ class SocketService {
       auth: { token },
       transports: ["websocket"],
       reconnection: true,
-      reconnectionAttempts: 5,
+      reconnectionAttempts: 10,
       reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
     });
 
     this.socket.on("connect", () => {
@@ -36,6 +37,14 @@ class SocketService {
 
     this.socket.on("connect_error", (err) => {
       console.error("Socket error:", err.message);
+
+      // If auth fails, try to reconnect with fresh token
+      if (err.message === 'Unauthorized') {
+        const freshToken = localStorage.getItem("token");
+        if (freshToken && this.socket) {
+          this.socket.auth = { token: freshToken };
+        }
+      }
     });
 
     this.socket.on("disconnect", (reason) => {
@@ -58,6 +67,14 @@ class SocketService {
     }
   }
 
+  /**
+   * Reconnect with a fresh token (after token refresh).
+   */
+  reconnectWithToken(newToken) {
+    this.disconnect();
+    this.connect(newToken);
+  }
+
   emitTyping(conversationId) {
     if (this.socket?.connected) {
       this.socket.emit("typing", { conversationId });
@@ -65,7 +82,6 @@ class SocketService {
   }
 
   on(event, callback) {
-    console.log(`[SocketService] Registering listener for event: ${event}`);
     if (this.socket) {
       this.socket.on(event, callback);
     } else {
@@ -80,33 +96,45 @@ class SocketService {
     }
   }
 
-  // Gọi điện cho người khác - emit call_user lên server
-  callUser({ targetUserId, roomId, callerName, type }) {
+  // ─── 1-1 Call ───
+
+  callUser({ targetUserId, roomId, callerName, type, conversationId }) {
     if (!this.socket?.connected) {
       console.error("❌ Socket chưa connected, không thể gọi điện!");
       return false;
     }
-    this.socket.emit("call_user", { targetUserId, roomId, callerName, type });
-    console.log("✅ call_user emitted:", { targetUserId, roomId, type });
+    this.socket.emit("call_user", { targetUserId, roomId, callerName, type, conversationId });
     return true;
   }
 
-  // Từ chối cuộc gọi - báo cho người gọi biết
   declineCall({ callerId, roomId }) {
     if (this.socket?.connected) {
       this.socket.emit("decline_call", { callerId, roomId });
     }
   }
+
+  acceptCall({ roomId, callerId }) {
+    if (this.socket?.connected) {
+      this.socket.emit("call:accept", { roomId, callerId });
+    }
+  }
+
+  endCall({ roomId, reason = 'normal' }) {
+    if (this.socket?.connected) {
+      this.socket.emit("call:end", { roomId, reason });
+    }
+  }
+
+  leaveCall({ roomId }) {
+    if (this.socket?.connected) {
+      this.socket.emit("call:leave", { roomId });
+    }
+  }
+
   // ─── Group Call ───
 
   /**
    * Bắt đầu cuộc gọi nhóm — server sẽ broadcast tới tất cả thành viên
-   * @param {object} opts
-   * @param {string} opts.conversationId
-   * @param {string} opts.roomId
-   * @param {string} opts.callerName
-   * @param {string} opts.type  'audio' | 'video'
-   * @param {string} opts.inviteLink  link Google-Meet-style để copy
    */
   startGroupCall({ conversationId, roomId, callerName, type, inviteLink }) {
     if (!this.socket?.connected) {
