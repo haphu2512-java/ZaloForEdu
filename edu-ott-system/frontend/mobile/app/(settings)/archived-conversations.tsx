@@ -184,6 +184,7 @@ export default function ArchivedConversationsScreen() {
             <Stack.Screen
                 options={{
                     title: 'Tin nhắn lưu trữ',
+                    headerShown: true,
                     headerStyle: {
                         backgroundColor: colorScheme === 'dark' ? colors.surface : colors.tint,
                     },

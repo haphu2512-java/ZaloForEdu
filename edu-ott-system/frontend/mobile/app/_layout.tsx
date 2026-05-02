@@ -1,4 +1,4 @@
-﻿import FontAwesome from '@expo/vector-icons/FontAwesome';
+import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
@@ -61,6 +61,7 @@ function RootLayoutNav() {
             <Stack.Screen name="group-call/[roomId]" options={{ headerShown: false, animation: 'fade' }} />
             <Stack.Screen name="community" options={{ headerShown: false }} />
             <Stack.Screen name="(settings)/blocked-users" options={{ headerShown: false }} />
+            <Stack.Screen name="(settings)/friend-list" options={{ headerShown: false }} />
             <Stack.Screen name="(settings)/archived-conversations" options={{ headerShown: false }} />
             <Stack.Screen name="(social)" options={{ headerShown: false }} />
           </Stack>
