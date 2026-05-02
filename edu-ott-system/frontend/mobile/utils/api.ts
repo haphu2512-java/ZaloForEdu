@@ -29,11 +29,30 @@ const emitAuthError = () => {
 const hostUri = Constants.expoConfig?.hostUri;
 const localhost = hostUri ? hostUri.split(':')[0] : '10.0.2.2';
 
+function resolveNativeDevHost(): string {
+  const host = hostUri ? hostUri.split(':')[0] : '';
+  if (host && host !== 'localhost' && host !== '127.0.0.1') return host;
+  return Platform.OS === 'android' ? '10.0.2.2' : 'localhost';
+}
+
+function normalizeLocalApiUrl(url: string): string {
+  if (Platform.OS === 'web') return url;
+  const normalized = url.trim();
+  const localPattern = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?(\/.*)?$/i;
+  const match = normalized.match(localPattern);
+  if (!match) return normalized;
+
+  const protocol = normalized.toLowerCase().startsWith('https://') ? 'https' : 'http';
+  const port = match[2] || ':5000';
+  const path = match[3] || '/api/v1';
+  return `${protocol}://${resolveNativeDevHost()}${port}${path}`;
+}
+
 function getApiBaseUrl(): string {
   // Prefer explicit env var (staging / production)
   const envUrl = Constants.expoConfig?.extra?.EXPO_PUBLIC_API_URL
     || process.env.EXPO_PUBLIC_API_URL;
-  if (envUrl) return envUrl;
+  if (envUrl) return normalizeLocalApiUrl(envUrl);
 
   // Web browser: use the current window hostname (which is localhost or the LAN IP)
   if (Platform.OS === 'web') {

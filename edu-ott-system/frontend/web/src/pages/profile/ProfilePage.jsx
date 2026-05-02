@@ -1,8 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
+
+
 import { Camera, Save, Mail, Phone, Sparkles, User, Image as ImageIcon, Lock, Bell, Shield, Info, Edit3, Eye, EyeOff, Users, Circle, Trash2, AlertTriangle, X, CheckCircle, ShieldAlert, LogOut } from 'lucide-react';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { userService } from '../../services/userService'; 
 import { authService } from '../../services/authService'; 
+import { useAuthStore } from '../../store/authStore';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 
@@ -128,6 +131,7 @@ export default function ProfilePage() {
       if (avatarFile) {
         try {
           const uploadRes = await userService.uploadAvatar(avatarFile);
+          // uploadRes.url trả về URL tuyệt đối từ Cloudinary
           finalAvatarUrl = uploadRes.url || profile.avatarUrl;
         } catch (err) {
           console.error("Lỗi upload ảnh:", err);
@@ -150,11 +154,8 @@ export default function ProfilePage() {
       } else {
         updateData.email = null;
       }
-      if (finalAvatarUrl && finalAvatarUrl.startsWith('http')) {
-        updateData.avatarUrl = finalAvatarUrl;
-      } else {
-        updateData.avatarUrl = null;
-      }
+      // Lưu avatarUrl nếu có (bất kể relative hay absolute — đã convert ở trên)
+      updateData.avatarUrl = finalAvatarUrl || null;
 
       const response = await userService.updateProfile(userId, updateData);
       
@@ -171,6 +172,11 @@ export default function ProfilePage() {
           phone: updatedUser.phone || prev.phone,
           email: updatedUser.email !== undefined ? updatedUser.email : prev.email
         }));
+        
+        // Cập nhật global state và localStorage để đồng bộ avatar/tên trên toàn ứng dụng web
+        localStorage.setItem("user", JSON.stringify(updatedUser));
+        useAuthStore.setState({ user: updatedUser });
+
         setVerifiedContacts({
           email: updatedUser.isEmailVerified !== false,
           phone: updatedUser.isPhoneVerified !== false,

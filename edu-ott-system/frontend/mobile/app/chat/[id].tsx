@@ -557,6 +557,38 @@ export default function ChatScreen() {
         console.log('[Mobile Chat] conversation_settings_updated:', newSettings);
         setConversation((prev) => prev ? { ...prev, settings: newSettings } : prev);
       };
+      const onPollUpdated = (updatedPoll: any) => {
+        if (!updatedPoll?._id) return;
+        setMessages((prev) => prev.map((m) => {
+          const pollId = String((m as any).pollId?._id || (m as any).pollId || '');
+          if (m.type === 'poll' && pollId === String(updatedPoll._id)) {
+            return { ...m, pollId: updatedPoll };
+          }
+          return m;
+        }));
+      };
+      const onReminderCreated = (reminder: any) => {
+        if (String(reminder?.conversationId) !== String(conversationId)) return;
+        Alert.alert('Nhac hen moi', reminder?.title || 'Co nhac hen moi trong nhom');
+      };
+      const onReminderUpdated = (reminder: any) => {
+        if (String(reminder?.conversationId) !== String(conversationId)) return;
+        // Keep this lightweight in chat screen; dedicated reminders screen handles list/detail updates.
+      };
+      const onReminderDeleted = (payload: any) => {
+        if (payload?.conversationId && String(payload.conversationId) !== String(conversationId)) return;
+      };
+      const onReminderTriggered = (payload: any) => {
+        if (String(payload?.conversationId) !== String(conversationId)) return;
+        Alert.alert('Nhac hen', payload?.title || 'Den gio nhac hen');
+      };
+      const onJoinRequestReceived = (payload: any) => {
+        if (String(payload?.conversationId) !== String(conversationId)) return;
+        Alert.alert('Yeu cau tham gia', 'Co thanh vien moi dang cho duyet');
+      };
+      const onJoinRequestProcessed = (payload: any) => {
+        if (String(payload?.conversationId) !== String(conversationId)) return;
+      };
       const onCallBusy = () => {
         Alert.alert('Bận', 'Người dùng đang trong cuộc gọi khác.');
       };
@@ -581,6 +613,13 @@ export default function ChatScreen() {
       socket.on('pinned_items_updated', onPinnedItemsUpdated);
       socket.on('message_reacted', onMessageReacted);
       socket.on('conversation_settings_updated', onConversationSettingsUpdated);
+      socket.on('poll_updated', onPollUpdated);
+      socket.on('reminder_created', onReminderCreated);
+      socket.on('reminder_updated', onReminderUpdated);
+      socket.on('reminder_deleted', onReminderDeleted);
+      socket.on('reminder_triggered', onReminderTriggered);
+      socket.on('join_request_received', onJoinRequestReceived);
+      socket.on('join_request_processed', onJoinRequestProcessed);
       socket.on('call_busy', onCallBusy);
       socket.on('call:accepted', onCallAccepted);
       socket.on('missed_call', onMissedCall);
@@ -598,6 +637,13 @@ export default function ChatScreen() {
         socket.off('pinned_items_updated', onPinnedItemsUpdated);
         socket.off('message_reacted', onMessageReacted);
         socket.off('conversation_settings_updated', onConversationSettingsUpdated);
+        socket.off('poll_updated', onPollUpdated);
+        socket.off('reminder_created', onReminderCreated);
+        socket.off('reminder_updated', onReminderUpdated);
+        socket.off('reminder_deleted', onReminderDeleted);
+        socket.off('reminder_triggered', onReminderTriggered);
+        socket.off('join_request_received', onJoinRequestReceived);
+        socket.off('join_request_processed', onJoinRequestProcessed);
         socket.off('call_busy', onCallBusy);
         socket.off('call:accepted', onCallAccepted);
         socket.off('missed_call', onMissedCall);
@@ -918,6 +964,12 @@ export default function ChatScreen() {
   }, []);
   const handleInlineLinkPress = useCallback(async (url: string) => {
     try {
+      const webInvite = url.match(/^https?:\/\/[^/]+\/join\/([^?#/\s]+)/i);
+      if (webInvite?.[1]) {
+        router.push((`/join-group?code=${decodeURIComponent(webInvite[1])}`) as any);
+        return;
+      }
+
       const inviteQuery = url.match(/^mobileapp:\/\/join-group\?code=([^&\s]+)/i);
       if (inviteQuery?.[1]) {
         router.push((`/join-group?code=${decodeURIComponent(inviteQuery[1])}`) as any);
@@ -1110,6 +1162,7 @@ export default function ChatScreen() {
     const adminIds = (conversation?.adminIds || []).map((admin: any) => typeof admin === 'string' ? admin : admin?._id);
     const iAmOwner = ownerId === currentUserId;
     const iAmAdmin = iAmOwner || adminIds.includes(currentUserId);
+    const canPinMessage = !isGroup || iAmAdmin || conversation?.settings?.canMembersPin !== false;
     const canRecall = isMine || (isGroup && iAmAdmin);
 
     const messageId = getMessageId(msg);
@@ -1146,7 +1199,7 @@ export default function ChatScreen() {
       buttons.push({ text: '😊 Thả cảm xúc', onPress: () => handleReactToMessage(msg) });
       buttons.push({ text: '↗ Chuyển tiếp', onPress: () => openForwardModal(msg) });
     }
-    if (!msg.isRecalled) {
+    if (!msg.isRecalled && canPinMessage) {
       buttons.push({
         text: isPinned ? 'Bỏ ghim' : 'Ghim tin nhắn',
         onPress: async () => {
@@ -1164,6 +1217,17 @@ export default function ChatScreen() {
     }
     setActionMenu({ visible: true, options: buttons });
   };
+
+  const ownerIdForPermission = typeof conversation?.ownerId === 'string'
+    ? conversation.ownerId
+    : (conversation?.ownerId as any)?._id;
+  const adminIdsForPermission = (conversation?.adminIds || []).map((admin: any) =>
+    typeof admin === 'string' ? admin : admin?._id,
+  );
+  const iAmOwnerForPermission = !!ownerIdForPermission && String(ownerIdForPermission) === String(currentUserId);
+  const iAmAdminForPermission = iAmOwnerForPermission || adminIdsForPermission.some((aid: any) => String(aid) === String(currentUserId));
+  const canCreatePoll = conversation?.type === 'group'
+    && (iAmAdminForPermission || conversation?.settings?.canMembersCreatePolls !== false);
 
   const handleUnblock = async () => {
     if (!otherParticipant) return;
@@ -1680,10 +1744,15 @@ export default function ChatScreen() {
         onClose={() => setShowMediaMenu(false)}
         colors={colors}
         isGroup={conversation?.type === 'group'}
+        canCreatePoll={!!canCreatePoll}
         onTakeImage={handleTakeImage}
         onPickImage={handlePickImage}
         onPickDocument={handleDocumentPick}
         onCreatePoll={() => {
+          if (!canCreatePoll) {
+            Alert.alert('Khong co quyen', 'Ban khong duoc phep tao binh chon trong nhom nay.');
+            return;
+          }
           setShowMediaMenu(false);
           router.push({ pathname: '/create-poll', params: { conversationId } } as any);
         }}

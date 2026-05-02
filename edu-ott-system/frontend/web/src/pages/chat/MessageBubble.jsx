@@ -20,7 +20,7 @@ const renderContent = (text) => {
   const parts = text.split(urlRegex);
   return parts.map((part, i) => {
     if (part.match(urlRegex)) {
-      return <a key={i} href={part} target="_blank" rel="noopener noreferrer" style={{color: '#0084FF', textDecoration: 'underline'}} onClick={e => e.stopPropagation()}>{part}</a>;
+      return <a key={i} href={part} target="_blank" rel="noopener noreferrer" style={{ color: '#0084FF', textDecoration: 'underline' }} onClick={e => e.stopPropagation()}>{part}</a>;
     }
     return <span key={i}>{part}</span>;
   });
@@ -97,6 +97,36 @@ export const MessageBubble = ({
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
+
+  // ── Render sticker/GIF message ──
+  const stickerUrl = message.stickerUrl ||
+    (typeof content === 'string' && content.startsWith('[sticker]') ? content.slice(9) : null);
+  if (stickerUrl) {
+    return (
+      <div id={`msg-${_id}`} className={`mdc-msg-wrap ${isMe ? 'me' : 'them'}`}>
+        {!isMe && <img src={avatar} alt="avatar" className="mdc-msg-avatar" />}
+        <div className="mdc-msg-body">
+          {!isMe && sender && <div className="mdc-msg-sender-name">{name}</div>}
+          <img
+            src={stickerUrl}
+            alt="sticker"
+            style={{
+              maxWidth: 160,
+              maxHeight: 160,
+              borderRadius: 8,
+              display: 'block',
+              opacity: message.status === 'sending' ? 0.6 : 1,
+            }}
+          />
+          <div className="mdc-msg-time" style={{ justifyContent: isMe ? 'flex-end' : 'flex-start', marginTop: 2 }}>
+            <span className="mdc-msg-time-text">
+              {new Date(message.createdAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
+            </span>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (type === 'system') {
     return (
@@ -299,20 +329,20 @@ export const MessageBubble = ({
             )}
 
             {!isRecalled && reactions?.length > 0 && (
-              <div style={{ 
-                position: 'absolute', 
-                bottom: '-14px', 
-                right: isMe ? '4px' : 'auto', 
-                left: isMe ? 'auto' : '4px', 
-                display: 'flex', 
+              <div style={{
+                position: 'absolute',
+                bottom: '-14px',
+                right: isMe ? '4px' : 'auto',
+                left: isMe ? 'auto' : '4px',
+                display: 'flex',
                 alignItems: 'center',
-                background: 'var(--z-bg-sidebar)', 
-                padding: '2px 6px', 
-                borderRadius: '12px', 
-                boxShadow: '0 2px 5px rgba(0,0,0,0.12)', 
-                gap: '2px', 
-                zIndex: 10, 
-                border: '1px solid var(--z-border)', 
+                background: 'var(--z-bg-sidebar)',
+                padding: '2px 6px',
+                borderRadius: '12px',
+                boxShadow: '0 2px 5px rgba(0,0,0,0.12)',
+                gap: '2px',
+                zIndex: 10,
+                border: '1px solid var(--z-border)',
                 color: 'var(--z-text-primary)',
                 fontSize: '11px'
               }}>
