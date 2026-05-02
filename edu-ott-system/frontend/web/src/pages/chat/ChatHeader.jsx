@@ -1,11 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FaPhone, FaVideo, FaEllipsisV, FaUsers, FaFileAlt } from 'react-icons/fa';
+import { FaPhone, FaVideo, FaEllipsisV, FaUsers, FaFileAlt, FaSearch } from 'react-icons/fa';
 import { useAuthStore } from '../../store/authStore';
 import { socketService } from '../../services/socketService';
 import { useTheme } from '../../contexts/ThemeContext';
 
-export const ChatHeader = ({ room, onCall, onVideo, onInfo }) => {
+export const ChatHeader = ({ room, onCall, onVideo, onInfo, onSearchInConv }) => {
   const navigate = useNavigate();
   const currentUser = useAuthStore((state) => state.user);
   const { appliedTheme } = useTheme();
@@ -245,6 +245,13 @@ export const ChatHeader = ({ room, onCall, onVideo, onInfo }) => {
           </>
         )}
 
+        <button
+          className={`${subTextColor} hover:text-blue-500 ${iconBgHover} p-2.5 rounded-full transition`}
+          onClick={onSearchInConv}
+          title="Tìm trong cuộc trò chuyện"
+        >
+          <FaSearch size={18} />
+        </button>
         <button
           className={`${subTextColor} hover:text-blue-500 ${iconBgHover} p-2.5 rounded-full transition ml-2`}
           onClick={onInfo}

@@ -9,6 +9,7 @@ import { useFriendStore } from "../../store/friendStore";
 import { socketService } from "../../services/socketService";
 import { useChatSocket } from "./useChatSocket";
 import { MessageBubble } from "./MessageBubble";
+import { SearchInConversation } from "./SearchInConversation";
 import { ShareMessageModal } from "./Modals/ShareMessageModal";
 import AddFriendModal from "./Modals/AddFriendModal";
 import CreateGroupModal from "./Modals/CreateGroupModal";
@@ -192,6 +193,7 @@ export default function ChatPage() {
   const [reminderDetailId, setReminderDetailId] = useState(null);
   const [pendingEditReminder, setPendingEditReminder] = useState(null);
   const [showReminderListPage, setShowReminderListPage] = useState(false);
+  const [showSearchInConv, setShowSearchInConv] = useState(false);
 
   const pageRef = useRef(null);
   const messagesEndRef = useRef(null);
@@ -564,10 +566,25 @@ export default function ChatPage() {
               strangerId: getOtherParticipant(activeConversation)?._id || getOtherParticipant(activeConversation)?.id,
             }}
             onInfo={() => setShowRightPanel(!showRightPanel)}
+            onSearchInConv={() => setShowSearchInConv(prev => !prev)}
           />
           <PinnedBar pinnedMessages={pinnedMessages} jumpToMessage={jumpToMessage} setShowRightPanel={setShowRightPanel} setUnpinTargetId={setUnpinTargetId} setShowUnpinConfirmModal={setShowUnpinConfirmModal} />
 
-          <div className="chat-messages">
+          <div className="chat-messages" style={{ position: 'relative' }}>
+            {showSearchInConv && (
+              <SearchInConversation
+                conversationId={activeConversation._id}
+                onClose={() => setShowSearchInConv(false)}
+                onJumpToMessage={(msg) => {
+                  const el = document.getElementById(`msg-${msg._id}`);
+                  if (el) {
+                    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    el.classList.add('highlight-msg');
+                    setTimeout(() => el.classList.remove('highlight-msg'), 1800);
+                  }
+                }}
+              />
+            )}
             {/* Friend request banner */}
             {(() => {
               if (!activeConversation || activeConversation.type === 'group' || activeConversation.roomModel === 'Group') return null;
