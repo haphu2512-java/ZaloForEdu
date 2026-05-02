@@ -320,10 +320,11 @@ export default function ChatPage() {
     showPinModal, setShowPinModal,
     pinModalMode, setPinModalMode,
     pinInput, setPinInput, pinConfirm, setPinConfirm,
+    pinCurrentInput, setPinCurrentInput,
     pinError, setPinError, pinStep, setPinStep,
-    getSavedPin,
+    hasPin,
     handlePinButtonClick, handlePinSubmit, handleUnhideConversation,
-  } = useHiddenConversations({ token, userId, fetchConversationsData });
+  } = useHiddenConversations({ token, fetchConversationsData });
 
   // ── Socket ────────────────────────────────────────────────────────────────
   useChatSocket({
@@ -539,8 +540,9 @@ export default function ChatPage() {
         showHidden={showHidden} hiddenConvs={hiddenConvs} handlePinButtonClick={handlePinButtonClick} handleUnhideConversation={handleUnhideConversation}
         showPinModal={showPinModal} setShowPinModal={setShowPinModal} pinModalMode={pinModalMode} setPinModalMode={setPinModalMode}
         pinInput={pinInput} setPinInput={setPinInput} pinConfirm={pinConfirm} setPinConfirm={setPinConfirm}
+        pinCurrentInput={pinCurrentInput} setPinCurrentInput={setPinCurrentInput}
         pinError={pinError} setPinError={setPinError} pinStep={pinStep} setPinStep={setPinStep}
-        handlePinSubmit={handlePinSubmit} getSavedPin={getSavedPin}
+        hasPin={hasPin} handlePinSubmit={handlePinSubmit}
       />
 
       {/* ── MAIN CHAT AREA ── */}

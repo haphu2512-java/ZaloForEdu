@@ -121,9 +121,16 @@ export const useChatSocket = ({
       setConversations(prevConvs => {
         const index = prevConvs.findIndex(c => String(c._id) === convIdStr);
         if (index === -1) {
-          fetchConversationsData();
+          // Conversation not in list — it may be hidden by the user.
+          // Only refetch if this is a mock conversation being replaced by a real one.
           const mockId = `mock_${String(latestMessage?.senderId?._id || latestMessage?.senderId || '')}`;
-          return prevConvs.filter(c => c._id !== mockId);
+          const hasMock = prevConvs.some(c => c._id === mockId);
+          if (hasMock) {
+            fetchConversationsData();
+            return prevConvs.filter(c => c._id !== mockId);
+          }
+          // Do NOT auto-fetch here — hidden conversations must stay hidden.
+          return prevConvs;
         }
         const newConvs = [...prevConvs];
         const target = { ...newConvs[index], latestMessage };

@@ -91,12 +91,6 @@ const sendMessage = asyncHandler(async (req, res) => {
   await message.populate('mediaIds', 'fileName url size mimeType providerResourceType duration');
   await message.populate('senderId', 'username avatarUrl');
 
-  // Un-hide conversation for all participants who had hidden it (e.g. via "delete conversation")
-  await ConversationPreference.updateMany(
-    { conversationId, isHidden: true },
-    { $set: { isHidden: false } }
-  );
-
   if (message.type === 'announcement') {
     socketService.emitToCommunityChannel(
       conversationId,
