@@ -2,6 +2,7 @@ const mongoose = require('mongoose');
 
 const Message = require('../models/Message');
 const User = require('../models/User');
+const Conversation = require('../models/Conversation');
 const ConversationPreference = require('../models/ConversationPreference');
 const GroupMember = require('../models/GroupMember');
 const { createMessage, ensureConversationMember } = require('../services/messageService');
@@ -301,6 +302,53 @@ const reactToMessage = asyncHandler(async (req, res) => {
   return successResponse(res, message.reactions, 'Reaction updated');
 });
 
+const searchMessagesInConversation = asyncHandler(async (req, res) => {
+  const { id: conversationId } = req.params;
+  const { q, limit: limitRaw, cursor } = req.query;
+  if (!q || !q.trim()) throw new ApiError(400, 'INVALID_QUERY', 'Search query is required');
+
+  const limit = Math.min(Number(limitRaw) || 20, 100);
+
+  const conversation = await Conversation.findById(conversationId);
+  if (!conversation) throw new ApiError(404, 'NOT_FOUND', 'Conversation not found');
+
+  const isMember = conversation.participants.some((p) => String(p) === String(req.user._id));
+  if (!isMember) throw new ApiError(403, 'FORBIDDEN', 'Not a member of this conversation');
+
+  const escaped = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const queryRegex = new RegExp(escaped, 'i');
+  const filter = {
+    conversationId,
+    content: queryRegex,
+    isRecalled: { $ne: true },
+    deletedBy: { $ne: req.user._id },
+  };
+
+  if (cursor) {
+    const parsed = decodeCursor(cursor);
+    if (!parsed) throw new ApiError(400, 'INVALID_CURSOR', 'Bad cursor');
+    filter.$or = [
+      { createdAt: { $lt: parsed.createdAt } },
+      { createdAt: parsed.createdAt, _id: { $lt: parsed.id } },
+    ];
+  }
+
+  const items = await Message.find(filter)
+    .sort({ createdAt: -1, _id: -1 })
+    .limit(limit + 1)
+    .populate('senderId', 'username avatarUrl fullName');
+
+  let nextCursor = null;
+  let finalItems = items;
+  if (items.length > limit) {
+    const next = items[limit - 1];
+    nextCursor = encodeCursor({ createdAt: next.createdAt, id: next._id.toString() });
+    finalItems = items.slice(0, limit);
+  }
+
+  return successResponse(res, { items: finalItems, nextCursor, limit }, 'Messages found');
+});
+
 module.exports = {
   sendMessage,
   listMessagesByConversation,
@@ -308,4 +356,5 @@ module.exports = {
   deleteMessage: deleteMessageForMe,
   recallMessage,
   reactToMessage,
+  searchMessagesInConversation,
 };

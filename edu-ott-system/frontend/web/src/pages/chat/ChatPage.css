@@ -1330,7 +1330,7 @@
   border: 1px solid var(--z-border);
   border-radius: 8px;
   padding: 12px;
-  box-shadow: 0 10px 25px rgba(0,0,0,0.15);
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
   display: flex;
   align-items: center;
   gap: 12px;
@@ -1397,6 +1397,21 @@
 }
 
 @keyframes slideIn {
-  from { transform: translateX(100%); opacity: 0; }
-  to { transform: translateX(0); opacity: 1; }
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.crp-avatar-overlay {
+  opacity: 0 !important;
+}
+
+div:hover>.crp-avatar-overlay {
+  opacity: 1 !important;
 }

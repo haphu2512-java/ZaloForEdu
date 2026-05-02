@@ -85,7 +85,9 @@ export const MessageBubble = ({
 
   const timeString = new Date(createdAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
   const avatar = toAbsoluteUrl(sender?.avatarUrl || sender?.avatar) || 'https://i.pravatar.cc/150';
-  const name = sender?.fullName || sender?.username || 'Người dùng';
+  const senderIdStr = String(sender?._id || sender?.id || sender || '');
+  const nickname = activeConversation?.nicknames?.[senderIdStr];
+  const name = nickname || sender?.fullName || sender?.username || 'Người dùng';
 
   useEffect(() => {
     const handleClickOutside = (event) => {

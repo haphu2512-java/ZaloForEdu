@@ -2,6 +2,7 @@ const express = require('express');
 
 const conversationController = require('../controllers/conversationController');
 const groupFeatureController = require('../controllers/groupFeatureController');
+const messageController = require('../controllers/messageController');
 const auth = require('../middlewares/auth');
 const validate = require('../middlewares/validate');
 const {
@@ -483,6 +484,20 @@ router.get(
   auth,
   validate({ params: conversationIdParamSchema }),
   groupFeatureController.listBlockedMembers,
+);
+
+// ==================== SEARCH MESSAGES IN CONVERSATION ====================
+const searchQuerySchema = z.object({
+  q: z.string().trim().min(1).max(200),
+  limit: z.coerce.number().int().min(1).max(100).default(20).optional(),
+  cursor: z.string().optional(),
+});
+
+router.get(
+  '/:id/messages/search',
+  auth,
+  validate({ params: conversationIdParamSchema, query: searchQuerySchema }),
+  messageController.searchMessagesInConversation,
 );
 
 module.exports = router;

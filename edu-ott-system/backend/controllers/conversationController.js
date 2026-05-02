@@ -143,7 +143,7 @@ const listConversations = asyncHandler(async (req, res) => {
   const items = finalItems.map((conversation, index) => {
     const latest = latestMessagesArr[index];
     return {
-      ...conversation.toObject(),
+      ...conversation.toObject({ flattenMaps: true }),
       latestMessage: latest ? latest.toObject() : null,
     };
   });
@@ -555,7 +555,11 @@ const updateGroupNickname = asyncHandler(async (req, res) => {
     throw new ApiError(404, 'MEMBER_NOT_FOUND', 'User is not in this group');
   }
 
-  conversation.nicknames.set(memberId, nickname.trim());
+  if (nickname.trim() === '') {
+    conversation.nicknames.delete(memberId);
+  } else {
+    conversation.nicknames.set(memberId, nickname.trim());
+  }
   await conversation.save();
 
   const targetUser = await User.findById(memberId).select('fullName username');
@@ -625,7 +629,7 @@ const listArchivedConversations = asyncHandler(async (req, res) => {
   const latestMessagesArr = await Promise.all(latestMessagePromises);
 
   const items = conversations.map((conv, idx) => ({
-    ...conv.toObject(),
+    ...conv.toObject({ flattenMaps: true }),
     latestMessage: latestMessagesArr[idx] ? latestMessagesArr[idx].toObject() : null,
   }));
 
