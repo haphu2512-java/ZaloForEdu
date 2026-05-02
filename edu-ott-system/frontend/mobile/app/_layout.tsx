@@ -9,6 +9,7 @@ import 'react-native-reanimated';
 
 import { useColorScheme } from '@/components/useColorScheme';
 import { AuthProvider } from '../context/auth';
+import { BadgeProvider } from '../context/badge';
 import IncomingCallOverlay from '../components/call/IncomingCallOverlay';
 
 export { ErrorBoundary } from 'expo-router';
@@ -44,28 +45,30 @@ function RootLayoutNav() {
     <SafeAreaProvider>
       <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
         <AuthProvider>
-          <Stack>
-            <Stack.Screen name="(auth)" options={{ headerShown: false }} />
-            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-            <Stack.Screen name="chat/[id]" options={{ headerShown: true, title: 'Tro chuyen' }} />
-            <Stack.Screen name="(chat-info)/conversation-details" options={{ headerShown: true }} />
-            <Stack.Screen name="(chat-info)/search-messages" options={{ headerShown: true }} />
-            <Stack.Screen name="(chat-info)/pinned-messages" options={{ headerShown: true }} />
-            <Stack.Screen name="(chat-info)/reminders" options={{ headerShown: true }} />
-            <Stack.Screen name="(chat-info)/blocked-members" options={{ headerShown: true }} />
-            <Stack.Screen name="(chat-info)/group-roles" options={{ headerShown: true }} />
-            <Stack.Screen name="(groups)/join-group" options={{ headerShown: true }} />
-            <Stack.Screen name="(groups)/join-requests" options={{ headerShown: true }} />
-            <Stack.Screen name="(polls)/create-poll" options={{ headerShown: true }} />
-            <Stack.Screen name="call/[roomId]" options={{ headerShown: false, animation: 'fade' }} />
-            <Stack.Screen name="group-call/[roomId]" options={{ headerShown: false, animation: 'fade' }} />
-            <Stack.Screen name="community" options={{ headerShown: false }} />
-            <Stack.Screen name="(settings)/blocked-users" options={{ headerShown: false }} />
-            <Stack.Screen name="(settings)/friend-list" options={{ headerShown: false }} />
-            <Stack.Screen name="(settings)/archived-conversations" options={{ headerShown: false }} />
-            <Stack.Screen name="(social)" options={{ headerShown: false }} />
-          </Stack>
-          <IncomingCallOverlay />
+          <BadgeProvider>
+            <Stack>
+              <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+              <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+              <Stack.Screen name="chat/[id]" options={{ headerShown: true, title: 'Tro chuyen' }} />
+              <Stack.Screen name="(chat-info)/conversation-details" options={{ headerShown: true }} />
+              <Stack.Screen name="(chat-info)/search-messages" options={{ headerShown: true }} />
+              <Stack.Screen name="(chat-info)/pinned-messages" options={{ headerShown: true }} />
+              <Stack.Screen name="(chat-info)/reminders" options={{ headerShown: true }} />
+              <Stack.Screen name="(chat-info)/blocked-members" options={{ headerShown: true }} />
+              <Stack.Screen name="(chat-info)/group-roles" options={{ headerShown: true }} />
+              <Stack.Screen name="(groups)/join-group" options={{ headerShown: true }} />
+              <Stack.Screen name="(groups)/join-requests" options={{ headerShown: true }} />
+              <Stack.Screen name="(polls)/create-poll" options={{ headerShown: true }} />
+              <Stack.Screen name="call/[roomId]" options={{ headerShown: false, animation: 'fade' }} />
+              <Stack.Screen name="group-call/[roomId]" options={{ headerShown: false, animation: 'fade' }} />
+              <Stack.Screen name="community" options={{ headerShown: false }} />
+              <Stack.Screen name="(settings)/blocked-users" options={{ headerShown: false }} />
+              <Stack.Screen name="(settings)/friend-list" options={{ headerShown: false }} />
+              <Stack.Screen name="(settings)/archived-conversations" options={{ headerShown: false }} />
+              <Stack.Screen name="(social)" options={{ headerShown: false }} />
+            </Stack>
+            <IncomingCallOverlay />
+          </BadgeProvider>
         </AuthProvider>
       </ThemeProvider>
     </SafeAreaProvider>

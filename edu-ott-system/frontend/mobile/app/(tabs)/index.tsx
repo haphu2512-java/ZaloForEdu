@@ -24,6 +24,7 @@ import { Alert } from 'react-native';
 import { updateConversationPreference, pinConversation, muteConversation, reportConversation } from '@/utils/messageService';
 import { blockOrUnblockUser } from '@/utils/userService';
 import { ChatListItem } from '@/components/chat/ChatListItem';
+import { useBadge } from '@/context/badge';
 
 type FilterTab = 'all' | 'work' | 'family';
 
@@ -88,6 +89,8 @@ export default function MessagesScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null);
   const [activeTab, setActiveTab] = useState<FilterTab>('all');
+
+  const { markMessagesRead } = useBadge();
 
   const loadConversations = useCallback(async () => {
     // Don't fetch if user is not logged in
@@ -171,8 +174,10 @@ export default function MessagesScreen() {
         if (isActive) setLoading(false);
       };
       init();
+      // Reset badge khi vào tab Tin nhắn
+      markMessagesRead();
       return () => { isActive = false; };
-    }, [loadConversations, user, conversations.length])
+    }, [loadConversations, user, conversations.length, markMessagesRead])
   );
 
   const onRefresh = useCallback(async () => {
@@ -226,7 +231,8 @@ export default function MessagesScreen() {
         const currentUserId = user?.id || '';
         const otherUser = item.participants?.find((p) => (p._id || p.id || '') !== currentUserId);
         if (otherUser) {
-          await blockOrUnblockUser(otherUser._id || otherUser.id || '');
+          const targetId = otherUser._id || otherUser.id || '';
+          await blockOrUnblockUser(targetId, 'block');
           await loadConversations();
           Alert.alert('✅', 'Đã chặn người dùng');
         }
@@ -468,12 +474,14 @@ export default function MessagesScreen() {
                       </TouchableOpacity>
                     )}
 
-                    <TouchableOpacity style={styles.actionOption} onPress={() => handleAction('report', selectedConversation)}>
-                      <View style={[styles.actionIconWrap, { backgroundColor: 'transparent' }]}>
-                        <Ionicons name="flag-outline" size={22} color={colors.text} />
-                      </View>
-                      <Text style={[styles.actionOptionText, { color: colors.text }]}>Báo cáo</Text>
-                    </TouchableOpacity>
+                    {selectedConversation.type !== 'group' && (
+                      <TouchableOpacity style={styles.actionOption} onPress={() => handleAction('report', selectedConversation)}>
+                        <View style={[styles.actionIconWrap, { backgroundColor: 'transparent' }]}>
+                          <Ionicons name="flag-outline" size={22} color={colors.text} />
+                        </View>
+                        <Text style={[styles.actionOptionText, { color: colors.text }]}>Báo cáo</Text>
+                      </TouchableOpacity>
+                    )}
 
                     <TouchableOpacity style={styles.actionOption} onPress={() => handleAction('delete', selectedConversation)}>
                       <View style={[styles.actionIconWrap, { backgroundColor: 'transparent' }]}>

@@ -19,12 +19,14 @@ import { useColorScheme } from '@/components/useColorScheme';
 import { useAuth } from '@/context/auth';
 import PostCard from '@/components/social/PostCard';
 import { getFeed, toggleReaction, deletePost } from '@/utils/socialService';
+import { useBadge } from '@/context/badge';
 
 export default function FeedScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const colors = Colors[colorScheme === 'dark' ? 'dark' : 'light'];
   const { user } = useAuth();
   const router = useRouter();
+  const { markNotificationsRead } = useBadge();
 
   const [posts, setPosts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -56,8 +58,10 @@ export default function FeedScreen() {
         if (active) setLoading(false);
       };
       init();
+      // Reset notification badge khi vào tab Nhật ký
+      markNotificationsRead();
       return () => { active = false; };
-    }, [loadFeed])
+    }, [loadFeed, markNotificationsRead])
   );
 
   const onRefresh = async () => {

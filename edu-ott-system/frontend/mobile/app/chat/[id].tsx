@@ -1237,7 +1237,7 @@ export default function ChatScreen() {
     setUnblockLoading(true);
     try {
       const targetId = otherParticipant._id || otherParticipant.id || '';
-      await blockOrUnblockUser(targetId);
+      await blockOrUnblockUser(targetId, 'unblock');
       setIsBlockedByMe(false);
       Alert.alert('✅', 'Đã bỏ chặn người dùng');
     } catch (e: any) {
