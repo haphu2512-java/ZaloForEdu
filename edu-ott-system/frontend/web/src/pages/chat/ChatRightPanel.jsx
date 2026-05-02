@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react';
-import { FaBell, FaBellSlash, FaThumbtack, FaUserPlus, FaUserSecret, FaArrowLeft, FaTrashAlt, FaSignOutAlt, FaLink, FaEllipsisH, FaChevronDown, FaChevronUp, FaCalendarAlt, FaUserTimes, FaKey, FaSync, FaPen, FaCheck, FaTimes, FaFlag, FaTag, FaPoll, FaCrown, FaStar, FaEdit, FaLevelUpAlt, FaLevelDownAlt, FaBan } from 'react-icons/fa';
+import { useState, useEffect, useRef } from 'react';
+import { FaBell, FaBellSlash, FaThumbtack, FaUserPlus, FaUserSecret, FaArrowLeft, FaTrashAlt, FaSignOutAlt, FaLink, FaEllipsisH, FaChevronDown, FaChevronUp, FaCalendarAlt, FaUserTimes, FaKey, FaSync, FaPen, FaCheck, FaTimes, FaFlag, FaTag, FaPoll, FaCrown, FaStar, FaEdit, FaLevelUpAlt, FaLevelDownAlt, FaBan, FaCamera } from 'react-icons/fa';
 import toast from 'react-hot-toast';
 import { conversationService } from '../../services/conversationService';
 import { pollService } from '../../services/pollService';
+import { uploadFile } from '../../services/mediaService';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { getFileColor, getExt, formatBytes, toAbsoluteUrl } from './chatUtils';
 import PinnedMessagesPanel from './Modals/PinnedMessagesPanel';
@@ -76,7 +77,7 @@ export const ChatRightPanel = ({
   handleProcessJoinRequest,
   pendingEditReminder,
   onPendingEditConsumed,
-  onShowReminderList = () => {},
+  onShowReminderList = () => { },
   onShowAddMember,
   onShowPoll,
   pinnedMessages = [],
@@ -110,6 +111,10 @@ export const ChatRightPanel = ({
   const [convCategory, setConvCategory] = useState('primary');
   const [showConfirmTransfer, setShowConfirmTransfer] = useState(false);
   const [transferTarget, setTransferTarget] = useState(null);
+  const groupAvatarInputRef = useRef(null);
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
+  const [editingNicknameId, setEditingNicknameId] = useState(null);
+  const [nicknameDraft, setNicknameDraft] = useState('');
 
   // Sync category từ preference khi đổi conversation
   useEffect(() => {
@@ -149,7 +154,7 @@ export const ChatRightPanel = ({
       })
       .catch(() => { });
   }, [activeConversation?._id]);
-  
+
 
   const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
   const myId = currentUser._id || currentUser.id;
@@ -186,6 +191,43 @@ export const ChatRightPanel = ({
     setShowMuteModal(false);
     handleMute(muteOption);
   };
+  const handleGroupAvatarChange = async (e) => {
+    const file = e.target.files[0];
+    if (!file || !isGroup || !canEditGroupInfo) return;
+    try {
+      setIsUploadingAvatar(true);
+      const media = await uploadFile(file);
+      const newAvatarUrl = toAbsoluteUrl(media.url);
+      await conversationService.updateGroupAvatar(activeConversation._id, newAvatarUrl);
+      setActiveConversation(prev => ({ ...prev, avatarUrl: newAvatarUrl }));
+      fetchConversations?.();
+      toast.success('Cập nhật ảnh nhóm thành công');
+    } catch (err) {
+      console.error('Upload group avatar error:', err);
+      toast.error('Tải ảnh lên thất bại');
+    } finally {
+      setIsUploadingAvatar(false);
+      e.target.value = '';
+    }
+  };
+
+  const handleSaveNickname = async (memberId) => {
+    const keyStr = String(memberId);
+    const current = activeConversation.nicknames?.[keyStr] || '';
+    if (nicknameDraft.trim() === current) { setEditingNicknameId(null); return; }
+    try {
+      await conversationService.updateNickname(activeConversation._id, memberId, nicknameDraft.trim());
+      setActiveConversation(prev => ({
+        ...prev,
+        nicknames: { ...prev.nicknames, [keyStr]: nicknameDraft.trim() }
+      }));
+      toast.success('Đã cập nhật biệt danh');
+    } catch {
+      toast.error('Cập nhật biệt danh thất bại');
+    } finally {
+      setEditingNicknameId(null);
+    }
+  };
 
   return (
     <>
@@ -194,7 +236,40 @@ export const ChatRightPanel = ({
           <>
             {/* HEADER */}
             <div className="crp-header" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '20px 16px', borderBottom: '1px solid var(--z-border)' }}>
-              <img className="crp-avatar" src={getConversationAvatar(activeConversation)} alt="avt" style={{ width: 64, height: 64, borderRadius: '50%', objectFit: 'cover', marginBottom: 12 }} />
+              <div
+                style={{ position: 'relative', width: 64, height: 64, marginBottom: 12, flexShrink: 0 }}
+                onClick={() => isGroup && canEditGroupInfo && !isUploadingAvatar && groupAvatarInputRef.current?.click()}
+              >
+                <img
+                  className="crp-avatar"
+                  src={getConversationAvatar(activeConversation)}
+                  alt="avt"
+                  style={{ width: 64, height: 64, borderRadius: '50%', objectFit: 'cover', opacity: isUploadingAvatar ? 0.5 : 1 }}
+                />
+                {isGroup && canEditGroupInfo && (
+                  <div style={{
+                    position: 'absolute', inset: 0, borderRadius: '50%',
+                    background: 'rgba(0,0,0,0.35)', display: 'flex',
+                    alignItems: 'center', justifyContent: 'center',
+                    opacity: isUploadingAvatar ? 1 : 0,
+                    transition: '0.2s', cursor: 'pointer',
+                    color: '#fff',
+                  }}
+                    className="crp-avatar-overlay"
+                  >
+                    {isUploadingAvatar
+                      ? <span style={{ fontSize: 10 }}>...</span>
+                      : <FaCamera size={18} />}
+                  </div>
+                )}
+                <input
+                  ref={groupAvatarInputRef}
+                  type="file"
+                  accept="image/*"
+                  style={{ display: 'none' }}
+                  onChange={handleGroupAvatarChange}
+                />
+              </div>
 
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, width: '100%', justifyContent: 'center' }}>
                 {isGroupNameEditing ? (
@@ -295,6 +370,38 @@ export const ChatRightPanel = ({
                                 )}
                               </div>
                             )}
+                            {/* Biệt danh */}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 2 }}>
+                              {editingNicknameId === keyStr ? (
+                                <input
+                                  autoFocus
+                                  value={nicknameDraft}
+                                  onChange={e => setNicknameDraft(e.target.value)}
+                                  onBlur={() => handleSaveNickname(p._id || p.id)}
+                                  onKeyDown={e => {
+                                    if (e.key === 'Enter') handleSaveNickname(p._id || p.id);
+                                    if (e.key === 'Escape') setEditingNicknameId(null);
+                                  }}
+                                  style={{
+                                    border: 'none', borderBottom: '1px solid var(--z-primary)',
+                                    background: 'transparent', outline: 'none',
+                                    fontSize: 11, color: 'var(--z-text-secondary)', width: 90
+                                  }}
+                                  placeholder="Biệt danh..."
+                                />
+                              ) : (
+                                <span
+                                  title="Click để đặt biệt danh"
+                                  style={{ fontSize: 11, color: 'var(--z-text-secondary)', cursor: 'pointer' }}
+                                  onClick={() => {
+                                    setNicknameDraft(activeConversation.nicknames?.[keyStr] || '');
+                                    setEditingNicknameId(keyStr);
+                                  }}
+                                >
+                                  {activeConversation.nicknames?.[keyStr] || <em style={{ opacity: 0.5 }}>Đặt biệt danh</em>}
+                                </span>
+                              )}
+                            </div>
                           </div>
                           {isAdmin && keyStr !== myId && role !== 'owner' && (
                             <div
@@ -307,26 +414,18 @@ export const ChatRightPanel = ({
                           {showMemberActionId === keyStr && (
                             <div className="member-action-menu">
                               {/* Đổi biệt danh */}
-                              <div className="member-action-item" onClick={async () => {
-                                const newNickname = prompt('Nhập biệt danh mới cho ' + displayName, activeConversation.nicknames?.[keyStr] || '');
-                                if (newNickname !== null) {
-                                  try {
-                                    await conversationService.updateNickname(activeConversation._id, keyStr, newNickname);
-                                    toast.success('Đã cập nhật biệt danh');
-                                    fetchConversations();
-                                  } catch (err) {
-                                    toast.error('Lỗi khi cập nhật biệt danh');
-                                  }
-                                }
+                              <div className="member-action-item" onClick={() => {
+                                setNicknameDraft(activeConversation.nicknames?.[keyStr] || '');
+                                setEditingNicknameId(keyStr);
                                 setShowMemberActionId(null);
                               }}>
                                 <FaEdit />
                                 <span>Đổi biệt danh</span>
                               </div>
-                              
+
                               {/* Divider */}
                               {isOwner && <div className="member-menu-divider" />}
-                              
+
                               {/* Nâng quyền / Hạ quyền */}
                               {isOwner && role === 'member' && (
                                 <>
@@ -344,7 +443,7 @@ export const ChatRightPanel = ({
                                   </div>
                                 </>
                               )}
-                              
+
                               {isOwner && role === 'admin' && (
                                 <>
                                   <div className="member-action-item" onClick={() => { handleGroupAction('demote', keyStr); setShowMemberActionId(null); }}>
@@ -361,10 +460,10 @@ export const ChatRightPanel = ({
                                   </div>
                                 </>
                               )}
-                              
+
                               {/* Divider */}
                               {isOwner && <div className="member-menu-divider" />}
-                              
+
                               {/* Mời ra khỏi nhóm */}
                               <div className="member-action-item danger" onClick={() => { if (window.confirm(`Mời ${displayName} ra khỏi nhóm?`)) handleGroupAction('remove', keyStr); setShowMemberActionId(null); }}>
                                 <FaBan />
@@ -873,7 +972,7 @@ export const ChatRightPanel = ({
               ) : blockedMembers.map(u => {
                 const uid = typeof u === 'string' ? u : (u.id || u._id || String(u));
                 const name = u.username || 'Người dùng';
-                
+
                 const handleUnblock = async () => {
                   try {
                     await conversationService.unblockMember(activeConversation._id, uid);
@@ -1043,10 +1142,10 @@ export const ChatRightPanel = ({
                           if (opt.special === 'custom') return;
                           const now = new Date();
                           let d;
-                          if (opt.special === 'tomorrow9') { 
+                          if (opt.special === 'tomorrow9') {
                             d = new Date(now);
-                            d.setDate(d.getDate() + 1); 
-                            d.setHours(9, 0, 0, 0); 
+                            d.setDate(d.getDate() + 1);
+                            d.setHours(9, 0, 0, 0);
                           } else {
                             d = new Date(now.getTime() + opt.mins * 60000);
                           }

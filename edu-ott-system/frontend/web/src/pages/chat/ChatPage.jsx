@@ -552,7 +552,14 @@ export default function ChatPage() {
               name: getConversationName(activeConversation),
               avatar: getConversationAvatar(activeConversation),
               targetUserId: getOtherParticipant(activeConversation)?._id || getOtherParticipant(activeConversation)?.id,
-              isOnline: true,
+              isOnline: (() => {
+                const other = getOtherParticipant(activeConversation);
+                return other && typeof other === 'object' ? !!other.isOnline : false;
+              })(),
+              lastSeen: (() => {
+                const other = getOtherParticipant(activeConversation);
+                return other && typeof other === 'object' ? other.lastSeen : null;
+              })(),
               isStranger: (() => { const o = getOtherParticipant(activeConversation); const id = o && typeof o === 'object' ? String(o._id || o.id) : null; return id ? !friendIds.has(id) : false; })(),
               strangerId: getOtherParticipant(activeConversation)?._id || getOtherParticipant(activeConversation)?.id,
             }}
