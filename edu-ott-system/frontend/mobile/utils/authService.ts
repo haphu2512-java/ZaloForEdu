@@ -197,7 +197,7 @@ export async function updateProfile(userId: string, payload: UpdateProfilePayloa
     method: 'PUT',
     body: JSON.stringify(payload),
   });
-  const user = res.data;
+  const user = res.data?.user || res.data;
   if (user) {
     await storeUserInfo(user);
   }

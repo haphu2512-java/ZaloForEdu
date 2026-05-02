@@ -5,6 +5,7 @@ import { Camera, Save, Mail, Phone, Sparkles, User, Image as ImageIcon, Lock, Be
 import { useLanguage } from '../../contexts/LanguageContext';
 import { userService } from '../../services/userService'; 
 import { authService } from '../../services/authService'; 
+import { useAuthStore } from '../../store/authStore';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 
@@ -171,6 +172,11 @@ export default function ProfilePage() {
           phone: updatedUser.phone || prev.phone,
           email: updatedUser.email !== undefined ? updatedUser.email : prev.email
         }));
+        
+        // Cập nhật global state và localStorage để đồng bộ avatar/tên trên toàn ứng dụng web
+        localStorage.setItem("user", JSON.stringify(updatedUser));
+        useAuthStore.setState({ user: updatedUser });
+
         setVerifiedContacts({
           email: updatedUser.isEmailVerified !== false,
           phone: updatedUser.isPhoneVerified !== false,
