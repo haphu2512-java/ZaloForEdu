@@ -1,4 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
+
+const API_ORIGIN_FOR_AVATAR = (import.meta.env.VITE_API_URL || 'http://localhost:5000/api/v1').replace(/\/api\/v1\/?$/, '');
+const toAbsoluteAvatarUrl = (url) => {
+  if (!url) return url;
+  if (/^https?:\/\//i.test(url)) return url;
+  return `${API_ORIGIN_FOR_AVATAR}${url.startsWith('/') ? '' : '/'}${url}`;
+};
 import { Camera, Save, Mail, Phone, Sparkles, User, Image as ImageIcon, Lock, Bell, Shield, Info, Edit3, Eye, EyeOff, Users, Circle, Trash2, AlertTriangle, X, CheckCircle, ShieldAlert, LogOut } from 'lucide-react';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { userService } from '../../services/userService'; 
@@ -128,7 +135,8 @@ export default function ProfilePage() {
       if (avatarFile) {
         try {
           const uploadRes = await userService.uploadAvatar(avatarFile);
-          finalAvatarUrl = uploadRes.url || profile.avatarUrl;
+          // Convert relative URL → absolute (upload-form trả về /uploads/...)
+          finalAvatarUrl = toAbsoluteAvatarUrl(uploadRes.url) || profile.avatarUrl;
         } catch (err) {
           console.error("Lỗi upload ảnh:", err);
           alert("Tải ảnh lên thất bại. Hệ thống hủy cập nhật để tránh lỗi dữ liệu!");
@@ -150,11 +158,8 @@ export default function ProfilePage() {
       } else {
         updateData.email = null;
       }
-      if (finalAvatarUrl && finalAvatarUrl.startsWith('http')) {
-        updateData.avatarUrl = finalAvatarUrl;
-      } else {
-        updateData.avatarUrl = null;
-      }
+      // Lưu avatarUrl nếu có (bất kể relative hay absolute — đã convert ở trên)
+      updateData.avatarUrl = finalAvatarUrl || null;
 
       const response = await userService.updateProfile(userId, updateData);
       

@@ -1,16 +1,18 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { FaSpinner, FaPaperPlane, FaThumbsUp, FaSmile, FaMicrophone, FaPoll } from 'react-icons/fa';
 import { VoiceRecorder } from '../../components/shared/VoiceRecorder';
+import { StickerSuggest } from './StickerSuggest';
 
-export const MessageInput = ({ 
-  theme, 
-  placeholder, 
-  onSend, 
-  onSendLike, 
-  onUploadFiles, 
-  onShowPoll, 
-  members = [], 
-  replyTo = null, 
+export const MessageInput = ({
+  theme,
+  placeholder,
+  onSend,
+  onSendSticker,
+  onSendLike,
+  onUploadFiles,
+  onShowPoll,
+  members = [],
+  replyTo = null,
   onCancelReply,
   isGroup = false
 }) => {
@@ -20,6 +22,10 @@ export const MessageInput = ({
   const [showRecorder, setShowRecorder] = useState(false);
   const [mentionQuery, setMentionQuery] = useState(null); // 'all' or partial name
   const [mentionIndex, setMentionIndex] = useState(0);
+  // Sticker suggest state
+  const [stickerQuery, setStickerQuery] = useState('');   // query đang search
+  const [showSticker, setShowSticker] = useState(false);  // đang hiện panel
+  const stickerTimerRef = useRef(null);
   const inputRef = useRef(null);
 
   const imageRef = useRef(null);
@@ -51,6 +57,19 @@ export const MessageInput = ({
       setMentionIndex(0);
     } else {
       setMentionQuery(null);
+    }
+
+    // Sticker suggest: debounce 400ms, trigger khi gõ ≥ 2 ký tự
+    clearTimeout(stickerTimerRef.current);
+    const trimmed = val.trim();
+    if (trimmed.length >= 2) {
+      stickerTimerRef.current = setTimeout(() => {
+        setStickerQuery(trimmed);
+        setShowSticker(true);
+      }, 400);
+    } else {
+      setShowSticker(false);
+      setStickerQuery('');
     }
   };
 
@@ -97,6 +116,15 @@ export const MessageInput = ({
     }
   };
 
+  // Xử lý chọn sticker từ panel Tenor
+  const handleSelectSticker = useCallback((sticker) => {
+    setShowSticker(false);
+    setStickerQuery('');
+    if (onSendSticker) {
+      onSendSticker(sticker);
+    }
+  }, [onSendSticker]);
+
   const handleSend = async (e) => {
     if (e) e.preventDefault();
     if (!text.trim() || isSending) return;
@@ -104,6 +132,8 @@ export const MessageInput = ({
     setText('');
     if (inputRef.current) inputRef.current.value = '';
     setShowEmoji(false);
+    setShowSticker(false);
+    setStickerQuery('');
     setIsSending(true);
     setMentionQuery(null);
     try {
@@ -154,6 +184,15 @@ export const MessageInput = ({
             ✕
           </button>
         </div>
+      )}
+
+      {/* Sticker Suggest (Tenor GIF) */}
+      {showSticker && (
+        <StickerSuggest
+          query={stickerQuery}
+          onSelect={handleSelectSticker}
+          onClose={() => setShowSticker(false)}
+        />
       )}
 
       {/* Mention Suggestions */}
@@ -227,8 +266,8 @@ export const MessageInput = ({
       {/* Voice Recorder hoặc Text Input */}
       {showRecorder ? (
         <div className="mdc-input-row" style={{ height: 60 }}>
-          <VoiceRecorder 
-            onCancel={() => setShowRecorder(false)} 
+          <VoiceRecorder
+            onCancel={() => setShowRecorder(false)}
             onSend={(blob, duration) => {
               // Universal extension mapping dựa trên mimeType
               let extension = '.webm';
