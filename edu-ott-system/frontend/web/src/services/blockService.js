@@ -1,12 +1,13 @@
 import api from "./authService";
 
+// Backend route: POST /users/block/:id  (body: { action: 'block' | 'unblock' })
 export const blockService = {
-  getBlockedUsers: (page = 1, limit = 20) =>
-    api.get("/users/blocked", { params: { page, limit } }),
+  getBlockedUsers: () =>
+    api.get("/users/me/blocked"),
 
   blockUser: (targetId) =>
-    api.put(`/users/${targetId}/block`, { action: "block" }),
+    api.post(`/users/block/${targetId}`, { action: "block" }),
 
   unblockUser: (targetId) =>
-    api.put(`/users/${targetId}/block`, { action: "unblock" }),
+    api.post(`/users/block/${targetId}`, { action: "unblock" }),
 };

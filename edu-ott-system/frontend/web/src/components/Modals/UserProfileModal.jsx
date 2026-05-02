@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import {
   FaTimes, FaCommentDots, FaPhoneAlt, FaVideo,
   FaUserPlus, FaUserMinus, FaBan, FaFlag, FaShareAlt,
@@ -6,6 +6,7 @@ import {
 } from "react-icons/fa";
 import { friendService } from "../../services/friendService";
 import { useFriendStore } from "../../store/friendStore";
+import { blockService } from "../../services/blockService";
 import api from "../../services/authService";
 import { useNavigate } from "react-router-dom";
 import "./UserProfileModal.css";
@@ -14,7 +15,13 @@ const DEFAULT_AVATAR = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/
 
 export default function UserProfileModal({ isOpen, onClose, user, status: initialStatus, onStatusChange, onChatOpened }) {
   const navigate = useNavigate();
-  const { unfriend, blockFriend } = useFriendStore();
+  const { 
+    unfriend, 
+    blockedUsers, 
+    blockFriend: blockFriendStore, 
+    unblockUser: unblockUserStore, 
+    fetchBlockedUsers 
+  } = useFriendStore();
 
   const [status, setStatus] = useState(initialStatus || "none");
   const [actionLoading, setActionLoading] = useState(null);
@@ -22,8 +29,13 @@ export default function UserProfileModal({ isOpen, onClose, user, status: initia
   const [outgoingReqId, setOutgoingReqId] = useState(null);
   const [incomingReqId, setIncomingReqId] = useState(null);
 
-  // Ref theo dõi user đã thực hiện action chưa
-  // → ngăn checkRelationship ghi đè status sau khi user đã click
+  const isBlockedByMe = useMemo(() => {
+    if (!user) return false;
+    const uid = String(user._id || user.id);
+    return blockedUsers.some(u => String(u._id || u.id || '') === uid);
+  }, [user, blockedUsers]);
+
+  // Ref để tránh checkRelationship ghi đè status sau khi user đã click
   const actionTakenRef = useRef(false);
 
   useEffect(() => {
@@ -46,7 +58,12 @@ export default function UserProfileModal({ isOpen, onClose, user, status: initia
         ]);
         if (cancelled) return;
 
-        // Merge store additively (không replace toàn bộ để tránh overwrite optimistic)
+        // Check blocked - uses global list
+        if (blockedUsers.length === 0) {
+          await fetchBlockedUsers();
+        }
+
+        // Merge store additively
         const { friends: curFriends, outgoingRequests: curOut, incomingRequests: curIn } = useFriendStore.getState();
 
         const serverFriendIds = new Set((friendData?.items || []).map(f => String(f._id || f.id)));
@@ -71,13 +88,11 @@ export default function UserProfileModal({ isOpen, onClose, user, status: initia
 
         useFriendStore.setState({ friends: mergedFriends, outgoingRequests: mergedOut, incomingRequests: mergedIn });
 
-        // ⚠️ Nếu user đã thực hiện action (gửi/hủy/chấp nhận) thì KHÔNG ghi đè status
         if (actionTakenRef.current) return;
 
         const isFriend = (friendData?.items || []).some(f => String(f._id || f.id) === uid);
         if (isFriend) { setStatus("friend"); return; }
 
-        // Tìm trong kết quả từ server VÀ current store (đã merge)
         const outReq = mergedOut.find(r => String(r.toUserId?._id || r.toUserId || "") === uid);
         if (outReq) { setStatus("outgoing"); setOutgoingReqId(String(outReq._id)); return; }
 
@@ -113,25 +128,21 @@ export default function UserProfileModal({ isOpen, onClose, user, status: initia
 
   const handleSendRequest = async () => {
     setActionLoading("add");
-    actionTakenRef.current = true; // mark TRƯỚC khi async để tránh race
+    actionTakenRef.current = true;
     try {
       const res = await friendService.sendFriendRequest(uid);
       setStatus("outgoing");
-
       const reqId = res?._id || String(Date.now());
       setOutgoingReqId(reqId);
-
-      // Optimistic update store → ChatHeader & ChatPage banner phản ánh ngay
       useFriendStore.setState(prev => ({
         outgoingRequests: [
           ...prev.outgoingRequests.filter(r => String(r.toUserId?._id || r.toUserId || "") !== uid),
           { _id: reqId, toUserId: { _id: uid } },
         ],
       }));
-
       onStatusChange?.("outgoing");
     } catch (e) {
-      actionTakenRef.current = false; // thất bại → cho phép checkRelationship tiếp tục
+      actionTakenRef.current = false;
       const code = e?.response?.data?.error?.code;
       if (code === "ALREADY_FRIENDS") { setStatus("friend"); onStatusChange?.("friend"); }
       else if (code === "REVERSE_REQUEST_EXISTS") { setStatus("incoming"); onStatusChange?.("incoming"); }
@@ -201,15 +212,32 @@ export default function UserProfileModal({ isOpen, onClose, user, status: initia
     } finally { setActionLoading(null); }
   };
 
+  // ── Block / Unblock ──────────────────────────────────────────
   const handleBlock = async () => {
     if (!window.confirm(`Chặn ${user.username}? Người này sẽ không thể liên lạc với bạn.`)) return;
     setActionLoading("block");
     actionTakenRef.current = true;
     try {
-      await blockFriend(uid);
-      onClose();
+      const res = await blockFriendStore(uid);
+      if (res.success) {
+        setStatus("none");
+      } else {
+        alert(res.error || "Chặn người dùng thất bại");
+      }
     } catch {
       actionTakenRef.current = false;
+    } finally { setActionLoading(null); }
+  };
+
+  const handleUnblock = async () => {
+    setActionLoading("unblock");
+    try {
+      const res = await unblockUserStore(uid);
+      if (!res.success) {
+        alert(res.error || "Không thể bỏ chặn. Thử lại sau.");
+      }
+    } catch {
+      alert("Không thể bỏ chặn. Thử lại sau.");
     } finally { setActionLoading(null); }
   };
 
@@ -350,11 +378,39 @@ export default function UserProfileModal({ isOpen, onClose, user, status: initia
                 <FaChevronRight size={12} className="upm-list-chevron" />
               </button>
             )}
-            <button className="upm-list-item" onClick={handleBlock} disabled={actionLoading === "block"}>
-              <FaBan size={15} className="upm-list-icon" />
-              <span>Chặn tin nhắn và cuộc gọi</span>
-              <FaChevronRight size={12} className="upm-list-chevron" />
-            </button>
+
+            {/* Chặn / Bỏ chặn — tự động phát hiện trạng thái */}
+            {isBlockedByMe ? (
+              <button
+                className="upm-list-item"
+                onClick={handleUnblock}
+                disabled={actionLoading === "unblock"}
+                style={{ color: "#ef4444" }}
+              >
+                <FaBan size={15} className="upm-list-icon" style={{ color: "#ef4444" }} />
+                <span style={{ flex: 1, color: "#ef4444", fontWeight: 600 }}>
+                  Bỏ chặn {user.username}
+                </span>
+                {actionLoading === "unblock"
+                  ? <FaSpinner className="spin" size={12} />
+                  : <FaChevronRight size={12} className="upm-list-chevron" />
+                }
+              </button>
+            ) : (
+              <button
+                className="upm-list-item"
+                onClick={handleBlock}
+                disabled={actionLoading === "block"}
+              >
+                <FaBan size={15} className="upm-list-icon" />
+                <span>Chặn tin nhắn và cuộc gọi</span>
+                {actionLoading === "block"
+                  ? <FaSpinner className="spin" size={12} />
+                  : <FaChevronRight size={12} className="upm-list-chevron" />
+                }
+              </button>
+            )}
+
             <button className="upm-list-item">
               <FaFlag size={15} className="upm-list-icon" />
               <span>Báo xấu</span>

@@ -194,6 +194,8 @@ export default function ChatPage() {
   const [pendingEditReminder, setPendingEditReminder] = useState(null);
   const [showReminderListPage, setShowReminderListPage] = useState(false);
   const [showSearchInConv, setShowSearchInConv] = useState(false);
+  const [unblockLoading, setUnblockLoading] = useState(false);
+  const { blockedUsers, unblockUser: unblockUserStore, fetchBlockedUsers } = useFriendStore();
 
   const pageRef = useRef(null);
   const messagesEndRef = useRef(null);
@@ -220,7 +222,12 @@ export default function ChatPage() {
   useEffect(() => {
     if (hasFetchedRef.current) return;
     hasFetchedRef.current = true;
-    setTimeout(() => { fetchFriends(); fetchOutgoingRequests(1, true); fetchIncomingRequests(); }, 100);
+    setTimeout(() => { 
+      fetchFriends(); 
+      fetchOutgoingRequests(1, true); 
+      fetchIncomingRequests(); 
+      fetchBlockedUsers(); // Tải danh sách chặn
+    }, 100);
   }, []);
 
   const friendIds = useMemo(() => new Set(friends.map(f => String(f._id || f.id))), [friends]);
@@ -245,6 +252,15 @@ export default function ChatPage() {
     if (other && typeof other === 'object') return other.username || other.fullName || other.name || 'Người dùng';
     return null;
   }, [getOtherParticipant]);
+
+  // Memoize isBlockedByMe based on store and active conversation
+  const isBlockedByMe = useMemo(() => {
+    if (!activeConversation || activeConversation.type === "group") return false;
+    const other = getOtherParticipant(activeConversation);
+    if (!other) return false;
+    const otherId = String(other._id || other.id || "");
+    return blockedUsers.some(u => String(u._id || u.id || "") === otherId);
+  }, [activeConversation, blockedUsers, getOtherParticipant]);
 
   const getConversationAvatar = useCallback((conv) => {
     if (!conv) return DEFAULT_AVATAR;
@@ -450,6 +466,7 @@ export default function ChatPage() {
       .then(res => setPinnedMessages(res.data?.items || res.data || []))
       .catch(() => setPinnedMessages([]));
     socketService.socket?.emit("join_conversation", { conversationId: activeConversation._id });
+
   }, [activeConversation?._id, token]);
 
   useEffect(() => {
@@ -746,6 +763,82 @@ export default function ChatPage() {
                 <span>Chỉ trưởng/phó cộng đồng được gửi tin nhắn.</span>
               </div>
             );
+
+            // ── Block banner (thay input khi đã chặn người này) ─────────────
+            if (!isGroupConv && isBlockedByMe) {
+              const otherPBlocked = getOtherParticipant(activeConversation);
+              const otherNameBlocked = otherPBlocked && typeof otherPBlocked === 'object'
+                ? (otherPBlocked.username || otherPBlocked.fullName || 'người này')
+                : 'người này';
+              return (
+                <div style={{
+                  padding: '16px 20px',
+                  background: 'var(--z-bg-sidebar)',
+                  borderTop: '1px solid var(--z-border)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 14,
+                }}>
+                  {/* Shield icon */}
+                  <div style={{
+                    width: 40, height: 40, borderRadius: '50%',
+                    background: 'rgba(239,68,68,0.1)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    flexShrink: 0,
+                  }}>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <circle cx="12" cy="12" r="10" />
+                      <line x1="4.93" y1="4.93" x2="19.07" y2="19.07" />
+                    </svg>
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--z-text-primary)', marginBottom: 2 }}>
+                      Bạn đã chặn <span style={{ color: '#ef4444' }}>{otherNameBlocked}</span>
+                    </div>
+                    <div style={{ fontSize: 12, color: 'var(--z-text-secondary)', lineHeight: 1.4 }}>
+                      Bỏ chặn để có thể gửi và nhận tin nhắn.
+                    </div>
+                  </div>
+                  <button
+                    disabled={unblockLoading}
+                    onClick={async () => {
+                      if (!otherPBlocked) return;
+                      const tid = String(otherPBlocked._id || otherPBlocked.id || '');
+                      if (!tid) return;
+                      setUnblockLoading(true);
+                      try {
+                        const res = await unblockUserStore(tid);
+                        if (res.success) {
+                          toast.success(`Đã bỏ chặn ${otherNameBlocked}`);
+                        } else {
+                          toast.error(res.error || 'Bỏ chặn thất bại');
+                        }
+                      } catch {
+                        toast.error('Không thể bỏ chặn. Thử lại sau.');
+                      } finally {
+                        setUnblockLoading(false);
+                      }
+                    }}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 6,
+                      padding: '8px 18px', borderRadius: 20,
+                      border: '1.5px solid #ef4444',
+                      background: unblockLoading ? 'rgba(239,68,68,0.07)' : 'transparent',
+                      color: '#ef4444', cursor: unblockLoading ? 'not-allowed' : 'pointer',
+                      fontWeight: 700, fontSize: 13, flexShrink: 0,
+                      transition: 'background 0.15s',
+                    }}
+                  >
+                    {unblockLoading
+                      ? <FaSpinner className="spin" size={13} />
+                      : <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8h1a4 4 0 0 1 0 8h-1" /><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z" /><line x1="6" y1="1" x2="6" y2="4" /><line x1="10" y1="1" x2="10" y2="4" /><line x1="14" y1="1" x2="14" y2="4" /></svg>
+                    }
+                    {unblockLoading ? 'Đang xử lý...' : 'Bỏ chặn'}
+                  </button>
+                </div>
+              );
+            }
+
             const otherP = !isGroupConv ? getOtherParticipant(activeConversation) : null;
             const otherIdP = otherP ? typeof otherP === 'object' ? String(otherP._id || otherP.id || '') : String(otherP) : null;
             const isStrangerChat = !!otherIdP && !friendIds.has(otherIdP);
