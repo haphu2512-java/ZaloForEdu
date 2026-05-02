@@ -31,3 +31,11 @@ export async function getBlockedUsers(): Promise<User[]> {
   const res = await fetchAPI(`${USERS_ENDPOINT}/me/blocked`);
   return res.data?.blockedUsers || [];
 }
+
+export async function reportUser(userId: string, reason: string): Promise<any> {
+  const res = await fetchAPI(`${USERS_ENDPOINT}/report/${userId}`, {
+    method: 'POST',
+    body: JSON.stringify({ reason }),
+  });
+  return res.data;
+}
