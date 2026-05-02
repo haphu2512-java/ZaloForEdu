@@ -32,7 +32,7 @@ const updateGroupAvatarSchema = z.object({
 });
 
 const updateNicknameSchema = z.object({
-  nickname: z.string().trim().min(1).max(60),
+  nickname: z.string().trim().max(60),
 });
 
 const pinMessageSchema = z.object({

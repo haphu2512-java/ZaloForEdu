@@ -214,14 +214,21 @@ export const ChatRightPanel = ({
   const handleSaveNickname = async (memberId) => {
     const keyStr = String(memberId);
     const current = activeConversation.nicknames?.[keyStr] || '';
-    if (nicknameDraft.trim() === current) { setEditingNicknameId(null); return; }
+    const draft = nicknameDraft.trim();
+    if (draft === current) { setEditingNicknameId(null); return; }
     try {
-      await conversationService.updateNickname(activeConversation._id, memberId, nicknameDraft.trim());
-      setActiveConversation(prev => ({
-        ...prev,
-        nicknames: { ...prev.nicknames, [keyStr]: nicknameDraft.trim() }
-      }));
-      toast.success('Đã cập nhật biệt danh');
+      await conversationService.updateNickname(activeConversation._id, memberId, draft);
+      setActiveConversation(prev => {
+        const next = { ...prev, nicknames: { ...prev.nicknames } };
+        if (draft === '') {
+          delete next.nicknames[keyStr];
+        } else {
+          next.nicknames[keyStr] = draft;
+        }
+        return next;
+      });
+      fetchConversations?.();
+      toast.success(draft === '' ? 'Đã xóa biệt danh' : 'Đã cập nhật biệt danh');
     } catch {
       toast.error('Cập nhật biệt danh thất bại');
     } finally {
