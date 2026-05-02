@@ -4,6 +4,7 @@ import { FaPhone, FaVideo, FaEllipsisV, FaUsers, FaFileAlt, FaSearch } from 'rea
 import { useAuthStore } from '../../store/authStore';
 import { socketService } from '../../services/socketService';
 import { useTheme } from '../../contexts/ThemeContext';
+import { toAbsoluteUrl } from './chatUtils';
 
 export const ChatHeader = ({ room, onCall, onVideo, onInfo, onSearchInConv }) => {
   const navigate = useNavigate();
@@ -159,7 +160,7 @@ export const ChatHeader = ({ room, onCall, onVideo, onInfo, onSearchInConv }) =>
             style={{ background: room.color || '#1b6ef3' }}
           >
             {room.avatar ? (
-              <img src={room.avatar} alt="avatar" className="w-full h-full object-cover" />
+              <img src={toAbsoluteUrl(room.avatar)} alt="avatar" className="w-full h-full object-cover" />
             ) : (
               (room.name?.[0] || '?').toUpperCase()
             )}

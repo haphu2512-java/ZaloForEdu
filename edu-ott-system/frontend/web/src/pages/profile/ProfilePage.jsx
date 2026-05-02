@@ -8,6 +8,7 @@ import { authService } from '../../services/authService';
 import { useAuthStore } from '../../store/authStore';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import { toAbsoluteUrl } from '../chat/chatUtils';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api/v1';
 
@@ -85,7 +86,7 @@ export default function ProfilePage() {
             username: userData.username || userData.fullName || '', 
             email: userData.email || '',
             phone: userData.phone || userData.phoneNumber || '',
-            avatarUrl: userData.avatarUrl || userData.avatar || 'https://i.pravatar.cc/150?img=11',
+            avatarUrl: toAbsoluteUrl(userData.avatarUrl || userData.avatar) || 'https://i.pravatar.cc/150?img=11',
             createdAt: joinDate,
             friends: userData.friends || [],
             isOnline: true

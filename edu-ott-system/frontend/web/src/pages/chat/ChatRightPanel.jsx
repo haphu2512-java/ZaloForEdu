@@ -4,6 +4,7 @@ import toast from 'react-hot-toast';
 import { conversationService } from '../../services/conversationService';
 import { pollService } from '../../services/pollService';
 import { uploadFile } from '../../services/mediaService';
+import { userService } from '../../services/userService';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { getFileColor, getExt, formatBytes, toAbsoluteUrl } from './chatUtils';
 import PinnedMessagesPanel from './Modals/PinnedMessagesPanel';
@@ -196,8 +197,8 @@ export const ChatRightPanel = ({
     if (!file || !isGroup || !canEditGroupInfo) return;
     try {
       setIsUploadingAvatar(true);
-      const media = await uploadFile(file);
-      const newAvatarUrl = toAbsoluteUrl(media.url);
+      const uploadRes = await userService.uploadAvatar(file);
+      const newAvatarUrl = toAbsoluteUrl(uploadRes.url);
       await conversationService.updateGroupAvatar(activeConversation._id, newAvatarUrl);
       setActiveConversation(prev => ({ ...prev, avatarUrl: newAvatarUrl }));
       fetchConversations?.();
@@ -910,7 +911,7 @@ export const ChatRightPanel = ({
                 const user = req.userId || {};
                 return (
                   <div key={req._id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: '1px solid var(--z-border)' }}>
-                    <img src={user.avatarUrl || 'https://i.pravatar.cc/150'} style={{ width: 44, height: 44, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} alt="" />
+                    <img src={toAbsoluteUrl(user.avatarUrl || user.avatar) || 'https://i.pravatar.cc/150'} style={{ width: 44, height: 44, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} alt="" />
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--z-text-primary)' }}>{user.username || 'Người dùng'}</div>
                       {req.reason && <div style={{ fontSize: 12, color: 'var(--z-text-secondary)', marginTop: 2 }}>"{req.reason}"</div>}
@@ -951,7 +952,7 @@ export const ChatRightPanel = ({
                 const isAlreadyBlocked = blockedMembers.some(b => String(b._id || b) === pid);
                 return (
                   <div key={pid} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 0' }}>
-                    <img src={p.avatarUrl || 'https://i.pravatar.cc/150'} style={{ width: 36, height: 36, borderRadius: '50%', objectFit: 'cover' }} alt="" />
+                    <img src={toAbsoluteUrl(p.avatarUrl || p.avatar) || 'https://i.pravatar.cc/150'} style={{ width: 36, height: 36, borderRadius: '50%', objectFit: 'cover' }} alt="" />
                     <div style={{ flex: 1, fontSize: 13, fontWeight: 500 }}>{p.username || 'Thành viên'}</div>
                     {!isAlreadyBlocked && (
                       <button onClick={async () => {
@@ -993,7 +994,7 @@ export const ChatRightPanel = ({
 
                 return (
                   <div key={uid} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 0', borderBottom: '1px solid var(--z-border)' }}>
-                    <img src={u.avatarUrl || 'https://i.pravatar.cc/150'} style={{ width: 40, height: 40, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} alt="" />
+                    <img src={toAbsoluteUrl(u.avatarUrl || u.avatar) || 'https://i.pravatar.cc/150'} style={{ width: 40, height: 40, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} alt="" />
                     <div style={{ flex: 1, fontSize: 14, fontWeight: 500, color: 'var(--z-text-primary)' }}>{name}</div>
                     <button onClick={handleUnblock} style={{ padding: '5px 14px', borderRadius: 8, border: 'none', background: 'var(--z-bg-main)', color: 'var(--z-primary)', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
                       Bỏ chặn

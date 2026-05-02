@@ -98,7 +98,7 @@ export interface Message {
   conversationId: string | { _id: string };
   senderId: SenderInfo | string;
   /** Legacy sender field for older UI components */
-  sender?: SenderInfo | { id?: string; _id?: string; username?: string; fullName?: string; avatar?: string };
+  sender?: SenderInfo | { id?: string; _id?: string; username?: string; fullName?: string; avatar?: string; avatarUrl?: string | null };
   content: string;
   mediaIds: string[];
   /** Legacy attachment field for older UI components */

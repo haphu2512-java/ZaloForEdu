@@ -26,7 +26,7 @@ import { ReminderListPage } from "./ReminderListPage";
 import MyDocumentsPage from "../cloud/MyDocumentsPage";
 import { useTheme } from '../../contexts/ThemeContext';
 import { useLanguage } from '../../contexts/LanguageContext';
-import { getCategory } from './chatUtils';
+import { getCategory, toAbsoluteUrl } from './chatUtils';
 import "./ChatPage.css";
 import { conversationService } from "../../services/conversationService";
 import ConversationContextMenu from "./Modals/ConversationContextMenu";
@@ -138,7 +138,7 @@ function ReminderDetailModal({ reminderId, reminders, userId, onClose, onEdit, o
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
               {(rem.participants || []).map((p, i) => (
                 <div key={String(p._id || p.id || i)} title={p.username || ''} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
-                  <img src={p.avatarUrl || DEFAULT_AVATAR} onError={e => { e.currentTarget.src = DEFAULT_AVATAR }} style={{ width: 36, height: 36, borderRadius: '50%', objectFit: 'cover' }} alt="" />
+                  <img src={toAbsoluteUrl(p.avatarUrl || p.avatar) || DEFAULT_AVATAR} onError={e => { e.currentTarget.src = DEFAULT_AVATAR }} style={{ width: 36, height: 36, borderRadius: '50%', objectFit: 'cover' }} alt="" />
                   <span style={{ fontSize: 10, color: 'var(--z-text-muted)', maxWidth: 44, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.username}</span>
                 </div>
               ))}
@@ -249,9 +249,9 @@ export default function ChatPage() {
   const getConversationAvatar = useCallback((conv) => {
     if (!conv) return DEFAULT_AVATAR;
     if (conv.type === 'direct' && conv.participants?.length === 1) return CLOUD_AVATAR;
-    if (conv.type === 'group' || conv.roomModel === 'Group') return conv.avatarUrl || conv.avatar || DEFAULT_AVATAR;
+    if (conv.type === 'group' || conv.roomModel === 'Group') return toAbsoluteUrl(conv.avatarUrl || conv.avatar) || DEFAULT_AVATAR;
     const other = getOtherParticipant(conv);
-    if (other && typeof other === 'object') return other.avatarUrl || other.avatar || DEFAULT_AVATAR;
+    if (other && typeof other === 'object') return toAbsoluteUrl(other.avatarUrl || other.avatar) || DEFAULT_AVATAR;
     return DEFAULT_AVATAR;
   }, [getOtherParticipant]);
 

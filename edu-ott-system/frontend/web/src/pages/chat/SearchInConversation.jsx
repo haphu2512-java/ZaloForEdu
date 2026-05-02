@@ -2,6 +2,7 @@ import React, { useState, useCallback, useRef } from 'react';
 import { FaSearch, FaTimes, FaChevronDown, FaChevronUp } from 'react-icons/fa';
 import { conversationService } from '../../services/conversationService';
 import { useTheme } from '../../contexts/ThemeContext';
+import { toAbsoluteUrl } from './chatUtils';
 
 function useDebounce(fn, delay) {
   const timer = useRef(null);
@@ -217,7 +218,7 @@ export const SearchInConversation = ({ conversationId, onJumpToMessage, onClose 
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
                 <img
                   src={
-                    msg.senderId?.avatarUrl ||
+                    toAbsoluteUrl(msg.senderId?.avatarUrl) ||
                     `https://ui-avatars.com/api/?name=${encodeURIComponent(msg.senderId?.username || '?')}&background=0068FF&color=fff&size=32`
                   }
                   alt=""
