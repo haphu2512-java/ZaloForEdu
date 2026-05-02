@@ -73,7 +73,7 @@ export const API_BASE_URL = getApiBaseUrl();
 
 export const fetchAPI = async (endpoint: string, options: RequestInit = {}): Promise<any> => {
   const controller = new AbortController();
-  const id = setTimeout(() => controller.abort(), 15000);
+  const id = setTimeout(() => controller.abort(), 60000); // Increased timeout to 60s for media uploads
 
   try {
     let url = `${API_BASE_URL}${endpoint}`;

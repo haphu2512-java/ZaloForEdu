@@ -11,12 +11,12 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
+  Keyboard,
 } from 'react-native';
 import { useRouter, Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useHeaderHeight } from '@react-navigation/elements';
 
 import Colors from '@/constants/Colors';
 import { useColorScheme } from '@/components/useColorScheme';
@@ -31,18 +31,85 @@ const PRIVACY_LABELS: Record<Privacy, { label: string; icon: string }> = {
   private: { label: 'Chỉ mình tôi', icon: 'lock-closed' },
 };
 
+// --- Dynamic Media Grid Component ---
+const MediaGrid = ({ images, onRemove }: { images: string[]; onRemove: (idx: number) => void }) => {
+  if (images.length === 0) return null;
+
+  const renderImage = (uri: string, idx: number, style: any) => (
+    <View key={idx} style={[style, { position: 'relative', overflow: 'hidden' }]}>
+      <Image source={{ uri }} style={{ width: '100%', height: '100%' }} />
+      <TouchableOpacity 
+        style={styles.removeImgBtn}
+        onPress={() => onRemove(idx)}
+        activeOpacity={0.7}
+      >
+        <Ionicons name="close" size={18} color="#fff" />
+      </TouchableOpacity>
+    </View>
+  );
+
+  if (images.length === 1) {
+    return renderImage(images[0], 0, { width: '100%', aspectRatio: 4 / 3, borderRadius: 12 });
+  }
+  if (images.length === 2) {
+    return (
+      <View style={{ flexDirection: 'row', gap: 4, height: 250, borderRadius: 12, overflow: 'hidden' }}>
+        {renderImage(images[0], 0, { flex: 1, height: '100%' })}
+        {renderImage(images[1], 1, { flex: 1, height: '100%' })}
+      </View>
+    );
+  }
+  if (images.length === 3) {
+    return (
+      <View style={{ gap: 4, borderRadius: 12, overflow: 'hidden' }}>
+        {renderImage(images[0], 0, { width: '100%', height: 200 })}
+        <View style={{ flexDirection: 'row', gap: 4, height: 140 }}>
+          {renderImage(images[1], 1, { flex: 1, height: '100%' })}
+          {renderImage(images[2], 2, { flex: 1, height: '100%' })}
+        </View>
+      </View>
+    );
+  }
+  return (
+    <View style={{ gap: 4, borderRadius: 12, overflow: 'hidden' }}>
+      {renderImage(images[0], 0, { width: '100%', height: 200 })}
+      <View style={{ flexDirection: 'row', gap: 4, height: 120 }}>
+        {renderImage(images[1], 1, { flex: 1, height: '100%' })}
+        {renderImage(images[2], 2, { flex: 1, height: '100%' })}
+        <View style={{ flex: 1, height: '100%', position: 'relative' }}>
+          {renderImage(images[3], 3, { width: '100%', height: '100%' })}
+          {images.length > 4 && (
+            <View style={{ ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' }} pointerEvents="none">
+              <Text style={{ color: '#fff', fontSize: 24, fontWeight: '700' }}>+{images.length - 4}</Text>
+            </View>
+          )}
+        </View>
+      </View>
+    </View>
+  );
+};
+
 export default function CreatePostScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const colors = Colors[colorScheme === 'dark' ? 'dark' : 'light'];
   const { user } = useAuth();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const headerHeight = useHeaderHeight();
 
   const [content, setContent] = useState('');
   const [images, setImages] = useState<string[]>([]);
   const [privacy, setPrivacy] = useState<Privacy>('public');
   const [posting, setPosting] = useState(false);
+  const [isKeyboardVisible, setKeyboardVisible] = useState(false);
+
+  React.useEffect(() => {
+    const keyboardDidShowListener = Keyboard.addListener('keyboardDidShow', () => setKeyboardVisible(true));
+    const keyboardDidHideListener = Keyboard.addListener('keyboardDidHide', () => setKeyboardVisible(false));
+    return () => {
+      keyboardDidHideListener.remove();
+      keyboardDidShowListener.remove();
+    };
+  }, []);
 
   const username = user?.username || 'Bạn';
   const avatarUrl = user?.avatarUrl
@@ -57,7 +124,7 @@ export default function CreatePostScreen() {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsMultipleSelection: true,
-      quality: 0.85,
+      quality: 0.8,
       selectionLimit: 10,
     });
     if (!result.canceled && result.assets?.length) {
@@ -98,53 +165,57 @@ export default function CreatePostScreen() {
   };
 
   const canPost = content.trim().length > 0 || images.length > 0;
+  // Dynamic font size for a more immersive feel
+  const inputFontSize = content.length < 80 ? 24 : 18;
 
   return (
     <KeyboardAvoidingView
-      style={[s.container, { backgroundColor: colors.background }]}
+      style={[styles.container, { backgroundColor: colors.background }]}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
     >
       <Stack.Screen options={{ headerShown: false }} />
 
-      <View style={[s.customHeader, { backgroundColor: colors.surface, paddingTop: insets.top }]}>
-        <View style={s.headerContent}>
-          <TouchableOpacity style={s.headerBtn} onPress={() => router.back()}>
+      {/* --- HEADER --- */}
+      <View style={[styles.header, { backgroundColor: colors.surface, paddingTop: insets.top }]}>
+        <View style={styles.headerContent}>
+          <TouchableOpacity style={styles.headerBtn} onPress={() => router.back()}>
             <Ionicons name="close" size={28} color={colors.text} />
           </TouchableOpacity>
-          <Text style={[s.headerTitle, { color: colors.text }]}>Tạo bài viết</Text>
+          <Text style={[styles.headerTitle, { color: colors.text }]}>Tạo bài viết</Text>
           <TouchableOpacity
-            style={[s.postBtn, { backgroundColor: canPost ? '#1D67FF' : colors.border, opacity: posting ? 0.7 : 1 }]}
+            style={[styles.postBtn, { backgroundColor: canPost ? '#0068FF' : colors.border, opacity: posting ? 0.7 : 1 }]}
             onPress={handlePost}
             disabled={!canPost || posting}
           >
             {posting ? (
               <ActivityIndicator size="small" color="#fff" />
             ) : (
-              <Text style={[s.postBtnText, { color: canPost ? '#fff' : colors.muted }]}>Đăng</Text>
+              <Text style={[styles.postBtnText, { color: canPost ? '#fff' : colors.muted }]}>Đăng</Text>
             )}
           </TouchableOpacity>
         </View>
       </View>
 
+      {/* --- CONTENT --- */}
       <ScrollView 
-        contentContainerStyle={[s.scrollContent, { paddingBottom: Math.max(insets.bottom, 24) }]} 
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: 24 }]} 
         keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
       >
-        <View style={s.authorRow}>
-          <Image source={{ uri: avatarUrl }} style={s.avatar} />
+        <View style={styles.authorRow}>
+          <Image source={{ uri: avatarUrl }} style={styles.avatar} />
           <View>
-            <Text style={[s.username, { color: colors.text }]}>{username}</Text>
-            <TouchableOpacity style={[s.privacyBtn, { backgroundColor: colorScheme === 'dark' ? '#374151' : '#F1F5F9' }]} onPress={cyclePrivacy}>
-              <Ionicons name={PRIVACY_LABELS[privacy].icon as any} size={14} color={colorScheme === 'dark' ? '#94A3B8' : '#475569'} />
-              <Text style={[s.privacyText, { color: colorScheme === 'dark' ? '#E2E8F0' : '#334155' }]}>{PRIVACY_LABELS[privacy].label}</Text>
-              <Ionicons name="chevron-down" size={12} color={colorScheme === 'dark' ? '#94A3B8' : '#475569'} />
+            <Text style={[styles.username, { color: colors.text }]}>{username}</Text>
+            <TouchableOpacity style={[styles.privacyBtn, { backgroundColor: colorScheme === 'dark' ? '#374151' : '#F1F5F9' }]} onPress={cyclePrivacy} activeOpacity={0.7}>
+              <Ionicons name={PRIVACY_LABELS[privacy].icon as any} size={13} color={colorScheme === 'dark' ? '#94A3B8' : '#475569'} />
+              <Text style={[styles.privacyText, { color: colorScheme === 'dark' ? '#E2E8F0' : '#334155' }]}>{PRIVACY_LABELS[privacy].label}</Text>
+              <Ionicons name="caret-down" size={11} color={colorScheme === 'dark' ? '#94A3B8' : '#475569'} />
             </TouchableOpacity>
           </View>
         </View>
 
         <TextInput
-          style={[s.input, { color: colors.text }]}
+          style={[styles.input, { color: colors.text, fontSize: inputFontSize }]}
           placeholder="Bạn đang nghĩ gì?"
           placeholderTextColor={colors.muted}
           value={content}
@@ -152,63 +223,86 @@ export default function CreatePostScreen() {
           multiline
           autoFocus
           textAlignVertical="top"
+          selectionColor="#0068FF"
         />
 
-        {images.length > 0 && (
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.imageRow}>
-            {images.map((uri, idx) => (
-              <View key={idx} style={s.imagePreview}>
-                <Image source={{ uri }} style={s.previewImg} />
-                <TouchableOpacity style={s.removeImgBtn} onPress={() => removeImage(idx)}>
-                  <View style={s.removeImgBg}>
-                    <Ionicons name="close" size={16} color="#fff" />
-                  </View>
-                </TouchableOpacity>
-              </View>
-            ))}
-          </ScrollView>
-        )}
+        {/* Media Grid Placeholder */}
+        <View style={styles.mediaContainer}>
+          <MediaGrid images={images} onRemove={removeImage} />
+        </View>
       </ScrollView>
 
-      <View style={[s.toolbar, { backgroundColor: colors.surface, borderTopColor: colors.border, paddingBottom: Math.max(insets.bottom, 12) }]}>
-        <TouchableOpacity style={s.toolBtn} onPress={pickImages}>
-          <Ionicons name="images" size={24} color="#10B981" />
-          <Text style={[s.toolLabel, { color: colors.text }]}>Ảnh/Video</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={s.toolBtn} onPress={() => Alert.alert('Thông báo', 'Tính năng đang phát triển')}>
-          <Ionicons name="happy" size={24} color="#F59E0B" />
-          <Text style={[s.toolLabel, { color: colors.text }]}>Cảm xúc</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={s.toolBtn} onPress={() => Alert.alert('Thông báo', 'Tính năng đang phát triển')}>
-          <Ionicons name="location" size={24} color="#EF4444" />
-          <Text style={[s.toolLabel, { color: colors.text }]}>Vị trí</Text>
-        </TouchableOpacity>
+      {/* --- TOOLBAR --- */}
+      <View style={[
+        styles.toolbar, 
+        { 
+          backgroundColor: colors.surface, 
+          borderTopColor: colorScheme === 'dark' ? '#333' : '#E2E8F0',
+          paddingBottom: isKeyboardVisible ? 12 : Math.max(insets.bottom, 12)
+        }
+      ]}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.toolbarScroll}>
+          <TouchableOpacity style={styles.toolActionBtn} onPress={pickImages}>
+            <Ionicons name="image" size={24} color="#10B981" />
+            <Text style={[styles.toolLabel, { color: colors.text }]}>Ảnh/Video</Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity style={styles.toolActionBtn} onPress={() => Alert.alert('Thông báo', 'Tính năng đang phát triển')}>
+            <Ionicons name="document-text" size={24} color="#8B5CF6" />
+            <Text style={[styles.toolLabel, { color: colors.text }]}>Tài liệu</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.toolActionBtn} onPress={() => Alert.alert('Thông báo', 'Tính năng đang phát triển')}>
+            <Ionicons name="stats-chart" size={24} color="#F59E0B" />
+            <Text style={[styles.toolLabel, { color: colors.text }]}>Tạo Poll</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.toolActionBtn} onPress={() => Alert.alert('Thông báo', 'Tính năng đang phát triển')}>
+            <Ionicons name="happy" size={24} color="#EF4444" />
+            <Text style={[styles.toolLabel, { color: colors.text }]}>Cảm xúc</Text>
+          </TouchableOpacity>
+        </ScrollView>
       </View>
     </KeyboardAvoidingView>
   );
 }
 
-const s = StyleSheet.create({
+const styles = StyleSheet.create({
   container: { flex: 1 },
-  customHeader: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: 'rgba(150,150,150,0.2)' },
+  header: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 3,
+    zIndex: 10,
+  },
   headerContent: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', height: 56, paddingHorizontal: 16 },
   headerBtn: { padding: 4, marginLeft: -4 },
   headerTitle: { fontSize: 18, fontWeight: '700' },
-  scrollContent: { padding: 16 },
-  postBtn: { paddingHorizontal: 16, paddingVertical: 6, borderRadius: 16 },
+  postBtn: { paddingHorizontal: 18, paddingVertical: 8, borderRadius: 20 },
   postBtnText: { fontWeight: '700', fontSize: 14 },
-  authorRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 16 },
-  avatar: { width: 46, height: 46, borderRadius: 23 },
+  scrollContent: { padding: 16, flexGrow: 1 },
+  authorRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 20 },
+  avatar: { width: 48, height: 48, borderRadius: 24, borderWidth: 1, borderColor: 'rgba(0,0,0,0.05)' },
   username: { fontSize: 16, fontWeight: '700' },
-  privacyBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6 },
-  privacyText: { fontSize: 12, fontWeight: '600' },
-  input: { fontSize: 18, lineHeight: 26, minHeight: 150 },
-  imageRow: { gap: 12, paddingTop: 16 },
-  imagePreview: { position: 'relative' },
-  previewImg: { width: 120, height: 160, borderRadius: 12 },
-  removeImgBtn: { position: 'absolute', top: 6, right: 6, zIndex: 10 },
-  removeImgBg: { backgroundColor: 'rgba(0,0,0,0.6)', width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
-  toolbar: { flexDirection: 'row', borderTopWidth: StyleSheet.hairlineWidth, paddingTop: 12, paddingHorizontal: 8 },
-  toolBtn: { flex: 1, alignItems: 'center', gap: 4, paddingVertical: 4 },
-  toolLabel: { fontSize: 12, fontWeight: '500' },
+  privacyBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4, paddingHorizontal: 12, paddingVertical: 4, borderRadius: 12 },
+  privacyText: { fontSize: 13, fontWeight: '600' },
+  input: { minHeight: 120, lineHeight: 32, marginBottom: 20 },
+  mediaContainer: { marginTop: 10 },
+  removeImgBtn: { 
+    position: 'absolute', top: 8, right: 8, zIndex: 10,
+    backgroundColor: 'rgba(0,0,0,0.6)', width: 28, height: 28, borderRadius: 14, 
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.3)'
+  },
+  toolbar: { borderTopWidth: 1, paddingTop: 12 },
+  toolbarScroll: { paddingHorizontal: 12, gap: 8 },
+  toolActionBtn: { 
+    flexDirection: 'row', alignItems: 'center', gap: 6, 
+    paddingHorizontal: 16, paddingVertical: 8, 
+    backgroundColor: 'rgba(150,150,150,0.08)', 
+    borderRadius: 20 
+  },
+  toolLabel: { fontSize: 14, fontWeight: '600' },
 });

@@ -769,14 +769,17 @@ export default function ChatScreen() {
     console.log('[Voice] Sending voice with duration:', duration, 'seconds');
 
     try {
-      const ext = uri.split('.').pop()?.toLowerCase() || 'm4a';
+      // Ensure uri has file:// prefix for React Native fetch
+      const safeUri = uri.startsWith('file://') ? uri : `file://${uri}`;
+
+      const ext = safeUri.split('.').pop()?.toLowerCase() || 'm4a';
       const fileName = `voice-${Date.now()}.${ext}`;
-      const mimeType = getAudioMimeTypeFromUri(uri);
+      const mimeType = getAudioMimeTypeFromUri(safeUri);
       
       console.log('[Voice] Uploading:', { fileName, mimeType, duration });
       
       // Upload with duration
-      const uploaded = await uploadMediaForm({ uri, fileName, mimeType, duration });
+      const uploaded = await uploadMediaForm({ uri: safeUri, fileName, mimeType, duration });
       
       console.log('[Voice] Upload response:', {
         mediaId: uploaded._id || uploaded.id,

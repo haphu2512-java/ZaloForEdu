@@ -233,7 +233,10 @@ export default function MyDocumentScreen() {
     setSending(true);
 
     try {
-      const ext = uri.split('.').pop()?.toLowerCase() || 'm4a';
+      // Ensure uri has file:// prefix for React Native fetch
+      const safeUri = uri.startsWith('file://') ? uri : `file://${uri}`;
+
+      const ext = safeUri.split('.').pop()?.toLowerCase() || 'm4a';
       const fileName = `voice-${Date.now()}.${ext}`;
       
       const mimeType = ext === 'm4a' ? 'audio/mp4' : 
@@ -242,7 +245,7 @@ export default function MyDocumentScreen() {
                        ext === 'aac' ? 'audio/aac' : 
                        ext === 'webm' ? 'audio/webm' : 'audio/mp4';
 
-      const uploaded = await uploadMediaForm({ uri, fileName, mimeType, duration });
+      const uploaded = await uploadMediaForm({ uri: safeUri, fileName, mimeType, duration });
       const mediaId = uploaded?._id || uploaded?.id;
 
       if (!mediaId) throw new Error('Upload ghi âm không thành công');

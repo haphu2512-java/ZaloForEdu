@@ -87,8 +87,8 @@ export const VoiceRecorderMobile: React.FC<VoiceRecorderMobileProps> = ({ onCanc
       stopTimer();
       if (visualizerRef.current) clearInterval(visualizerRef.current);
       
-      // Capture final duration in seconds before stopping
-      const finalDurationSeconds = Math.floor(duration / 1000);
+      // Capture final duration in seconds before stopping (min 1 second)
+      const finalDurationSeconds = Math.max(1, Math.ceil(duration / 1000));
       
       await recordingRef.current.stop();
       const uri = recordingRef.current.uri;

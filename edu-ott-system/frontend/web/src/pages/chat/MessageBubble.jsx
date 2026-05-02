@@ -283,11 +283,11 @@ export const MessageBubble = ({
                                 backgroundColor: '#f0f2f5', margin: 0, borderRadius: 0
                               }}>
                               {isVideo ? (
-                                <video src={att.url} controls style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                                <video src={toAbsoluteUrl(att.url)} controls style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
                               ) : (
-                                <img src={att.url} alt="attachment" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                                <img src={toAbsoluteUrl(att.url)} alt="attachment" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
                               )}
-                              <a className="mdc-img-dl-btn" href={att.url} target="_blank" rel="noreferrer" title="Tải về" onClick={e => e.stopPropagation()}><FaDownload size={11} /></a>
+                              <a className="mdc-img-dl-btn" href={toAbsoluteUrl(att.url)} target="_blank" rel="noreferrer" title="Tải về" onClick={e => e.stopPropagation()}><FaDownload size={11} /></a>
                               {isLast && remain > 0 && (
                                 <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.5)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '24px', fontWeight: 'bold' }}>
                                   +{remain}
@@ -301,7 +301,7 @@ export const MessageBubble = ({
 
                     {docs.length > 0 && docs.map((att, i) => {
                       const fileName = att.name || att.fileName || `Tệp ${i + 1}`;
-                      const downloadUrl = att.url;
+                      const downloadUrl = toAbsoluteUrl(att.url);
                       return (
                         <div key={`doc-${i}`} className="mdc-file-bubble">
                           <div className="mdc-fb-icon" style={{ background: getFileColor(fileName) }}>
@@ -317,7 +317,7 @@ export const MessageBubble = ({
                     })}
 
                     {audios.length > 0 && audios.map((att, i) => (
-                      <AudioBubble key={`audio-${i}`} url={att.url} duration={att.duration} />
+                      <AudioBubble key={`audio-${i}`} url={toAbsoluteUrl(att.url)} duration={att.duration} />
                     ))}
                   </div>
                 )}
