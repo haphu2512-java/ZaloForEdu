@@ -14,11 +14,30 @@ import Constants from 'expo-constants';
 const hostUri = Constants.expoConfig?.hostUri;
 const localhost = hostUri ? hostUri.split(':')[0] : '10.0.2.2';
 
+function resolveNativeDevHost(): string {
+  const host = hostUri ? hostUri.split(':')[0] : '';
+  if (host && host !== 'localhost' && host !== '127.0.0.1') return host;
+  return Platform.OS === 'android' ? '10.0.2.2' : 'localhost';
+}
+
+function normalizeLocalSocketUrl(url: string): string {
+  if (Platform.OS === 'web') return url;
+  const normalized = url.trim();
+  const localPattern = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?(\/.*)?$/i;
+  const match = normalized.match(localPattern);
+  if (!match) return normalized;
+
+  const protocol = normalized.toLowerCase().startsWith('https://') ? 'https' : 'http';
+  const port = match[2] || ':5000';
+  const path = match[3] || '';
+  return `${protocol}://${resolveNativeDevHost()}${port}${path}`;
+}
+
 function getSocketUrl(): string {
   // Prefer explicit env var (staging / production)
   const envUrl = Constants.expoConfig?.extra?.EXPO_PUBLIC_SOCKET_URL
     || process.env.EXPO_PUBLIC_SOCKET_URL;
-  if (envUrl) return envUrl;
+  if (envUrl) return normalizeLocalSocketUrl(envUrl);
 
   if (Platform.OS === 'web') {
     if (typeof window !== 'undefined' && window.location) {
