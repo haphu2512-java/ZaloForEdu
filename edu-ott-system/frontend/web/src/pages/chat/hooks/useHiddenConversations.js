@@ -14,13 +14,21 @@ export function useHiddenConversations({ token, fetchConversationsData }) {
   const [showHidden, setShowHidden] = useState(false);
   const [hiddenConvs, setHiddenConvs] = useState([]);
   const [showPinModal, setShowPinModal] = useState(false);
-  const [pinModalMode, setPinModalMode] = useState('unlock'); // 'unlock' | 'setup' | 'change'
+  // Modes: 'unlock' | 'setup' | 'change' | 'forgot'
+  const [pinModalMode, setPinModalMode] = useState('unlock');
   const [pinInput, setPinInput] = useState('');
   const [pinConfirm, setPinConfirm] = useState('');
   const [pinCurrentInput, setPinCurrentInput] = useState('');
   const [pinError, setPinError] = useState('');
-  const [pinStep, setPinStep] = useState(1); // 1=enter, 2=confirm (setup mode)
+  // Steps per mode:
+  //   unlock: 1=enter PIN
+  //   setup:  1=enter new PIN, 2=confirm new PIN
+  //   change: 1=enter current PIN (verified immediately), 2=enter new PIN, 3=confirm new PIN
+  //   forgot: 1=enter account password (verified + clears PIN), 2=enter new PIN, 3=confirm new PIN
+  const [pinStep, setPinStep] = useState(1);
   const [hasPin, setHasPin] = useState(false); // from backend
+  // Forgot-PIN: store account password across steps
+  const [forgotPassword, setForgotPassword] = useState('');
 
   // ── Load hasPin status from backend on mount ────────────────────────────
   useEffect(() => {
@@ -30,7 +38,7 @@ export function useHiddenConversations({ token, fetchConversationsData }) {
       .then((res) => {
         setHasPin(!!(res.data?.data?.hasHiddenPin));
       })
-      .catch(() => {});
+      .catch(() => { });
   }, [token]);
 
   // ── Fetch hidden conversations from backend ─────────────────────────────
@@ -50,6 +58,16 @@ export function useHiddenConversations({ token, fetchConversationsData }) {
     setShowHidden(true);
   }, [fetchHiddenConversations]);
 
+  // ── Reset all PIN modal state ────────────────────────────────────────────
+  const resetPinModal = useCallback(() => {
+    setPinInput('');
+    setPinConfirm('');
+    setPinCurrentInput('');
+    setPinError('');
+    setPinStep(1);
+    setForgotPassword('');
+  }, []);
+
   // ── Called when user clicks the lock button in sidebar ──────────────────
   const handlePinButtonClick = useCallback(() => {
     if (showHidden) {
@@ -61,24 +79,34 @@ export function useHiddenConversations({ token, fetchConversationsData }) {
       openHiddenList();
       return;
     }
-    setPinInput('');
-    setPinConfirm('');
-    setPinCurrentInput('');
-    setPinError('');
-    setPinStep(1);
+    resetPinModal();
     setPinModalMode(hasPin ? 'unlock' : 'setup');
     setShowPinModal(true);
-  }, [showHidden, hasPin, openHiddenList]);
+  }, [showHidden, hasPin, openHiddenList, resetPinModal]);
+
+  // ── Switch to "change PIN" mode — always requires current PIN (no session bypass) ─────
+  const handleEnterChangeMode = useCallback(() => {
+    resetPinModal();
+    setPinModalMode('change');
+    setShowPinModal(true);
+  }, [resetPinModal]);
+
+  // ── Switch to "forgot PIN" mode ──────────────────────────────────────────
+  const handleEnterForgotMode = useCallback(() => {
+    resetPinModal();
+    setPinModalMode('forgot');
+    setPinStep(1);
+    setShowPinModal(true);
+  }, [resetPinModal]);
 
   // ── Handle PIN form submission ───────────────────────────────────────────
   const handlePinSubmit = useCallback(async () => {
-    if (pinInput.length !== 4 || !/^\d{4}$/.test(pinInput)) {
-      setPinError('PIN phải là 4 chữ số');
-      return;
-    }
-
+    // --- SETUP mode (no PIN yet) ---
     if (pinModalMode === 'setup') {
-      // Step 1: first entry
+      if (pinInput.length !== 4 || !/^\d{4}$/.test(pinInput)) {
+        setPinError('PIN phải là 4 chữ số');
+        return;
+      }
       if (pinStep === 1) {
         setPinStep(2);
         setPinConfirm(pinInput);
@@ -93,7 +121,6 @@ export function useHiddenConversations({ token, fetchConversationsData }) {
         setPinStep(1);
         return;
       }
-      // Save to backend
       try {
         await axios.put(
           `${API_BASE_URL}/settings/hidden-pin`,
@@ -110,26 +137,54 @@ export function useHiddenConversations({ token, fetchConversationsData }) {
         setPinInput('');
         setPinStep(1);
       }
-    } else if (pinModalMode === 'change') {
-      // 3-step: step 1 = current PIN, step 2 = new PIN, step 3 = confirm new PIN
+      return;
+    }
+
+    // --- CHANGE mode (must already be unlocked — gate enforced in handleEnterChangeMode) ---
+    if (pinModalMode === 'change') {
+      // Step 1: verify current PIN immediately via backend
       if (pinStep === 1) {
-        // Just store current PIN and advance — actual verification happens on final submit
-        setPinCurrentInput(pinInput);
-        setPinStep(2);
-        setPinInput('');
-        setPinError('');
+        if (pinInput.length !== 4 || !/^\d{4}$/.test(pinInput)) {
+          setPinError('PIN phải là 4 chữ số');
+          return;
+        }
+        try {
+          await axios.post(
+            `${API_BASE_URL}/settings/hidden-pin/verify`,
+            { pin: pinInput },
+            { headers: { Authorization: `Bearer ${token}` } },
+          );
+          // Verified — store and advance
+          setPinCurrentInput(pinInput);
+          setPinStep(2);
+          setPinInput('');
+          setPinError('');
+        } catch (err) {
+          const code = err.response?.data?.code;
+          setPinError(code === 'WRONG_PIN' ? 'PIN hiện tại không đúng' : (err.response?.data?.message || 'Xác minh thất bại'));
+          setPinInput('');
+        }
         return;
       }
+      // Step 2: enter new PIN
       if (pinStep === 2) {
+        if (pinInput.length !== 4 || !/^\d{4}$/.test(pinInput)) {
+          setPinError('PIN phải là 4 chữ số');
+          return;
+        }
         setPinStep(3);
         setPinConfirm(pinInput);
         setPinInput('');
         setPinError('');
         return;
       }
-      // Step 3: confirm match + API call
+      // Step 3: confirm new PIN + save
+      if (pinInput.length !== 4 || !/^\d{4}$/.test(pinInput)) {
+        setPinError('PIN phải là 4 chữ số');
+        return;
+      }
       if (pinInput !== pinConfirm) {
-        setPinError('PIN mới không khớp');
+        setPinError('PIN mới không khớp, nhập lại');
         setPinInput('');
         setPinStep(2);
         return;
@@ -142,33 +197,103 @@ export function useHiddenConversations({ token, fetchConversationsData }) {
         );
         setHasPin(true);
         setShowPinModal(false);
-        toast.success('Đã đổi mã PIN');
+        toast.success('✅ Đã đổi mã PIN thành công');
       } catch (err) {
         setPinError(err.response?.data?.message || 'Đổi PIN thất bại');
         setPinInput('');
-        setPinCurrentInput('');
         setPinStep(1);
       }
-    } else {
-      // Unlock mode: verify via backend
+      return;
+    }
+
+    // --- FORGOT mode: step 1 = account password → reset PIN, step 2-3 = set new PIN ---
+    if (pinModalMode === 'forgot') {
+      if (pinStep === 1) {
+        // pinInput is repurposed as password input in this step (text mode)
+        if (!pinInput.trim()) {
+          setPinError('Vui lòng nhập mật khẩu tài khoản');
+          return;
+        }
+        try {
+          await axios.post(
+            `${API_BASE_URL}/settings/hidden-pin/reset`,
+            { password: pinInput.trim() },
+            { headers: { Authorization: `Bearer ${token}` } },
+          );
+          // Password verified, PIN cleared — now ask user to set a new PIN
+          setForgotPassword(pinInput.trim());
+          setHasPin(false);
+          setPinStep(2);
+          setPinInput('');
+          setPinError('');
+          toast('Xác minh thành công. Hãy đặt mã PIN mới.', { icon: '🔑' });
+        } catch (err) {
+          const code = err.response?.data?.code;
+          setPinError(code === 'WRONG_PASSWORD' ? 'Mật khẩu tài khoản không đúng' : (err.response?.data?.message || 'Xác minh thất bại'));
+          setPinInput('');
+        }
+        return;
+      }
+      // Step 2: enter new PIN
+      if (pinStep === 2) {
+        if (pinInput.length !== 4 || !/^\d{4}$/.test(pinInput)) {
+          setPinError('PIN phải là 4 chữ số');
+          return;
+        }
+        setPinStep(3);
+        setPinConfirm(pinInput);
+        setPinInput('');
+        setPinError('');
+        return;
+      }
+      // Step 3: confirm + save new PIN
+      if (pinInput.length !== 4 || !/^\d{4}$/.test(pinInput)) {
+        setPinError('PIN phải là 4 chữ số');
+        return;
+      }
+      if (pinInput !== pinConfirm) {
+        setPinError('PIN không khớp, nhập lại');
+        setPinInput('');
+        setPinStep(2);
+        return;
+      }
       try {
-        await axios.post(
-          `${API_BASE_URL}/settings/hidden-pin/verify`,
+        await axios.put(
+          `${API_BASE_URL}/settings/hidden-pin`,
           { pin: pinInput },
           { headers: { Authorization: `Bearer ${token}` } },
         );
+        setHasPin(true);
         setUnlocked();
         setShowPinModal(false);
+        toast.success('🔒 Đã đặt lại mã PIN mới');
         openHiddenList();
       } catch (err) {
-        const code = err.response?.data?.code;
-        if (code === 'WRONG_PIN') {
-          setPinError('PIN không đúng, thử lại');
-        } else {
-          setPinError(err.response?.data?.message || 'Xác minh thất bại');
-        }
+        setPinError(err.response?.data?.message || 'Không thể lưu PIN mới');
         setPinInput('');
+        setPinStep(2);
       }
+      return;
+    }
+
+    // --- UNLOCK mode: verify via backend ---
+    if (pinInput.length !== 4 || !/^\d{4}$/.test(pinInput)) {
+      setPinError('PIN phải là 4 chữ số');
+      return;
+    }
+    try {
+      await axios.post(
+        `${API_BASE_URL}/settings/hidden-pin/verify`,
+        { pin: pinInput },
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+      setUnlocked();
+      setShowPinModal(false);
+      openHiddenList();
+    } catch (err) {
+      const code = err.response?.data?.code;
+      setPinError(code === 'WRONG_PIN' ? 'PIN không đúng, thử lại' : (err.response?.data?.message || 'Xác minh thất bại'));
+      setPinInput('');
     }
   }, [pinModalMode, pinStep, pinInput, pinConfirm, pinCurrentInput, token, openHiddenList]);
 
@@ -202,10 +327,14 @@ export function useHiddenConversations({ token, fetchConversationsData }) {
     pinError, setPinError,
     pinStep, setPinStep,
     hasPin, setHasPin,
+    forgotPassword,
     fetchHiddenConversations,
     openHiddenList,
     handlePinButtonClick,
     handlePinSubmit,
     handleUnhideConversation,
+    handleEnterChangeMode,
+    handleEnterForgotMode,
+    resetPinModal,
   };
 }
