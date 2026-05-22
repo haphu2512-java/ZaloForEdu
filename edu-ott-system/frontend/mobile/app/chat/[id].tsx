@@ -36,6 +36,7 @@ import { API_BASE_URL } from '../../utils/api';
 import { getPinnedMessages, pinMessage, unpinMessage } from '../../utils/groupFeatureService';
 import { getMediaById, uploadMediaForm } from '../../utils/mediaService';
 import { getBlockedUsers, blockOrUnblockUser } from '@/utils/userService';
+import { toAbsoluteUrl } from '@/utils/url';
 import {
   connectSocket,
   joinConversation,
@@ -210,8 +211,8 @@ export default function ChatScreen() {
     (conversation ? getConversationTitle(conversation, currentUserId) : 'Trò chuyện');
 
   const headerAvatarUrl = conversation?.type === 'group'
-    ? conversation.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(conversationTitle)}&background=8B5CF6&color=fff&size=150&bold=true`
-    : otherParticipant?.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(conversationTitle)}&background=2563EB&color=fff&size=150&bold=true`;
+    ? toAbsoluteUrl(conversation.avatarUrl || (conversation as any).avatar) || `https://ui-avatars.com/api/?name=${encodeURIComponent(conversationTitle)}&background=8B5CF6&color=fff&size=150&bold=true`
+    : toAbsoluteUrl(otherParticipant?.avatarUrl || (otherParticipant as any)?.avatar) || `https://ui-avatars.com/api/?name=${encodeURIComponent(conversationTitle)}&background=2563EB&color=fff&size=150&bold=true`;
 
   // ==================== MEDIA HARVESTING ====================
   // Trích xuất thông tin Media từ tin nhắn vào cache, tránh gọi API thừa
@@ -1280,8 +1281,8 @@ export default function ChatScreen() {
       userId: reactionUserId,
       username,
       avatarUrl:
-        participant?.avatarUrl ||
-        reactionUser?.avatarUrl ||
+        toAbsoluteUrl(participant?.avatarUrl || (participant as any)?.avatar) ||
+        toAbsoluteUrl(reactionUser?.avatarUrl || (reactionUser as any)?.avatar) ||
         `https://ui-avatars.com/api/?name=${encodeURIComponent(username)}&background=2563EB&color=fff&size=100&bold=true`,
     };
   }, [conversation?.participants]);
@@ -1303,7 +1304,7 @@ export default function ChatScreen() {
     const isMine = senderId === currentUserId;
     const senderObj = typeof item.senderId === 'string' ? null : item.senderId;
     const senderName = senderObj?.username || '';
-    const senderAvatarUrl = senderObj?.avatarUrl;
+    const senderAvatarUrl = toAbsoluteUrl(senderObj?.avatarUrl || (senderObj as any)?.avatar);
     const isSendingMsg = (item.status as any) === 'sending';
 
     // Cần kiểm tra xem senderId có nằm trong adminIds hoặc ownerId của conversation không
@@ -1639,7 +1640,7 @@ export default function ChatScreen() {
                       <Ionicons name="people" size={18} color="#fff" />
                     </View>
                   ) : (
-                    <Image source={{ uri: item.avatarUrl || `https://ui-avatars.com/api/?name=${item.username}&background=0068FF&color=fff` }} style={{ width: 30, height: 30, borderRadius: 15, marginRight: 10 }} />
+                    <Image source={{ uri: toAbsoluteUrl(item.avatarUrl) || `https://ui-avatars.com/api/?name=${item.username}&background=0068FF&color=fff` }} style={{ width: 30, height: 30, borderRadius: 15, marginRight: 10 }} />
                   )}
                   <Text style={{ color: colors.text, fontSize: 16, fontWeight: '500' }}>
                     {item.id === 'all' || item._id === 'all' ? 'Tất cả mọi người (@all)' : item.username}
@@ -1871,7 +1872,7 @@ export default function ChatScreen() {
                     const info = getReactionUserInfo(item);
                     return (
                       <View style={styles.reactionUserRow}>
-                        <Image source={{ uri: info.avatarUrl }} style={styles.reactionAvatar} />
+                        <Image source={{ uri: toAbsoluteUrl(info.avatarUrl) }} style={styles.reactionAvatar} />
                         <View style={{ flex: 1 }}>
                           <Text style={{ color: colors.text, fontSize: 18, fontWeight: '700' }}>{info.username}</Text>
                           <Text style={{ color: colors.muted, fontSize: 14 }}>Nhấn để gỡ</Text>

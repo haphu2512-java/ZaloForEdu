@@ -23,6 +23,7 @@ import { useRouter } from 'expo-router';
 import { Alert } from 'react-native';
 import { updateConversationPreference, pinConversation, muteConversation, reportConversation } from '@/utils/messageService';
 import { blockOrUnblockUser } from '@/utils/userService';
+import { toAbsoluteUrl } from '@/utils/url';
 import { ChatListItem } from '@/components/chat/ChatListItem';
 import { useBadge } from '@/context/badge';
 
@@ -55,13 +56,14 @@ function getDisplayName(conv: Conversation, currentUserId: string): string {
 
 function getDisplayAvatar(conv: Conversation, currentUserId: string): string {
   if (conv.type === 'group') {
-    if (conv.avatarUrl) return conv.avatarUrl;
+    const groupAvatar = toAbsoluteUrl(conv.avatarUrl || (conv as any).avatar);
+    if (groupAvatar) return groupAvatar;
     const name = conv.name || 'Group';
     return `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=8B5CF6&color=fff&size=100&bold=true`;
   }
   const otherUser = conv.participants?.find((p) => (p._id || p.id || '') !== currentUserId);
   return (
-    otherUser?.avatarUrl ||
+    toAbsoluteUrl(otherUser?.avatarUrl || (otherUser as any)?.avatar) ||
     `https://ui-avatars.com/api/?name=${encodeURIComponent(otherUser?.username || 'U')}&background=6366F1&color=fff&size=100&bold=true`
   );
 }

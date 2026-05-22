@@ -16,6 +16,7 @@ interface ChatListItemProps {
   onPress?: () => void;
   onLongPress?: () => void;
   colors?: {
+    background: string;
     text: string;
     muted: string;
     tint: string;
