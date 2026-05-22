@@ -336,10 +336,12 @@ export default function ChatPage() {
     showPinModal, setShowPinModal,
     pinModalMode, setPinModalMode,
     pinInput, setPinInput, pinConfirm, setPinConfirm,
+    pinCurrentInput, setPinCurrentInput,
     pinError, setPinError, pinStep, setPinStep,
-    getSavedPin,
+    hasPin,
     handlePinButtonClick, handlePinSubmit, handleUnhideConversation,
-  } = useHiddenConversations({ token, userId, fetchConversationsData });
+    handleEnterChangeMode, handleEnterForgotMode, resetPinModal,
+  } = useHiddenConversations({ token, fetchConversationsData });
 
   // ── Socket ────────────────────────────────────────────────────────────────
   useChatSocket({
@@ -368,9 +370,15 @@ export default function ChatPage() {
         if (other) directMap.add(String(typeof other === 'string' ? other : (other._id || other.id)));
       }
     });
+    // Build set of participant IDs who have a hidden conversation — skip mock for them
+    const hiddenParticipantIds = new Set(
+      hiddenConvs.flatMap(c =>
+        (c.participants || []).map(p => String(p._id || p.id || p)).filter(id => id !== String(userId))
+      )
+    );
     friends.forEach(friend => {
       const fId = String(friend._id || friend.id);
-      if (!directMap.has(fId)) {
+      if (!directMap.has(fId) && !hiddenParticipantIds.has(fId)) {
         convs.push({ _id: `mock_${fId}`, isMock: true, type: 'direct', participants: [{ _id: userId }, friend], latestMessage: null, unreadCount: 0 });
       }
     });
@@ -391,7 +399,7 @@ export default function ChatPage() {
     const filtered = categoryFilter !== 'all' ? deduped.filter(c => (c.preference?.category || 'primary') === categoryFilter) : deduped;
     if (!searchQuery.trim()) return filtered;
     return filtered.filter(c => getConversationName(c).toLowerCase().includes(searchQuery.toLowerCase()));
-  }, [conversations, friends, searchQuery, categoryFilter, userId, getConversationName, getOtherParticipant]);
+  }, [conversations, friends, hiddenConvs, searchQuery, categoryFilter, userId, getConversationName, getOtherParticipant]);
 
   const activeIdStr = String(activeConversation?._id || '');
   const { friendConvs, strangerConvs } = useMemo(() => {
@@ -556,8 +564,10 @@ export default function ChatPage() {
         showHidden={showHidden} hiddenConvs={hiddenConvs} handlePinButtonClick={handlePinButtonClick} handleUnhideConversation={handleUnhideConversation}
         showPinModal={showPinModal} setShowPinModal={setShowPinModal} pinModalMode={pinModalMode} setPinModalMode={setPinModalMode}
         pinInput={pinInput} setPinInput={setPinInput} pinConfirm={pinConfirm} setPinConfirm={setPinConfirm}
+        pinCurrentInput={pinCurrentInput} setPinCurrentInput={setPinCurrentInput}
         pinError={pinError} setPinError={setPinError} pinStep={pinStep} setPinStep={setPinStep}
-        handlePinSubmit={handlePinSubmit} getSavedPin={getSavedPin}
+        hasPin={hasPin} handlePinSubmit={handlePinSubmit}
+        handleEnterChangeMode={handleEnterChangeMode} handleEnterForgotMode={handleEnterForgotMode} resetPinModal={resetPinModal}
       />
 
       {/* ── MAIN CHAT AREA ── */}

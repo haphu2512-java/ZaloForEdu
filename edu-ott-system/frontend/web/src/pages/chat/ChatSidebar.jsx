@@ -36,8 +36,9 @@ export const ChatSidebar = ({
   // PIN modal
   showPinModal, setShowPinModal, pinModalMode, setPinModalMode,
   pinInput, setPinInput, pinConfirm, setPinConfirm,
+  pinCurrentInput, setPinCurrentInput,
   pinError, setPinError, pinStep, setPinStep, handlePinSubmit,
-  getSavedPin,
+  hasPin, handleEnterChangeMode, handleEnterForgotMode, resetPinModal,
   // New props for context menu & report
   ctxMenu, setCtxMenu, reportTarget, setReportTarget,
 }) => {
@@ -221,73 +222,134 @@ export const ChatSidebar = ({
       </div>
 
       {/* PIN Modal */}
-      {showPinModal && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-          onClick={(e) => { if (e.target === e.currentTarget) setShowPinModal(false); }}
-        >
-          <div style={{ background: 'var(--z-bg-sidebar)', borderRadius: 18, padding: '28px 32px', width: 320, boxShadow: '0 8px 40px rgba(0,0,0,0.22)', textAlign: 'center' }}
-            onClick={e => e.stopPropagation()}>
-            <div style={{ fontSize: 32, marginBottom: 8 }}>🔒</div>
-            <div style={{ fontSize: 17, fontWeight: 700, color: 'var(--z-text-primary)', marginBottom: 6 }}>
-              {pinModalMode === 'setup' ? (pinStep === 1 ? 'Tạo PIN bảo mật' : 'Xác nhận PIN') : 'Nhập PIN'}
-            </div>
-            <div style={{ fontSize: 13, color: 'var(--z-text-muted)', marginBottom: 24, lineHeight: 1.5 }}>
-              {pinModalMode === 'setup' ? (pinStep === 1 ? 'Nhập 4 chữ số để bảo vệ hội thoại ẩn.' : 'Nhập lại PIN để xác nhận.') : 'Nhập PIN 4 chữ số để xem hội thoại đã ẩn.'}
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'center', gap: 12, marginBottom: 20 }}>
-              {[0, 1, 2, 3].map(i => (
-                <div key={i} style={{ width: 48, height: 56, borderRadius: 12, border: `2px solid ${pinError ? '#ef4444' : i < pinInput.length ? 'var(--z-primary)' : 'var(--z-border)'}`, background: 'var(--z-bg-main)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, fontWeight: 900, color: 'var(--z-text-primary)', transition: 'border-color 0.15s' }}>
-                  {i < pinInput.length ? '●' : ''}
+      {showPinModal && (() => {
+        // ── Labels per mode + step ───────────────────────────────────────
+        const isForgotStep1 = pinModalMode === 'forgot' && pinStep === 1;
+
+        const titles = {
+          unlock: 'Nhập mã PIN',
+          setup: pinStep === 1 ? 'Tạo mã PIN bảo mật' : 'Xác nhận mã PIN',
+          change: pinStep === 1 ? 'Xác minh PIN hiện tại' : pinStep === 2 ? 'Nhập PIN mới' : 'Xác nhận PIN mới',
+          forgot: pinStep === 1 ? 'Xác minh bằng mật khẩu' : pinStep === 2 ? 'Đặt PIN mới' : 'Xác nhận PIN mới',
+        };
+        const hints = {
+          unlock: 'Nhập 4 chữ số để xem hội thoại đã ẩn.',
+          setup: pinStep === 1 ? 'Nhập 4 chữ số để bảo vệ hội thoại ẩn.' : 'Nhập lại PIN để xác nhận.',
+          change: pinStep === 1 ? 'Nhập PIN hiện tại — sẽ xác minh ngay với máy chủ.' : pinStep === 2 ? 'Nhập mã PIN mới (4 chữ số).' : 'Nhập lại PIN mới để xác nhận.',
+          forgot: pinStep === 1 ? 'Nhập mật khẩu đăng nhập tài khoản để đặt lại PIN.' : pinStep === 2 ? 'Nhập mã PIN mới (4 chữ số).' : 'Nhập lại PIN mới để xác nhận.',
+        };
+        const submitLabel = {
+          unlock: 'Xác nhận',
+          setup: pinStep === 1 ? 'Tiếp theo' : 'Tạo PIN',
+          change: pinStep < 3 ? 'Tiếp theo' : 'Đổi PIN',
+          forgot: pinStep === 1 ? 'Xác minh' : pinStep === 2 ? 'Tiếp theo' : 'Lưu PIN',
+        };
+
+        // Auto-advance when 4 digits entered (not for password text input)
+        const onDigitChange = (val) => {
+          setPinInput(val);
+          setPinError('');
+          if (val.length === 4) {
+            setTimeout(() => document.getElementById('pin-submit-btn')?.click(), 120);
+          }
+        };
+
+        return (
+          <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            onClick={(e) => { if (e.target === e.currentTarget) { setShowPinModal(false); resetPinModal?.(); } }}
+          >
+            <div style={{ background: 'var(--z-bg-sidebar)', borderRadius: 18, padding: '28px 32px', width: 320, boxShadow: '0 8px 40px rgba(0,0,0,0.22)', textAlign: 'center' }}
+              onClick={e => e.stopPropagation()}>
+              <div style={{ fontSize: 32, marginBottom: 8 }}>{pinModalMode === 'forgot' && pinStep === 1 ? '🔑' : '🔒'}</div>
+              <div style={{ fontSize: 17, fontWeight: 700, color: 'var(--z-text-primary)', marginBottom: 6 }}>
+                {titles[pinModalMode]}
+              </div>
+              <div style={{ fontSize: 13, color: 'var(--z-text-muted)', marginBottom: 24, lineHeight: 1.5 }}>
+                {hints[pinModalMode]}
+              </div>
+
+              {/* ── Password text input (forgot step 1 only) ─────────────── */}
+              {isForgotStep1 ? (
+                <div style={{ marginBottom: 20 }}>
+                  <input
+                    autoFocus
+                    type="password"
+                    placeholder="Mật khẩu tài khoản"
+                    value={pinInput}
+                    onChange={e => { setPinInput(e.target.value); setPinError(''); }}
+                    onKeyDown={e => { if (e.key === 'Enter') document.getElementById('pin-submit-btn')?.click(); }}
+                    style={{ width: '100%', padding: '11px 14px', borderRadius: 12, border: `1.5px solid ${pinError ? '#ef4444' : 'var(--z-border)'}`, background: 'var(--z-bg-main)', color: 'var(--z-text-primary)', fontSize: 15, outline: 'none', boxSizing: 'border-box' }}
+                  />
                 </div>
-              ))}
+              ) : (
+                <>
+                  {/* 4-dot PIN display */}
+                  <div style={{ display: 'flex', justifyContent: 'center', gap: 12, marginBottom: 20 }}>
+                    {[0, 1, 2, 3].map(i => (
+                      <div key={i} style={{ width: 48, height: 56, borderRadius: 12, border: `2px solid ${pinError ? '#ef4444' : i < pinInput.length ? 'var(--z-primary)' : 'var(--z-border)'}`, background: 'var(--z-bg-main)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, fontWeight: 900, color: 'var(--z-text-primary)', transition: 'border-color 0.15s' }}>
+                        {i < pinInput.length ? '●' : ''}
+                      </div>
+                    ))}
+                  </div>
+                  {/* Hidden input for keyboard */}
+                  <input autoFocus type="tel" maxLength={4} value={pinInput}
+                    onChange={e => onDigitChange(e.target.value.replace(/\D/g, '').slice(0, 4))}
+                    onKeyDown={e => { if (e.key === 'Enter') document.getElementById('pin-submit-btn')?.click(); }}
+                    style={{ position: 'absolute', opacity: 0, width: 1, height: 1, pointerEvents: 'none' }}
+                  />
+                </>
+              )}
+
+              {pinError && <div style={{ fontSize: 12, color: '#ef4444', marginBottom: 12, fontWeight: 600 }}>{pinError}</div>}
+
+              {/* Number pad — only for PIN digits, not password */}
+              {!isForgotStep1 && (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10, marginBottom: 16 }}>
+                  {[1, 2, 3, 4, 5, 6, 7, 8, 9, '', 0, '⌫'].map((k, idx) => (
+                    <button key={idx}
+                      onClick={() => {
+                        if (k === '') return;
+                        if (k === '⌫') { setPinInput(p => p.slice(0, -1)); setPinError(''); return; }
+                        setPinInput(p => {
+                          const next = p.length < 4 ? p + k : p;
+                          if (next.length === 4) setTimeout(() => document.getElementById('pin-submit-btn')?.click(), 120);
+                          return next;
+                        });
+                        setPinError('');
+                      }}
+                      style={{ padding: '14px', borderRadius: 12, border: '1px solid var(--z-border)', background: k === '' ? 'transparent' : 'var(--z-bg-main)', color: 'var(--z-text-primary)', fontSize: 18, fontWeight: 600, cursor: k === '' ? 'default' : 'pointer', visibility: k === '' ? 'hidden' : 'visible' }}
+                    >{k}</button>
+                  ))}
+                </div>
+              )}
+
+              {/* Action buttons */}
+              <div style={{ display: 'flex', gap: 10, marginTop: isForgotStep1 ? 0 : undefined }}>
+                <button onClick={() => { setShowPinModal(false); resetPinModal?.(); }}
+                  style={{ flex: 1, padding: '11px', borderRadius: 12, border: '1px solid var(--z-border)', background: 'transparent', color: 'var(--z-text-primary)', cursor: 'pointer', fontWeight: 600, fontSize: 14 }}
+                >Huỷ</button>
+                <button id="pin-submit-btn" onClick={handlePinSubmit}
+                  style={{ flex: 1, padding: '11px', borderRadius: 12, border: 'none', background: 'var(--z-primary)', color: '#fff', cursor: 'pointer', fontWeight: 700, fontSize: 14 }}
+                >{submitLabel[pinModalMode]}</button>
+              </div>
+
+              {/* Footer links — only show in unlock mode */}
+              {pinModalMode === 'unlock' && hasPin && (
+                <div style={{ marginTop: 16, display: 'flex', justifyContent: 'center', gap: 20 }}>
+                  <span
+                    onClick={handleEnterChangeMode}
+                    style={{ fontSize: 12, color: 'var(--z-primary)', cursor: 'pointer', textDecoration: 'underline' }}
+                  >Đổi mã PIN</span>
+                  <span
+                    onClick={handleEnterForgotMode}
+                    style={{ fontSize: 12, color: 'var(--z-text-muted)', cursor: 'pointer', textDecoration: 'underline' }}
+                  >Quên PIN?</span>
+                </div>
+              )}
             </div>
-            <input autoFocus type="tel" maxLength={4} value={pinInput}
-              onChange={e => {
-                const val = e.target.value.replace(/\D/g, '').slice(0, 4);
-                setPinInput(val); setPinError('');
-                if (val.length === 4) setTimeout(() => {
-                  if (pinModalMode === 'setup' && pinStep === 1) { setPinStep(2); setPinConfirm(val); setPinInput(''); }
-                  else { document.getElementById('pin-submit-btn')?.click(); }
-                }, 120);
-              }}
-              onKeyDown={e => { if (e.key === 'Enter') document.getElementById('pin-submit-btn')?.click(); }}
-              style={{ position: 'absolute', opacity: 0, width: 1, height: 1, pointerEvents: 'none' }}
-            />
-            {pinError && <div style={{ fontSize: 12, color: '#ef4444', marginBottom: 12, fontWeight: 600 }}>{pinError}</div>}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10, marginBottom: 16 }}>
-              {[1, 2, 3, 4, 5, 6, 7, 8, 9, '', 0, '⌫'].map((k, idx) => (
-                <button key={idx}
-                  onClick={() => {
-                    if (k === '') return;
-                    if (k === '⌫') { setPinInput(p => p.slice(0, -1)); setPinError(''); return; }
-                    setPinInput(p => {
-                      const next = p.length < 4 ? p + k : p;
-                      if (next.length === 4) {
-                        setTimeout(() => { if (pinModalMode === 'setup' && pinStep === 1) { setPinStep(2); setPinConfirm(next); setPinInput(''); } }, 120);
-                      }
-                      return next;
-                    });
-                    setPinError('');
-                  }}
-                  style={{ padding: '14px', borderRadius: 12, border: '1px solid var(--z-border)', background: k === '' ? 'transparent' : 'var(--z-bg-main)', color: 'var(--z-text-primary)', fontSize: 18, fontWeight: 600, cursor: k === '' ? 'default' : 'pointer', visibility: k === '' ? 'hidden' : 'visible' }}
-                >{k}</button>
-              ))}
-            </div>
-            <div style={{ display: 'flex', gap: 10 }}>
-              <button onClick={() => { setShowPinModal(false); setPinInput(''); setPinError(''); setPinStep(1); }}
-                style={{ flex: 1, padding: '11px', borderRadius: 12, border: '1px solid var(--z-border)', background: 'transparent', color: 'var(--z-text-primary)', cursor: 'pointer', fontWeight: 600, fontSize: 14 }}
-              >Huỷ</button>
-              <button id="pin-submit-btn" onClick={handlePinSubmit}
-                style={{ flex: 1, padding: '11px', borderRadius: 12, border: 'none', background: 'var(--z-primary)', color: '#fff', cursor: 'pointer', fontWeight: 700, fontSize: 14 }}
-              >{pinModalMode === 'setup' && pinStep === 1 ? 'Tiếp theo' : 'Xác nhận'}</button>
-            </div>
-            {pinModalMode === 'unlock' && (
-              <div onClick={() => { setPinModalMode('setup'); setPinStep(1); setPinInput(''); setPinError(''); }}
-                style={{ marginTop: 14, fontSize: 12, color: 'var(--z-primary)', cursor: 'pointer', textDecoration: 'underline' }}>Đặt lại PIN</div>
-            )}
           </div>
-        </div>
-      )}
+        );
+      })()}
     </aside>
   );
 };

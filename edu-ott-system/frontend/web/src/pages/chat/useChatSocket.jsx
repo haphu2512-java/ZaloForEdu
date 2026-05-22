@@ -121,9 +121,17 @@ export const useChatSocket = ({
       setConversations(prevConvs => {
         const index = prevConvs.findIndex(c => String(c._id) === convIdStr);
         if (index === -1) {
-          fetchConversationsData();
+          // Conversation not in list — it may be hidden by the user.
+          // Only refetch if this is a mock conversation being replaced by a real one.
+          // Only remove mock placeholder if present — do NOT fetchConversationsData
+          // because the real conversation may be hidden and must stay hidden.
           const mockId = `mock_${String(latestMessage?.senderId?._id || latestMessage?.senderId || '')}`;
-          return prevConvs.filter(c => c._id !== mockId);
+          const hasMock = prevConvs.some(c => c._id === mockId);
+          if (hasMock) {
+            return prevConvs.filter(c => c._id !== mockId);
+          }
+          // Conversation not in list and no mock — it is hidden. Leave state unchanged.
+          return prevConvs;
         }
         const newConvs = [...prevConvs];
         const target = { ...newConvs[index], latestMessage };
@@ -253,7 +261,7 @@ export const useChatSocket = ({
 
       // Update active conversation if it's the same
       const isActiveConv = activeConvIdRef.current && String(activeConvIdRef.current) === convIdStr;
-      
+
       if (isActiveConv) {
         // Reload conversation detail from API to get populated fields
         try {
@@ -265,7 +273,7 @@ export const useChatSocket = ({
           const data = await response.json();
           const conversations = data.data?.items || data.items || [];
           const updatedConv = conversations.find(c => String(c._id) === convIdStr);
-          
+
           if (updatedConv) {
             console.log('[Socket] Reloaded conversation with populated fields:', updatedConv);
             setActiveConversation(updatedConv);
