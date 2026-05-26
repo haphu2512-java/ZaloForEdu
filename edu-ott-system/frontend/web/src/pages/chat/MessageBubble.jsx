@@ -439,11 +439,30 @@ export const MessageBubble = ({
       {viewingMedia && createPortal(
         <div style={{ position: 'fixed', inset: 0, zIndex: 99999, background: 'rgba(0,0,0,0.9)', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => { setViewingMedia(null); setShowMediaInfo(false); }}>
           {showMediaInfo && (
-            <div style={{ position: 'absolute', top: 20, left: 20, color: '#fff', fontSize: 14, background: 'rgba(0,0,0,0.6)', padding: '12px 16px', borderRadius: 8, textShadow: '0 1px 3px rgba(0,0,0,0.8)' }} onClick={e => e.stopPropagation()}>
-              <div style={{ fontWeight: 'bold', fontSize: 16 }}>{viewingMedia.name}</div>
-              <div style={{ opacity: 0.8, marginTop: 4 }}>Dung lượng: {viewingMedia.size}</div>
-              <div style={{ opacity: 0.8, marginTop: 2 }}>Người gửi: {viewingMedia.sender}</div>
-              <div style={{ opacity: 0.8, marginTop: 2 }}>Thời gian: {viewingMedia.time} - {viewingMedia.date}</div>
+            <div style={{ position: 'absolute', top: 80, left: 24, color: '#fff', fontSize: 14, background: 'rgba(20,20,20,0.85)', backdropFilter: 'blur(10px)', border: '1px solid rgba(255,255,255,0.1)', padding: '20px 24px', borderRadius: 16, width: 300, boxShadow: '0 8px 32px rgba(0,0,0,0.3)', transition: 'all 0.3s ease', transform: showMediaInfo ? 'translateX(0)' : 'translateX(-20px)', opacity: showMediaInfo ? 1 : 0 }} onClick={e => e.stopPropagation()}>
+              <div style={{ fontWeight: '600', fontSize: 18, marginBottom: 16, paddingBottom: 12, borderBottom: '1px solid rgba(255,255,255,0.1)', wordBreak: 'break-word' }}>{viewingMedia.name}</div>
+              
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: 13 }}>Dung lượng</span>
+                  <span style={{ fontWeight: '500' }}>{viewingMedia.size}</span>
+                </div>
+                
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: 13 }}>Người gửi</span>
+                  <span style={{ fontWeight: '500' }}>{viewingMedia.sender}</span>
+                </div>
+                
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: 13 }}>Thời gian</span>
+                  <span style={{ fontWeight: '500' }}>{viewingMedia.time}</span>
+                </div>
+                
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: 13 }}>Ngày gửi</span>
+                  <span style={{ fontWeight: '500' }}>{viewingMedia.date}</span>
+                </div>
+              </div>
             </div>
           )}
           
