@@ -324,12 +324,19 @@ const processJoinRequest = asyncHandler(async (req, res) => {
     joinRequest.status = 'approved';
     // Thêm user vào nhóm
     if (!conversation.participants.some((p) => toStr(p) === toStr(joinRequest.userId))) {
+      // Remove from pastParticipants if they were previously kicked
+      conversation.pastParticipants = (conversation.pastParticipants || []).filter(
+        (p) => toStr(p.userId) !== toStr(joinRequest.userId)
+      );
+
       conversation.participants.push(joinRequest.userId);
       await conversation.save();
       await mongoose.model('ConversationPreference').findOneAndUpdate(
         { conversationId: id, userId: joinRequest.userId },
-        { conversationId: id, userId: joinRequest.userId },
-        { upsert: true, setDefaultsOnInsert: true }
+        { 
+          $set: { conversationId: id, userId: joinRequest.userId, createdAt: new Date() } 
+        },
+        { upsert: true }
       );
     }
   } else if (action === 'reject') {
@@ -503,12 +510,19 @@ const joinByInviteLink = asyncHandler(async (req, res) => {
   }
 
   // Tham gia trực tiếp
+  // Remove from pastParticipants if they were previously kicked
+  conversation.pastParticipants = (conversation.pastParticipants || []).filter(
+    (p) => toStr(p.userId) !== toStr(req.user._id)
+  );
+
   conversation.participants.push(req.user._id);
   await conversation.save();
   await mongoose.model('ConversationPreference').findOneAndUpdate(
     { conversationId: conversation._id, userId: req.user._id },
-    { conversationId: conversation._id, userId: req.user._id },
-    { upsert: true, setDefaultsOnInsert: true }
+    { 
+      $set: { conversationId: conversation._id, userId: req.user._id, createdAt: new Date() } 
+    },
+    { upsert: true }
   );
 
   const senderName = req.user.fullName || req.user.username;

@@ -312,16 +312,22 @@ const addGroupMembers = asyncHandler(async (req, res) => {
     throw new ApiError(400, 'NO_NEW_MEMBERS', 'All users are already in the group');
   }
 
+  // Remove from pastParticipants if they were previously kicked
+  conversation.pastParticipants = (conversation.pastParticipants || []).filter(
+    (p) => !validMemberIds.includes(toStr(p.userId))
+  );
+
   conversation.participants.push(...validMemberIds);
   await conversation.save();
 
-  // Create preferences for new members to track joinedAt date
+  // Create or update preferences for new members to track joinedAt date
   const prefOps = validMemberIds.map(uid => ({
     updateOne: {
       filter: { conversationId: conversation._id, userId: uid },
-      update: { $set: { conversationId: conversation._id, userId: uid } },
-      upsert: true,
-      setDefaultsOnInsert: true
+      update: { 
+        $set: { conversationId: conversation._id, userId: uid, createdAt: new Date() } 
+      },
+      upsert: true
     }
   }));
   if (prefOps.length > 0) {
