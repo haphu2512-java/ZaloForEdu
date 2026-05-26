@@ -41,6 +41,6 @@ const API_ORIGIN = (import.meta.env.VITE_API_URL || 'http://localhost:5000/api/v
 
 export function toAbsoluteUrl(url) {
   if (!url) return '';
-  if (/^https?:\/\//i.test(url)) return url;
+  if (/^(https?|blob|data):/i.test(url)) return url;
   return `${API_ORIGIN}${url.startsWith('/') ? '' : '/'}${url}`;
 }
