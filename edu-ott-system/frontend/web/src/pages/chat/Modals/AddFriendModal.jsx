@@ -150,7 +150,6 @@ export default function AddFriendModal({ isOpen, onClose }) {
                 </div>
               );
             })}
-            })}
           </div>
         </div>
       </div>
