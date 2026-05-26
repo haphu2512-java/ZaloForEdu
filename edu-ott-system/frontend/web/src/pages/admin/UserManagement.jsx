@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Search, ShieldAlert, Loader2, ChevronLeft, ChevronRight, UserX, UserCheck, Trash2, Shield, Users, Activity, Eye, AlertCircle, AlertTriangle, X } from 'lucide-react';
 import { userService } from '../../services/userService';
+import { DEFAULT_AVATAR } from '../../utils/constants';
+
 
 export default function UserManagement() {
   const [users, setUsers] = useState([]);
@@ -234,7 +236,7 @@ export default function UserManagement() {
 
                       <td style={{ padding: "16px 24px" }}>
                         <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-                          <img src={user.avatarUrl || 'https://i.pravatar.cc/150?img=11'} alt="Ava" style={{ width: "40px", height: "40px", borderRadius: "12px", objectFit: "cover" }} />
+                          <img src={user.avatarUrl || DEFAULT_AVATAR} alt="Ava" style={{ width: "40px", height: "40px", borderRadius: "12px", objectFit: "cover" }} />
                           <div>
                             <p style={{ margin: 0, fontWeight: 700, fontSize: "14px", color: isBanned ? "#94a3b8" : "#0f172a" }}>{user.fullName || user.username || 'Ẩn danh'}</p>
                             <p style={{ margin: 0, fontSize: "12px", color: "#64748b" }}>{user.email || user.phone || 'Chưa cập nhật'}</p>

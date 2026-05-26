@@ -12,6 +12,8 @@ import ReportUserModal from './Modals/ReportUserModal';
 import ClassifyConversationModal from './Modals/ClassifyConversationModal';
 import ConfirmTransferModal from './Modals/ConfirmTransferModal';
 import './MemberMenu.css';
+import { DEFAULT_AVATAR } from '../../utils/constants';
+
 
 // Tooltip component
 const Tooltip = ({ text, children }) => {
@@ -357,7 +359,7 @@ export const ChatRightPanel = ({
                       const pid = p._id || p.id || p;
                       const keyStr = typeof pid === 'string' ? pid : (pid?._id || pid?.id || `member-${idx}`);
                       const displayName = p.fullName || p.username || 'Người dùng';
-                      const avatarSrc = toAbsoluteUrl(p.avatar || p.avatarUrl) || 'https://i.pravatar.cc/150';
+                      const avatarSrc = toAbsoluteUrl(p.avatar || p.avatarUrl) || DEFAULT_AVATAR;
                       return (
                         <div key={keyStr} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', position: 'relative', borderBottom: '1px solid var(--z-border)' }}>
                           <img src={avatarSrc} style={{ width: 34, height: 34, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} alt="" />
@@ -812,7 +814,7 @@ export const ChatRightPanel = ({
                   <>
                     {owner && (
                       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-                        <img src={toAbsoluteUrl(owner.avatarUrl || owner.avatar) || 'https://i.pravatar.cc/150'} style={{ width: 44, height: 44, borderRadius: '50%', objectFit: 'cover' }} alt="" />
+                        <img src={toAbsoluteUrl(owner.avatarUrl || owner.avatar) || DEFAULT_AVATAR} style={{ width: 44, height: 44, borderRadius: '50%', objectFit: 'cover' }} alt="" />
                         <div>
                           <div style={{ fontWeight: 600, fontSize: 14 }}>{owner.fullName || owner.username}</div>
                           <div style={{ fontSize: 13, color: 'var(--z-text-secondary)' }}>Trưởng nhóm</div>
@@ -823,7 +825,7 @@ export const ChatRightPanel = ({
                       const adminId = admin._id || admin.id;
                       return (
                         <div key={adminId} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 0', borderTop: '1px solid var(--z-border)' }}>
-                          <img src={toAbsoluteUrl(admin.avatarUrl || admin.avatar) || 'https://i.pravatar.cc/150'} style={{ width: 44, height: 44, borderRadius: '50%', objectFit: 'cover' }} alt="" />
+                          <img src={toAbsoluteUrl(admin.avatarUrl || admin.avatar) || DEFAULT_AVATAR} style={{ width: 44, height: 44, borderRadius: '50%', objectFit: 'cover' }} alt="" />
                           <div style={{ flex: 1 }}>
                             <div style={{ fontWeight: 600, fontSize: 14 }}>{admin.fullName || admin.username}</div>
                             <div style={{ fontSize: 13, color: 'var(--z-text-secondary)' }}>Phó nhóm</div>
@@ -867,7 +869,7 @@ export const ChatRightPanel = ({
                       setRightPanelMode('manage-roles');
                     }
                   }}>
-                  <img src={toAbsoluteUrl(member.avatarUrl || member.avatar) || 'https://i.pravatar.cc/150'} style={{ width: 44, height: 44, borderRadius: '50%', objectFit: 'cover' }} alt="" />
+                  <img src={toAbsoluteUrl(member.avatarUrl || member.avatar) || DEFAULT_AVATAR} style={{ width: 44, height: 44, borderRadius: '50%', objectFit: 'cover' }} alt="" />
                   <div style={{ flex: 1, fontWeight: 500, fontSize: 14 }}>{member.fullName || member.username}</div>
                 </div>
               ))}
@@ -892,7 +894,7 @@ export const ChatRightPanel = ({
                       setRightPanelMode('default'); // Xong thì nhảy ra ngoài vì không còn là owner
                     }
                   }}>
-                  <img src={toAbsoluteUrl(member.avatarUrl || member.avatar) || 'https://i.pravatar.cc/150'} style={{ width: 44, height: 44, borderRadius: '50%', objectFit: 'cover' }} alt="" />
+                  <img src={toAbsoluteUrl(member.avatarUrl || member.avatar) || DEFAULT_AVATAR} style={{ width: 44, height: 44, borderRadius: '50%', objectFit: 'cover' }} alt="" />
                   <div style={{ flex: 1, fontWeight: 500, fontSize: 14 }}>{member.fullName || member.username}</div>
                 </div>
               ))}
@@ -911,7 +913,7 @@ export const ChatRightPanel = ({
                 const user = req.userId || {};
                 return (
                   <div key={req._id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: '1px solid var(--z-border)' }}>
-                    <img src={toAbsoluteUrl(user.avatarUrl || user.avatar) || 'https://i.pravatar.cc/150'} style={{ width: 44, height: 44, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} alt="" />
+                    <img src={toAbsoluteUrl(user.avatarUrl || user.avatar) || DEFAULT_AVATAR} style={{ width: 44, height: 44, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} alt="" />
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--z-text-primary)' }}>{user.username || 'Người dùng'}</div>
                       {req.reason && <div style={{ fontSize: 12, color: 'var(--z-text-secondary)', marginTop: 2 }}>"{req.reason}"</div>}
@@ -952,7 +954,7 @@ export const ChatRightPanel = ({
                 const isAlreadyBlocked = blockedMembers.some(b => String(b._id || b) === pid);
                 return (
                   <div key={pid} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 0' }}>
-                    <img src={toAbsoluteUrl(p.avatarUrl || p.avatar) || 'https://i.pravatar.cc/150'} style={{ width: 36, height: 36, borderRadius: '50%', objectFit: 'cover' }} alt="" />
+                    <img src={toAbsoluteUrl(p.avatarUrl || p.avatar) || DEFAULT_AVATAR} style={{ width: 36, height: 36, borderRadius: '50%', objectFit: 'cover' }} alt="" />
                     <div style={{ flex: 1, fontSize: 13, fontWeight: 500 }}>{p.username || 'Thành viên'}</div>
                     {!isAlreadyBlocked && (
                       <button onClick={async () => {
@@ -994,7 +996,7 @@ export const ChatRightPanel = ({
 
                 return (
                   <div key={uid} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 0', borderBottom: '1px solid var(--z-border)' }}>
-                    <img src={toAbsoluteUrl(u.avatarUrl || u.avatar) || 'https://i.pravatar.cc/150'} style={{ width: 40, height: 40, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} alt="" />
+                    <img src={toAbsoluteUrl(u.avatarUrl || u.avatar) || DEFAULT_AVATAR} style={{ width: 40, height: 40, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} alt="" />
                     <div style={{ flex: 1, fontSize: 14, fontWeight: 500, color: 'var(--z-text-primary)' }}>{name}</div>
                     <button onClick={handleUnblock} style={{ padding: '5px 14px', borderRadius: 8, border: 'none', background: 'var(--z-bg-main)', color: 'var(--z-primary)', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
                       Bỏ chặn

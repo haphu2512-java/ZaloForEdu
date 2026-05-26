@@ -1,13 +1,16 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import {
   FaDownload, FaCheckDouble, FaCheck, FaClock, FaSmile,
-  FaShare, FaReply, FaEllipsisH, FaUndo, FaTrash, FaCopy, FaThumbtack, FaCrown, FaStar
+  FaShare, FaReply, FaEllipsisH, FaUndo, FaTrash, FaCopy, FaThumbtack, FaCrown, FaStar, FaPlayCircle
 } from 'react-icons/fa';
 import { getExt, getCategory, getFileColor, formatBytes, toAbsoluteUrl } from './chatUtils';
 import { AudioBubble } from '../../components/shared/AudioBubble';
 import PollMessage from './PollMessage';
 import { conversationService } from '../../services/conversationService';
 import toast from 'react-hot-toast';
+import { DEFAULT_AVATAR } from '../../utils/constants';
+
 
 const API_ORIGIN = (import.meta.env.VITE_API_URL || 'http://localhost:5000/api/v1').replace(/\/api\/v1\/?$/, '');
 
@@ -73,6 +76,7 @@ export const MessageBubble = ({
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [pinLoading, setPinLoading] = useState(false);
+  const [viewingMedia, setViewingMedia] = useState(null);
   const menuRef = useRef(null);
 
   const rawMediaList = isRecalled ? [] : (message.attachments || message.mediaIds || message.media || []);
@@ -84,7 +88,7 @@ export const MessageBubble = ({
     .filter(att => att && (att._id || att.id));
 
   const timeString = new Date(createdAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
-  const avatar = toAbsoluteUrl(sender?.avatarUrl || sender?.avatar) || 'https://i.pravatar.cc/150';
+  const avatar = toAbsoluteUrl(sender?.avatarUrl || sender?.avatar) || DEFAULT_AVATAR;
   const senderIdStr = String(sender?._id || sender?.id || sender || '');
   const nickname = activeConversation?.nicknames?.[senderIdStr];
   const name = nickname || sender?.fullName || sender?.username || 'Người dùng';
@@ -283,9 +287,14 @@ export const MessageBubble = ({
                                 backgroundColor: '#f0f2f5', margin: 0, borderRadius: 0
                               }}>
                               {isVideo ? (
-                                <video src={toAbsoluteUrl(att.url)} controls style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                                <div style={{ width: '100%', height: '100%', position: 'relative', cursor: 'pointer' }} onClick={() => setViewingMedia({ url: toAbsoluteUrl(att.url), isVideo: true })}>
+                                  <video src={toAbsoluteUrl(att.url)} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                                  <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.2)' }}>
+                                    <FaPlayCircle size={32} color="#fff" style={{ opacity: 0.8 }} />
+                                  </div>
+                                </div>
                               ) : (
-                                <img src={toAbsoluteUrl(att.url)} alt="attachment" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                                <img src={toAbsoluteUrl(att.url)} alt="attachment" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', cursor: 'pointer' }} onClick={() => setViewingMedia({ url: toAbsoluteUrl(att.url), isVideo: false })} />
                               )}
                               <a className="mdc-img-dl-btn" href={toAbsoluteUrl(att.url)} target="_blank" rel="noreferrer" title="Tải về" onClick={e => e.stopPropagation()}><FaDownload size={11} /></a>
                               {isLast && remain > 0 && (
@@ -425,6 +434,18 @@ export const MessageBubble = ({
           )}
         </div>
       </div>
+
+      {viewingMedia && createPortal(
+        <div style={{ position: 'fixed', inset: 0, zIndex: 99999, background: 'rgba(0,0,0,0.9)', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setViewingMedia(null)}>
+          <button style={{ position: 'absolute', top: 20, right: 20, background: 'none', border: 'none', color: '#fff', fontSize: 40, cursor: 'pointer' }} onClick={() => setViewingMedia(null)}>&times;</button>
+          {viewingMedia.isVideo ? (
+             <video src={viewingMedia.url} controls autoPlay style={{ maxWidth: '90%', maxHeight: '90%' }} onClick={e => e.stopPropagation()} />
+          ) : (
+             <img src={viewingMedia.url} alt="Full view" style={{ maxWidth: '90%', maxHeight: '90%', objectFit: 'contain' }} onClick={e => e.stopPropagation()} />
+          )}
+        </div>,
+        document.body
+      )}
     </div>
   );
 };

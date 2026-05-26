@@ -1,8 +1,9 @@
 import React, { useState } from "react";
 import { FaSearch, FaUsers, FaCloud, FaUserSecret, FaArrowLeft, FaUserPlus, FaThumbtack } from "react-icons/fa";
 import { useLanguage } from '../../contexts/LanguageContext';
+import { DEFAULT_AVATAR } from '../../utils/constants';
 
-const DEFAULT_AVATAR = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' rx='20' fill='%23d8dadf'/%3E%3Ccircle cx='20' cy='15' r='7' fill='%23bcc0c4'/%3E%3Cpath d='M6 35 Q6 26 20 26 Q34 26 34 35' fill='%23bcc0c4'/%3E%3C/svg%3E";
+
 
 const formatChatTimestamp = (dateString) => {
   const d = new Date(dateString);

@@ -33,6 +33,8 @@ import { socketService } from "../../services/socketService"; // Thêm import so
 import IncomingCallModal from '../../pages/chat/Modals/IncomingCallModal';
 import { toast, Toaster } from "react-hot-toast"; // Import toast for push notifications
 import "./MainLayout.css";
+import { DEFAULT_AVATAR } from '../../utils/constants';
+
 
 function getInitials(name = "") {
   return name
@@ -488,8 +490,7 @@ export default function MainLayout() {
 
       const senderName = senderIdObj?.username || senderIdObj?.fullName || "Ai đó";
       const contentStr = message?.content || (message?.mediaIds?.length ? "Đã gửi tệp đính kèm" : "Có tin nhắn mới");
-      const DEFAULT_AVATAR = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' rx='20' fill='%23d8dadf'/%3E%3Ccircle cx='20' cy='15' r='7' fill='%23bcc0c4'/%3E%3Cpath d='M6 35 Q6 26 20 26 Q34 26 34 35' fill='%23bcc0c4'/%3E%3C/svg%3E";
-      const avatarSrc = senderIdObj?.avatarUrl || senderIdObj?.avatar || DEFAULT_AVATAR;
+            const avatarSrc = senderIdObj?.avatarUrl || senderIdObj?.avatar || DEFAULT_AVATAR;
 
       toast.custom((t) => (
         <div

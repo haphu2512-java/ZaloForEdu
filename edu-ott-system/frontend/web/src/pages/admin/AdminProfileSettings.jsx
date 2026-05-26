@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef } from "react";
 import { FaUserAlt, FaLock, FaSave, FaSpinner, FaEye, FaEyeSlash, FaShieldAlt, FaEdit, FaCamera, FaTimes, FaEnvelope, FaUserShield } from "react-icons/fa";
 import { userService } from "../../services/userService";
 import { authService } from "../../services/authService";
+import { DEFAULT_AVATAR } from '../../utils/constants';
+
 
 export default function AdminProfileSettings() {
   const [adminProfile, setAdminProfile] = useState({ 
@@ -34,7 +36,7 @@ export default function AdminProfileSettings() {
             fullName: userData.fullName || userData.username || "", 
             email: userData.email || "",
             phone: userData.phone || userData.phoneNumber || "",
-            avatarUrl: userData.avatarUrl || userData.avatar || "https://i.pravatar.cc/150?img=11",
+            avatarUrl: userData.avatarUrl || userData.avatar || DEFAULT_AVATAR,
             role: userData.role || "admin"
           });
         }

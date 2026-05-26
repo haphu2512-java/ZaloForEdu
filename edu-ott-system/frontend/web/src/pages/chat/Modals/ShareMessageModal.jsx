@@ -1,5 +1,7 @@
 import React from 'react';
 import { FaTimes } from 'react-icons/fa';
+import { DEFAULT_AVATAR } from '../../../utils/constants';
+
 
 export const ShareMessageModal = ({ isOpen, onClose, friends, onForward }) => {
   if (!isOpen) return null;
@@ -17,7 +19,7 @@ export const ShareMessageModal = ({ isOpen, onClose, friends, onForward }) => {
             friends.map((friend, index) => (
               <div key={index} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid #E5E7EB' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <img src={friend.avatarUrl || friend.avatar || 'https://i.pravatar.cc/150'} alt="avt" style={{ width: 40, height: 40, borderRadius: '50%' }} />
+                  <img src={friend.avatarUrl || friend.avatar || DEFAULT_AVATAR} alt="avt" style={{ width: 40, height: 40, borderRadius: '50%' }} />
                   <span style={{ fontSize: '15px', fontWeight: '500' }}>{friend.fullName || friend.username}</span>
                 </div>
                 <button 

@@ -3,6 +3,8 @@ import { FaSearch, FaTimes, FaChevronDown, FaChevronUp } from 'react-icons/fa';
 import { conversationService } from '../../services/conversationService';
 import { useTheme } from '../../contexts/ThemeContext';
 import { toAbsoluteUrl } from './chatUtils';
+import { DEFAULT_AVATAR } from '../../utils/constants';
+
 
 function useDebounce(fn, delay) {
   const timer = useRef(null);

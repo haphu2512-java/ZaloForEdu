@@ -9,6 +9,8 @@ import { useAuthStore } from '../../store/authStore';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { toAbsoluteUrl } from '../chat/chatUtils';
+import { DEFAULT_AVATAR } from '../../utils/constants';
+
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api/v1';
 
@@ -40,7 +42,7 @@ export default function ProfilePage() {
     username: '',
     email: '',
     phone: '',
-    avatarUrl: 'https://i.pravatar.cc/150?img=11',
+    avatarUrl: DEFAULT_AVATAR,
     createdAt: '',
     friends: [],
     isOnline: true
@@ -86,7 +88,7 @@ export default function ProfilePage() {
             username: userData.username || userData.fullName || '', 
             email: userData.email || '',
             phone: userData.phone || userData.phoneNumber || '',
-            avatarUrl: toAbsoluteUrl(userData.avatarUrl || userData.avatar) || 'https://i.pravatar.cc/150?img=11',
+            avatarUrl: toAbsoluteUrl(userData.avatarUrl || userData.avatar) || DEFAULT_AVATAR,
             createdAt: joinDate,
             friends: userData.friends || [],
             isOnline: true
@@ -543,7 +545,7 @@ export default function ProfilePage() {
                   {profile.friends.map((friend, idx) => {
                     const isObj = typeof friend === 'object' && friend !== null;
                     const fName = isObj ? (friend.username || friend.fullName || 'Người dùng Zalo') : 'Người dùng ẩn danh';
-                    const fAva = isObj ? (friend.avatarUrl || friend.avatar || 'https://i.pravatar.cc/150?img=11') : 'https://i.pravatar.cc/150?img=11';
+                    const fAva = isObj ? (friend.avatarUrl || friend.avatar || DEFAULT_AVATAR) : DEFAULT_AVATAR;
                     
                     return (
                       <div key={idx} style={styles.friendCard}>

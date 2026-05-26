@@ -34,6 +34,8 @@ import { CloudInput } from "./CloudInput";
 import { CloudRightPanel } from "./CloudRightPanel";
 import { CloudMsgBubble, MediaPreview, UploadBubble } from "./CloudMsgBubble";
 import { CleanupModal } from "./CleanupModal";
+import { DEFAULT_AVATAR } from '../../utils/constants';
+
 
 /* ===== MAIN PAGE ===== */
 export default function MyDocumentsPage(){
@@ -511,7 +513,7 @@ export default function MyDocumentsPage(){
                 : friends.filter(f=>(f.fullName||f.username||"").toLowerCase().includes(friendSearch.toLowerCase())).map((friend,i)=>(
                   <div key={i} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'10px 20px',cursor:'pointer',transition:'background .12s'}} onMouseEnter={e=>e.currentTarget.style.background='#F0F2F5'} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
                     <div style={{display:'flex',alignItems:'center',gap:12}}>
-                      <img src={friend.avatarUrl||friend.avatar||`https://i.pravatar.cc/150?u=${friend._id}`} alt="avt" style={{width:42,height:42,borderRadius:'50%',objectFit:'cover'}}/>
+                      <img src={friend.avatarUrl||friend.avatar||DEFAULT_AVATAR} alt="avt" style={{width:42,height:42,borderRadius:'50%',objectFit:'cover'}}/>
                       <div>
                         <div style={{fontSize:15,fontWeight:600,color:'#050505'}}>{friend.fullName||friend.username}</div>
                         {friend.username&&friend.fullName&&<div style={{fontSize:12,color:'#8A8D91'}}>@{friend.username}</div>}
