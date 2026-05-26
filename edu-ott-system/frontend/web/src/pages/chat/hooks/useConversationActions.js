@@ -192,6 +192,13 @@ export function useConversationActions({
   // ── Update group settings ─────────────────────────────────────────────────
   const handleUpdateGroupSettings = async (settings) => {
     if (!activeConversation) return;
+    
+    // Optimistic update
+    setActiveConversation(prev => prev ? { 
+      ...prev, 
+      settings: { ...prev.settings, ...settings } 
+    } : prev);
+
     try {
       await axios.put(
         `${API_BASE_URL}/conversations/${activeConversation._id}/settings`,
@@ -201,6 +208,11 @@ export function useConversationActions({
       toast.success('Đã cập nhật cài đặt nhóm');
       fetchConversationsData();
     } catch {
+      // Revert optimistic update on error
+      setActiveConversation(prev => prev ? { 
+        ...prev, 
+        settings: activeConversation.settings 
+      } : prev);
       toast.error('Lỗi cập nhật cài đặt');
     }
   };
