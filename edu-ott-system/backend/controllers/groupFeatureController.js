@@ -360,6 +360,14 @@ const processJoinRequest = asyncHandler(async (req, res) => {
       : `${senderName} đã từ chối yêu cầu tham gia của ${requesterName}`,
   });
 
+  if (action === 'approve') {
+    await socketService.emitGroupUpdated(conversation._id.toString(), {
+      conversationId: conversation._id.toString(),
+      action: 'member_joined',
+      userId: joinRequest.userId,
+    });
+  }
+
   return successResponse(res, joinRequest, `Join request ${action}d`);
 });
 
@@ -508,6 +516,12 @@ const joinByInviteLink = asyncHandler(async (req, res) => {
     conversationId: conversation._id,
     senderId: req.user._id,
     content: `${senderName} đã tham gia nhóm qua link mời`,
+  });
+
+  await socketService.emitGroupUpdated(conversation._id.toString(), {
+    conversationId: conversation._id.toString(),
+    action: 'member_joined',
+    userId: req.user._id,
   });
 
   return successResponse(res, conversation, 'Joined group successfully');

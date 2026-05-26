@@ -342,6 +342,11 @@ const addGroupMembers = asyncHandler(async (req, res) => {
     content: `${senderName} đã thêm ${addedText} vào nhóm`,
   });
 
+  await socketService.emitGroupUpdated(conversation._id.toString(), {
+    conversationId: conversation._id.toString(),
+    action: 'members_added',
+  });
+
   return successResponse(res, conversation, 'Members added to group');
 });
 
@@ -383,6 +388,12 @@ const removeGroupMember = asyncHandler(async (req, res) => {
     conversationId: conversation._id,
     senderId: req.user._id,
     content: `${senderName} đã mời ${removedName} ra khỏi nhóm`,
+  });
+
+  await socketService.emitGroupUpdated(conversation._id.toString(), {
+    conversationId: conversation._id.toString(),
+    action: 'member_removed',
+    memberId,
   });
 
   return successResponse(res, conversation, 'Member removed from group');
@@ -538,6 +549,12 @@ const leaveGroup = asyncHandler(async (req, res) => {
     content: `${senderName} đã rời nhóm`,
   });
 
+  await socketService.emitGroupUpdated(conversation._id.toString(), {
+    conversationId: conversation._id.toString(),
+    action: 'member_left',
+    userId,
+  });
+
   return successResponse(res, conversation, 'Left group successfully');
 });
 
@@ -553,6 +570,11 @@ const disbandGroup = asyncHandler(async (req, res) => {
   await ConversationPreference.deleteMany({ conversationId: id });
   // Delete conversation
   await conversation.deleteOne();
+
+  await socketService.emitGroupUpdated(id, {
+    conversationId: id,
+    action: 'group_disbanded',
+  });
 
   return successResponse(res, null, 'Group disbanded successfully');
 });
