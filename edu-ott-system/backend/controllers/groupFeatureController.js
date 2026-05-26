@@ -1,4 +1,5 @@
 const crypto = require('crypto');
+const mongoose = require('mongoose');
 const Conversation = require('../models/Conversation');
 const JoinRequest = require('../models/JoinRequest');
 const Message = require('../models/Message');
