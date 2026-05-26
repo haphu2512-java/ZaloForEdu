@@ -51,8 +51,8 @@ export default function AddFriendModal({ isOpen, onClose }) {
     const myId = String(currentUser?._id || currentUser?.id);
     if (id === myId) return "self";
     if (friends.some(f => String(f._id || f.id) === id)) return "friend";
-    if (outgoingRequests.some(r => String(r.toUserId?._id || r.toUserId || r.to?._id || r.to || "") === id)) return "outgoing";
-    if (incomingRequests.some(r => String(r.fromUserId?._id || r.fromUserId || r.from?._id || r.from || "") === id)) return "incoming";
+    if (outgoingRequests.some(r => String(r.toUserId?._id || r.toUserId?.id || r.toUserId || r.to?._id || r.to?.id || r.to || "") === id)) return "outgoing";
+    if (incomingRequests.some(r => String(r.fromUserId?._id || r.fromUserId?.id || r.fromUserId || r.from?._id || r.from?.id || r.from || "") === id)) return "incoming";
     return "none";
   };
 
@@ -151,7 +151,7 @@ export default function AddFriendModal({ isOpen, onClose }) {
               );
             })}
             <div style={{ padding: "8px 20px", fontSize: 10, color: "var(--text-tertiary)", wordBreak: "break-all" }}>
-              Debug In: {incomingRequests.length} reqs | IDs: {incomingRequests.map(r => String(r.fromUserId?._id || r.fromUserId || r.from?._id || r.from || "")).join(", ")}
+              Debug In: {incomingRequests.length} reqs | IDs: {incomingRequests.map(r => String(r.fromUserId?._id || r.fromUserId?.id || r.fromUserId || r.from?._id || r.from?.id || r.from || "")).join(", ")}
             </div>
           </div>
         </div>
