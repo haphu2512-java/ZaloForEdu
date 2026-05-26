@@ -199,7 +199,15 @@ export default function MessagesScreen() {
     setRefreshing(false);
   }, [loadConversations]);
 
-  const handlePress = (item: Conversation) => { router.push(`/chat/${item._id}`); };
+  const handlePress = (item: Conversation) => {
+    const currentUserId = user?.id || '';
+    const isSelfConv = item.type === 'direct' && item.participants?.every(p => (p._id || p.id || '') === currentUserId);
+    if (isSelfConv || (item as any).isMock) {
+      router.push('/(tabs)/mydocument');
+      return;
+    }
+    router.push(`/chat/${item._id}`);
+  };
   const handleLongPress = (item: Conversation) => { setSelectedConversation(item); };
   const closeActionSheet = () => { setSelectedConversation(null); };
 
@@ -257,17 +265,39 @@ export default function MessagesScreen() {
 
   // Filter conversations based on active tab and sort them with pinned on top
   const filteredConversations = useMemo(() => {
-    return [...conversations.filter((conv) => {
+    const currentUserId = user?.id || '';
+    let convs = [...conversations];
+    
+    // Inject Cloud của tôi if missing
+    if (currentUserId && !convs.some(c => c.type === 'direct' && c.participants?.every(p => (p._id || p.id || '') === currentUserId))) {
+      convs.push({
+        _id: `mock_self_${currentUserId}`,
+        id: `mock_self_${currentUserId}`,
+        type: 'direct',
+        participants: [user],
+        latestMessage: null,
+        unreadCount: 0,
+        isMock: true
+      } as any);
+    }
+
+    return convs.filter((conv) => {
       if (activeTab === 'all') return true;
       return conv.preference?.category === activeTab;
-    })].sort((a, b) => {
+    }).sort((a, b) => {
+      const isASelf = a.type === 'direct' && a.participants?.every(p => (p._id || p.id || '') === currentUserId);
+      const isBSelf = b.type === 'direct' && b.participants?.every(p => (p._id || p.id || '') === currentUserId);
+      if (isASelf && !isBSelf) return -1;
+      if (!isASelf && isBSelf) return 1;
+
       if (a.preference?.isPinned && !b.preference?.isPinned) return -1;
       if (!a.preference?.isPinned && b.preference?.isPinned) return 1;
+      
       const timeA = new Date(a.latestMessage?.createdAt || a.lastMessageAt || 0).getTime();
       const timeB = new Date(b.latestMessage?.createdAt || b.lastMessageAt || 0).getTime();
       return timeB - timeA;
     });
-  }, [conversations, activeTab]);
+  }, [conversations, activeTab, user]);
 
   // Calculate Strangers vs Normal
   const currentUserFriends = useMemo(() => (user?.friends || []).map((f: any) => typeof f === 'string' ? f : f._id || f.id), [user]);
