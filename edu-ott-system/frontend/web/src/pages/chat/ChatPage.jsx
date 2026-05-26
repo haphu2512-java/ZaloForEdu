@@ -550,7 +550,7 @@ export default function ChatPage() {
   return (
     <div className={`chat-page ${appliedTheme === 'dark' ? 'dark-mode' : ''}`} ref={pageRef}>
 
-      <ShareMessageModal isOpen={shareModalOpen} onClose={() => setShareModalOpen(false)} conversations={conversations.filter(c => c._id !== activeConversation?._id)} currentUserId={user?._id || user?.id} onForward={c => executeForward(c)} />
+      <ShareMessageModal isOpen={shareModalOpen} onClose={() => setShareModalOpen(false)} conversations={conversations.filter(c => c._id !== activeConversation?._id)} currentUserId={userId} onForward={c => executeForward(c)} />
 
       {reminderDetailId && (
         <ReminderDetailModal
