@@ -150,12 +150,20 @@ export default function MessagesScreen() {
         }));
       };
 
+      const onRemovedFromGroup = (payload: any) => {
+        const conversationId = payload?.conversationId;
+        if (!conversationId) return;
+        setConversations((prev) => prev.filter((conv) => conv._id !== conversationId && conv.id !== conversationId));
+      };
+
       socket.on('conversation_updated', onConversationUpdated);
       socket.on('message_seen', onMessageSeen);
+      socket.on('removed_from_group', onRemovedFromGroup);
 
       off = () => {
         socket.off('conversation_updated', onConversationUpdated);
         socket.off('message_seen', onMessageSeen);
+        socket.off('removed_from_group', onRemovedFromGroup);
       };
     };
 

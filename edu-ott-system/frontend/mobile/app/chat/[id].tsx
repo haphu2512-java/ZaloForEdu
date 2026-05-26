@@ -554,9 +554,10 @@ export default function ChatScreen() {
         );
       };
 
-      const onConversationSettingsUpdated = (newSettings: any) => {
-        console.log('[Mobile Chat] conversation_settings_updated:', newSettings);
-        setConversation((prev) => prev ? { ...prev, settings: newSettings } : prev);
+      const onConversationSettingsUpdated = (payload: any) => {
+        console.log('[Mobile Chat] conversation_settings_updated:', payload);
+        if (payload?.conversationId && String(payload.conversationId) !== String(conversationId)) return;
+        setConversation((prev) => prev ? { ...prev, settings: payload.settings || payload } : prev);
       };
       const onPollUpdated = (updatedPoll: any) => {
         if (!updatedPoll?._id) return;
@@ -1666,14 +1667,30 @@ export default function ChatScreen() {
           </View>
         )}
 
-        {isBlockedByMe ? (
-          <View style={[styles.inputBar, { borderTopColor: colors.border, backgroundColor: colors.surface, paddingBottom: Math.max(12, insets.bottom), alignItems: 'center', justifyContent: 'center', paddingVertical: 12, flexDirection: 'column' }]}>
-            <Text style={{ color: colors.muted, marginBottom: 8 }}>Bạn đã chặn người dùng này</Text>
-            <TouchableOpacity onPress={handleUnblock} disabled={unblockLoading} style={{ backgroundColor: '#DBEAFE', paddingHorizontal: 20, paddingVertical: 8, borderRadius: 20 }}>
-              {unblockLoading ? <ActivityIndicator size="small" color={colors.tint} /> : <Text style={{ color: colors.tint, fontWeight: 'bold' }}>BỎ CHẶN</Text>}
-            </TouchableOpacity>
-          </View>
-        ) : (() => {
+        {(() => {
+          const isParticipant = !conversation || !conversation.participants || conversation.participants.some(p => String((p as any)._id || p) === String(currentUserId));
+          
+          if (!isParticipant) {
+            return (
+              <View style={[styles.inputBar, { borderTopColor: colors.border, backgroundColor: '#ffecec', paddingBottom: Math.max(12, insets.bottom), alignItems: 'center', justifyContent: 'center', paddingVertical: 16, flexDirection: 'column' }]}>
+                <Text style={{ color: '#e53e3e', fontWeight: 'bold', textAlign: 'center' }}>
+                  Bạn không còn là thành viên của nhóm này. Bạn chỉ có thể xem lịch sử trò chuyện.
+                </Text>
+              </View>
+            );
+          }
+
+          if (isBlockedByMe) {
+            return (
+              <View style={[styles.inputBar, { borderTopColor: colors.border, backgroundColor: colors.surface, paddingBottom: Math.max(12, insets.bottom), alignItems: 'center', justifyContent: 'center', paddingVertical: 12, flexDirection: 'column' }]}>
+                <Text style={{ color: colors.muted, marginBottom: 8 }}>Bạn đã chặn người dùng này</Text>
+                <TouchableOpacity onPress={handleUnblock} disabled={unblockLoading} style={{ backgroundColor: '#DBEAFE', paddingHorizontal: 20, paddingVertical: 8, borderRadius: 20 }}>
+                  {unblockLoading ? <ActivityIndicator size="small" color={colors.tint} /> : <Text style={{ color: colors.tint, fontWeight: 'bold' }}>BỎ CHẶN</Text>}
+                </TouchableOpacity>
+              </View>
+            );
+          }
+
           // Check permission to send message in group
           const isGroupConv = conversation?.type === 'group';
           const ownerId = (conversation?.ownerId as any)?._id || conversation?.ownerId;
