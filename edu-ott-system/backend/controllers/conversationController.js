@@ -218,6 +218,19 @@ const createConversation = asyncHandler(async (req, res) => {
     lastMessageAt: new Date(),
   });
 
+  const participantsToCreatePref = isSelfConv ? [myId] : uniqueParticipants;
+  const prefOps = participantsToCreatePref.map(uid => ({
+    updateOne: {
+      filter: { conversationId: conversation._id, userId: uid },
+      update: { $set: { conversationId: conversation._id, userId: uid } },
+      upsert: true,
+      setDefaultsOnInsert: true
+    }
+  }));
+  if (prefOps.length > 0) {
+    await ConversationPreference.bulkWrite(prefOps);
+  }
+
   await conversation.populate('participants', 'username email avatarUrl isOnline lastSeen messagePrivacy');
   return successResponse(res, conversation, 'Conversation created', 201);
 });
@@ -301,6 +314,19 @@ const addGroupMembers = asyncHandler(async (req, res) => {
 
   conversation.participants.push(...validMemberIds);
   await conversation.save();
+
+  // Create preferences for new members to track joinedAt date
+  const prefOps = validMemberIds.map(uid => ({
+    updateOne: {
+      filter: { conversationId: conversation._id, userId: uid },
+      update: { $set: { conversationId: conversation._id, userId: uid } },
+      upsert: true,
+      setDefaultsOnInsert: true
+    }
+  }));
+  if (prefOps.length > 0) {
+    await ConversationPreference.bulkWrite(prefOps);
+  }
 
   const addedUsers = await User.find({ _id: { $in: validMemberIds } }).select('fullName username');
   const addedNames = addedUsers

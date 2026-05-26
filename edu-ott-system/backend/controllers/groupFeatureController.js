@@ -326,6 +326,11 @@ const processJoinRequest = asyncHandler(async (req, res) => {
     if (!conversation.participants.some((p) => toStr(p) === toStr(joinRequest.userId))) {
       conversation.participants.push(joinRequest.userId);
       await conversation.save();
+      await mongoose.model('ConversationPreference').findOneAndUpdate(
+        { conversationId: id, userId: joinRequest.userId },
+        { conversationId: id, userId: joinRequest.userId },
+        { upsert: true, setDefaultsOnInsert: true }
+      );
     }
   } else if (action === 'reject') {
     joinRequest.status = 'rejected';
@@ -492,6 +497,11 @@ const joinByInviteLink = asyncHandler(async (req, res) => {
   // Tham gia trực tiếp
   conversation.participants.push(req.user._id);
   await conversation.save();
+  await mongoose.model('ConversationPreference').findOneAndUpdate(
+    { conversationId: conversation._id, userId: req.user._id },
+    { conversationId: conversation._id, userId: req.user._id },
+    { upsert: true, setDefaultsOnInsert: true }
+  );
 
   const senderName = req.user.fullName || req.user.username;
   await emitGroupSystemMessage({

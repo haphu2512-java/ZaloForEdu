@@ -133,7 +133,14 @@ const listMessagesByConversation = asyncHandler(async (req, res) => {
   }
 
   if (conversation.type === 'group' && String(conversation.createdBy) !== String(req.user._id)) {
-    const pref = await mongoose.model('ConversationPreference').findOne({ conversationId, userId: req.user._id });
+    let pref = await mongoose.model('ConversationPreference').findOne({ conversationId, userId: req.user._id });
+    if (!pref) {
+      pref = await mongoose.model('ConversationPreference').findOneAndUpdate(
+        { conversationId, userId: req.user._id },
+        { conversationId, userId: req.user._id },
+        { upsert: true, setDefaultsOnInsert: true, new: true }
+      );
+    }
     if (pref) {
       const joinedAt = pref.createdAt;
       const allowReadHistory = conversation.settings?.allowNewMembersReadHistory;
@@ -358,7 +365,14 @@ const searchMessagesInConversation = asyncHandler(async (req, res) => {
   }
 
   if (conversation.type === 'group' && String(conversation.createdBy) !== String(req.user._id)) {
-    const pref = await mongoose.model('ConversationPreference').findOne({ conversationId, userId: req.user._id });
+    let pref = await mongoose.model('ConversationPreference').findOne({ conversationId, userId: req.user._id });
+    if (!pref) {
+      pref = await mongoose.model('ConversationPreference').findOneAndUpdate(
+        { conversationId, userId: req.user._id },
+        { conversationId, userId: req.user._id },
+        { upsert: true, setDefaultsOnInsert: true, new: true }
+      );
+    }
     if (pref) {
       const joinedAt = pref.createdAt;
       const allowReadHistory = conversation.settings?.allowNewMembersReadHistory;
