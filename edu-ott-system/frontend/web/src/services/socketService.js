@@ -81,6 +81,12 @@ class SocketService {
     }
   }
 
+  emitStopTyping(conversationId) {
+    if (this.socket?.connected) {
+      this.socket.emit("stop_typing", { conversationId });
+    }
+  }
+
   on(event, callback) {
     if (this.socket) {
       this.socket.on(event, callback);

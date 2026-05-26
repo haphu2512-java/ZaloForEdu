@@ -291,6 +291,7 @@ export default function ChatPage() {
     handleSendText, handleSendSticker, handleSendLike,
     handleUploadFile, handleUploadFilesFromInput,
     handleReaction, handleRecall, handleDelete,
+    // handleEdit, // TODO: uncomment khi BE sẵn sàng
   } = useMessages({ activeConversation, userId, token, getOtherParticipant, navigate, setConversations });
 
   const {
@@ -589,7 +590,7 @@ export default function ChatPage() {
                 const other = getOtherParticipant(activeConversation);
                 return other && typeof other === 'object' ? other.lastSeen : null;
               })(),
-              isStranger: (() => { const o = getOtherParticipant(activeConversation); const id = o && typeof o === 'object' ? String(o._id || o.id) : null; return id ? !friendIds.has(id) : false; })(),
+              isStranger: (() => { const o = getOtherParticipant(activeConversation); const id = o && typeof o === 'object' ? String(o._id || o.id) : null; return id && friends.length > 0 ? !friendIds.has(id) : false; })(),
               strangerId: getOtherParticipant(activeConversation)?._id || getOtherParticipant(activeConversation)?.id,
             }}
             onInfo={() => setShowRightPanel(!showRightPanel)}
@@ -743,6 +744,7 @@ export default function ChatPage() {
                           <MessageBubble
                             message={item} isMe={isMe}
                             onReaction={handleReaction} onRecall={handleRecall} onDelete={handleDelete}
+                            // onEdit={handleEdit} // TODO: uncomment khi BE sẵn sàng
                             onForward={openShareModal} onReply={setReplyToMessage}
                             onPin={handlePinMessage} onUnpin={handleUnpinMessage}
                             isPinned={pinnedMsgIds.has(String(item._id || item.id))}
@@ -868,6 +870,8 @@ export default function ChatPage() {
                 key={String(activeConversation._id)}
                 theme={appliedTheme}
                 placeholder={`Nhập @, tin nhắn tới ${convName}`}
+                conversationId={activeConversation._id}
+                userId={userId}
                 onSend={handleSendText} onSendSticker={handleSendSticker} onSendLike={handleSendLike}
                 onUploadFiles={handleUploadFilesFromInput} onShowPoll={() => setShowCreatePollModal(true)}
                 members={activeConversation.participants || []}

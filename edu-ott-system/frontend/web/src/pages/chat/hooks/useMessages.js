@@ -242,12 +242,55 @@ export function useMessages({ activeConversation, userId, token, getOtherPartici
     }
   };
 
-  // ── Delete ────────────────────────────────────────────────────────────────
+  // ── Edit message ─────────────────────────────────────────────────────────
+  // TODO: BE + Mobile chưa có → tạm comment, bật lại khi cả 3 platform sẵn sàng
+  // const handleEdit = async (msgId, newContent) => {
+  //   const original = messages.find(m => String(m._id) === String(msgId));
+  //   if (!original || !newContent.trim()) return;
+  //   setMessages(prev => prev.map(m => {
+  //     if (String(m._id) !== String(msgId)) return m;
+  //     const oldHistory = m.editHistory || [];
+  //     return {
+  //       ...m,
+  //       content: newContent,
+  //       isEdited: true,
+  //       editHistory: [...oldHistory, { content: m.content, editedAt: new Date().toISOString() }],
+  //     };
+  //   }));
+  //   try {
+  //     await axios.patch(
+  //       `${API_BASE_URL}/messages/${msgId}`,
+  //       { content: newContent },
+  //       { headers: { Authorization: `Bearer ${token}` } }
+  //     );
+  //     toast.success('Đã chỉnh sửa tin nhắn');
+  //   } catch {
+  //     setMessages(prev => prev.map(m =>
+  //       String(m._id) === String(msgId) ? original : m
+  //     ));
+  //     toast.error('Lỗi chỉnh sửa tin nhắn');
+  //   }
+  // };
+
+  // ── Delete (soft-delete phía client) ─────────────────────────────────────
   const handleDelete = async (msgId) => {
-    setMessages(prev => prev.filter(m => m._id !== msgId));
+    // Optimistic: đánh dấu deletedBy chứa userId hiện tại
+    setMessages(prev => prev.map(m =>
+      String(m._id) === String(msgId)
+        ? { ...m, deletedBy: [...(m.deletedBy || []), userId] }
+        : m
+    ));
     try {
       await axios.delete(`${API_BASE_URL}/messages/${msgId}`, { headers: { Authorization: `Bearer ${token}` } });
-    } catch { toast.error('Lỗi xóa tin nhắn'); }
+    } catch {
+      // Rollback
+      setMessages(prev => prev.map(m =>
+        String(m._id) === String(msgId)
+          ? { ...m, deletedBy: (m.deletedBy || []).filter(id => String(id) !== String(userId)) }
+          : m
+      ));
+      toast.error('Lỗi xóa tin nhắn');
+    }
   };
 
   return {
@@ -263,5 +306,6 @@ export function useMessages({ activeConversation, userId, token, getOtherPartici
     handleReaction,
     handleRecall,
     handleDelete,
+    // handleEdit, // TODO: uncomment khi BE sẵn sàng
   };
 }
