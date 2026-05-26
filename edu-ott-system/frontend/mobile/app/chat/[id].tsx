@@ -277,7 +277,7 @@ export default function ChatScreen() {
       const matched = (convRes.items || []).find((item) => (item._id || item.id) === conversationId) || null;
       setConversation(matched);
       if (matched) {
-        getPinnedMessages(conversationId).then(setPinnedItems).catch(console.error);
+        getPinnedMessages(conversationId).then(setPinnedItems).catch(() => null);
         if (matched.type !== 'group') {
           const other = matched.participants?.find((p) => (p._id || p.id || '') !== currentUserId);
           if (other) {
@@ -328,7 +328,7 @@ export default function ChatScreen() {
             setConversation(updatedConv);
           }
         } catch (error) {
-          console.error('[Socket] Failed to reload conversation:', error);
+          console.log('[Socket] Failed to reload conversation:', error);
         }
       }
     };
@@ -810,7 +810,7 @@ export default function ChatScreen() {
       );
     } catch (err: any) {
       Alert.alert('Lỗi', err?.message || 'Không thể gửi ghi âm');
-      console.error('Voice send failed:', err);
+      console.log('Voice send failed:', err);
     } finally {
       setIsSending(false);
     }
@@ -882,7 +882,7 @@ export default function ChatScreen() {
             const fileName = asset.fileName || `photo-${Date.now()}.${ext}`;
             return await uploadMediaForm({ uri: asset.uri, fileName, mimeType });
           } catch (e) {
-            console.error('Failed to upload image:', e);
+            console.log('Failed to upload image:', e);
             return null;
           }
         })
@@ -929,7 +929,7 @@ export default function ChatScreen() {
               mimeType: asset.mimeType || getMimeTypeFromFileName(fileName),
             });
           } catch (e) {
-            console.error('Failed to upload file:', e);
+            console.log('Failed to upload file:', e);
             return null;
           }
         })
@@ -953,7 +953,7 @@ export default function ChatScreen() {
         prev.some((m) => getMessageId(m) === getMessageId(newMsg)) ? prev : [newMsg, ...prev]
       );
     } catch (e: any) {
-      console.error('Document picker error:', e);
+      console.log('Document picker error:', e);
       Alert.alert('Lỗi', e.message || 'Không thể chọn file');
     } finally {
       setIsSending(false);
