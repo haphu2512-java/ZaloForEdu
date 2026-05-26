@@ -200,12 +200,9 @@ export default function MessagesScreen() {
   }, [loadConversations]);
 
   const handlePress = (item: Conversation) => {
-    const currentUserId = user?.id || '';
-    const isSelfConv = item.type === 'direct' && item.participants?.every(p => (p._id || p.id || '') === currentUserId);
-    if (isSelfConv || (item as any).isMock) {
-      router.push('/(tabs)/mydocument');
-      return;
-    }
+    // isMock items don't have a real ID — skip
+    if ((item as any).isMock) return;
+    // Self-conversation ("Cloud của tôi") → go to normal chat screen (has back button + full features)
     router.push(`/chat/${item._id}`);
   };
   const handleLongPress = (item: Conversation) => { setSelectedConversation(item); };

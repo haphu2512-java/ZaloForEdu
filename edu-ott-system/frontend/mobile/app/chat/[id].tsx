@@ -1177,6 +1177,9 @@ export default function ChatScreen() {
     const isPinned = pinnedItems.some((item) => getPinnedMessageId(item) === messageId);
     const buttons: ChatActionMenuOption[] = [{ text: 'Hủy', style: 'cancel', onPress: () => { } }];
 
+    // Chỉ cho ghim nếu messageId hợp lệ (đã được lưu DB, không phải tin tạm)
+    const hasValidId = !!messageId && !messageId.startsWith('temp-');
+
     if (!msg.isRecalled) {
       buttons.push({ text: '↩ Trả lời', onPress: () => setReplyTo(msg) });
     }
@@ -1207,7 +1210,7 @@ export default function ChatScreen() {
       buttons.push({ text: '😊 Thả cảm xúc', onPress: () => handleReactToMessage(msg) });
       buttons.push({ text: '↗ Chuyển tiếp', onPress: () => openForwardModal(msg) });
     }
-    if (!msg.isRecalled && canPinMessage) {
+    if (!msg.isRecalled && canPinMessage && hasValidId) {
       buttons.push({
         text: isPinned ? 'Bỏ ghim' : 'Ghim tin nhắn',
         onPress: async () => {
