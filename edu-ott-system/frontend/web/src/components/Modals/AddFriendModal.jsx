@@ -70,7 +70,7 @@ export default function AddFriendModal({ isOpen, onClose }) {
           {/* Header */}
           <div style={{ padding: "16px 20px 12px", borderBottom: "1px solid var(--border-color)", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
             <div>
-              <div style={{ fontWeight: 700, fontSize: 15, color: "var(--text-primary)" }}>Thêm bạn</div>
+              <div style={{ fontWeight: 700, fontSize: 15, color: "var(--text-primary)" }}>Thêm bạn (v3)</div>
               <div style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 2 }}>Tìm qua số điện thoại, email hoặc tên</div>
             </div>
             <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-secondary)", padding: 4 }}>
@@ -150,6 +150,9 @@ export default function AddFriendModal({ isOpen, onClose }) {
                 </div>
               );
             })}
+            <div style={{ padding: "8px 20px", fontSize: 10, color: "var(--text-tertiary)", wordBreak: "break-all" }}>
+              Debug In: {incomingRequests.length} reqs | IDs: {incomingRequests.map(r => String(r.fromUserId?._id || r.fromUserId || r.from?._id || r.from || "")).join(", ")}
+            </div>
           </div>
         </div>
       </div>

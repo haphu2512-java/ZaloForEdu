@@ -432,6 +432,9 @@ export default function UserProfileModal({ isOpen, onClose, user, status: initia
             )}
           </div>
         </div>
+        <div style={{ textAlign: "center", padding: "10px", fontSize: 10, color: "var(--text-tertiary)", borderTop: "1px solid var(--border-color)" }}>
+          Debug ID: {uid} | Status: {status}
+        </div>
       </div>
     </div>
   );
