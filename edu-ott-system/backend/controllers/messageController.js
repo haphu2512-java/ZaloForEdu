@@ -132,6 +132,28 @@ const listMessagesByConversation = asyncHandler(async (req, res) => {
     query.createdAt = { $lte: conversation._leftAt };
   }
 
+  if (conversation.type === 'group' && String(conversation.createdBy) !== String(req.user._id)) {
+    const pref = await mongoose.model('ConversationPreference').findOne({ conversationId, userId: req.user._id });
+    if (pref) {
+      const joinedAt = pref.createdAt;
+      const allowReadHistory = conversation.settings?.allowNewMembersReadHistory;
+      let minDate;
+      if (allowReadHistory === false) {
+        minDate = joinedAt; // Only from the exact moment they joined
+      } else {
+        // allowNewMembersReadHistory is true (default) -> allow reading messages from "today" (00:00 of joined day)
+        minDate = new Date(joinedAt);
+        minDate.setHours(0, 0, 0, 0);
+      }
+      
+      if (query.createdAt) {
+        query.createdAt.$gte = minDate;
+      } else {
+        query.createdAt = { $gte: minDate };
+      }
+    }
+  }
+
   if (cursor) {
     const parsedCursor = decodeCursor(cursor);
     if (!parsedCursor) {
@@ -333,6 +355,27 @@ const searchMessagesInConversation = asyncHandler(async (req, res) => {
 
   if (leftAt) {
     filter.createdAt = { $lte: leftAt };
+  }
+
+  if (conversation.type === 'group' && String(conversation.createdBy) !== String(req.user._id)) {
+    const pref = await mongoose.model('ConversationPreference').findOne({ conversationId, userId: req.user._id });
+    if (pref) {
+      const joinedAt = pref.createdAt;
+      const allowReadHistory = conversation.settings?.allowNewMembersReadHistory;
+      let minDate;
+      if (allowReadHistory === false) {
+        minDate = joinedAt;
+      } else {
+        minDate = new Date(joinedAt);
+        minDate.setHours(0, 0, 0, 0);
+      }
+      
+      if (filter.createdAt) {
+        filter.createdAt.$gte = minDate;
+      } else {
+        filter.createdAt = { $gte: minDate };
+      }
+    }
   }
 
   if (cursor) {

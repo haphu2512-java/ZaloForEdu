@@ -219,6 +219,8 @@ const updateGroupSettings = asyncHandler(async (req, res) => {
   if (typeof canMembersCreatePolls === 'boolean') updates.canMembersCreatePolls = canMembersCreatePolls;
   if (typeof canMembersSendMessages === 'boolean') updates.canMembersSendMessages = canMembersSendMessages;
   if (typeof req.body.markAdminMessages === 'boolean') updates.markAdminMessages = req.body.markAdminMessages;
+  if (typeof req.body.allowInviteLink === 'boolean') updates.allowInviteLink = req.body.allowInviteLink;
+  if (typeof req.body.allowNewMembersReadHistory === 'boolean') updates.allowNewMembersReadHistory = req.body.allowNewMembersReadHistory;
 
   conversation.settings = { ...conversation.settings, ...updates };
   await conversation.save();
@@ -423,6 +425,9 @@ const previewGroupByInviteCode = asyncHandler(async (req, res) => {
     .populate('participants', 'username avatarUrl');
 
   if (!conversation) throw new ApiError(404, 'INVALID_INVITE_CODE', 'Invite link is invalid or expired');
+  if (conversation.settings?.allowInviteLink === false) {
+    throw new ApiError(403, 'FORBIDDEN', 'Tham gia bằng link đang bị tắt cho nhóm này');
+  }
 
   return successResponse(
     res,
@@ -446,6 +451,9 @@ const joinByInviteLink = asyncHandler(async (req, res) => {
 
   const conversation = await Conversation.findOne({ inviteCode: code });
   if (!conversation) throw new ApiError(404, 'INVALID_INVITE_CODE', 'Invite link is invalid or expired');
+  if (conversation.settings?.allowInviteLink === false) {
+    throw new ApiError(403, 'FORBIDDEN', 'Tham gia bằng link đang bị tắt cho nhóm này');
+  }
 
   // Kiểm tra đã là thành viên chưa
   const alreadyMember = conversation.participants.some((p) => toStr(p) === toStr(req.user._id));
@@ -463,6 +471,21 @@ const joinByInviteLink = asyncHandler(async (req, res) => {
       { status: 'pending', invitedBy: null, processedBy: null, processedAt: null },
       { returnDocument: 'after', upsert: true },
     );
+
+    await joinRequest.populate('userId', 'username avatarUrl email');
+
+    const adminIds = [
+      toStr(conversation.ownerId || conversation.createdBy),
+      ...(conversation.adminIds || []).map(toStr),
+    ].filter(Boolean);
+
+    adminIds.forEach((adminId) => {
+      socketService.emitToUser(adminId, 'join_request_received', {
+        conversationId: conversation._id,
+        conversationName: conversation.name,
+        joinRequest,
+      });
+    });
 
     return successResponse(res, { requiresApproval: true, joinRequest }, 'Join request sent, waiting for approval', 202);
   }

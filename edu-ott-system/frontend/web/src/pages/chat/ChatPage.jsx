@@ -943,7 +943,7 @@ export default function ChatPage() {
           handleUpdateGroupSettings={handleUpdateGroupSettings} handleMute={handleMute} handleGroupAction={handleGroupAction}
           reminders={reminders} polls={polls} loadingPolls={loadingPolls}
           handleCreateReminder={handleCreateReminder} handleUpdateReminder={handleUpdateReminder} handleDeleteReminder={handleDeleteReminder}
-          joinRequests={[]} handleProcessJoinRequest={(id, action) => handleProcessJoinRequest(id, action, { activeConversation, fetchConversationsData })}
+          joinRequests={joinRequests} handleProcessJoinRequest={(id, action) => handleProcessJoinRequest(id, action, { activeConversation, fetchConversationsData })}
           pendingEditReminder={pendingEditReminder} onPendingEditConsumed={() => setPendingEditReminder(null)}
           onShowReminderList={() => setShowReminderListPage(true)} onShowAddMember={() => setShowAddMemberModal(true)}
           onShowPoll={() => setShowCreatePollModal(true)}
