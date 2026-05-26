@@ -19,7 +19,10 @@ export default function AddFriendModal({ isOpen, onClose }) {
 
   useEffect(() => {
     if (isOpen && currentUser) {
-      Promise.all([fetchFriends(), fetchIncomingRequests(), fetchOutgoingRequests()]);
+      // FIX: Không gọi fetchOutgoingRequests đừn đây — nó REPLACE toàn bộ store bằng API data
+      // Làm mất optimistic update từ handleSendRequest khi đóng mở lại modal
+      // Store đã được persist (localStorage) nên outgoingRequests vẫn giữ nguyên
+      Promise.all([fetchFriends(), fetchIncomingRequests()]);
     }
   }, [isOpen, currentUser]);
 
