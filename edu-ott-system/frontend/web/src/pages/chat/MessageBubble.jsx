@@ -75,6 +75,7 @@ export const MessageBubble = ({
   // ... (rest of state and hooks)
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
+  const [menuDirection, setMenuDirection] = useState('bottom');
   const [pinLoading, setPinLoading] = useState(false);
   const [viewingMedia, setViewingMedia] = useState(null);
   const [showMediaInfo, setShowMediaInfo] = useState(false);
@@ -210,6 +211,16 @@ export const MessageBubble = ({
     } finally {
       setPinLoading(false);
     }
+  };
+
+  const handleToggleMoreMenu = (e) => {
+    if (!showMoreMenu) {
+      const rect = e.currentTarget.getBoundingClientRect();
+      const distanceToBottom = window.innerHeight - rect.bottom;
+      setMenuDirection(distanceToBottom < 220 ? 'top' : 'bottom');
+    }
+    setShowMoreMenu(!showMoreMenu);
+    setShowEmojiPicker(false);
   };
 
   return (
@@ -378,11 +389,16 @@ export const MessageBubble = ({
               <div className="mdc-msg-menu-pill">
                 <button className="mdc-pill-btn" title="Thả cảm xúc" onClick={() => { setShowEmojiPicker(!showEmojiPicker); setShowMoreMenu(false); }}><FaSmile size={12} /></button>
                 <button className="mdc-pill-btn" title="Trả lời" onClick={() => onReply?.(message)}><FaReply size={12} /></button>
-                <button className="mdc-pill-btn" title="Thêm" onClick={() => { setShowMoreMenu(!showMoreMenu); setShowEmojiPicker(false); }}><FaEllipsisH size={12} /></button>
+                <button className="mdc-pill-btn" title="Thêm" onClick={handleToggleMoreMenu}><FaEllipsisH size={12} /></button>
               </div>
 
               {showMoreMenu && (
-                <div className="mdc-msg-menu" style={{ right: isMe ? 0 : 'auto', left: isMe ? 'auto' : 0 }}>
+                <div className="mdc-msg-menu" style={{ 
+                  right: isMe ? 0 : 'auto', 
+                  left: isMe ? 'auto' : 0,
+                  top: menuDirection === 'bottom' ? 'calc(100% - 20px)' : 'auto',
+                  bottom: menuDirection === 'top' ? 'calc(100% - 20px)' : 'auto',
+                }}>
                   {content && (
                     <div className="mdc-mm-item" onClick={() => { navigator.clipboard.writeText(content); setShowMoreMenu(false); }}>
                       <FaCopy size={13} color="#65676B" /> Sao chép
