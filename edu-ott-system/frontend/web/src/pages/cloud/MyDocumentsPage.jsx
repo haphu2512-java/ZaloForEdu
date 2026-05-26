@@ -62,7 +62,9 @@ export default function MyDocumentsPage(){
   const[preview,setPreview]=useState(null);
   const[pinnedIds,setPinnedIds]=useState(new Set());
   const[showRightPanel, setShowRightPanel] = useState(true);
-  const[msgToDelete, setMsgToDelete] = useState(null);
+  const [msgToDelete,setMsgToDelete]=useState(null);
+
+  const [conversationsList, setConversationsList] = useState([]);
   const[removingId, setRemovingId] = useState(null);
   const[storageData, setStorageData] = useState({ totalBytes: 0, imageCount: 0, docCount: 0, linkCount: 0 });
 
@@ -341,35 +343,30 @@ export default function MyDocumentsPage(){
     }
   };
 
-  const openShareModal=(msg)=>{
+  const openShareModal = async (msg) => {
     setMsgToShare(msg);
     setFriendSearch("");
+    try {
+      const res = await chatService.getConversations(null, 100);
+      const convs = res.data?.data?.items || [];
+      setConversationsList(convs.filter(c => c._id !== convId));
+    } catch(err) {
+      console.error(err);
+    }
     setShareOpen(true);
   };
 
-  const executeForward=async(friend)=>{
-    if(!msgToShare)return;
-    try{
-      const targetId=friend._id||friend.id;
-      // Tìm hoặc tạo conversation với bạn
-      const res=await chatService.getConversations(null,100);
-      const convs=res.data?.data?.items||[];
-      let targetConvId=null;
-      const existing=convs.find(c=>c.type==="direct"&&c.participants?.some(p=>(p._id||p.id||p)===targetId));
-      if(existing){
-        targetConvId=existing._id;
-      }else{
-        const cr=await chatService.createConversation({type:"direct",participantIds:[targetId]});
-        targetConvId=cr.data?.data?._id||cr.data?.data?.id;
-      }
-      // Gửi nội dung tin nhắn đầu tiên
-      const content=msgToShare.content||""; 
-      const mediaIds=(msgToShare.mediaIds||msgToShare.media||msgToShare.attachments||[]).map(m=>m._id||m.id||m);
-      await chatService.sendMessage({conversationId:targetConvId,content,mediaIds});
-      toast.success(`Đã chuyển tiếp tới ${friend.fullName||friend.username}`);
+  const executeForward = async (conv) => {
+    if (!msgToShare) return;
+    try {
+      const targetConvId = conv._id || conv.id;
+      const content = msgToShare.content || ""; 
+      const mediaIds = (msgToShare.mediaIds || msgToShare.media || msgToShare.attachments || []).map(m => m._id || m.id || m);
+      await chatService.sendMessage({ conversationId: targetConvId, content, mediaIds, forwardFrom: msgToShare._id });
+      toast.success(`Đã chuyển tiếp tin nhắn`);
       setShareOpen(false);
-    }catch(err){
-      toast.error("Chuyển tiếp thất bại: "+(err.response?.data?.message||err.message));
+    } catch(err) {
+      toast.error("Chuyển tiếp thất bại: " + (err.response?.data?.message || err.message));
     }
   };
 
@@ -508,23 +505,34 @@ export default function MyDocumentsPage(){
               </div>
             </div>
             <div style={{flex:1,overflowY:'auto',padding:'8px 0'}}>
-              {friends.filter(f=>(f.fullName||f.username||"").toLowerCase().includes(friendSearch.toLowerCase())).length===0
-                ? <div style={{textAlign:'center',color:'#8A8D91',padding:24,fontSize:14}}>Không tìm thấy bạn bè nào</div>
-                : friends.filter(f=>(f.fullName||f.username||"").toLowerCase().includes(friendSearch.toLowerCase())).map((friend,i)=>(
-                  <div key={i} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'10px 20px',cursor:'pointer',transition:'background .12s'}} onMouseEnter={e=>e.currentTarget.style.background='#F0F2F5'} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
-                    <div style={{display:'flex',alignItems:'center',gap:12}}>
-                      <img src={friend.avatarUrl||friend.avatar||DEFAULT_AVATAR} alt="avt" style={{width:42,height:42,borderRadius:'50%',objectFit:'cover'}}/>
-                      <div>
-                        <div style={{fontSize:15,fontWeight:600,color:'#050505'}}>{friend.fullName||friend.username}</div>
-                        {friend.username&&friend.fullName&&<div style={{fontSize:12,color:'#8A8D91'}}>@{friend.username}</div>}
+              {(!conversationsList || conversationsList.length === 0)
+                ? <div style={{textAlign:'center',color:'#8A8D91',padding:24,fontSize:14}}>Không có cuộc trò chuyện nào</div>
+                : conversationsList.filter(c => {
+                    const isGroup = c.type === 'group';
+                    const otherUser = c.participants?.find(p => p._id !== (user?._id || user?.id));
+                    const displayName = isGroup ? c.name : (otherUser?.fullName || otherUser?.username || 'Trò chuyện');
+                    return displayName?.toLowerCase().includes(friendSearch.toLowerCase());
+                  }).map((conv, i) => {
+                    const isGroup = conv.type === 'group';
+                    const otherUser = conv.participants?.find(p => p._id !== (user?._id || user?.id));
+                    const displayName = isGroup ? conv.name : (otherUser?.fullName || otherUser?.username || 'Trò chuyện');
+                    const avatar = isGroup ? conv.avatarUrl : (otherUser?.avatarUrl || otherUser?.avatar);
+                    
+                    return (
+                      <div key={i} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'10px 20px',cursor:'pointer',transition:'background .12s'}} onMouseEnter={e=>e.currentTarget.style.background='#F0F2F5'} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+                        <div style={{display:'flex',alignItems:'center',gap:12}}>
+                          <img src={avatar || DEFAULT_AVATAR} alt="avt" style={{width:42,height:42,borderRadius:'50%',objectFit:'cover'}}/>
+                          <div>
+                            <div style={{fontSize:15,fontWeight:600,color:'#050505'}}>{displayName}</div>
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => executeForward(conv)}
+                          style={{padding:'7px 18px',borderRadius:6,border:'none',background:'#0068FF',color:'#fff',cursor:'pointer',fontWeight:600,fontSize:13,flexShrink:0}}
+                        >Gửi</button>
                       </div>
-                    </div>
-                    <button
-                      onClick={()=>executeForward(friend)}
-                      style={{padding:'7px 18px',borderRadius:6,border:'none',background:'#0068FF',color:'#fff',cursor:'pointer',fontWeight:600,fontSize:13,flexShrink:0}}
-                    >Gửi</button>
-                  </div>
-                ))
+                    );
+                  })
               }
             </div>
           </div>

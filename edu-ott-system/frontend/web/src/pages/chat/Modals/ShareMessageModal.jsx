@@ -3,7 +3,7 @@ import { FaTimes } from 'react-icons/fa';
 import { DEFAULT_AVATAR } from '../../../utils/constants';
 
 
-export const ShareMessageModal = ({ isOpen, onClose, friends, onForward }) => {
+export const ShareMessageModal = ({ isOpen, onClose, conversations, onForward, currentUserId }) => {
   if (!isOpen) return null;
 
   return (
@@ -15,19 +15,26 @@ export const ShareMessageModal = ({ isOpen, onClose, friends, onForward }) => {
         </div>
         
         <div style={{ flex: 1, overflowY: 'auto' }}>
-          {friends.length === 0 ? <p style={{ textAlign: 'center', color: '#8A8D91' }}>Bạn chưa có bạn bè nào.</p> : (
-            friends.map((friend, index) => (
-              <div key={index} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid #E5E7EB' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <img src={friend.avatarUrl || friend.avatar || DEFAULT_AVATAR} alt="avt" style={{ width: 40, height: 40, borderRadius: '50%' }} />
-                  <span style={{ fontSize: '15px', fontWeight: '500' }}>{friend.fullName || friend.username}</span>
+          {(!conversations || conversations.length === 0) ? <p style={{ textAlign: 'center', color: '#8A8D91' }}>Không có cuộc trò chuyện nào.</p> : (
+            conversations.map((conv, index) => {
+              const isGroup = conv.type === 'group';
+              const otherUser = conv.participants?.find(p => p._id !== currentUserId);
+              const displayName = isGroup ? conv.name : (otherUser?.fullName || otherUser?.username || 'Trò chuyện');
+              const avatar = isGroup ? conv.avatarUrl : (otherUser?.avatarUrl || otherUser?.avatar);
+
+              return (
+                <div key={conv._id || index} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid #E5E7EB' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <img src={avatar || DEFAULT_AVATAR} alt="avt" style={{ width: 40, height: 40, borderRadius: '50%', objectFit: 'cover' }} />
+                    <span style={{ fontSize: '15px', fontWeight: '500' }}>{displayName}</span>
+                  </div>
+                  <button 
+                    onClick={() => onForward(conv)}
+                    style={{ padding: '6px 16px', borderRadius: '4px', border: 'none', backgroundColor: '#0084FF', color: '#fff', cursor: 'pointer', fontWeight: 'bold' }}
+                  >Gửi</button>
                 </div>
-                <button 
-                  onClick={() => onForward(friend)}
-                  style={{ padding: '6px 16px', borderRadius: '4px', border: 'none', backgroundColor: '#0084FF', color: '#fff', cursor: 'pointer', fontWeight: 'bold' }}
-                >Gửi</button>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
       </div>

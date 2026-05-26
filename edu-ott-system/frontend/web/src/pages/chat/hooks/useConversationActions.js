@@ -285,32 +285,18 @@ export function useConversationActions({
   // ── Forward message ───────────────────────────────────────────────────────
   const openShareModal = (msg) => { setMsgToShare(msg); setShareModalOpen(true); };
 
-  const executeForward = async (friend, { conversations }) => {
+  const executeForward = async (conversation) => {
     if (!msgToShare) { toast.error('Không có tin nhắn để chuyển tiếp'); return; }
     try {
-      const targetId = friend._id || friend.id;
-      let targetConvId = null;
-      const existingConv = conversations.find(c =>
-        c.type === 'direct' && c.participants.some(p => (p._id || p.id) === targetId)
-      );
-      if (existingConv) {
-        targetConvId = existingConv._id;
-      } else {
-        const createRes = await axios.post(
-          `${API_BASE_URL}/conversations`,
-          { type: 'direct', participantIds: [targetId] },
-          { headers: { Authorization: `Bearer ${token}` } }
-        );
-        targetConvId = createRes.data.data?._id || createRes.data?._id;
-      }
+      const targetConvId = conversation._id || conversation.id;
       const content = msgToShare.content || '';
       const mediaIds = (msgToShare.attachments || msgToShare.mediaIds || []).map(m => m._id || m.id || m);
       await axios.post(
         `${API_BASE_URL}/messages/send`,
-        { content, mediaIds, conversationId: targetConvId },
+        { content, mediaIds, conversationId: targetConvId, forwardFrom: msgToShare._id },
         { headers: { Authorization: `Bearer ${token}` } }
       );
-      toast.success(`Đã chuyển tiếp tới ${friend.fullName || friend.username}`);
+      toast.success(`Đã chuyển tiếp tin nhắn`);
       setShareModalOpen(false);
     } catch {
       toast.error('Lỗi chuyển tiếp tin nhắn');

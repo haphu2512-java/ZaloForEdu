@@ -1444,7 +1444,12 @@ export default function ChatScreen() {
 
                     if (isImage && media?.url) {
                       return (
-                        <TouchableOpacity key={`${mediaId}-${idx}`} onPress={() => setViewImageUrl(media.url || null)} activeOpacity={0.9}>
+                        <TouchableOpacity 
+                          key={`${mediaId}-${idx}`} 
+                          onPress={() => setViewImageUrl(media.url || null)} 
+                          onLongPress={() => !isSendingMsg && handleMessageLongPress(item)}
+                          activeOpacity={0.9}
+                        >
                           <Image source={{ uri: media.url }} style={styles.inlineImage} resizeMode="cover" />
                         </TouchableOpacity>
                       );
@@ -1463,6 +1468,7 @@ export default function ChatScreen() {
                         key={`${mediaId}-${idx}`}
                         disabled={!canOpen}
                         onPress={() => openAttachment(media)}
+                        onLongPress={() => !isSendingMsg && handleMessageLongPress(item)}
                         style={[
                           styles.fileAttachment,
                           {
