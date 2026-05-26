@@ -158,7 +158,7 @@ const initSocket = (server) => {
       if (!conversationId) return;
       const allowed = await canJoinConversation(conversationId, socket.user._id);
       if (!allowed) {
-        socket.emit('socket_error', { message: 'Not allowed to join this room' });
+        socket.emit('socket_error', { message: 'Bạn không có quyền tham gia phòng này' });
         return;
       }
       socket.join(`conversation:${conversationId}`);
@@ -170,7 +170,7 @@ const initSocket = (server) => {
       if (!communityId || !channelId) return;
       const allowed = await canJoinConversation(communityId, socket.user._id);
       if (!allowed) {
-        socket.emit('socket_error', { message: 'Not allowed to join this channel room' });
+        socket.emit('socket_error', { message: 'Bạn không có quyền tham gia kênh này' });
         return;
       }
       socket.join(`community:${communityId}:channel:${channelId}`);

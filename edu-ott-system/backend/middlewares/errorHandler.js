@@ -8,8 +8,36 @@ const errorHandler = (err, _req, res, _next) => {
   let message = err.message || 'Something went wrong';
   let details = err.details || null;
 
+  const MESSAGE_MAP = {
+    'You are not a member of this group': 'Bạn không phải là thành viên của nhóm này',
+    'You are not a member of this conversation': 'Bạn không phải là thành viên của cuộc trò chuyện này',
+    'Only owner/admin can perform this action': 'Chỉ trưởng hoặc phó nhóm mới có quyền này',
+    'Only group owner can perform this action': 'Chỉ trưởng nhóm mới có quyền này',
+    'Only owner/admin can update group info': 'Chỉ trưởng hoặc phó nhóm mới được cập nhật thông tin',
+    'Only admin/owner can create polls in this group': 'Chỉ trưởng hoặc phó nhóm mới được tạo bình chọn',
+    'Cannot remove group owner': 'Không thể xóa trưởng nhóm',
+    'Only group owner can remove other admins': 'Chỉ trưởng nhóm mới có quyền xóa phó nhóm',
+    'Owner must transfer ownership before leaving group': 'Trưởng nhóm phải chuyển quyền trước khi rời nhóm',
+    'Conversation not found': 'Không tìm thấy cuộc trò chuyện',
+    'User not found': 'Không tìm thấy người dùng',
+    'User is not in this group': 'Thành viên không có trong nhóm',
+    'Member is already an admin': 'Thành viên đã là phó nhóm',
+    'User is already in this group': 'Thành viên đã có trong nhóm',
+    'All users are already in the group': 'Tất cả người dùng đã có trong nhóm',
+    'Direct conversation must contain exactly 2 participants': 'Cuộc trò chuyện cá nhân phải có đúng 2 người',
+    'Missing Bearer token': 'Vui lòng đăng nhập lại',
+    'Invalid access token': 'Phiên đăng nhập không hợp lệ',
+    'Invalid payload': 'Dữ liệu không hợp lệ',
+    'Validation failed': 'Xác thực dữ liệu thất bại',
+    'Internal server error': 'Lỗi máy chủ',
+    'File too large': 'Kích thước tệp quá lớn',
+    'Invalid file type': 'Loại tệp không hợp lệ'
+  };
+
+  message = MESSAGE_MAP[message] || message;
+
   if (err.name === 'ValidationError') {
-    message = 'Validation failed';
+    message = 'Xác thực dữ liệu thất bại';
     details = err.errors;
   }
 
