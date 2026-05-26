@@ -5,6 +5,7 @@ import { chatService } from "../../services/chatService";
 import { useAuthStore } from "../../store/authStore";
 import { useFriendStore } from "../../store/friendStore";
 import { socketService } from "../../services/socketService";
+import { userService } from "../../services/userService";
 import toast from "react-hot-toast";
 import "./MyDocumentsPage.css";
 
@@ -31,7 +32,7 @@ const isPopulatedReply = (r) => r && typeof r === "object" && (r.content !== und
 import { CloudHeader } from "./CloudHeader";
 import { CloudInput } from "./CloudInput";
 import { CloudRightPanel } from "./CloudRightPanel";
-import { CloudMsgBubble, UploadBubble, ImagePreview } from "./CloudMsgBubble";
+import { CloudMsgBubble, MediaPreview, UploadBubble } from "./CloudMsgBubble";
 import { CleanupModal } from "./CleanupModal";
 
 /* ===== MAIN PAGE ===== */
@@ -61,6 +62,18 @@ export default function MyDocumentsPage(){
   const[showRightPanel, setShowRightPanel] = useState(true);
   const[msgToDelete, setMsgToDelete] = useState(null);
   const[removingId, setRemovingId] = useState(null);
+  const[storageData, setStorageData] = useState({ totalBytes: 0, imageCount: 0, docCount: 0, linkCount: 0 });
+
+  const fetchStorageUsage = useCallback(async () => {
+    try {
+      const res = await userService.getMyCloudStorage();
+      if (res?.data) {
+        setStorageData(res.data);
+      }
+    } catch (err) {
+      console.error("Storage load error:", err);
+    }
+  }, []);
 
   const pageRef=useRef(null);
   const messagesEndRef=useRef(null);
@@ -96,9 +109,20 @@ export default function MyDocumentsPage(){
 
   useEffect(()=>{
     let cancelled=false;
-    (async()=>{setLoading(true);const cid=await getOrCreateSelfConv();if(!cancelled){setConvId(cid);if(cid)await loadMessages(cid);setLoading(false);}})();
+    (async()=>{
+      setLoading(true);
+      const cid=await getOrCreateSelfConv();
+      if(!cancelled){
+        setConvId(cid);
+        if(cid){
+          await loadMessages(cid);
+          await fetchStorageUsage();
+        }
+        setLoading(false);
+      }
+    })();
     return()=>{cancelled=true;};
-  },[getOrCreateSelfConv,loadMessages]);
+  },[getOrCreateSelfConv,loadMessages,fetchStorageUsage]);
 
   // load friend list for forward modal
   useEffect(()=>{ fetchFriends(); },[fetchFriends]);
@@ -154,7 +178,7 @@ export default function MyDocumentsPage(){
     const onDrop=(e)=>{
       e.preventDefault();
       setIsDragging(false);
-      Array.from(e.dataTransfer.files).forEach(f => handleUploadFile(f, null));
+      handleUploadFiles(Array.from(e.dataTransfer.files), null);
     };
     zone.addEventListener("dragover",onDragOver);zone.addEventListener("dragleave",onDragLeave);zone.addEventListener("drop",onDrop);
     return()=>{zone.removeEventListener("dragover",onDragOver);zone.removeEventListener("dragleave",onDragLeave);zone.removeEventListener("drop",onDrop);};
@@ -193,12 +217,25 @@ export default function MyDocumentsPage(){
     }catch(err){setUploads(prev=>prev.filter(u=>u.id!==uid));toast.error(err.message||"Tải lên thất bại");}
   },[convId]);
 
-  const handleUploadFiles=(files, replyToId=null)=>{
-    // Get full object from state using the replyToId if we assume we just pass replyTo object
-    // Wait, the input gives us replyToId, let's just pass `replyTo` from state directly? No, CloudInput doesn't pass the object back, 
-    // it passes replyToId. Oh well, we can just grab `replyTo` state variable inside handleUploadFiles!
+  const handleUploadFiles = async (files, replyToId=null) => {
     const replySnapshot = replyTo;
-    files.forEach(f => handleUploadFile(f, replySnapshot));
+    const maxConcurrent = 3;
+    const queue = Array.from(files);
+    
+    const worker = async () => {
+      while (queue.length > 0) {
+        const file = queue.shift();
+        await handleUploadFile(file, replySnapshot);
+      }
+    };
+    
+    const workers = [];
+    for (let i = 0; i < Math.min(maxConcurrent, queue.length); i++) {
+      workers.push(worker());
+    }
+    
+    await Promise.all(workers);
+    fetchStorageUsage();
   };
 
   const handleSendText=async(text, replyToId=null)=>{
@@ -238,6 +275,7 @@ export default function MyDocumentsPage(){
       setTimeout(() => {
         setMessages(prev => prev.filter(m => m._id !== msgToDelete));
         setRemovingId(null);
+        fetchStorageUsage();
         toast.success("Đã xóa tin nhắn", {
           icon: '🗑️',
           style: {
@@ -259,6 +297,7 @@ export default function MyDocumentsPage(){
     try{
       await Promise.all(msgIds.map(id=>chatService.deleteMessage(id)));
       setMessages(prev=>prev.filter(m=>!msgIds.includes(m._id)));
+      fetchStorageUsage();
       toast.success(`Đã xóa ${msgIds.length} mục`);
     }catch(err){toast.error("Xóa thất bại");}
   };
@@ -362,11 +401,10 @@ export default function MyDocumentsPage(){
     return acc;
   }, {});
 
-  const allMedia = messages.flatMap(m => m.mediaIds || m.media || []);
-  const totalBytes = allMedia.reduce((s, m) => s + (m.size || 0), 0);
-  const pctUsed = Math.min(100, (totalBytes / (1024 * 1024 * 1024)) * 100);
-  const imgFiles = allMedia.filter(m => ["image", "video"].includes(getCategory(m.fileName || "")));
-  const docFiles = allMedia.filter(m => !["image", "video"].includes(getCategory(m.fileName || "")));
+  const pctUsed = Math.min(100, ((storageData.totalBytes || 0) / (100 * 1024 * 1024 * 1024)) * 100);
+  
+  // We no longer filter imgFiles and docFiles from messages since they can be huge.
+  // Instead, we pass the counts from storageData to CloudRightPanel.
 
   return (
     <div className="mdc-page" ref={pageRef}>
@@ -420,7 +458,7 @@ export default function MyDocumentsPage(){
           {loading?(<div className="mdc-loading"><FaSpinner className="spin" size={28}/></div>):filtered.length===0&&uploads.length===0?(
             <div className="mdc-empty"><div className="mdc-empty-icon"><FaCloud size={52}/></div><h3>{searchQuery?"Không tìm thấy kết quả":"Chưa có nội dung nào"}</h3><p>{searchQuery?`Không có file nào chứa từ khóa "${searchQuery}"`:"Gửi ảnh, video, tài liệu hoặc ghi chú để lưu trữ cá nhân"}</p></div>
           ):(
-            <>{Object.entries(grouped).map(([dateLabel,items])=>(<div key={dateLabel}><div className="mdc-date-sep">{dateLabel}</div>{items.map(msg=>(<CloudMsgBubble key={String(msg._id || msg.id)} msg={msg} isRemoving={removingId===msg._id} onDelete={confirmDelete} onPreview={(url,name)=>setPreview({url,name})} onReaction={handleReaction} pinnedIds={pinnedIds} onPin={handlePin} onForward={openShareModal} onReply={(m)=>setReplyTo(m)} searchQuery={searchQuery}/>))}</div>))}{uploads.map(u=>(<UploadBubble key={String(u.id)} name={u.name} percent={u.percent}/>))}</>
+            <>{Object.entries(grouped).map(([dateLabel,items])=>(<div key={dateLabel}><div className="mdc-date-sep">{dateLabel}</div>{items.map(msg=>(<CloudMsgBubble key={String(msg._id || msg.id)} msg={msg} isRemoving={removingId===msg._id} onDelete={confirmDelete} onPreview={(url,name,type)=>setPreview({url,name,type})} onReaction={handleReaction} pinnedIds={pinnedIds} onPin={handlePin} onForward={openShareModal} onReply={(m)=>setReplyTo(m)} searchQuery={searchQuery}/>))}</div>))}{uploads.map(u=>(<UploadBubble key={String(u.id)} name={u.name} percent={u.percent}/>))}</>
 
           )}
           <div ref={messagesEndRef}/>
@@ -437,17 +475,14 @@ export default function MyDocumentsPage(){
 
       {showRightPanel && (
         <CloudRightPanel
-          totalBytes={totalBytes}
+          storageData={storageData}
           pctUsed={pctUsed}
           setShowCleanup={setShowCleanup}
-          imgFiles={imgFiles}
-          docFiles={docFiles}
           setFilterTab={setFilterTab}
-          setPreview={setPreview}
         />
       )}
 
-      {preview&&<ImagePreview url={preview.url} name={preview.name} onClose={()=>setPreview(null)}/>}
+      {preview&&<MediaPreview url={preview.url} name={preview.name} type={preview.type} onClose={()=>setPreview(null)}/>}
       {showCleanup&&<CleanupModal messages={messages} onDelete={handleBulkDelete} onClose={()=>setShowCleanup(false)}/>}
 
       {/* Share / Forward Modal */}

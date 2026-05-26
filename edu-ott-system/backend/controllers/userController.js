@@ -1,5 +1,7 @@
 const crypto = require('node:crypto');
 const User = require('../models/User');
+const Conversation = require('../models/Conversation');
+const Message = require('../models/Message');
 const asyncHandler = require('../utils/asyncHandler');
 const ApiError = require('../utils/apiError');
 const { successResponse } = require('../utils/apiResponse');
@@ -283,6 +285,52 @@ const getAllUsers = asyncHandler(async (req, res) => {
   return successResponse(res, { users: usersWithWarnings }, 'Lấy danh sách người dùng thành công');
 });
 
+const getMyCloudStorage = asyncHandler(async (req, res) => {
+  const userId = req.user._id;
+  
+  // Find self conversation (My Documents)
+  const selfConv = await Conversation.findOne({
+    type: 'direct',
+    participants: { $size: 1, $all: [userId] }
+  });
+
+  let totalBytes = 0;
+  let imageCount = 0;
+  let docCount = 0;
+  let linkCount = 0;
+
+  if (selfConv) {
+    const messages = await Message.find({ 
+      conversationId: selfConv._id, 
+      'mediaIds.0': { $exists: true } 
+    }).populate('mediaIds');
+
+    for (const msg of messages) {
+      if (!msg.mediaIds) continue;
+      for (const media of msg.mediaIds) {
+        if (!media) continue;
+        totalBytes += media.size || 0;
+        const mime = media.mimeType || '';
+        if (mime.startsWith('image/') || mime.startsWith('video/') || media.providerResourceType === 'image' || media.providerResourceType === 'video') {
+          imageCount++;
+        } else {
+          docCount++;
+        }
+      }
+    }
+    
+    // Đếm số lượng link nếu cần (tin nhắn text có chứa http/https)
+    // Tạm thời để 0 vì chức năng cũ không yêu cầu.
+  }
+
+  return successResponse(res, {
+    totalBytes,
+    imageCount,
+    docCount,
+    linkCount
+  }, 'Lấy thông tin dung lượng thành công');
+});
+
 module.exports = {
   getUserById,
   updateUserById,
@@ -292,4 +340,5 @@ module.exports = {
   updateUserStatus,
   getAllUsers,
   reportUser,
+  getMyCloudStorage,
 };
