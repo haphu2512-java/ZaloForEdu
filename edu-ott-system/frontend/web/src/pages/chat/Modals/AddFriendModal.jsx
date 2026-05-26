@@ -51,20 +51,18 @@ export default function AddFriendModal({ isOpen, onClose }) {
     const myId = String(currentUser?._id || currentUser?.id);
     if (id === myId) return "self";
     if (friends.some(f => String(f._id || f.id) === id)) return "friend";
-    if (outgoingRequests.some(r => String(r.toUserId?._id || r.toUserId || "") === id)) return "outgoing";
-    if (incomingRequests.some(r => String(r.fromUserId?._id || r.fromUserId || "") === id)) return "incoming";
+    if (outgoingRequests.some(r => String(r.toUserId?._id || r.toUserId || r.to?._id || r.to || "") === id)) return "outgoing";
+    if (incomingRequests.some(r => String(r.fromUserId?._id || r.fromUserId || r.from?._id || r.from || "") === id)) return "incoming";
     return "none";
   };
 
   return (
     <>
-      <div
-        style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 9998,
-          // FIX: Ẩn hoàn toàn khi UserProfileModal đang mở — tránh 2 modal chồng nhau
-          display: selectedUser ? "none" : "flex",
-          alignItems: "center", justifyContent: "center" }}
-        onClick={onClose}
-      >
+      {!selectedUser && (
+        <div
+          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 9998, display: "flex", alignItems: "center", justifyContent: "center" }}
+          onClick={onClose}
+        >
         <div
           style={{ background: "var(--bg-primary)", borderRadius: 14, width: 420, maxWidth: "95vw", boxShadow: "0 20px 60px rgba(0,0,0,0.2)", overflow: "hidden", display: "flex", flexDirection: "column", maxHeight: "80vh" }}
           onClick={e => e.stopPropagation()}
@@ -154,7 +152,7 @@ export default function AddFriendModal({ isOpen, onClose }) {
             })}
           </div>
         </div>
-      </div>
+      )}
 
       {selectedUser && (
         <UserProfileModal

@@ -89,19 +89,19 @@ export default function UserProfileModal({ isOpen, onClose, user, status: initia
         if (isFriend) { setStatus("friend"); return; }
 
         const serverOut = outData?.items || [];
-        const outReq = serverOut.find(r => String(r.toUserId?._id || r.toUserId || "") === uid);
+        const outReq = serverOut.find(r => String(r.toUserId?._id || r.toUserId || r.to?._id || r.to || "") === uid);
         if (outReq) { setStatus("outgoing"); setOutgoingReqId(String(outReq._id)); return; }
 
         const serverIn = inData?.items || [];
-        const inReq = serverIn.find(r => String(r.fromUserId?._id || r.fromUserId || "") === uid);
+        const inReq = serverIn.find(r => String(r.fromUserId?._id || r.fromUserId || r.from?._id || r.from || "") === uid);
         if (inReq) { setStatus("incoming"); setIncomingReqId(String(inReq._id)); return; }
 
         // FIX: Trước khi đặt 'none', kiểm tra lại live store
         // (có thể handleSendRequest đã optimistic update nhưng API chưa phản ánh)
         const { outgoingRequests: liveOut, incomingRequests: liveIn, friends: liveFriends } = useFriendStore.getState();
         const liveIsFriend = liveFriends.some(f => String(f._id || f.id) === uid);
-        const liveOutgoing = liveOut.some(r => String(r.toUserId?._id || r.toUserId || '') === uid);
-        const liveIncoming = liveIn.some(r => String(r.fromUserId?._id || r.fromUserId || '') === uid);
+        const liveOutgoing = liveOut.some(r => String(r.toUserId?._id || r.toUserId || r.to?._id || r.to || '') === uid);
+        const liveIncoming = liveIn.some(r => String(r.fromUserId?._id || r.fromUserId || r.from?._id || r.from || '') === uid);
         if (liveIsFriend)  { setStatus("friend");   return; }
         if (liveOutgoing)  { setStatus("outgoing");  return; }
         if (liveIncoming)  { setStatus("incoming");  return; }

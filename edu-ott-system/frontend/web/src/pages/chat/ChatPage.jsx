@@ -620,9 +620,12 @@ export default function ChatPage() {
               const otherName = other && typeof other === 'object' ? (other.username || other.fullName || 'Người dùng') : 'Người dùng';
               if (!otherId || friendIds.has(otherId)) return null;
               const hasOutgoing = outgoingRequestIds.has(otherId) || justSentRequestTo === otherId;
-              const incomingReq = incomingRequests.find(r => { const fromId = r.fromUserId?._id ? String(r.fromUserId._id) : r.fromUserId?.id ? String(r.fromUserId.id) : String(r.fromUserId || ''); return fromId === otherId; });
+              const incomingReq = incomingRequests.find(r => {
+                const fromId = String(r.fromUserId?._id || r.fromUserId || r.from?._id || r.from || '');
+                return fromId === otherId;
+              });
               if (hasOutgoing) {
-                const outReq = outgoingRequests.find(r => String(r.toUserId?._id || r.toUserId || '') === otherId);
+                const outReq = outgoingRequests.find(r => String(r.toUserId?._id || r.toUserId || r.to?._id || r.to || '') === otherId);
                 return (
                   <div style={{ position: 'sticky', top: 0, zIndex: 10, padding: '12px 20px', background: 'rgba(0,104,255,0.06)', borderBottom: '1px solid var(--z-border)', display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, backdropFilter: 'blur(8px)' }}>
                     <FaUserPlus size={14} color="var(--z-primary)" style={{ flexShrink: 0 }} />
