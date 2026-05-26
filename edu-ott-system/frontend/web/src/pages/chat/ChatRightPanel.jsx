@@ -6,7 +6,7 @@ import { pollService } from '../../services/pollService';
 import { uploadFile } from '../../services/mediaService';
 import { userService } from '../../services/userService';
 import { useLanguage } from '../../contexts/LanguageContext';
-import { getFileColor, getExt, formatBytes, toAbsoluteUrl } from './chatUtils';
+import { getFileColor, getExt, formatBytes, toAbsoluteUrl, openDocument } from './chatUtils';
 import PinnedMessagesPanel from './Modals/PinnedMessagesPanel';
 import ReportUserModal from './Modals/ReportUserModal';
 import ClassifyConversationModal from './Modals/ClassifyConversationModal';
@@ -600,7 +600,7 @@ export const ChatRightPanel = ({
                   {imgFiles.length > 0 ? (
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 4, marginTop: 4 }}>
                       {imgFiles.slice(0, 8).map((m, i) => (
-                        <img key={i} src={m.url} alt="" style={{ width: '100%', aspectRatio: '1/1', objectFit: 'cover', borderRadius: 4 }} />
+                        <img key={i} src={m.url} alt="" style={{ width: '100%', aspectRatio: '1/1', objectFit: 'cover', borderRadius: 4, cursor: 'pointer' }} onClick={() => window.open(m.url, '_blank')} title="Xem ảnh" />
                       ))}
                     </div>
                   ) : <div style={{ fontSize: 13, color: 'var(--z-text-muted)', marginTop: 4, textAlign: 'center' }}>{t('noImageVideo') || 'Chưa có ảnh/video'}</div>}
@@ -615,7 +615,7 @@ export const ChatRightPanel = ({
                       {docFiles.slice(0, 3).map((m, i) => {
                         const fname = m.name || m.fileName;
                         return (
-                          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }} onClick={() => openDocument(m.url, fname)} title="Xem tài liệu">
                             <div style={{ width: 36, height: 40, borderRadius: 6, background: getFileColor(fname), display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: 10, fontWeight: 'bold', flexShrink: 0 }}>
                               {getExt(fname).substring(0, 3).toUpperCase()}
                             </div>

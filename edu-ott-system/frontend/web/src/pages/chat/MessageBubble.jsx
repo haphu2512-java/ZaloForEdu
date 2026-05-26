@@ -4,7 +4,7 @@ import {
   FaDownload, FaCheckDouble, FaCheck, FaClock, FaSmile,
   FaShare, FaReply, FaEllipsisH, FaUndo, FaTrash, FaCopy, FaThumbtack, FaCrown, FaStar, FaPlayCircle
 } from 'react-icons/fa';
-import { getExt, getCategory, getFileColor, formatBytes, toAbsoluteUrl } from './chatUtils';
+import { getExt, getCategory, getFileColor, formatBytes, toAbsoluteUrl, forceDownload, openDocument } from './chatUtils';
 import { AudioBubble } from '../../components/shared/AudioBubble';
 import PollMessage from './PollMessage';
 import { conversationService } from '../../services/conversationService';
@@ -296,7 +296,7 @@ export const MessageBubble = ({
                               ) : (
                                 <img src={toAbsoluteUrl(att.url)} alt="attachment" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', cursor: 'pointer' }} onClick={() => setViewingMedia({ url: toAbsoluteUrl(att.url), isVideo: false })} />
                               )}
-                              <a className="mdc-img-dl-btn" href={toAbsoluteUrl(att.url)} target="_blank" rel="noreferrer" title="Tải về" onClick={e => e.stopPropagation()}><FaDownload size={11} /></a>
+                              <a className="mdc-img-dl-btn" title="Tải về" onClick={e => { e.preventDefault(); e.stopPropagation(); forceDownload(att.url, att.fileName || att.name || 'image'); }}><FaDownload size={11} /></a>
                               {isLast && remain > 0 && (
                                 <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.5)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '24px', fontWeight: 'bold' }}>
                                   +{remain}
@@ -312,7 +312,7 @@ export const MessageBubble = ({
                       const fileName = att.name || att.fileName || `Tệp ${i + 1}`;
                       const downloadUrl = toAbsoluteUrl(att.url);
                       return (
-                        <div key={`doc-${i}`} className="mdc-file-bubble">
+                        <div key={`doc-${i}`} className="mdc-file-bubble" style={{ cursor: 'pointer' }} onClick={(e) => { e.stopPropagation(); openDocument(att.url, fileName); }}>
                           <div className="mdc-fb-icon" style={{ background: getFileColor(fileName) }}>
                             {getExt(fileName).toUpperCase().slice(0, 4)}
                           </div>
@@ -320,7 +320,7 @@ export const MessageBubble = ({
                             <span className="mdc-fb-name">{fileName}</span>
                             <div className="mdc-fb-meta">{formatBytes(att.size)}</div>
                           </div>
-                          <a href={downloadUrl} onClick={e => e.stopPropagation()} download={fileName} className="mdc-fb-btn"><FaDownload size={13} /></a>
+                          <a onClick={e => { e.preventDefault(); e.stopPropagation(); forceDownload(att.url, fileName); }} className="mdc-fb-btn"><FaDownload size={13} /></a>
                         </div>
                       );
                     })}
@@ -437,6 +437,9 @@ export const MessageBubble = ({
 
       {viewingMedia && createPortal(
         <div style={{ position: 'fixed', inset: 0, zIndex: 99999, background: 'rgba(0,0,0,0.9)', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setViewingMedia(null)}>
+          <a style={{ position: 'absolute', top: 20, right: 80, background: 'none', border: 'none', color: '#fff', fontSize: 30, cursor: 'pointer', display: 'flex', alignItems: 'center' }} onClick={(e) => { e.stopPropagation(); forceDownload(viewingMedia.url, 'media'); }} title="Tải xuống">
+            <FaDownload size={24} />
+          </a>
           <button style={{ position: 'absolute', top: 20, right: 20, background: 'none', border: 'none', color: '#fff', fontSize: 40, cursor: 'pointer' }} onClick={() => setViewingMedia(null)}>&times;</button>
           {viewingMedia.isVideo ? (
              <video src={viewingMedia.url} controls autoPlay style={{ maxWidth: '90%', maxHeight: '90%' }} onClick={e => e.stopPropagation()} />
