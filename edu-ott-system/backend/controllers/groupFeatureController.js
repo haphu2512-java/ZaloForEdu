@@ -211,18 +211,17 @@ const updateGroupSettings = asyncHandler(async (req, res) => {
   if (conversation.type !== 'group') throw new ApiError(400, 'INVALID_CONVERSATION_TYPE', 'Only for group conversations');
   ensureAdminOrOwner(conversation, req.user._id);
 
-  const updates = {};
-  if (typeof isApprovalRequired === 'boolean') updates.isApprovalRequired = isApprovalRequired;
-  if (typeof canMembersUpdateInfo === 'boolean') updates.canMembersUpdateInfo = canMembersUpdateInfo;
-  if (typeof canMembersPin === 'boolean') updates.canMembersPin = canMembersPin;
-  if (typeof canMembersCreateReminders === 'boolean') updates.canMembersCreateReminders = canMembersCreateReminders;
-  if (typeof canMembersCreatePolls === 'boolean') updates.canMembersCreatePolls = canMembersCreatePolls;
-  if (typeof canMembersSendMessages === 'boolean') updates.canMembersSendMessages = canMembersSendMessages;
-  if (typeof req.body.markAdminMessages === 'boolean') updates.markAdminMessages = req.body.markAdminMessages;
-  if (typeof req.body.allowInviteLink === 'boolean') updates.allowInviteLink = req.body.allowInviteLink;
-  if (typeof req.body.allowNewMembersReadHistory === 'boolean') updates.allowNewMembersReadHistory = req.body.allowNewMembersReadHistory;
+  if (typeof isApprovalRequired === 'boolean') conversation.settings.isApprovalRequired = isApprovalRequired;
+  if (typeof canMembersUpdateInfo === 'boolean') conversation.settings.canMembersUpdateInfo = canMembersUpdateInfo;
+  if (typeof canMembersPin === 'boolean') conversation.settings.canMembersPin = canMembersPin;
+  if (typeof canMembersCreateReminders === 'boolean') conversation.settings.canMembersCreateReminders = canMembersCreateReminders;
+  if (typeof canMembersCreatePolls === 'boolean') conversation.settings.canMembersCreatePolls = canMembersCreatePolls;
+  if (typeof canMembersSendMessages === 'boolean') conversation.settings.canMembersSendMessages = canMembersSendMessages;
+  if (typeof req.body.markAdminMessages === 'boolean') conversation.settings.markAdminMessages = req.body.markAdminMessages;
+  if (typeof req.body.allowInviteLink === 'boolean') conversation.settings.allowInviteLink = req.body.allowInviteLink;
+  if (typeof req.body.allowNewMembersReadHistory === 'boolean') conversation.settings.allowNewMembersReadHistory = req.body.allowNewMembersReadHistory;
 
-  conversation.settings = { ...conversation.settings, ...updates };
+  conversation.markModified('settings');
   await conversation.save();
 
   socketService.emitToConversation(id, 'conversation_settings_updated', conversation.settings);
