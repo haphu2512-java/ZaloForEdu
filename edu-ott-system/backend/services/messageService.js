@@ -3,6 +3,8 @@ const Message = require('../models/Message');
 const User = require('../models/User');
 const ApiError = require('../utils/apiError');
 
+const toStr = (id) => id?.toString();
+
 const ensureConversationMember = async (conversationId, userId, allowPast = false) => {
   const conversation = await Conversation.findById(conversationId);
   if (!conversation) {

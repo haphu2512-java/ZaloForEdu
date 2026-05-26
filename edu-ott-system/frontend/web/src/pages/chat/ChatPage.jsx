@@ -789,10 +789,26 @@ export default function ChatPage() {
           {/* Input area */}
           {(() => {
             const isGroupConv = activeConversation?.type === 'group' || activeConversation?.roomModel === 'Group';
+            const isParticipant = activeConversation?.participants?.some(p => String(p._id || p) === String(userId));
             const isOwnerStr = activeConversation?.ownerId?._id || activeConversation?.ownerId;
             const isOwner = isOwnerStr && String(isOwnerStr) === String(userId);
             const isAdmin = activeConversation?.adminIds?.some(aid => String(aid._id || aid) === String(userId)) || isOwner;
-            const cannotSend = isGroupConv && !(isOwner || isAdmin) && activeConversation?.settings?.canMembersSendMessages === false;
+            const cannotSend = isGroupConv && isParticipant && !(isOwner || isAdmin) && activeConversation?.settings?.canMembersSendMessages === false;
+
+            if (isGroupConv && !isParticipant) {
+              return (
+                <div style={{ padding: '16px 20px', background: 'var(--z-bg-sidebar)', borderTop: '1px solid var(--z-border)', display: 'flex', alignItems: 'center', gap: 14 }}>
+                  <div style={{ width: 40, height: 40, borderRadius: '50%', background: 'rgba(239,68,68,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><line x1="4.93" y1="4.93" x2="19.07" y2="19.07" /></svg>
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: '#ef4444', marginBottom: 2 }}>Bạn không còn là thành viên của nhóm này</div>
+                    <div style={{ fontSize: 12, color: 'var(--z-text-secondary)', lineHeight: 1.4 }}>Bạn chỉ có thể xem lịch sử trò chuyện.</div>
+                  </div>
+                </div>
+              );
+            }
+
             if (cannotSend) return (
               <div style={{ padding: '16px', background: 'var(--z-bg-main)', borderTop: '1px solid var(--z-border)', display: 'flex', alignItems: 'flex-start', color: 'var(--z-text-secondary)', fontSize: 13, gap: 12 }}>
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, color: 'var(--z-primary)' }}><circle cx="12" cy="12" r="10" /><line x1="12" y1="16" x2="12" y2="12" /><line x1="12" y1="8" x2="12.01" y2="8" /></svg>
