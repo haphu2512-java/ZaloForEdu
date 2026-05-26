@@ -144,11 +144,16 @@ export const useChatSocket = ({
       });
     };
 
-    const handleSettingsUpdated = (newSettings) => {
-      setActiveConversation(prev => prev ? { ...prev, settings: newSettings } : prev);
+    const handleSettingsUpdated = ({ conversationId, settings: newSettings }) => {
+      setActiveConversation(prev => 
+        (prev && String(prev._id) === String(conversationId)) 
+          ? { ...prev, settings: newSettings } 
+          : prev
+      );
       setConversations(prev => prev.map(c =>
-        activeConversationRef.current && c._id === activeConversationRef.current._id
-          ? { ...c, settings: newSettings } : c
+        String(c._id) === String(conversationId)
+          ? { ...c, settings: newSettings } 
+          : c
       ));
     };
 

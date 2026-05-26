@@ -225,7 +225,10 @@ const updateGroupSettings = asyncHandler(async (req, res) => {
   conversation.markModified('settings');
   await conversation.save();
 
-  socketService.emitToConversation(id, 'conversation_settings_updated', conversation.settings);
+  socketService.emitToConversation(id, 'conversation_settings_updated', {
+    conversationId: id,
+    settings: conversation.settings
+  });
   const senderName = req.user.fullName || req.user.username;
   await emitGroupSystemMessage({
     conversationId: conversation._id,
@@ -567,6 +570,13 @@ const blockMember = asyncHandler(async (req, res) => {
 
   socketService.emitToUser(targetStr, 'removed_from_group', { conversationId: id, reason: 'blocked' });
   socketService.emitToConversation(id, 'member_blocked', { conversationId: id, memberId: targetStr });
+  
+  await socketService.emitGroupUpdated(conversation._id.toString(), {
+    conversationId: conversation._id.toString(),
+    action: 'member_blocked',
+    memberId: targetStr,
+  });
+
   const targetUser = await User.findById(memberId).select('fullName username');
   const targetName = targetUser?.fullName || targetUser?.username || 'một thành viên';
   const senderName = req.user.fullName || req.user.username;
@@ -588,6 +598,13 @@ const unblockMember = asyncHandler(async (req, res) => {
 
   conversation.blockedMembers = (conversation.blockedMembers || []).filter(b => toStr(b) !== toStr(memberId));
   await conversation.save();
+
+  await socketService.emitGroupUpdated(conversation._id.toString(), {
+    conversationId: conversation._id.toString(),
+    action: 'member_unblocked',
+    memberId: toStr(memberId),
+  });
+
   const targetUser = await User.findById(memberId).select('fullName username');
   const targetName = targetUser?.fullName || targetUser?.username || 'một thành viên';
   const senderName = req.user.fullName || req.user.username;
