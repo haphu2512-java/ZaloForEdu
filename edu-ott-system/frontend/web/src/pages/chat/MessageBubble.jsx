@@ -78,6 +78,7 @@ export const MessageBubble = ({
   const [pinLoading, setPinLoading] = useState(false);
   const [viewingMedia, setViewingMedia] = useState(null);
   const [showMediaInfo, setShowMediaInfo] = useState(false);
+  const [showDetailsModal, setShowDetailsModal] = useState(false);
   const menuRef = useRef(null);
 
   const rawMediaList = isRecalled ? [] : (message.attachments || message.mediaIds || message.media || []);
@@ -313,7 +314,7 @@ export const MessageBubble = ({
                       const fileName = att.name || att.fileName || `Tệp ${i + 1}`;
                       const downloadUrl = toAbsoluteUrl(att.url);
                       return (
-                        <div key={`doc-${i}`} className="mdc-file-bubble" style={{ cursor: 'pointer' }} onClick={(e) => { e.stopPropagation(); setViewingMedia({ url: toAbsoluteUrl(att.url), isVideo: false, isDoc: true, name: fileName, size: formatBytes(att.size || 0), sender: name, time: timeString, date: new Date(createdAt).toLocaleDateString('vi-VN') }); }}>
+                        <div key={`doc-${i}`} className="mdc-file-bubble" style={{ cursor: 'pointer' }} onClick={(e) => { e.stopPropagation(); openDocument(downloadUrl, fileName); }}>
                           <div className="mdc-fb-icon" style={{ background: getFileColor(fileName) }}>
                             {getExt(fileName).toUpperCase().slice(0, 4)}
                           </div>
@@ -404,6 +405,12 @@ export const MessageBubble = ({
                     </div>
                   )}
 
+                  {mediaList.length > 0 && (
+                    <div className="mdc-mm-item" onClick={() => { setShowDetailsModal(true); setShowMoreMenu(false); }}>
+                      <FaInfoCircle size={13} color="#65676B" /> Xem chi tiết
+                    </div>
+                  )}
+
                   {isMe && (
                     <div className="mdc-mm-item" onClick={() => { onRecall?.(_id); setShowMoreMenu(false); }}>
                       <FaUndo size={13} color="#65676B" /> Thu hồi
@@ -435,6 +442,45 @@ export const MessageBubble = ({
           )}
         </div>
       </div>
+
+      {showDetailsModal && createPortal(
+        <div style={{ position: 'fixed', inset: 0, zIndex: 99999, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setShowDetailsModal(false)}>
+          <div style={{ background: 'var(--z-bg-main)', width: 340, borderRadius: 12, padding: 20, boxShadow: '0 4px 20px rgba(0,0,0,0.15)' }} onClick={e => e.stopPropagation()}>
+            <h3 style={{ margin: '0 0 16px 0', fontSize: 18, color: 'var(--z-text-primary)' }}>Chi tiết tin nhắn</h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, fontSize: 14 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: 'var(--z-text-secondary)' }}>Người gửi:</span>
+                <span style={{ fontWeight: 500, color: 'var(--z-text-primary)' }}>{name}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: 'var(--z-text-secondary)' }}>Thời gian:</span>
+                <span style={{ fontWeight: 500, color: 'var(--z-text-primary)' }}>{timeString} - {new Date(createdAt).toLocaleDateString('vi-VN')}</span>
+              </div>
+              
+              {mediaList.length > 0 && (
+                <div style={{ marginTop: 8 }}>
+                  <div style={{ color: 'var(--z-text-secondary)', marginBottom: 8, fontSize: 13 }}>Tệp đính kèm ({mediaList.length}):</div>
+                  <div style={{ maxHeight: 160, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {mediaList.map((m, i) => (
+                      <div key={i} style={{ background: 'var(--z-bg-sidebar)', padding: '10px 12px', borderRadius: 8, display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <div style={{ width: 36, height: 36, borderRadius: 6, background: 'var(--z-primary-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--z-primary)', fontWeight: 'bold', fontSize: 12 }}>
+                          {getExt(m.name || m.fileName || '').toUpperCase().slice(0,3) || 'FILE'}
+                        </div>
+                        <div style={{ flex: 1, overflow: 'hidden' }}>
+                          <div style={{ fontWeight: 500, color: 'var(--z-text-primary)', fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{m.name || m.fileName || `Tệp ${i+1}`}</div>
+                          <div style={{ color: 'var(--z-text-secondary)', fontSize: 12, marginTop: 2 }}>{formatBytes(m.size || 0)}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+            <button onClick={() => setShowDetailsModal(false)} style={{ width: '100%', padding: '10px 0', marginTop: 20, background: 'var(--z-primary)', color: '#fff', border: 'none', borderRadius: 8, fontWeight: 600, cursor: 'pointer', transition: 'background 0.2s' }} onMouseEnter={e => e.currentTarget.style.background = 'var(--z-primary-dark)'} onMouseLeave={e => e.currentTarget.style.background = 'var(--z-primary)'}>Đóng</button>
+          </div>
+        </div>,
+        document.body
+      )}
 
       {viewingMedia && createPortal(
         <div style={{ position: 'fixed', inset: 0, zIndex: 99999, background: 'rgba(0,0,0,0.9)', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => { setViewingMedia(null); setShowMediaInfo(false); }}>
