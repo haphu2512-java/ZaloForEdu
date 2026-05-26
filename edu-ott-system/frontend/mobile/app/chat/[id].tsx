@@ -213,7 +213,9 @@ export default function ChatScreen() {
 
   const headerAvatarUrl = conversation?.type === 'group'
     ? toAbsoluteUrl(conversation.avatarUrl || (conversation as any).avatar) || `https://ui-avatars.com/api/?name=${encodeURIComponent(conversationTitle)}&background=8B5CF6&color=fff&size=150&bold=true`
-    : toAbsoluteUrl(otherParticipant?.avatarUrl || (otherParticipant as any)?.avatar) || `https://ui-avatars.com/api/?name=${encodeURIComponent(conversationTitle)}&background=2563EB&color=fff&size=150&bold=true`;
+    : (conversation?.type === 'direct' && conversation?.participants?.every(p => (p._id || p.id) === currentUserId)
+      ? 'cloud'
+      : toAbsoluteUrl(otherParticipant?.avatarUrl || (otherParticipant as any)?.avatar) || `https://ui-avatars.com/api/?name=${encodeURIComponent(conversationTitle)}&background=2563EB&color=fff&size=150&bold=true`);
 
   // ==================== MEDIA HARVESTING ====================
   // Trích xuất thông tin Media từ tin nhắn vào cache, tránh gọi API thừa
@@ -1544,7 +1546,13 @@ export default function ChatScreen() {
         options={{
           headerTitle: () => (
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-              <Image source={{ uri: headerAvatarUrl }} style={{ width: 34, height: 34, borderRadius: 17 }} />
+              {headerAvatarUrl === 'cloud' ? (
+                <View style={{ width: 34, height: 34, borderRadius: 17, backgroundColor: '#0068FF', alignItems: 'center', justifyContent: 'center' }}>
+                  <Ionicons name="cloud" size={20} color="#fff" style={{ marginTop: 2 }} />
+                </View>
+              ) : (
+                <Image source={{ uri: headerAvatarUrl }} style={{ width: 34, height: 34, borderRadius: 17 }} />
+              )}
               <Text style={{ fontSize: 17, fontWeight: '600', color: colors.text }} numberOfLines={1}>
                 {conversationTitle}
               </Text>
