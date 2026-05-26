@@ -283,6 +283,33 @@ export default function ChatPage() {
     } catch (err) { console.error("Lỗi lấy danh sách:", err); }
   }, [token]);
 
+  // ── Sync activeConversation ───────────────────────────────────────────────
+  useEffect(() => {
+    if (activeConversation && !activeConversation.isMock) {
+      const updatedConv = conversations.find(c => String(c._id) === String(activeConversation._id));
+      if (updatedConv) {
+        setActiveConversation(prev => {
+          if (!prev) return prev;
+          const prevParticipantsStr = JSON.stringify(prev.participants || []);
+          const updatedParticipantsStr = JSON.stringify(updatedConv.participants || []);
+          const prevSettingsStr = JSON.stringify(prev.settings || {});
+          const updatedSettingsStr = JSON.stringify(updatedConv.settings || {});
+          
+          if (
+            prevParticipantsStr !== updatedParticipantsStr ||
+            prevSettingsStr !== updatedSettingsStr ||
+            prev.name !== updatedConv.name ||
+            prev.avatarUrl !== updatedConv.avatarUrl ||
+            prev.avatar !== updatedConv.avatar
+          ) {
+            return { ...prev, ...updatedConv };
+          }
+          return prev;
+        });
+      }
+    }
+  }, [conversations]);
+
   // ── Custom hooks ──────────────────────────────────────────────────────────
   const {
     messages, setMessages,
