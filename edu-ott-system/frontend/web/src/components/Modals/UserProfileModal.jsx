@@ -115,6 +115,16 @@ export default function UserProfileModal({ isOpen, onClose, user, status: initia
         const inReq = mergedIn.find(r => String(r.fromUserId?._id || r.fromUserId || "") === uid);
         if (inReq) { setStatus("incoming"); setIncomingReqId(String(inReq._id)); return; }
 
+        // FIX: Trước khi đặt 'none', kiểm tra lại store hiện tại (có thể handleSendRequest đã optimistic update)
+        // Tránh race condition giữa API rả và optimistic store update
+        const { outgoingRequests: liveOut, incomingRequests: liveIn, friends: liveFriends } = useFriendStore.getState();
+        const liveIsFriend  = liveFriends.some(f => String(f._id || f.id) === uid);
+        const liveOutgoing  = liveOut.some(r => String(r.toUserId?._id  || r.toUserId  || '') === uid);
+        const liveIncoming  = liveIn.some(r  => String(r.fromUserId?._id || r.fromUserId || '') === uid);
+        if (liveIsFriend)  { setStatus("friend");   return; }
+        if (liveOutgoing)  { setStatus("outgoing");  return; }
+        if (liveIncoming)  { setStatus("incoming");  return; }
+        // Chỉ đặt 'none' khi chắc chắn cả API lẫn store đều không có quan hệ nào
         setStatus("none");
       } catch {
         if (!actionTakenRef.current) setStatus(initialStatus || "none");

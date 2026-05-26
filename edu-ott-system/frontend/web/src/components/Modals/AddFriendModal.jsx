@@ -56,12 +56,7 @@ export default function AddFriendModal({ isOpen, onClose }) {
   return (
     <>
       <div
-        style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 9998, display: "flex", alignItems: "center", justifyContent: "center",
-          // FIX: Ẩn AddFriendModal khi UserProfileModal đang mở — tránh modal xếp chồng nhau
-          visibility: selectedUser ? "hidden" : "visible",
-          opacity: selectedUser ? 0 : 1,
-          pointerEvents: selectedUser ? "none" : "auto",
-        }}
+        style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 9998, display: selectedUser ? "none" : "flex", alignItems: "center", justifyContent: "center" }}
         onClick={onClose}
       >
         <div
