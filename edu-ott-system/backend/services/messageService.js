@@ -3,18 +3,25 @@ const Message = require('../models/Message');
 const User = require('../models/User');
 const ApiError = require('../utils/apiError');
 
-const ensureConversationMember = async (conversationId, userId) => {
+const ensureConversationMember = async (conversationId, userId, allowPast = false) => {
   const conversation = await Conversation.findById(conversationId);
   if (!conversation) {
     throw new ApiError(404, 'CONVERSATION_NOT_FOUND', 'Conversation not found');
   }
 
   const member = conversation.participants.some((participantId) => participantId.equals(userId));
-  if (!member) {
-    throw new ApiError(403, 'FORBIDDEN', 'You are not a member of this conversation');
+  if (member) return conversation;
+
+  if (allowPast && conversation.pastParticipants) {
+    const pastMember = conversation.pastParticipants.find(p => toStr(p.userId) === toStr(userId));
+    if (pastMember) {
+      // Gắn thêm thông tin leftAt vào object conversation để query limit
+      conversation._leftAt = pastMember.leftAt;
+      return conversation;
+    }
   }
 
-  return conversation;
+  throw new ApiError(403, 'FORBIDDEN', 'You are not a member of this conversation');
 };
 
 /**

@@ -61,9 +61,12 @@ export const MessageBubble = ({
   // Highlight mentions function
   const renderContentWithMentions = (text) => {
     if (!text) return '';
-    // Tách văn bản dựa trên @username hoặc @all
-    const parts = text.split(/(@\S+)/g);
+    // Tách văn bản dựa trên URL hoặc @username
+    const parts = text.split(/(https?:\/\/[^\s]+|@\S+)/g);
     return parts.map((part, i) => {
+      if (part.startsWith('http')) {
+        return <a key={i} href={part} target="_blank" rel="noopener noreferrer" style={{ color: isMe ? '#E0F2FE' : '#0084FF', textDecoration: 'underline' }} onClick={e => e.stopPropagation()}>{part}</a>;
+      }
       if (part.startsWith('@')) {
         return <span key={i} style={{ color: isMe ? '#E0F2FE' : '#0084FF', fontWeight: 600 }}>{part}</span>;
       }

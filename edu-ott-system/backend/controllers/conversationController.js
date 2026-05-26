@@ -79,7 +79,10 @@ const listConversations = asyncHandler(async (req, res) => {
   const excludedConversationIds = hiddenOrDeletedPrefs.map((item) => item.conversationId);
 
   const baseFilter = {
-    participants: req.user._id,
+    $or: [
+      { participants: req.user._id },
+      { 'pastParticipants.userId': req.user._id }
+    ],
     ...(excludedConversationIds.length > 0 ? { _id: { $nin: excludedConversationIds } } : {}),
   };
 
@@ -341,6 +344,8 @@ const removeGroupMember = asyncHandler(async (req, res) => {
     throw new ApiError(403, 'FORBIDDEN', 'Only group owner can remove other admins');
   }
 
+  if (!conversation.pastParticipants) conversation.pastParticipants = [];
+  conversation.pastParticipants.push({ userId: memberId, leftAt: new Date() });
   conversation.participants = conversation.participants.filter((participantId) => toStr(participantId) !== memberId);
   conversation.adminIds = (conversation.adminIds || []).filter((adminId) => toStr(adminId) !== memberId);
   await conversation.save();
@@ -494,6 +499,8 @@ const leaveGroup = asyncHandler(async (req, res) => {
     throw new ApiError(400, 'OWNER_CANNOT_LEAVE', 'Owner must transfer ownership before leaving group');
   }
 
+  if (!conversation.pastParticipants) conversation.pastParticipants = [];
+  conversation.pastParticipants.push({ userId, leftAt: new Date() });
   conversation.participants = conversation.participants.filter((participantId) => toStr(participantId) !== userId);
   conversation.adminIds = (conversation.adminIds || []).filter((adminId) => toStr(adminId) !== userId);
   await conversation.save();

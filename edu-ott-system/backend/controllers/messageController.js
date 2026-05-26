@@ -120,13 +120,17 @@ const listMessagesByConversation = asyncHandler(async (req, res) => {
   const { cursor } = req.query;
   const channelId = req.query.channelId || null;
 
-  await ensureConversationMember(conversationId, req.user._id);
+  const conversation = await ensureConversationMember(conversationId, req.user._id, true);
 
   const query = {
     conversationId,
     channelId,
     deletedBy: { $ne: req.user._id } // Do not fetch messages deleted by this user
   };
+
+  if (conversation._leftAt) {
+    query.createdAt = { $lte: conversation._leftAt };
+  }
 
   if (cursor) {
     const parsedCursor = decodeCursor(cursor);
@@ -306,7 +310,16 @@ const searchMessagesInConversation = asyncHandler(async (req, res) => {
   const conversation = await Conversation.findById(conversationId);
   if (!conversation) throw new ApiError(404, 'NOT_FOUND', 'Conversation not found');
 
-  const isMember = conversation.participants.some((p) => String(p) === String(req.user._id));
+  let isMember = conversation.participants.some((p) => String(p) === String(req.user._id));
+  let leftAt = null;
+  if (!isMember && conversation.pastParticipants) {
+    const pastMember = conversation.pastParticipants.find(p => String(p.userId) === String(req.user._id));
+    if (pastMember) {
+      isMember = true;
+      leftAt = pastMember.leftAt;
+    }
+  }
+
   if (!isMember) throw new ApiError(403, 'FORBIDDEN', 'Not a member of this conversation');
 
   const escaped = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -317,6 +330,10 @@ const searchMessagesInConversation = asyncHandler(async (req, res) => {
     isRecalled: { $ne: true },
     deletedBy: { $ne: req.user._id },
   };
+
+  if (leftAt) {
+    filter.createdAt = { $lte: leftAt };
+  }
 
   if (cursor) {
     const parsed = decodeCursor(cursor);

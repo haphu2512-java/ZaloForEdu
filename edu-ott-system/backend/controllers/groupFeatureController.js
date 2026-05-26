@@ -495,6 +495,8 @@ const blockMember = asyncHandler(async (req, res) => {
   const ownerStr = toStr(conversation.ownerId || conversation.createdBy);
   if (targetStr === ownerStr) throw new ApiError(403, 'FORBIDDEN', 'Cannot block the group owner');
 
+  if (!conversation.pastParticipants) conversation.pastParticipants = [];
+  conversation.pastParticipants.push({ userId: memberId, leftAt: new Date() });
   conversation.participants = conversation.participants.filter(p => toStr(p) !== targetStr);
   if (!conversation.blockedMembers) conversation.blockedMembers = [];
   if (!conversation.blockedMembers.some(b => toStr(b) === targetStr)) {
