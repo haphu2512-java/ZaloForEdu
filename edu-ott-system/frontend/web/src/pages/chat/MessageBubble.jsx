@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import {
   FaDownload, FaCheckDouble, FaCheck, FaClock, FaSmile,
-  FaShare, FaReply, FaEllipsisH, FaUndo, FaTrash, FaCopy, FaThumbtack, FaCrown, FaStar, FaPlayCircle
+  FaShare, FaReply, FaEllipsisH, FaUndo, FaTrash, FaCopy, FaThumbtack, FaCrown, FaStar, FaPlayCircle, FaInfoCircle
 } from 'react-icons/fa';
 import { getExt, getCategory, getFileColor, formatBytes, toAbsoluteUrl, forceDownload, openDocument } from './chatUtils';
 import { AudioBubble } from '../../components/shared/AudioBubble';
@@ -77,6 +77,7 @@ export const MessageBubble = ({
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [pinLoading, setPinLoading] = useState(false);
   const [viewingMedia, setViewingMedia] = useState(null);
+  const [showMediaInfo, setShowMediaInfo] = useState(false);
   const menuRef = useRef(null);
 
   const rawMediaList = isRecalled ? [] : (message.attachments || message.mediaIds || message.media || []);
@@ -436,17 +437,23 @@ export const MessageBubble = ({
       </div>
 
       {viewingMedia && createPortal(
-        <div style={{ position: 'fixed', inset: 0, zIndex: 99999, background: 'rgba(0,0,0,0.9)', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setViewingMedia(null)}>
-          <div style={{ position: 'absolute', top: 20, left: 20, color: '#fff', fontSize: 14, textShadow: '0 1px 3px rgba(0,0,0,0.8)' }} onClick={e => e.stopPropagation()}>
-            <div style={{ fontWeight: 'bold', fontSize: 16 }}>{viewingMedia.name}</div>
-            <div style={{ opacity: 0.8, marginTop: 4 }}>Dung lượng: {viewingMedia.size}</div>
-            <div style={{ opacity: 0.8, marginTop: 2 }}>Người gửi: {viewingMedia.sender}</div>
-            <div style={{ opacity: 0.8, marginTop: 2 }}>Thời gian: {viewingMedia.time} - {viewingMedia.date}</div>
-          </div>
-          <a style={{ position: 'absolute', top: 20, right: 80, background: 'none', border: 'none', color: '#fff', fontSize: 30, cursor: 'pointer', display: 'flex', alignItems: 'center' }} onClick={(e) => { e.stopPropagation(); forceDownload(viewingMedia.url, viewingMedia.name || 'download'); }} title="Tải xuống">
+        <div style={{ position: 'fixed', inset: 0, zIndex: 99999, background: 'rgba(0,0,0,0.9)', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => { setViewingMedia(null); setShowMediaInfo(false); }}>
+          {showMediaInfo && (
+            <div style={{ position: 'absolute', top: 20, left: 20, color: '#fff', fontSize: 14, background: 'rgba(0,0,0,0.6)', padding: '12px 16px', borderRadius: 8, textShadow: '0 1px 3px rgba(0,0,0,0.8)' }} onClick={e => e.stopPropagation()}>
+              <div style={{ fontWeight: 'bold', fontSize: 16 }}>{viewingMedia.name}</div>
+              <div style={{ opacity: 0.8, marginTop: 4 }}>Dung lượng: {viewingMedia.size}</div>
+              <div style={{ opacity: 0.8, marginTop: 2 }}>Người gửi: {viewingMedia.sender}</div>
+              <div style={{ opacity: 0.8, marginTop: 2 }}>Thời gian: {viewingMedia.time} - {viewingMedia.date}</div>
+            </div>
+          )}
+          
+          <a style={{ position: 'absolute', top: 20, right: 120, background: 'none', border: 'none', color: '#fff', fontSize: 24, cursor: 'pointer', display: 'flex', alignItems: 'center' }} onClick={(e) => { e.stopPropagation(); setShowMediaInfo(!showMediaInfo); }} title="Thông tin chi tiết">
+            <FaInfoCircle size={24} />
+          </a>
+          <a style={{ position: 'absolute', top: 20, right: 70, background: 'none', border: 'none', color: '#fff', fontSize: 24, cursor: 'pointer', display: 'flex', alignItems: 'center' }} onClick={(e) => { e.stopPropagation(); forceDownload(viewingMedia.url, viewingMedia.name || 'download'); }} title="Tải xuống">
             <FaDownload size={24} />
           </a>
-          <button style={{ position: 'absolute', top: 20, right: 20, background: 'none', border: 'none', color: '#fff', fontSize: 40, cursor: 'pointer' }} onClick={() => setViewingMedia(null)}>&times;</button>
+          <button style={{ position: 'absolute', top: 12, right: 20, background: 'none', border: 'none', color: '#fff', fontSize: 36, cursor: 'pointer' }} onClick={() => { setViewingMedia(null); setShowMediaInfo(false); }}>&times;</button>
           
           {viewingMedia.isDoc ? (
             <iframe src={['doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx'].includes(getExt(viewingMedia.name)) && !viewingMedia.url.includes('localhost') ? `https://docs.google.com/viewer?url=${encodeURIComponent(viewingMedia.url)}&embedded=true` : viewingMedia.url} style={{ width: '80%', height: '80%', background: '#fff', border: 'none', borderRadius: 8 }} onClick={e => e.stopPropagation()} />
