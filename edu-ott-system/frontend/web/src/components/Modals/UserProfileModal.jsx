@@ -20,7 +20,10 @@ export default function UserProfileModal({ isOpen, onClose, user, status: initia
     blockedUsers, 
     blockFriend: blockFriendStore, 
     unblockUser: unblockUserStore, 
-    fetchBlockedUsers 
+    fetchBlockedUsers,
+    friends: storeFriends,
+    outgoingRequests: storeOut,
+    incomingRequests: storeIn,
   } = useFriendStore();
 
   const [status, setStatus] = useState(initialStatus || "none");
@@ -37,6 +40,19 @@ export default function UserProfileModal({ isOpen, onClose, user, status: initia
 
   // Ref để tránh checkRelationship ghi đè status sau khi user đã click
   const actionTakenRef = useRef(false);
+
+  // FIX: Đồng bộ status từ Zustand store theo thời gian thực
+  // Khi user mở lại modal, status luôn phản ánh đúng trạng thái trong store
+  const targetUid = user ? String(user._id || user.id) : null;
+  useEffect(() => {
+    if (!targetUid || !isOpen) return;
+    const isFriend = storeFriends.some(f => String(f._id || f.id) === targetUid);
+    const outReq = storeOut.find(r => String(r.toUserId?._id || r.toUserId || '') === targetUid);
+    const inReq  = storeIn.find(r => String(r.fromUserId?._id || r.fromUserId || '') === targetUid);
+    if (isFriend)      { setStatus('friend');   return; }
+    if (outReq)        { setStatus('outgoing');  setOutgoingReqId(outReq._id ? String(outReq._id) : null); return; }
+    if (inReq)         { setStatus('incoming');  setIncomingReqId(inReq._id  ? String(inReq._id)  : null); return; }
+  }, [targetUid, isOpen, storeFriends, storeOut, storeIn]);
 
   useEffect(() => {
     if (!isOpen || !user) return;
