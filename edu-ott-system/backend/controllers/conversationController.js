@@ -250,6 +250,12 @@ const updateGroupName = asyncHandler(async (req, res) => {
     senderId: req.user._id,
     content: `${senderName} đã đổi tên nhóm thành "${conversation.name}"`,
   });
+
+  await socketService.emitGroupUpdated(conversation._id.toString(), {
+    conversationId: conversation._id.toString(),
+    action: 'group_name_updated',
+    name: conversation.name
+  });
   return successResponse(res, conversation, 'Group name updated');
 });
 
@@ -599,6 +605,12 @@ const updateGroupAvatar = asyncHandler(async (req, res) => {
     conversationId: conversation._id,
     senderId: req.user._id,
     content: `${senderName} đã cập nhật ảnh đại diện nhóm`,
+  });
+
+  await socketService.emitGroupUpdated(conversation._id.toString(), {
+    conversationId: conversation._id.toString(),
+    action: 'group_avatar_updated',
+    avatarUrl: conversation.avatarUrl
   });
 
   return successResponse(res, conversation, 'Group avatar updated');
