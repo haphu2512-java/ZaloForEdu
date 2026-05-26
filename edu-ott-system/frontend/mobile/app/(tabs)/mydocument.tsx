@@ -461,7 +461,7 @@ export default function MyDocumentScreen() {
 
                 if (isImage && media?.url) {
                   return (
-                    <TouchableOpacity key={`${mediaId}-${idx}`} onPress={() => setViewImageUrl(media.url)} activeOpacity={0.9}>
+                    <TouchableOpacity key={`${mediaId}-${idx}`} onPress={() => setViewImageUrl(media.url)} onLongPress={() => handleMessageLongPress(item)} activeOpacity={0.9}>
                       <Image source={{ uri: media.url }} style={{ width: 200, height: 160, borderRadius: 12 }} resizeMode="cover" />
                     </TouchableOpacity>
                   );
@@ -472,6 +472,7 @@ export default function MyDocumentScreen() {
                     key={`${mediaId}-${idx}`}
                     disabled={!canOpen}
                     onPress={() => openAttachment(media)}
+                    onLongPress={() => handleMessageLongPress(item)}
                     style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: colors.background, padding: 8, borderRadius: 10, width: 230 }}
                   >
                     <View style={[styles.fileIconWrap, { backgroundColor: colors.tint + '20', width: 36, height: 36, marginRight: 8 }]}>
