@@ -287,14 +287,14 @@ export const MessageBubble = ({
                                 backgroundColor: '#f0f2f5', margin: 0, borderRadius: 0
                               }}>
                               {isVideo ? (
-                                <div style={{ width: '100%', height: '100%', position: 'relative', cursor: 'pointer' }} onClick={() => setViewingMedia({ url: toAbsoluteUrl(att.url), isVideo: true })}>
+                                <div style={{ width: '100%', height: '100%', position: 'relative', cursor: 'pointer' }} onClick={() => setViewingMedia({ url: toAbsoluteUrl(att.url), isVideo: true, isDoc: false, name: att.fileName || att.name || 'Video', size: formatBytes(att.size || 0), sender: name, time: timeString, date: new Date(createdAt).toLocaleDateString('vi-VN') })}>
                                   <video src={toAbsoluteUrl(att.url)} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
                                   <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.2)' }}>
                                     <FaPlayCircle size={32} color="#fff" style={{ opacity: 0.8 }} />
                                   </div>
                                 </div>
                               ) : (
-                                <img src={toAbsoluteUrl(att.url)} alt="attachment" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', cursor: 'pointer' }} onClick={() => setViewingMedia({ url: toAbsoluteUrl(att.url), isVideo: false })} />
+                                <img src={toAbsoluteUrl(att.url)} alt="attachment" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', cursor: 'pointer' }} onClick={() => setViewingMedia({ url: toAbsoluteUrl(att.url), isVideo: false, isDoc: false, name: att.fileName || att.name || 'Image', size: formatBytes(att.size || 0), sender: name, time: timeString, date: new Date(createdAt).toLocaleDateString('vi-VN') })} />
                               )}
                               <a className="mdc-img-dl-btn" title="Tải về" onClick={e => { e.preventDefault(); e.stopPropagation(); forceDownload(att.url, att.fileName || att.name || 'image'); }}><FaDownload size={11} /></a>
                               {isLast && remain > 0 && (
@@ -312,7 +312,7 @@ export const MessageBubble = ({
                       const fileName = att.name || att.fileName || `Tệp ${i + 1}`;
                       const downloadUrl = toAbsoluteUrl(att.url);
                       return (
-                        <div key={`doc-${i}`} className="mdc-file-bubble" style={{ cursor: 'pointer' }} onClick={(e) => { e.stopPropagation(); openDocument(att.url, fileName); }}>
+                        <div key={`doc-${i}`} className="mdc-file-bubble" style={{ cursor: 'pointer' }} onClick={(e) => { e.stopPropagation(); setViewingMedia({ url: toAbsoluteUrl(att.url), isVideo: false, isDoc: true, name: fileName, size: formatBytes(att.size || 0), sender: name, time: timeString, date: new Date(createdAt).toLocaleDateString('vi-VN') }); }}>
                           <div className="mdc-fb-icon" style={{ background: getFileColor(fileName) }}>
                             {getExt(fileName).toUpperCase().slice(0, 4)}
                           </div>
@@ -437,11 +437,20 @@ export const MessageBubble = ({
 
       {viewingMedia && createPortal(
         <div style={{ position: 'fixed', inset: 0, zIndex: 99999, background: 'rgba(0,0,0,0.9)', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setViewingMedia(null)}>
-          <a style={{ position: 'absolute', top: 20, right: 80, background: 'none', border: 'none', color: '#fff', fontSize: 30, cursor: 'pointer', display: 'flex', alignItems: 'center' }} onClick={(e) => { e.stopPropagation(); forceDownload(viewingMedia.url, 'media'); }} title="Tải xuống">
+          <div style={{ position: 'absolute', top: 20, left: 20, color: '#fff', fontSize: 14, textShadow: '0 1px 3px rgba(0,0,0,0.8)' }} onClick={e => e.stopPropagation()}>
+            <div style={{ fontWeight: 'bold', fontSize: 16 }}>{viewingMedia.name}</div>
+            <div style={{ opacity: 0.8, marginTop: 4 }}>Dung lượng: {viewingMedia.size}</div>
+            <div style={{ opacity: 0.8, marginTop: 2 }}>Người gửi: {viewingMedia.sender}</div>
+            <div style={{ opacity: 0.8, marginTop: 2 }}>Thời gian: {viewingMedia.time} - {viewingMedia.date}</div>
+          </div>
+          <a style={{ position: 'absolute', top: 20, right: 80, background: 'none', border: 'none', color: '#fff', fontSize: 30, cursor: 'pointer', display: 'flex', alignItems: 'center' }} onClick={(e) => { e.stopPropagation(); forceDownload(viewingMedia.url, viewingMedia.name || 'download'); }} title="Tải xuống">
             <FaDownload size={24} />
           </a>
           <button style={{ position: 'absolute', top: 20, right: 20, background: 'none', border: 'none', color: '#fff', fontSize: 40, cursor: 'pointer' }} onClick={() => setViewingMedia(null)}>&times;</button>
-          {viewingMedia.isVideo ? (
+          
+          {viewingMedia.isDoc ? (
+            <iframe src={['doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx'].includes(getExt(viewingMedia.name)) && !viewingMedia.url.includes('localhost') ? `https://docs.google.com/viewer?url=${encodeURIComponent(viewingMedia.url)}&embedded=true` : viewingMedia.url} style={{ width: '80%', height: '80%', background: '#fff', border: 'none', borderRadius: 8 }} onClick={e => e.stopPropagation()} />
+          ) : viewingMedia.isVideo ? (
              <video src={viewingMedia.url} controls autoPlay style={{ maxWidth: '90%', maxHeight: '90%' }} onClick={e => e.stopPropagation()} />
           ) : (
              <img src={viewingMedia.url} alt="Full view" style={{ maxWidth: '90%', maxHeight: '90%', objectFit: 'contain' }} onClick={e => e.stopPropagation()} />
