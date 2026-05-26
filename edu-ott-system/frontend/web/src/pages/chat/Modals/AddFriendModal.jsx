@@ -56,7 +56,10 @@ export default function AddFriendModal({ isOpen, onClose }) {
   return (
     <>
       <div
-        style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 9998, display: "flex", alignItems: "center", justifyContent: "center" }}
+        style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 9998,
+          // FIX: Ẩn hoàn toàn khi UserProfileModal đang mở — tránh 2 modal chồng nhau
+          display: selectedUser ? "none" : "flex",
+          alignItems: "center", justifyContent: "center" }}
         onClick={onClose}
       >
         <div
@@ -159,7 +162,9 @@ export default function AddFriendModal({ isOpen, onClose }) {
           onChatOpened={onClose}
           onStatusChange={(newStatus) => {
             setSelectedUser(prev => prev ? { ...prev, status: newStatus } : null);
-            Promise.all([fetchFriends(), fetchOutgoingRequests(), fetchIncomingRequests()]);
+            // FIX: Không gọi fetchOutgoingRequests ở đây — tránh race condition
+            // overwrite optimistic store update từ handleSendRequest trước khi server index xong
+            Promise.all([fetchFriends(), fetchIncomingRequests()]);
           }}
         />
       )}

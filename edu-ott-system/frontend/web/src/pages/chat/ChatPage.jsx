@@ -627,7 +627,29 @@ export default function ChatPage() {
                   <div style={{ position: 'sticky', top: 0, zIndex: 10, padding: '12px 20px', background: 'rgba(0,104,255,0.06)', borderBottom: '1px solid var(--z-border)', display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, backdropFilter: 'blur(8px)' }}>
                     <FaUserPlus size={14} color="var(--z-primary)" style={{ flexShrink: 0 }} />
                     <span style={{ flex: 1, color: 'var(--z-text-secondary)' }}>Đã gửi lời mời kết bạn tới <strong style={{ color: 'var(--z-text-primary)' }}>{otherName}</strong></span>
-                    <button onClick={async () => { try { const { friendService } = await import('../../services/friendService'); const reqId = outReq ? String(outReq._id || outReq.id) : null; if (reqId) await friendService.cancelFriendRequest(reqId); setJustSentRequestTo(null); fetchOutgoingRequests(); } catch { toast.error('Không thể hủy lời mời'); } }}
+                    <button onClick={async () => {
+                      try {
+                        const { friendService } = await import('../../services/friendService');
+                        // FIX: Tìm reqId từ outReq trước
+                        let reqId = outReq ? String(outReq._id || outReq.id) : null;
+                        // Nếu không tìm được (race condition), refresh store và thử lại
+                        if (!reqId) {
+                          await fetchOutgoingRequests();
+                          const freshOut = useFriendStore.getState().outgoingRequests;
+                          const freshReq = freshOut.find(r => String(r.toUserId?._id || r.toUserId || '') === otherId);
+                          reqId = freshReq ? String(freshReq._id || freshReq.id) : null;
+                        }
+                        if (reqId) {
+                          await friendService.cancelFriendRequest(reqId);
+                          // Xóa khỏi store ngay lập tức để UI cập nhật tức thì
+                          useFriendStore.setState(prev => ({
+                            outgoingRequests: prev.outgoingRequests.filter(r => String(r.toUserId?._id || r.toUserId || '') !== otherId)
+                          }));
+                        }
+                        setJustSentRequestTo(null);
+                        fetchOutgoingRequests();
+                      } catch { toast.error('Không thể hủy lời mời'); }
+                    }}
                       style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 14px', borderRadius: 8, border: '1px solid var(--z-border)', background: 'transparent', color: 'var(--z-text-secondary)', cursor: 'pointer', fontWeight: 600, fontSize: 13, flexShrink: 0 }}>
                       <FaTimes size={11} />Hủy lời mời
                     </button>

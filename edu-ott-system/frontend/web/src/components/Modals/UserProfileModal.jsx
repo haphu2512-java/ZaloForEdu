@@ -74,57 +74,38 @@ export default function UserProfileModal({ isOpen, onClose, user, status: initia
         ]);
         if (cancelled) return;
 
-        // Check blocked - uses global list
+        // Kiểm tra blocked
         if (blockedUsers.length === 0) {
           await fetchBlockedUsers();
         }
 
-        // Merge store additively
-        const { friends: curFriends, outgoingRequests: curOut, incomingRequests: curIn } = useFriendStore.getState();
-
-        const serverFriendIds = new Set((friendData?.items || []).map(f => String(f._id || f.id)));
-        const mergedFriends = [
-          ...(friendData?.items || []),
-          ...curFriends.filter(f => !serverFriendIds.has(String(f._id || f.id))),
-        ];
-
-        const serverOut = outData?.items || [];
-        const serverOutIds = new Set(serverOut.map(r => String(r.toUserId?._id || r.toUserId || '')));
-        const mergedOut = [
-          ...serverOut,
-          ...curOut.filter(r => !serverOutIds.has(String(r.toUserId?._id || r.toUserId || ''))),
-        ];
-
-        const serverIn = inData?.items || [];
-        const serverInIds = new Set(serverIn.map(r => String(r.fromUserId?._id || r.fromUserId || '')));
-        const mergedIn = [
-          ...serverIn,
-          ...curIn.filter(r => !serverInIds.has(String(r.fromUserId?._id || r.fromUserId || ''))),
-        ];
-
-        useFriendStore.setState({ friends: mergedFriends, outgoingRequests: mergedOut, incomingRequests: mergedIn });
+        // FIX: KHÔNG ghi đè Zustand store ở đây — tránh race condition
+        // Store đã được cập nhật bởi handleSendRequest (optimistic) và fetchOutgoingRequests khác
+        // Chỉ dùng kết quả API để set local status
 
         if (actionTakenRef.current) return;
 
         const isFriend = (friendData?.items || []).some(f => String(f._id || f.id) === uid);
         if (isFriend) { setStatus("friend"); return; }
 
-        const outReq = mergedOut.find(r => String(r.toUserId?._id || r.toUserId || "") === uid);
+        const serverOut = outData?.items || [];
+        const outReq = serverOut.find(r => String(r.toUserId?._id || r.toUserId || "") === uid);
         if (outReq) { setStatus("outgoing"); setOutgoingReqId(String(outReq._id)); return; }
 
-        const inReq = mergedIn.find(r => String(r.fromUserId?._id || r.fromUserId || "") === uid);
+        const serverIn = inData?.items || [];
+        const inReq = serverIn.find(r => String(r.fromUserId?._id || r.fromUserId || "") === uid);
         if (inReq) { setStatus("incoming"); setIncomingReqId(String(inReq._id)); return; }
 
-        // FIX: Trước khi đặt 'none', kiểm tra lại store hiện tại (có thể handleSendRequest đã optimistic update)
-        // Tránh race condition giữa API rả và optimistic store update
+        // FIX: Trước khi đặt 'none', kiểm tra lại live store
+        // (có thể handleSendRequest đã optimistic update nhưng API chưa phản ánh)
         const { outgoingRequests: liveOut, incomingRequests: liveIn, friends: liveFriends } = useFriendStore.getState();
-        const liveIsFriend  = liveFriends.some(f => String(f._id || f.id) === uid);
-        const liveOutgoing  = liveOut.some(r => String(r.toUserId?._id  || r.toUserId  || '') === uid);
-        const liveIncoming  = liveIn.some(r  => String(r.fromUserId?._id || r.fromUserId || '') === uid);
+        const liveIsFriend = liveFriends.some(f => String(f._id || f.id) === uid);
+        const liveOutgoing = liveOut.some(r => String(r.toUserId?._id || r.toUserId || '') === uid);
+        const liveIncoming = liveIn.some(r => String(r.fromUserId?._id || r.fromUserId || '') === uid);
         if (liveIsFriend)  { setStatus("friend");   return; }
         if (liveOutgoing)  { setStatus("outgoing");  return; }
         if (liveIncoming)  { setStatus("incoming");  return; }
-        // Chỉ đặt 'none' khi chắc chắn cả API lẫn store đều không có quan hệ nào
+        // Chỉ set 'none' khi cả API lẫn store đều không có quan hệ
         setStatus("none");
       } catch {
         if (!actionTakenRef.current) setStatus(initialStatus || "none");
