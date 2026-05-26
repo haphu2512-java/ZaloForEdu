@@ -50,16 +50,19 @@ function formatTime(dateStr?: string | null): string {
 
 function getDisplayName(conv: Conversation, currentUserId: string): string {
   if (conv.type === 'group' && conv.name) return conv.name;
+  if (conv.type === 'direct' && conv.participants?.every(p => (p._id || p.id || '') === currentUserId)) return 'Cloud của tôi';
   const otherUser = conv.participants?.find((p) => (p._id || p.id || '') !== currentUserId);
-  return otherUser?.username || 'Cuộc trò chuyện';
+  return otherUser?.username || otherUser?.fullName || 'Cuộc trò chuyện';
 }
 
 function getDisplayAvatar(conv: Conversation, currentUserId: string): string {
   if (conv.type === 'group') {
     const groupAvatar = toAbsoluteUrl(conv.avatarUrl || (conv as any).avatar);
     if (groupAvatar) return groupAvatar;
-    const name = conv.name || 'Group';
-    return `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=8B5CF6&color=fff&size=100&bold=true`;
+    return `https://ui-avatars.com/api/?name=${encodeURIComponent(conv.name || 'G')}&background=0EA5E9&color=fff&size=100&bold=true`;
+  }
+  if (conv.type === 'direct' && conv.participants?.every(p => (p._id || p.id || '') === currentUserId)) {
+    return `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' rx='20' fill='%230068FF'/%3E%3Cpath d='M28 22a5 5 0 0 0-4.9-5 7 7 0 0 0-13.1 3A4 4 0 0 0 12 28h16a4 4 0 0 0 0-6z' fill='white'/%3E%3C/svg%3E`;
   }
   const otherUser = conv.participants?.find((p) => (p._id || p.id || '') !== currentUserId);
   return (

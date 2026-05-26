@@ -76,8 +76,9 @@ function getConversationIdFromMessage(msg: Message): string {
 
 function getConversationTitle(conv: Conversation, currentUserId: string) {
   if (conv.type === 'group') return conv.name || 'Nhóm chat';
+  if (conv.type === 'direct' && conv.participants?.every(p => (p._id || p.id) === currentUserId)) return 'Cloud của tôi';
   const otherUser = conv.participants?.find((p) => (p._id || p.id) !== currentUserId);
-  return otherUser?.username || 'Cuộc trò chuyện';
+  return otherUser?.username || otherUser?.fullName || 'Cuộc trò chuyện';
 }
 
 function isImageMimeType(mimeType?: string): boolean {
