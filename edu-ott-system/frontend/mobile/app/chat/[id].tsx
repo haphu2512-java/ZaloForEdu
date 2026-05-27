@@ -168,6 +168,8 @@ const getCategory = (filename: string) => {
   return 'document';
 };
 
+const acceptedBlockWarnings: Record<string, boolean> = {};
+
 export default function ChatScreen() {
   const { id: conversationId, isSelf } = useLocalSearchParams<{ id: string; isSelf?: string }>();
   const router = useRouter();
@@ -177,6 +179,7 @@ export default function ChatScreen() {
   const colors = Colors[colorScheme === 'dark' ? 'dark' : 'light'];
 
   const [messages, setMessages] = useState<Message[]>([]);
+  const [showBlockWarning, setShowBlockWarning] = useState(false);
   const currentUserId = user?.id || (user as any)?._id || '';
   const [inputText, setInputText] = useState('');
   const [isLoading, setIsLoading] = useState(true);
@@ -327,12 +330,22 @@ export default function ChatScreen() {
       setConversation(matched);
       if (matched) {
         getPinnedMessages(conversationId).then(setPinnedItems).catch(() => null);
+        
+        const blockedList = await getBlockedUsers();
+        const blockedIds = blockedList.map((u: any) => u._id || u.id || '');
+        
         if (matched.type !== 'group') {
           const other = matched.participants?.find((p) => (p._id || p.id || '') !== currentUserId);
           if (other) {
-            const blockedList = await getBlockedUsers();
             const targetId = other._id || other.id || '';
-            setIsBlockedByMe(blockedList.some((u: any) => (u._id || u.id || '') === targetId));
+            setIsBlockedByMe(blockedIds.includes(targetId));
+          }
+        } else if (matched.type === 'group' && !acceptedBlockWarnings[conversationId]) {
+          const participantIds = (matched.participants || []).map(p => typeof p === 'string' ? p : (p._id || p.id || ''));
+          const hasConflict = participantIds.some(pid => pid !== currentUserId && blockedIds.includes(pid));
+          
+          if (hasConflict) {
+            setShowBlockWarning(true);
           }
         }
       }
@@ -2097,6 +2110,47 @@ export default function ChatScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* Block Warning Modal for Group Chats */}
+      <Modal visible={showBlockWarning} transparent animationType="fade" onRequestClose={() => {}}>
+        <View style={styles.reactionPickerOverlay}>
+          <View style={[styles.reactionPickerBox, { backgroundColor: colors.surface }]}>
+            <View style={{ alignItems: 'center', marginBottom: 16 }}>
+              <Ionicons name="warning" size={40} color="#F59E0B" />
+              <Text style={{ fontSize: 18, fontWeight: '700', color: colors.text, marginTop: 12, textAlign: 'center' }}>
+                Cảnh báo chặn
+              </Text>
+            </View>
+            
+            <Text style={{ color: colors.text, fontSize: 15, textAlign: 'center', marginBottom: 24, lineHeight: 22 }}>
+              Trong nhóm có thành viên đang chặn nhau. Bạn có muốn tiếp tục cuộc trò chuyện?
+            </Text>
+
+            <View style={{ flexDirection: 'row', gap: 12 }}>
+              <TouchableOpacity 
+                style={{ flex: 1, backgroundColor: colorScheme === 'dark' ? '#374151' : '#E5E7EB', paddingVertical: 12, borderRadius: 12, alignItems: 'center' }}
+                onPress={() => {
+                  setShowBlockWarning(false);
+                  router.back();
+                }}
+              >
+                <Text style={{ color: colors.text, fontSize: 16, fontWeight: '600' }}>Quay lại</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                style={{ flex: 1, backgroundColor: '#0068FF', paddingVertical: 12, borderRadius: 12, alignItems: 'center' }}
+                onPress={() => {
+                  acceptedBlockWarnings[conversationId] = true;
+                  setShowBlockWarning(false);
+                }}
+              >
+                <Text style={{ color: '#fff', fontSize: 16, fontWeight: '600' }}>Tiếp tục</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
     </SafeAreaView>
   );
 }
