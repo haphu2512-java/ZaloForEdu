@@ -199,18 +199,28 @@ export default function MessagesScreen() {
     setRefreshing(false);
   }, [loadConversations]);
 
-  const handlePress = (item: Conversation) => {
-    // Cloud của tôi (mock hoặc self-conversation) → vào tab MyDocument
+  const [creatingCloud, setCreatingCloud] = useState(false);
+
+  const handlePress = async (item: Conversation) => {
+    // Nếu là mock "Cloud của tôi", tạo conversation trước khi vào chat
     if ((item as any).isMock) {
-      router.push('/(tabs)/mydocument');
+      if (creatingCloud) return;
+      setCreatingCloud(true);
+      try {
+        const conv = await createConversation({ type: 'direct', participantIds: [user?.id || ''] });
+        const convId = conv?._id || conv?.id;
+        if (convId) {
+          await loadConversations();
+          router.push(`/chat/${convId}`);
+        }
+      } catch (e: any) {
+        Alert.alert('Lỗi', e.message || 'Không thể mở Cloud của tôi');
+      } finally {
+        setCreatingCloud(false);
+      }
       return;
     }
-    const currentUserId = user?.id || '';
-    const isSelfConv = item.type === 'direct' && item.participants?.every(p => (p._id || p.id || '') === currentUserId);
-    if (isSelfConv) {
-      router.push('/(tabs)/mydocument');
-      return;
-    }
+    // Các conversation bình thường (bao gồm cả self-conversation đã tạo)
     router.push(`/chat/${item._id}`);
   };
   const handleLongPress = (item: Conversation) => { setSelectedConversation(item); };
