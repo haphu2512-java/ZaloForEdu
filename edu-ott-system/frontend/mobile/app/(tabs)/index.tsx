@@ -50,7 +50,7 @@ function formatTime(dateStr?: string | null): string {
 
 function getDisplayName(conv: Conversation, currentUserId: string): string {
   if (conv.type === 'group' && conv.name) return conv.name;
-  if (conv.type === 'direct' && conv.participants?.every(p => (p._id || p.id || '') === currentUserId)) return 'Cloud của tôi';
+  if (conv.type === 'direct' && conv.participants?.every(p => (typeof p === 'string' ? p : (p._id || p.id || '')) === currentUserId)) return 'Cloud của tôi';
   const otherUser = conv.participants?.find((p) => (p._id || p.id || '') !== currentUserId);
   return otherUser?.username || otherUser?.fullName || 'Cuộc trò chuyện';
 }
@@ -61,7 +61,7 @@ function getDisplayAvatar(conv: Conversation, currentUserId: string): string {
     if (groupAvatar) return groupAvatar;
     return `https://ui-avatars.com/api/?name=${encodeURIComponent(conv.name || 'G')}&background=0EA5E9&color=fff&size=100&bold=true`;
   }
-  if (conv.type === 'direct' && conv.participants?.every(p => (p._id || p.id || '') === currentUserId)) {
+  if (conv.type === 'direct' && conv.participants?.every(p => (typeof p === 'string' ? p : (p._id || p.id || '')) === currentUserId)) {
     return 'cloud';
   }
   const otherUser = conv.participants?.find((p) => (p._id || p.id || '') !== currentUserId);
@@ -284,7 +284,7 @@ export default function MessagesScreen() {
     let convs = [...conversations];
     
     // Inject Cloud của tôi if missing
-    if (currentUserId && !convs.some(c => c.type === 'direct' && c.participants?.every(p => (p._id || p.id || '') === currentUserId))) {
+    if (currentUserId && !convs.some(c => c.type === 'direct' && c.participants?.every(p => (typeof p === 'string' ? p : (p._id || p.id || '')) === currentUserId))) {
       convs.push({
         _id: `mock_self_${currentUserId}`,
         id: `mock_self_${currentUserId}`,
@@ -300,8 +300,8 @@ export default function MessagesScreen() {
       if (activeTab === 'all') return true;
       return conv.preference?.category === activeTab;
     }).sort((a, b) => {
-      const isASelf = a.type === 'direct' && a.participants?.every(p => (p._id || p.id || '') === currentUserId);
-      const isBSelf = b.type === 'direct' && b.participants?.every(p => (p._id || p.id || '') === currentUserId);
+      const isASelf = a.type === 'direct' && a.participants?.every(p => (typeof p === 'string' ? p : (p._id || p.id || '')) === currentUserId);
+      const isBSelf = b.type === 'direct' && b.participants?.every(p => (typeof p === 'string' ? p : (p._id || p.id || '')) === currentUserId);
       if (isASelf && !isBSelf) return -1;
       if (!isASelf && isBSelf) return 1;
 

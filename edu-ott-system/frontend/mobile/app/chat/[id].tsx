@@ -160,6 +160,14 @@ const formatBytes = (bytes: number, decimals = 2) => {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
 };
 
+const getCategory = (filename: string) => {
+  const ext = filename.split('.').pop()?.toLowerCase() || '';
+  if (['png', 'jpg', 'jpeg', 'gif', 'webp'].includes(ext)) return 'image';
+  if (['mp4', 'mov', 'avi', 'mkv'].includes(ext)) return 'video';
+  if (['mp3', 'wav', 'm4a'].includes(ext)) return 'audio';
+  return 'document';
+};
+
 export default function ChatScreen() {
   const { id: conversationId } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
@@ -191,6 +199,7 @@ export default function ChatScreen() {
   const [conversation, setConversation] = useState<Conversation | null>(null);
   const [pinnedItems, setPinnedItems] = useState<any[]>([]);
   const [storageData, setStorageData] = useState<{ totalBytes: number; imageCount: number; docCount: number; linkCount: number } | null>(null);
+  const [cloudFilterTab, setCloudFilterTab] = useState<'all' | 'image' | 'file' | 'text'>('all');
   const [mediaById, setMediaById] = useState<Record<string, MediaItem>>({});
   const [actionMenu, setActionMenu] = useState<{ visible: boolean; options: ChatActionMenuOption[] }>({ visible: false, options: [] });
   const [viewImageUrl, setViewImageUrl] = useState<string | null>(null);
@@ -218,6 +227,20 @@ export default function ChatScreen() {
       : null;
 
   const isSelfConv = conversation?.type === 'direct' && conversation?.participants?.every(p => (p._id || p.id || '') === currentUserId);
+
+  const filteredMessages = useMemo(() => {
+    if (!isSelfConv || cloudFilterTab === 'all') return messages;
+    return messages.filter(msg => {
+      const media = msg.mediaIds?.[0] ? mediaById[typeof msg.mediaIds[0] === 'string' ? msg.mediaIds[0] : (msg.mediaIds[0] as any)._id] : null;
+      const isImageOrVideo = media && ['image', 'video'].includes(getCategory(media.fileName || ''));
+      const isFile = media && !isImageOrVideo;
+      
+      if (cloudFilterTab === 'text') return !media && !!msg.content;
+      if (cloudFilterTab === 'image') return isImageOrVideo;
+      if (cloudFilterTab === 'file') return isFile;
+      return true;
+    });
+  }, [messages, isSelfConv, cloudFilterTab, mediaById]);
 
   useEffect(() => {
     if (isSelfConv) {
@@ -1612,19 +1635,46 @@ export default function ChatScreen() {
       )}
 
       {isSelfConv && (
-        <View style={{ backgroundColor: colors.surface, padding: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', zIndex: 5 }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
-            <View style={{ width: 44, height: 44, borderRadius: 12, backgroundColor: '#0068FF' + '15', alignItems: 'center', justifyContent: 'center' }}>
-              <Ionicons name="cloud" size={24} color="#0068FF" />
-            </View>
-            <View style={{ marginLeft: 12 }}>
-              <Text style={{ fontSize: 14, fontWeight: '600', color: colors.text }}>Lưu trữ Cloud</Text>
-              <Text style={{ fontSize: 13, color: '#0068FF', marginTop: 2, fontWeight: '700' }}>
-                {formatBytes(storageData?.totalBytes || 0)} <Text style={{ color: '#9CA3AF', fontWeight: '500' }}>/ 1 GB</Text>
-              </Text>
+        <>
+          <View style={{ backgroundColor: colors.surface, padding: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', zIndex: 5 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+              <View style={{ width: 44, height: 44, borderRadius: 12, backgroundColor: '#0068FF' + '15', alignItems: 'center', justifyContent: 'center' }}>
+                <Ionicons name="cloud" size={24} color="#0068FF" />
+              </View>
+              <View style={{ marginLeft: 12 }}>
+                <Text style={{ fontSize: 14, fontWeight: '600', color: colors.text }}>Lưu trữ Cloud</Text>
+                <Text style={{ fontSize: 13, color: '#0068FF', marginTop: 2, fontWeight: '700' }}>
+                  {formatBytes(storageData?.totalBytes || 0)} <Text style={{ color: '#9CA3AF', fontWeight: '500' }}>/ 1 GB</Text>
+                </Text>
+              </View>
             </View>
           </View>
-        </View>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0, backgroundColor: colors.surface, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border }}>
+            <View style={{ flexDirection: 'row', paddingHorizontal: 12, paddingVertical: 8, gap: 8 }}>
+              {[
+                { id: 'all', label: 'Tất cả' },
+                { id: 'image', label: 'Ảnh/Video' },
+                { id: 'file', label: 'File' },
+                { id: 'text', label: 'Ghi chú' }
+              ].map(tab => (
+                <TouchableOpacity
+                  key={tab.id}
+                  onPress={() => setCloudFilterTab(tab.id as any)}
+                  style={{
+                    paddingHorizontal: 14,
+                    paddingVertical: 6,
+                    borderRadius: 16,
+                    backgroundColor: cloudFilterTab === tab.id ? '#0068FF' : (colorScheme === 'dark' ? '#374151' : '#F3F4F6')
+                  }}
+                >
+                  <Text style={{ fontSize: 13, fontWeight: '500', color: cloudFilterTab === tab.id ? '#fff' : colors.text }}>
+                    {tab.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </ScrollView>
+        </>
       )}
 
       {pinnedItems.length > 0 && (
@@ -1651,7 +1701,7 @@ export default function ChatScreen() {
 
       <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding" keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}>
         <FlatList
-          data={messages}
+          data={filteredMessages}
           keyExtractor={(item) => getMessageId(item)}
           renderItem={renderMessage}
           keyboardShouldPersistTaps="handled"
