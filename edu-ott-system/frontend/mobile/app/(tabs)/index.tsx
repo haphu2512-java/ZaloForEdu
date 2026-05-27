@@ -13,7 +13,7 @@ import {
   ScrollView,
 } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { getConversations } from '@/utils/messageService';
+import { getConversations, createConversation } from '@/utils/messageService';
 import { connectSocket } from '@/utils/socketService';
 import { useAuth } from '@/context/auth';
 import Colors from '@/constants/Colors';
@@ -200,9 +200,17 @@ export default function MessagesScreen() {
   }, [loadConversations]);
 
   const handlePress = (item: Conversation) => {
-    // isMock items don't have a real ID — skip
-    if ((item as any).isMock) return;
-    // Self-conversation ("Cloud của tôi") → go to normal chat screen (has back button + full features)
+    // Cloud của tôi (mock hoặc self-conversation) → vào tab MyDocument
+    if ((item as any).isMock) {
+      router.push('/(tabs)/mydocument');
+      return;
+    }
+    const currentUserId = user?.id || '';
+    const isSelfConv = item.type === 'direct' && item.participants?.every(p => (p._id || p.id || '') === currentUserId);
+    if (isSelfConv) {
+      router.push('/(tabs)/mydocument');
+      return;
+    }
     router.push(`/chat/${item._id}`);
   };
   const handleLongPress = (item: Conversation) => { setSelectedConversation(item); };
