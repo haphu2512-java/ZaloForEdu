@@ -2035,6 +2035,8 @@ export default function ChatScreen() {
             ) : null}
           </View>
         </View>
+      </Modal>
+      
       <Modal visible={messageDetailsModal.visible} transparent animationType="fade" onRequestClose={() => setMessageDetailsModal({ visible: false, message: null })}>
         <View style={styles.reactionPickerOverlay}>
           <View style={[styles.reactionPickerBox, { backgroundColor: colors.surface }]}>
