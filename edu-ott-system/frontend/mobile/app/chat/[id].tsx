@@ -76,7 +76,7 @@ function getConversationIdFromMessage(msg: Message): string {
 
 function getConversationTitle(conv: Conversation, currentUserId: string) {
   if (conv.type === 'group') return conv.name || 'Nhóm chat';
-  if (conv.type === 'direct' && conv.participants?.every(p => (p._id || p.id) === currentUserId)) return 'Cloud của tôi';
+  if (conv.type === 'direct' && conv.participants?.every(p => (typeof p === 'string' ? p : (p._id || p.id || '')) === currentUserId)) return 'Cloud của tôi';
   const otherUser = conv.participants?.find((p) => (p._id || p.id) !== currentUserId);
   return otherUser?.username || otherUser?.fullName || 'Cuộc trò chuyện';
 }
@@ -226,7 +226,7 @@ export default function ChatScreen() {
       ? conversation.participants?.find((p) => (p._id || p.id || '') !== currentUserId)
       : null;
 
-  const isSelfConv = conversation?.type === 'direct' && conversation?.participants?.every(p => (p._id || p.id || '') === currentUserId);
+  const isSelfConv = conversation?.type === 'direct' && conversation?.participants?.every(p => (typeof p === 'string' ? p : (p._id || p.id || '')) === currentUserId);
 
   const filteredMessages = useMemo(() => {
     if (!isSelfConv || cloudFilterTab === 'all') return messages;
@@ -254,7 +254,7 @@ export default function ChatScreen() {
 
   const headerAvatarUrl = conversation?.type === 'group'
     ? toAbsoluteUrl(conversation.avatarUrl || (conversation as any).avatar) || `https://ui-avatars.com/api/?name=${encodeURIComponent(conversationTitle)}&background=8B5CF6&color=fff&size=150&bold=true`
-    : (conversation?.type === 'direct' && conversation?.participants?.every(p => (p._id || p.id) === currentUserId)
+    : (conversation?.type === 'direct' && conversation?.participants?.every(p => (typeof p === 'string' ? p : (p._id || p.id || '')) === currentUserId)
       ? 'cloud'
       : toAbsoluteUrl(otherParticipant?.avatarUrl || (otherParticipant as any)?.avatar) || `https://ui-avatars.com/api/?name=${encodeURIComponent(conversationTitle)}&background=2563EB&color=fff&size=150&bold=true`);
 

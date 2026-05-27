@@ -120,7 +120,7 @@ export default function MyDocumentScreen() {
       const res = await getConversations(null, 100);
       const currentUserId = user.id || (user as any)._id || '';
       const existing = (res?.items || []).find(
-        (c) => c.type === 'direct' && c.participants?.every((p: any) => (p._id || p.id || '') === currentUserId),
+        (c) => c.type === 'direct' && c.participants?.every((p: any) => (typeof p === 'string' ? p : (p._id || p.id || '')) === currentUserId),
       );
       if (existing) return existing;
 
