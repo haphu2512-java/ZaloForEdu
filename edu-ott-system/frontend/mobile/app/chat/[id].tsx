@@ -1636,46 +1636,57 @@ export default function ChatScreen() {
       )}
 
       {isSelfConv && (
-        <>
-          <View style={{ backgroundColor: colors.surface, padding: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', zIndex: 5 }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
-              <View style={{ width: 44, height: 44, borderRadius: 12, backgroundColor: '#0068FF' + '15', alignItems: 'center', justifyContent: 'center' }}>
-                <Ionicons name="cloud" size={24} color="#0068FF" />
+        <View style={{ backgroundColor: colors.surface, borderBottomWidth: 1, borderBottomColor: colors.border, zIndex: 5 }}>
+          {/* Storage Banner */}
+          <View style={{ paddingHorizontal: 16, paddingVertical: 12, flexDirection: 'row', alignItems: 'center' }}>
+            <View style={{ width: 48, height: 48, borderRadius: 16, backgroundColor: colorScheme === 'dark' ? '#312E81' : '#E0E7FF', alignItems: 'center', justifyContent: 'center' }}>
+              <Ionicons name="cloud-done" size={24} color={colorScheme === 'dark' ? '#818CF8' : '#4F46E5'} />
+            </View>
+            <View style={{ marginLeft: 14, flex: 1 }}>
+              <Text style={{ fontSize: 15, fontWeight: '700', color: colors.text }}>Lưu trữ dữ liệu Cloud</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
+                <Text style={{ fontSize: 13, color: colorScheme === 'dark' ? '#818CF8' : '#4F46E5', fontWeight: '700' }}>{formatBytes(storageData?.totalBytes || 0)}</Text>
+                <Text style={{ fontSize: 13, color: '#6B7280', fontWeight: '500' }}> / 1 GB</Text>
               </View>
-              <View style={{ marginLeft: 12 }}>
-                <Text style={{ fontSize: 14, fontWeight: '600', color: colors.text }}>Lưu trữ Cloud</Text>
-                <Text style={{ fontSize: 13, color: '#0068FF', marginTop: 2, fontWeight: '700' }}>
-                  {formatBytes(storageData?.totalBytes || 0)} <Text style={{ color: '#9CA3AF', fontWeight: '500' }}>/ 1 GB</Text>
-                </Text>
+              {/* Progress Bar */}
+              <View style={{ height: 4, backgroundColor: colorScheme === 'dark' ? '#374151' : '#E5E7EB', borderRadius: 2, marginTop: 8, overflow: 'hidden' }}>
+                <View style={{ height: '100%', width: `${Math.min(100, ((storageData?.totalBytes || 0) / (1024 * 1024 * 1024)) * 100)}%`, backgroundColor: colorScheme === 'dark' ? '#818CF8' : '#4F46E5', borderRadius: 2 }} />
               </View>
             </View>
           </View>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0, backgroundColor: colors.surface, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border }}>
-            <View style={{ flexDirection: 'row', paddingHorizontal: 12, paddingVertical: 8, gap: 8 }}>
-              {[
-                { id: 'all', label: 'Tất cả' },
-                { id: 'image', label: 'Ảnh/Video' },
-                { id: 'file', label: 'File' },
-                { id: 'text', label: 'Ghi chú' }
-              ].map(tab => (
+
+          {/* Filter Tabs */}
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 12, gap: 8 }}>
+            {[
+              { id: 'all', label: 'Tất cả', icon: 'apps' },
+              { id: 'image', label: 'Ảnh/Video', icon: 'image' },
+              { id: 'file', label: 'File', icon: 'document-text' },
+              { id: 'text', label: 'Ghi chú', icon: 'pencil' }
+            ].map(tab => {
+              const isActive = cloudFilterTab === tab.id;
+              const activeColor = colorScheme === 'dark' ? '#818CF8' : '#4F46E5';
+              return (
                 <TouchableOpacity
                   key={tab.id}
                   onPress={() => setCloudFilterTab(tab.id as any)}
                   style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
                     paddingHorizontal: 14,
-                    paddingVertical: 6,
-                    borderRadius: 16,
-                    backgroundColor: cloudFilterTab === tab.id ? '#0068FF' : (colorScheme === 'dark' ? '#374151' : '#F3F4F6')
+                    paddingVertical: 8,
+                    borderRadius: 20,
+                    backgroundColor: isActive ? activeColor : (colorScheme === 'dark' ? '#374151' : '#F3F4F6'),
                   }}
                 >
-                  <Text style={{ fontSize: 13, fontWeight: '500', color: cloudFilterTab === tab.id ? '#fff' : colors.text }}>
+                  {isActive && <Ionicons name={tab.icon as any} size={14} color="#fff" style={{ marginRight: 6 }} />}
+                  <Text style={{ fontSize: 13, fontWeight: isActive ? '600' : '500', color: isActive ? '#fff' : (colorScheme === 'dark' ? '#D1D5DB' : '#4B5563') }}>
                     {tab.label}
                   </Text>
                 </TouchableOpacity>
-              ))}
-            </View>
+              );
+            })}
           </ScrollView>
-        </>
+        </View>
       )}
 
       {pinnedItems.length > 0 && (
