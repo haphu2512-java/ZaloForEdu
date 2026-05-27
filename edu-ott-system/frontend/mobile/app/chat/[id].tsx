@@ -35,7 +35,7 @@ import {
 import { API_BASE_URL } from '../../utils/api';
 import { getPinnedMessages, pinMessage, unpinMessage } from '../../utils/groupFeatureService';
 import { getMediaById, uploadMediaForm } from '../../utils/mediaService';
-import { getBlockedUsers, blockOrUnblockUser } from '@/utils/userService';
+import { getBlockedUsers, blockOrUnblockUser, getMyCloudStorage } from '@/utils/userService';
 import { toAbsoluteUrl } from '@/utils/url';
 import {
   connectSocket,
@@ -151,6 +151,15 @@ function extractMediaId(mediaItem: any): string {
   return mediaItem._id || mediaItem.id || '';
 }
 
+const formatBytes = (bytes: number, decimals = 2) => {
+  if (!bytes || bytes === 0) return '0 Bytes';
+  const k = 1024;
+  const dm = decimals < 0 ? 0 : decimals;
+  const sizes = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+};
+
 export default function ChatScreen() {
   const { id: conversationId } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
@@ -181,6 +190,7 @@ export default function ChatScreen() {
   const [isForwarding, setIsForwarding] = useState(false);
   const [conversation, setConversation] = useState<Conversation | null>(null);
   const [pinnedItems, setPinnedItems] = useState<any[]>([]);
+  const [storageData, setStorageData] = useState<{ totalBytes: number; imageCount: number; docCount: number; linkCount: number } | null>(null);
   const [mediaById, setMediaById] = useState<Record<string, MediaItem>>({});
   const [actionMenu, setActionMenu] = useState<{ visible: boolean; options: ChatActionMenuOption[] }>({ visible: false, options: [] });
   const [viewImageUrl, setViewImageUrl] = useState<string | null>(null);
@@ -208,6 +218,12 @@ export default function ChatScreen() {
       : null;
 
   const isSelfConv = conversation?.type === 'direct' && conversation?.participants?.every(p => (p._id || p.id || '') === currentUserId);
+
+  useEffect(() => {
+    if (isSelfConv) {
+      getMyCloudStorage().then(res => setStorageData(res)).catch(err => console.log('Fetch storage error:', err));
+    }
+  }, [isSelfConv]);
 
   const conversationTitle =
     conversation?.preference?.nickname ||
@@ -1573,7 +1589,7 @@ export default function ChatScreen() {
               <Ionicons name="arrow-back" size={24} color={colors.text} />
             </TouchableOpacity>
           ),
-          headerRight: () => (
+          headerRight: () => isSelfConv ? null : (
             <View style={{ flexDirection: 'row', alignItems: 'center', marginRight: 2 }}>
               <TouchableOpacity onPress={handleVoiceCall} style={{ padding: 8 }}>
                 <Ionicons name="call-outline" size={20} color={colors.text} />
@@ -1592,6 +1608,22 @@ export default function ChatScreen() {
       {!isSocketReady && (
         <View style={{ paddingVertical: 5, backgroundColor: colorScheme === 'dark' ? '#78350F' : '#FEF3C7', alignItems: 'center' }}>
           <Text style={{ color: colorScheme === 'dark' ? '#FDE68A' : '#92400E', fontSize: 11 }}>Đang kết nối...</Text>
+        </View>
+      )}
+
+      {isSelfConv && (
+        <View style={{ backgroundColor: colors.surface, padding: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', zIndex: 5 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+            <View style={{ width: 44, height: 44, borderRadius: 12, backgroundColor: '#0068FF' + '15', alignItems: 'center', justifyContent: 'center' }}>
+              <Ionicons name="cloud" size={24} color="#0068FF" />
+            </View>
+            <View style={{ marginLeft: 12 }}>
+              <Text style={{ fontSize: 14, fontWeight: '600', color: colors.text }}>Lưu trữ Cloud</Text>
+              <Text style={{ fontSize: 13, color: '#0068FF', marginTop: 2, fontWeight: '700' }}>
+                {formatBytes(storageData?.totalBytes || 0)} <Text style={{ color: '#9CA3AF', fontWeight: '500' }}>/ 1 GB</Text>
+              </Text>
+            </View>
+          </View>
         </View>
       )}
 
