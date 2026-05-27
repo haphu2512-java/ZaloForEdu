@@ -1586,7 +1586,7 @@ export default function ChatScreen() {
 
   // ==================== MAIN RENDER ====================
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }} edges={['bottom']}>
       <Stack.Screen
         options={{
           headerTitle: () => (
