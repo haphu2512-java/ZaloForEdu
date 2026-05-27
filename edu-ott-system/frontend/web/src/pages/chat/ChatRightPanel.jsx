@@ -9,9 +9,12 @@ import { useLanguage } from '../../contexts/LanguageContext';
 import { getFileColor, getExt, formatBytes, toAbsoluteUrl } from './chatUtils';
 import PinnedMessagesPanel from './Modals/PinnedMessagesPanel';
 import ReportUserModal from './Modals/ReportUserModal';
+import { useFriendStore } from '../../store/friendStore';
 import ClassifyConversationModal from './Modals/ClassifyConversationModal';
 import ConfirmTransferModal from './Modals/ConfirmTransferModal';
 import './MemberMenu.css';
+
+const DEFAULT_AVATAR = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' rx='20' fill='%23d8dadf'/%3E%3Ccircle cx='20' cy='15' r='7' fill='%23bcc0c4'/%3E%3Cpath d='M6 35 Q6 26 20 26 Q34 26 34 35' fill='%23bcc0c4'/%3E%3C/svg%3E";
 
 // Tooltip component
 const Tooltip = ({ text, children }) => {
@@ -159,6 +162,7 @@ export const ChatRightPanel = ({
 
   const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
   const myId = currentUser._id || currentUser.id;
+  const { blockFriend, unblockUser, blockedUsers } = useFriendStore();
 
   // Only check ownerId, not createdBy (owner can be transferred)
   const isOwner = activeConversation?.ownerId?._id === myId || activeConversation?.ownerId === myId;
@@ -1022,7 +1026,7 @@ export const ChatRightPanel = ({
               })()}
             </button>
 
-            {/* Nút báo cáo (chỉ hiện với hội thoại 1-1) */}
+            {/* Nút chặn + báo cáo (chỉ hiện với hội thoại 1-1) */}
             {!isGroup && (() => {
               const otherParticipant = (activeConversation?.participants || []).find(p => {
                 const pid = String(p._id || p.id || p);
@@ -1031,8 +1035,30 @@ export const ChatRightPanel = ({
               if (!otherParticipant) return null;
               const targetId = String(otherParticipant._id || otherParticipant.id || otherParticipant);
               const targetName = otherParticipant.username || otherParticipant.fullName || 'người dùng này';
+              const isBlockedByMe = blockedUsers.some(u => String(u._id || u.id) === targetId);
               return (
                 <>
+                  {/* Nút chặn / bỏ chặn */}
+                  <button
+                    onClick={async () => {
+                      if (isBlockedByMe) {
+                        const res = await unblockUser(targetId);
+                        if (res?.success) toast.success(`Đã bỏ chặn ${targetName}`);
+                        else toast.error(res?.error || 'Bỏ chặn thất bại');
+                      } else {
+                        if (!window.confirm(`Chặn ${targetName}? Bạn sẽ không thể nhắn tin cho nhau.`)) return;
+                        const res = await blockFriend(targetId);
+                        if (res?.success) toast.success(`Đã chặn ${targetName}`);
+                        else toast.error(res?.error || 'Chặn thất bại');
+                      }
+                    }}
+                    style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 10, border: `1px solid ${isBlockedByMe ? '#fde68a' : '#fee2e2'}`, background: isBlockedByMe ? '#fffbeb' : '#fff5f5', color: isBlockedByMe ? '#d97706' : '#ef4444', cursor: 'pointer', fontSize: 14, fontWeight: 500 }}
+                  >
+                    <FaBan size={14} />
+                    {isBlockedByMe ? `Bỏ chặn ${targetName}` : `Chặn ${targetName}`}
+                  </button>
+
+                  {/* Nút báo cáo */}
                   <button
                     onClick={() => setShowReportModal(true)}
                     style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 10, border: '1px solid #fee2e2', background: '#fff5f5', color: '#ef4444', cursor: 'pointer', fontSize: 14, fontWeight: 500 }}
@@ -1040,7 +1066,6 @@ export const ChatRightPanel = ({
                     <FaFlag size={14} />
                     Báo cáo tài khoản
                   </button>
-                  {/* Modal báo cáo — phải đặt NGOÀI button, không được lồng bên trong */}
                   {showReportModal && (
                     <ReportUserModal
                       targetUserId={targetId}

@@ -72,8 +72,14 @@ export function useMessages({ activeConversation, userId, token, getOtherPartici
         );
         return [...filtered, normalizedMsg];
       });
-    } catch {
-      toast.error('Lỗi gửi tin nhắn');
+    } catch (err) {
+      // BE trả về { success, error: { code, message, details } } hoặc { message }
+      const errData = err?.response?.data;
+      const serverMsg =
+        (typeof errData?.error === 'object' ? errData?.error?.message : errData?.error) ||
+        errData?.message ||
+        'Lỗi gửi tin nhắn';
+      toast.error(typeof serverMsg === 'string' ? serverMsg : 'Lỗi gửi tin nhắn');
       setMessages(prev => prev.filter(m => m._id !== tempId));
     }
   };

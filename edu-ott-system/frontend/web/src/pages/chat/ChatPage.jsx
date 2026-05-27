@@ -22,6 +22,7 @@ import { MessageInput } from "./MessageInput";
 import { ChatRightPanel } from "./ChatRightPanel";
 import { ChatSidebar } from "./ChatSidebar";
 import { PinnedBar } from "./PinnedBar";
+import { TypingIndicator } from "./TypingIndicator";
 import { ReminderListPage } from "./ReminderListPage";
 import MyDocumentsPage from "../cloud/MyDocumentsPage";
 import { useTheme } from '../../contexts/ThemeContext';
@@ -194,8 +195,9 @@ export default function ChatPage() {
   const [pendingEditReminder, setPendingEditReminder] = useState(null);
   const [showReminderListPage, setShowReminderListPage] = useState(false);
   const [showSearchInConv, setShowSearchInConv] = useState(false);
+  const [typingUsers, setTypingUsers] = useState({}); // { conversationId: [{userId, username}] }
   const [unblockLoading, setUnblockLoading] = useState(false);
-  const { blockedUsers, unblockUser: unblockUserStore, fetchBlockedUsers } = useFriendStore();
+  const { blockedUsers, unblockUser: unblockUserStore, fetchBlockedUsers, previouslyBlockedIds } = useFriendStore();
 
   const pageRef = useRef(null);
   const messagesEndRef = useRef(null);
@@ -353,6 +355,7 @@ export default function ChatPage() {
     setTriggeredReminder,
     fetchConversationsData, fetchIncomingRequests, fetchFriends, fetchOutgoingRequests,
     toast,
+    setTypingUsers,
   });
 
   // ── Merged conversation list ───────────────────────────────────────────────
@@ -414,7 +417,13 @@ export default function ChatPage() {
       if (!conv.latestMessage) { if (String(conv._id) === activeIdStr) friendConvs.push(conv); return; }
       const firstSenderId = String(conv.firstSenderId?._id || conv.firstSenderId || '');
       const myId = String(userId || '');
-      if (!firstSenderId || firstSenderId === myId) friendConvs.push(conv);
+      // Nếu mình nhắn trước, đã reply, hoặc đã từng chặn → không phải người lạ
+      const iHaveInteracted = !firstSenderId || firstSenderId === myId;
+      const hadBlockRelation = !!otherId && (
+        blockedUsers.some(u => String(u._id || u.id) === otherId) ||
+        previouslyBlockedIds?.has(otherId)
+      );
+      if (iHaveInteracted || hadBlockRelation) friendConvs.push(conv);
       else strangerConvs.push(conv);
     });
     return { friendConvs, strangerConvs };
@@ -590,7 +599,7 @@ export default function ChatPage() {
                 const other = getOtherParticipant(activeConversation);
                 return other && typeof other === 'object' ? other.lastSeen : null;
               })(),
-              isStranger: (() => { const o = getOtherParticipant(activeConversation); const id = o && typeof o === 'object' ? String(o._id || o.id) : null; return id && friends.length > 0 ? !friendIds.has(id) : false; })(),
+              isStranger: (() => { const o = getOtherParticipant(activeConversation); const id = o && typeof o === 'object' ? String(o._id || o.id) : null; if (!id || friends.length === 0) return false; if (blockedUsers.some(u => String(u._id || u.id) === id)) return false; if (previouslyBlockedIds?.has(id)) return false; const firstSenderId = String(activeConversation.firstSenderId?._id || activeConversation.firstSenderId || ''); return !friendIds.has(id) && !!firstSenderId && firstSenderId !== String(userId); })(),
               strangerId: getOtherParticipant(activeConversation)?._id || getOtherParticipant(activeConversation)?.id,
             }}
             onInfo={() => setShowRightPanel(!showRightPanel)}
@@ -620,6 +629,8 @@ export default function ChatPage() {
               const otherId = other && typeof other === 'object' ? String(other._id || other.id) : null;
               const otherName = other && typeof other === 'object' ? (other.username || other.fullName || 'Người dùng') : 'Người dùng';
               if (!otherId || friendIds.has(otherId)) return null;
+              // Ẩn banner khi đang chặn hoặc đã từng chặn người này
+              if (blockedUsers.some(u => String(u._id || u.id) === otherId) || previouslyBlockedIds?.has(otherId)) return null;
               const hasOutgoing = outgoingRequestIds.has(otherId) || justSentRequestTo === otherId;
               const incomingReq = incomingRequests.find(r => { const fromId = r.fromUserId?._id ? String(r.fromUserId._id) : r.fromUserId?.id ? String(r.fromUserId.id) : String(r.fromUserId || ''); return fromId === otherId; });
               if (hasOutgoing) {
@@ -757,6 +768,21 @@ export default function ChatPage() {
                   });
                 })()}
                 {uploads.map(u => <UploadBubble key={u.id} name={u.name} percent={u.percent} />)}
+                {/* Typing indicator */}
+                {(() => {
+                  const convId = String(activeConversation._id || '');
+                  const typers = typingUsers[convId] || [];
+                  if (typers.length === 0) return null;
+                  const participants = activeConversation.participants || [];
+                  const resolvedNames = typers.map(t => {
+                    const p = participants.find(p => String(p._id || p.id) === String(t.userId));
+                    return p?.username || p?.fullName || t.username || 'Ai đó';
+                  });
+                  const label = resolvedNames.length === 1
+                    ? `${resolvedNames[0]} đang nhập...`
+                    : `${resolvedNames[0]} và ${resolvedNames.length - 1} người khác đang nhập...`;
+                  return <TypingIndicator userName={label} />;
+                })()}
                 <div ref={messagesEndRef} />
               </>
             )}
@@ -853,7 +879,7 @@ export default function ChatPage() {
 
             const otherP = !isGroupConv ? getOtherParticipant(activeConversation) : null;
             const otherIdP = otherP ? typeof otherP === 'object' ? String(otherP._id || otherP.id || '') : String(otherP) : null;
-            const isStrangerChat = !!otherIdP && !friendIds.has(otherIdP);
+            const isStrangerChat = !!otherIdP && !friendIds.has(otherIdP) && !blockedUsers.some(u => String(u._id || u.id) === otherIdP) && !previouslyBlockedIds?.has(otherIdP);
             const otherName = otherP && typeof otherP === 'object' ? (otherP.username || otherP.fullName || 'Người này') : 'Người này';
             const otherPrivacy = otherP && typeof otherP === 'object' ? otherP.messagePrivacy : undefined;
             if (isStrangerChat && otherPrivacy === 'friends') return (
