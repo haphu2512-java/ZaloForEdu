@@ -4,7 +4,7 @@ import toast from 'react-hot-toast';
 import { fmtTime, getCategory, getExt, getFileColor, formatBytes } from './CloudUtils';
 import { AudioBubble } from '../../components/shared/AudioBubble';
 
-const EMOJIS = ['👍','❤️','😂','😲','😢','😡'];
+const EMOJIS = ['😀', '😂', '😍', '🥰', '👍', '❤️', '🔥', '😭', '🙏', '🎉'];
 
 /* Highlight search keyword trong text */
 function HighlightText({ text, query }) {
