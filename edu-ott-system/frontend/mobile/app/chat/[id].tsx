@@ -76,7 +76,7 @@ function getConversationIdFromMessage(msg: Message): string {
 
 function getConversationTitle(conv: Conversation, currentUserId: string) {
   if (conv.type === 'group') return conv.name || 'Nhóm chat';
-  if (conv.type === 'direct' && conv.participants?.every(p => (typeof p === 'string' ? p : (p._id || p.id || '')) === currentUserId)) return 'Cloud của tôi';
+  if (conv.type === 'direct' && conv.participants?.every(p => (typeof p === 'string' ? p : (p._id || p.id || '')) === currentUserId)) return 'My Documents';
   const otherUser = conv.participants?.find((p) => (p._id || p.id) !== currentUserId);
   return otherUser?.username || otherUser?.fullName || 'Cuộc trò chuyện';
 }
@@ -169,7 +169,7 @@ const getCategory = (filename: string) => {
 };
 
 export default function ChatScreen() {
-  const { id: conversationId } = useLocalSearchParams<{ id: string }>();
+  const { id: conversationId, isSelf } = useLocalSearchParams<{ id: string; isSelf?: string }>();
   const router = useRouter();
   const { user } = useAuth();
   const insets = useSafeAreaInsets();
@@ -221,12 +221,17 @@ export default function ChatScreen() {
   const isTypingRef = useRef(false);
   const typingStopTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const otherParticipant =
-    conversation?.type === 'direct'
-      ? conversation.participants?.find((p) => (p._id || p.id || '') !== currentUserId)
-      : null;
+  const otherParticipant = conversation?.type === 'group'
+    ? null
+    : conversation?.participants?.length === 1 && conversation.participants[0] === currentUserId
+      ? conversation.participants[0]
+      : conversation?.participants?.find((p) => (p._id || p.id || '') !== currentUserId);
 
-  const isSelfConv = conversation?.type === 'direct' && conversation?.participants?.every(p => (typeof p === 'string' ? p : (p._id || p.id || '')) === currentUserId);
+  const isSelfConv = isSelf === 'true' || (conversation?.type === 'direct' && conversation?.participants?.every(p => (typeof p === 'string' ? p : (p._id || p.id || '')) === currentUserId));
+  console.log('[DEBUG-CHAT] currentUserId:', currentUserId);
+  console.log('[DEBUG-CHAT] conversation type:', conversation?.type);
+  console.log('[DEBUG-CHAT] participants:', JSON.stringify(conversation?.participants));
+  console.log('[DEBUG-CHAT] isSelfConv:', isSelfConv);
 
   const filteredMessages = useMemo(() => {
     if (!isSelfConv || cloudFilterTab === 'all') return messages;
@@ -250,7 +255,7 @@ export default function ChatScreen() {
 
   const conversationTitle =
     conversation?.preference?.nickname ||
-    (isSelfConv ? 'Cloud của tôi' : (conversation ? getConversationTitle(conversation, currentUserId) : 'Trò chuyện'));
+    (isSelfConv ? 'My Documents' : (conversation ? getConversationTitle(conversation, currentUserId) : 'Trò chuyện'));
 
   const headerAvatarUrl = conversation?.type === 'group'
     ? toAbsoluteUrl(conversation.avatarUrl || (conversation as any).avatar) || `https://ui-avatars.com/api/?name=${encodeURIComponent(conversationTitle)}&background=8B5CF6&color=fff&size=150&bold=true`
@@ -1698,6 +1703,14 @@ export default function ChatScreen() {
           </TouchableOpacity>
         </View>
       )}
+
+      <View style={{ backgroundColor: 'red', padding: 10 }}>
+        <Text style={{ color: 'white' }}>Debug Info:</Text>
+        <Text style={{ color: 'white' }}>ID: {currentUserId}</Text>
+        <Text style={{ color: 'white' }}>Type: {conversation?.type}</Text>
+        <Text style={{ color: 'white' }}>Parts: {JSON.stringify(conversation?.participants)}</Text>
+        <Text style={{ color: 'white' }}>isSelf: {isSelfConv ? 'Yes' : 'No'}</Text>
+      </View>
 
       <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding" keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}>
         <FlatList

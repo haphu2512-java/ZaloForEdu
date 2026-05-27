@@ -211,7 +211,7 @@ export default function MessagesScreen() {
         const convId = conv?._id || conv?.id;
         if (convId) {
           await loadConversations();
-          router.push(`/chat/${convId}`);
+          router.push({ pathname: `/chat/${convId}`, params: { isSelf: 'true' } });
         }
       } catch (e: any) {
         Alert.alert('Lỗi', e.message || 'Không thể mở Cloud của tôi');
@@ -221,7 +221,8 @@ export default function MessagesScreen() {
       return;
     }
     // Các conversation bình thường (bao gồm cả self-conversation đã tạo)
-    router.push(`/chat/${item._id}`);
+    const isSelf = item.type === 'direct' && item.participants?.every((p: any) => (typeof p === 'string' ? p : (p._id || p.id || '')) === currentUserId);
+    router.push({ pathname: `/chat/${item._id}`, params: { isSelf: isSelf ? 'true' : 'false' } });
   };
   const handleLongPress = (item: Conversation) => { setSelectedConversation(item); };
   const closeActionSheet = () => { setSelectedConversation(null); };
