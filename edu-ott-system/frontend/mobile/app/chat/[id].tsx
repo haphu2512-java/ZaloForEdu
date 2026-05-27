@@ -213,6 +213,13 @@ export default function ChatScreen() {
     emojiFilter: null,
   });
   const [reactionPickerMsg, setReactionPickerMsg] = useState<Message | null>(null);
+  const [messageDetailsModal, setMessageDetailsModal] = useState<{
+    visible: boolean;
+    message: Message | null;
+  }>({
+    visible: false,
+    message: null,
+  });
 
   // Tránh mở Picker nhiều lần cùng lúc gây lỗi "picking in progress"
   const isPicking = useRef(false);
@@ -1240,6 +1247,12 @@ export default function ChatScreen() {
     }
     if (!msg.isRecalled) {
       buttons.push({
+        text: 'ℹ️ Xem chi tiết',
+        onPress: () => {
+          setMessageDetailsModal({ visible: true, message: msg });
+        }
+      });
+      buttons.push({
         text: '✕ Xóa phía tôi',
         isDestructive: true,
         onPress: async () => {
@@ -2020,6 +2033,65 @@ export default function ChatScreen() {
                 />
               </>
             ) : null}
+          </View>
+        </View>
+      <Modal visible={messageDetailsModal.visible} transparent animationType="fade" onRequestClose={() => setMessageDetailsModal({ visible: false, message: null })}>
+        <View style={styles.reactionPickerOverlay}>
+          <View style={[styles.reactionPickerBox, { backgroundColor: colors.surface }]}>
+            <Text style={{ fontSize: 20, fontWeight: '700', color: colors.text, marginBottom: 16 }}>Chi tiết tin nhắn</Text>
+            
+            <View style={{ flexDirection: 'row', marginBottom: 12 }}>
+              <Text style={{ width: 100, color: colors.muted }}>Người gửi:</Text>
+              <Text style={{ flex: 1, color: colors.text, fontWeight: '500' }}>
+                {(() => {
+                  const msg = messageDetailsModal.message;
+                  if (!msg) return '';
+                  if (getMessageSenderId(msg) === currentUserId) return 'Bạn';
+                  const senderObj = msg.senderId as any;
+                  if (senderObj && senderObj.username) return senderObj.username;
+                  const participant = conversation?.participants?.find((p) => (p._id || p.id || '') === getMessageSenderId(msg));
+                  return participant?.username || 'Người dùng';
+                })()}
+              </Text>
+            </View>
+
+            <View style={{ flexDirection: 'row', marginBottom: 16 }}>
+              <Text style={{ width: 100, color: colors.muted }}>Thời gian:</Text>
+              <Text style={{ flex: 1, color: colors.text, fontWeight: '500' }}>
+                {messageDetailsModal.message?.createdAt ? `${new Date(messageDetailsModal.message.createdAt).toLocaleTimeString('vi-VN', {hour: '2-digit', minute: '2-digit'})} - ${new Date(messageDetailsModal.message.createdAt).toLocaleDateString('vi-VN')}` : ''}
+              </Text>
+            </View>
+
+            {messageDetailsModal.message?.mediaIds && messageDetailsModal.message.mediaIds.length > 0 && (
+              <View style={{ marginBottom: 16 }}>
+                <Text style={{ color: colors.muted, marginBottom: 8 }}>
+                  Tệp đính kèm ({messageDetailsModal.message.mediaIds.length}):
+                </Text>
+                {messageDetailsModal.message.mediaIds.map((mediaRef: any, idx: number) => {
+                  const mediaId = typeof mediaRef === 'string' ? mediaRef : (mediaRef._id || mediaRef.id || '');
+                  const media = mediaById[mediaId];
+                  if (!media) return null;
+                  return (
+                    <View key={mediaId} style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: colorScheme === 'dark' ? '#374151' : '#F3F4F6', padding: 12, borderRadius: 12, marginBottom: 8 }}>
+                      <Text style={{ color: '#2563EB', fontWeight: '700', marginRight: 12, width: 40, textAlign: 'center' }}>
+                        {media.fileName ? (media.fileName.split('.').pop() || '').toUpperCase() : 'FILE'}
+                      </Text>
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ color: colors.text, fontWeight: '600' }} numberOfLines={1}>{media.fileName || 'Tệp đính kèm'}</Text>
+                        <Text style={{ color: colors.muted, fontSize: 13 }}>{formatBytes(media.fileSize || 0)}</Text>
+                      </View>
+                    </View>
+                  );
+                })}
+              </View>
+            )}
+
+            <TouchableOpacity 
+              style={{ backgroundColor: '#0068FF', paddingVertical: 12, borderRadius: 12, alignItems: 'center', marginTop: 8 }}
+              onPress={() => setMessageDetailsModal({ visible: false, message: null })}
+            >
+              <Text style={{ color: '#fff', fontSize: 16, fontWeight: '700' }}>Đóng</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
