@@ -203,6 +203,10 @@ const createConversation = asyncHandler(async (req, res) => {
         : { type: 'direct', participants: { $all: uniqueParticipants, $size: 2 } }
     );
     if (existing) {
+      await ConversationPreference.updateMany(
+        { conversationId: existing._id, userId: { $in: uniqueParticipants } },
+        { $set: { isDeleted: false, isHidden: false } }
+      );
       await existing.populate('participants', 'username email avatarUrl isOnline lastSeen messagePrivacy');
       return successResponse(res, existing, 'Conversation already exists');
     }
