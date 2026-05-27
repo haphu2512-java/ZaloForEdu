@@ -207,9 +207,11 @@ export default function ChatScreen() {
       ? conversation.participants?.find((p) => (p._id || p.id || '') !== currentUserId)
       : null;
 
+  const isSelfConv = conversation?.type === 'direct' && conversation?.participants?.every(p => (p._id || p.id || '') === currentUserId);
+
   const conversationTitle =
     conversation?.preference?.nickname ||
-    (conversation ? getConversationTitle(conversation, currentUserId) : 'Trò chuyện');
+    (isSelfConv ? 'Cloud của tôi' : (conversation ? getConversationTitle(conversation, currentUserId) : 'Trò chuyện'));
 
   const headerAvatarUrl = conversation?.type === 'group'
     ? toAbsoluteUrl(conversation.avatarUrl || (conversation as any).avatar) || `https://ui-avatars.com/api/?name=${encodeURIComponent(conversationTitle)}&background=8B5CF6&color=fff&size=150&bold=true`
