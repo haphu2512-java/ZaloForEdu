@@ -221,6 +221,7 @@ export default function MessagesScreen() {
       return;
     }
     // Các conversation bình thường (bao gồm cả self-conversation đã tạo)
+    const currentUserId = user?.id || (user as any)?._id || '';
     const isSelf = item.type === 'direct' && item.participants?.every((p: any) => (typeof p === 'string' ? p : (p._id || p.id || '')) === currentUserId);
     router.push({ pathname: `/chat/${item._id}`, params: { isSelf: isSelf ? 'true' : 'false' } });
   };
