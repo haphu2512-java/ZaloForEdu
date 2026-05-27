@@ -1639,18 +1639,18 @@ export default function ChatScreen() {
         <View style={{ backgroundColor: colors.surface, borderBottomWidth: 1, borderBottomColor: colors.border, zIndex: 5 }}>
           {/* Storage Banner */}
           <View style={{ paddingHorizontal: 16, paddingVertical: 12, flexDirection: 'row', alignItems: 'center' }}>
-            <View style={{ width: 48, height: 48, borderRadius: 16, backgroundColor: colorScheme === 'dark' ? '#312E81' : '#E0E7FF', alignItems: 'center', justifyContent: 'center' }}>
-              <Ionicons name="cloud-done" size={24} color={colorScheme === 'dark' ? '#818CF8' : '#4F46E5'} />
+            <View style={{ width: 48, height: 48, borderRadius: 16, backgroundColor: colorScheme === 'dark' ? '#1E3A8A' : '#E5F0FF', alignItems: 'center', justifyContent: 'center' }}>
+              <Ionicons name="cloud-done" size={24} color={colorScheme === 'dark' ? '#60A5FA' : '#0068FF'} />
             </View>
             <View style={{ marginLeft: 14, flex: 1 }}>
               <Text style={{ fontSize: 15, fontWeight: '700', color: colors.text }}>Lưu trữ dữ liệu Cloud</Text>
               <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
-                <Text style={{ fontSize: 13, color: colorScheme === 'dark' ? '#818CF8' : '#4F46E5', fontWeight: '700' }}>{formatBytes(storageData?.totalBytes || 0)}</Text>
+                <Text style={{ fontSize: 13, color: colorScheme === 'dark' ? '#60A5FA' : '#0068FF', fontWeight: '700' }}>{formatBytes(storageData?.totalBytes || 0)}</Text>
                 <Text style={{ fontSize: 13, color: '#6B7280', fontWeight: '500' }}> / 1 GB</Text>
               </View>
               {/* Progress Bar */}
               <View style={{ height: 4, backgroundColor: colorScheme === 'dark' ? '#374151' : '#E5E7EB', borderRadius: 2, marginTop: 8, overflow: 'hidden' }}>
-                <View style={{ height: '100%', width: `${Math.min(100, ((storageData?.totalBytes || 0) / (1024 * 1024 * 1024)) * 100)}%`, backgroundColor: colorScheme === 'dark' ? '#818CF8' : '#4F46E5', borderRadius: 2 }} />
+                <View style={{ height: '100%', width: `${Math.min(100, ((storageData?.totalBytes || 0) / (1024 * 1024 * 1024)) * 100)}%`, backgroundColor: colorScheme === 'dark' ? '#60A5FA' : '#0068FF', borderRadius: 2 }} />
               </View>
             </View>
           </View>
@@ -1664,7 +1664,7 @@ export default function ChatScreen() {
               { id: 'text', label: 'Ghi chú', icon: 'pencil' }
             ].map(tab => {
               const isActive = cloudFilterTab === tab.id;
-              const activeColor = colorScheme === 'dark' ? '#818CF8' : '#4F46E5';
+              const activeColor = colorScheme === 'dark' ? '#60A5FA' : '#0068FF';
               return (
                 <TouchableOpacity
                   key={tab.id}
