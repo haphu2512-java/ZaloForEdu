@@ -228,10 +228,6 @@ export default function ChatScreen() {
       : conversation?.participants?.find((p) => (p._id || p.id || '') !== currentUserId);
 
   const isSelfConv = isSelf === 'true' || (conversation?.type === 'direct' && conversation?.participants?.every(p => (typeof p === 'string' ? p : (p._id || p.id || '')) === currentUserId));
-  console.log('[DEBUG-CHAT] currentUserId:', currentUserId);
-  console.log('[DEBUG-CHAT] conversation type:', conversation?.type);
-  console.log('[DEBUG-CHAT] participants:', JSON.stringify(conversation?.participants));
-  console.log('[DEBUG-CHAT] isSelfConv:', isSelfConv);
 
   const filteredMessages = useMemo(() => {
     if (!isSelfConv || cloudFilterTab === 'all') return messages;
@@ -1703,14 +1699,6 @@ export default function ChatScreen() {
           </TouchableOpacity>
         </View>
       )}
-
-      <View style={{ backgroundColor: 'red', padding: 10 }}>
-        <Text style={{ color: 'white' }}>Debug Info:</Text>
-        <Text style={{ color: 'white' }}>ID: {currentUserId}</Text>
-        <Text style={{ color: 'white' }}>Type: {conversation?.type}</Text>
-        <Text style={{ color: 'white' }}>Parts: {JSON.stringify(conversation?.participants)}</Text>
-        <Text style={{ color: 'white' }}>isSelf: {isSelfConv ? 'Yes' : 'No'}</Text>
-      </View>
 
       <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding" keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}>
         <FlatList
