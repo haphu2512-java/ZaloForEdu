@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { socketService } from '../../services/socketService';
 import { DEFAULT_AVATAR } from '../../utils/constants';
-
+import { useFriendStore } from '../../store/friendStore';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api/v1";
 const API_ORIGIN = API_BASE_URL.replace(/\/api\/v1\/?$/, "");
@@ -28,7 +28,10 @@ export const useChatSocket = ({
   fetchFriends,
   fetchOutgoingRequests,
   toast,
+  setTypingUsers,   // thêm mới: typing indicator
 }) => {
+  const setBlockedUsersRealtime = useFriendStore(state => state.setBlockedUsersRealtime);
+
   useEffect(() => {
     if (!token) return;
     socketService.connect(token);
@@ -68,13 +71,9 @@ export const useChatSocket = ({
         const resolveReply = (msg, existingMsgs) => {
           if (!msg || !msg.replyTo) return msg;
           if (typeof msg.replyTo === 'object' && msg.replyTo.content) return msg;
-
           const replyId = String(msg.replyTo._id || msg.replyTo);
           const originalMsg = existingMsgs.find(m => String(m._id || m.id) === replyId);
-
-          if (originalMsg) {
-            return { ...msg, replyTo: originalMsg };
-          }
+          if (originalMsg) return { ...msg, replyTo: originalMsg };
           return msg;
         };
 
@@ -91,6 +90,16 @@ export const useChatSocket = ({
 
         socketService.socket?.emit("message_delivered", { messageId: latestMessage._id });
         socketService.socket?.emit("message_seen", { messageId: latestMessage._id });
+
+        // Khi nhận tin mới → xóa typing indicator của người đó
+        if (setTypingUsers) {
+          setTypingUsers(prev => {
+            const key = String(convIdStr);
+            const senderId = String(latestMessage?.senderId?._id || latestMessage?.senderId || '');
+            const current = prev[key] || [];
+            return { ...prev, [key]: current.filter(u => u.userId !== senderId) };
+          });
+        }
       } else if (!isMyMessage && latestMessage?.type !== 'system' && latestMessage?.type !== 'system_reminder') {
         const isMentioned = latestMessage?.mentionAll ||
           (latestMessage?.mentions || []).some(m => String(m._id || m) === String(userId));
@@ -123,16 +132,9 @@ export const useChatSocket = ({
       setConversations(prevConvs => {
         const index = prevConvs.findIndex(c => String(c._id) === convIdStr);
         if (index === -1) {
-          // Conversation not in list — it may be hidden by the user.
-          // Only refetch if this is a mock conversation being replaced by a real one.
-          // Only remove mock placeholder if present — do NOT fetchConversationsData
-          // because the real conversation may be hidden and must stay hidden.
           const mockId = `mock_${String(latestMessage?.senderId?._id || latestMessage?.senderId || '')}`;
           const hasMock = prevConvs.some(c => c._id === mockId);
-          if (hasMock) {
-            return prevConvs.filter(c => c._id !== mockId);
-          }
-          // Conversation not in list and no mock — it is hidden. Leave state unchanged.
+          if (hasMock) return prevConvs.filter(c => c._id !== mockId);
           return prevConvs;
         }
         const newConvs = [...prevConvs];
@@ -224,7 +226,7 @@ export const useChatSocket = ({
       }
     };
 
-    // ── Poll updated (MỚI) ──
+    // ── Poll updated ──
     const handlePollUpdated = (updatedPoll) => {
       if (!updatedPoll) return;
       setMessages(prev => prev.map(m => {
@@ -237,7 +239,6 @@ export const useChatSocket = ({
       if (setPolls) {
         setPolls(prev => prev.map(p => String(p._id) === String(updatedPoll._id) ? updatedPoll : p));
       }
-      // Hiển thị thông báo khi có người bình chọn (tránh hiện nếu chính mình vừa vote - giả định backend gộp nốt)
       toast.success(`Có người vừa bình chọn: ${updatedPoll.question}`, {
         icon: '📊',
         id: `poll_${updatedPoll._id}`,
@@ -245,10 +246,9 @@ export const useChatSocket = ({
       });
     };
 
-    // ── Pinned items updated (MỚI) ──
+    // ── Pinned items updated ──
     const handlePinnedItemsUpdated = (payload) => {
       if (!payload || !setPinnedMessages) return;
-      // payload = { conversationId, pinnedMessages: [...] } or just array
       const activeId = activeConvIdRef.current;
       if (payload.conversationId && String(payload.conversationId) !== String(activeId)) return;
       if (Array.isArray(payload.pinnedMessages)) {
@@ -266,11 +266,9 @@ export const useChatSocket = ({
 
       console.log('[Socket] group_updated:', payload);
 
-      // Update active conversation if it's the same
       const isActiveConv = activeConvIdRef.current && String(activeConvIdRef.current) === convIdStr;
 
       if (isActiveConv) {
-        // Reload conversation detail from API to get populated fields
         try {
           const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api/v1";
           const token = localStorage.getItem('token');
@@ -280,7 +278,6 @@ export const useChatSocket = ({
           const data = await response.json();
           const conversations = data.data?.items || data.items || [];
           const updatedConv = conversations.find(c => String(c._id) === convIdStr);
-
           if (updatedConv) {
             console.log('[Socket] Reloaded conversation with populated fields:', updatedConv);
             setActiveConversation(updatedConv);
@@ -290,7 +287,6 @@ export const useChatSocket = ({
         }
       }
 
-      // Update conversations list
       setConversations(prev => prev.map(c => {
         if (String(c._id) === convIdStr) {
           return {
@@ -303,7 +299,6 @@ export const useChatSocket = ({
         return c;
       }));
 
-      // Show toast notification
       if (action === 'owner_transferred') {
         toast.success('Quyền trưởng nhóm đã được chuyển', { icon: '👑' });
       } else if (action === 'member_promoted') {
@@ -312,8 +307,61 @@ export const useChatSocket = ({
         toast.success('Đã gỡ quyền phó nhóm', { icon: '📝' });
       }
 
-      // Refresh conversation list to get populated fields
       fetchConversationsData();
+    };
+
+    // ── Block / Unblock realtime ──
+    const handleYouBlockedUser = ({ targetId }) => {
+      // Đồng bộ khi mình chặn từ tab/thiết bị khác
+      setBlockedUsersRealtime?.(prev =>
+        prev.some(u => String(u._id || u.id) === String(targetId))
+          ? prev
+          : [...prev, { _id: targetId }]
+      );
+    };
+
+    const handleYouUnblockedUser = ({ targetId }) => {
+      setBlockedUsersRealtime?.(prev =>
+        prev.filter(u => String(u._id || u.id) !== String(targetId))
+      );
+    };
+
+    // ── message_seen / message_delivered (đồng bộ mobile) ──
+    const handleMessageSeen = ({ messageId, userId: seenUserId }) => {
+      setMessages(prev => prev.map(m => {
+        if (String(m._id || m.id) !== String(messageId)) return m;
+        const seenBy = Array.from(new Set([...(m.seenBy || []), seenUserId]));
+        const deliveredTo = Array.from(new Set([...(m.deliveredTo || []), seenUserId]));
+        return { ...m, seenBy, deliveredTo };
+      }));
+    };
+
+    const handleMessageDelivered = ({ messageId, userId: deliveredUserId }) => {
+      setMessages(prev => prev.map(m => {
+        if (String(m._id || m.id) !== String(messageId)) return m;
+        const deliveredTo = Array.from(new Set([...(m.deliveredTo || []), deliveredUserId]));
+        return { ...m, deliveredTo };
+      }));
+    };
+
+    // ── Typing indicators (đồng bộ mobile) ──
+    const handleTyping = ({ conversationId, userId: typingUserId, username }) => {
+      if (!setTypingUsers || typingUserId === userId) return;
+      setTypingUsers(prev => {
+        const key = String(conversationId);
+        const current = prev[key] || [];
+        if (current.find(u => u.userId === typingUserId)) return prev;
+        return { ...prev, [key]: [...current, { userId: typingUserId, username }] };
+      });
+    };
+
+    const handleStopTyping = ({ conversationId, userId: typingUserId }) => {
+      if (!setTypingUsers) return;
+      setTypingUsers(prev => {
+        const key = String(conversationId);
+        const current = prev[key] || [];
+        return { ...prev, [key]: current.filter(u => u.userId !== typingUserId) };
+      });
     };
 
     // ── Register all listeners ──
@@ -331,6 +379,12 @@ export const useChatSocket = ({
     socketService.on("poll_updated", handlePollUpdated);
     socketService.on("pinned_items_updated", handlePinnedItemsUpdated);
     socketService.on("group_updated", handleGroupUpdated);
+    socketService.on("you_blocked_user", handleYouBlockedUser);
+    socketService.on("you_unblocked_user", handleYouUnblockedUser);
+    socketService.on("message_seen", handleMessageSeen);
+    socketService.on("message_delivered", handleMessageDelivered);
+    socketService.on("typing", handleTyping);
+    socketService.on("stop_typing", handleStopTyping);
 
     return () => {
       socketService.off("conversation_updated", handleConversationUpdated);
@@ -347,6 +401,12 @@ export const useChatSocket = ({
       socketService.off("poll_updated", handlePollUpdated);
       socketService.off("pinned_items_updated", handlePinnedItemsUpdated);
       socketService.off("group_updated", handleGroupUpdated);
+      socketService.off("you_blocked_user", handleYouBlockedUser);
+      socketService.off("you_unblocked_user", handleYouUnblockedUser);
+      socketService.off("message_seen", handleMessageSeen);
+      socketService.off("message_delivered", handleMessageDelivered);
+      socketService.off("typing", handleTyping);
+      socketService.off("stop_typing", handleStopTyping);
     };
   }, [token, userId, fetchConversationsData]);
 };

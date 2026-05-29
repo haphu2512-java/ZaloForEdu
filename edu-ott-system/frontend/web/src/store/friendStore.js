@@ -12,6 +12,7 @@ export const useFriendStore = create(
       incomingRequests: [],
       outgoingRequests: [],
       blockedUsers: [], // New: Track blocked users globally
+      previouslyBlockedIds: new Set(), // Track người đã từng bị chặn (kể cả sau khi bỏ chặn)
       searchResults: [],
       isLoading: false,
       error: null,
@@ -189,20 +190,30 @@ export const useFriendStore = create(
     set({ isLoading: true, error: null });
     const { blockService } = await import("../services/blockService");
     try {
-      await blockService.blockUser(targetId);
-      // Xóa khỏi danh sách bạn bè
+      const res = await blockService.blockUser(targetId);
       const currentFriends = get().friends;
-      set({ 
+      const currentBlocked = get().blockedUsers;
+      // Optimistic: xóa khỏi friends, thêm vào blockedUsers ngay lập tức
+      const prev = get().previouslyBlockedIds;
+      const newPrev = new Set(prev); newPrev.add(String(targetId));
+      set({
         friends: currentFriends.filter(f => (f._id || f.id) !== targetId),
-        isLoading: false 
+        blockedUsers: currentBlocked.some(u => String(u._id || u.id) === String(targetId))
+          ? currentBlocked
+          : [...currentBlocked, { _id: targetId }],
+        previouslyBlockedIds: newPrev,
+        isLoading: false,
       });
-      // Refresh list chặn
-      await get().fetchBlockedUsers();
       return { success: true };
     } catch (err) {
       set({ isLoading: false });
       return { success: false, error: err.response?.data?.message || "Chặn người dùng thất bại" };
     }
+  },
+
+  // Cập nhật blockedUsers realtime từ socket (không cần gọi API)
+  setBlockedUsersRealtime: (updater) => {
+    set(state => ({ blockedUsers: updater(state.blockedUsers) }));
   },
 
   unblockUser: async (targetId) => {

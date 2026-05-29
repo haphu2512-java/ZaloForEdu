@@ -7,6 +7,7 @@ const ApiError = require('../utils/apiError');
 const { successResponse } = require('../utils/apiResponse');
 const { sendEmail } = require('../utils/email');
 const { getRedis, isRedisAvailable, keyWithPrefix } = require('../services/redisClient');
+const { emitToUser } = require('../services/socketService');
 
 const OTP_EXPIRE_MINUTES = 10;
 const createEmailOtp = () => String(Math.floor(100000 + Math.random() * 900000));
@@ -153,6 +154,19 @@ const blockOrUnblockUser = asyncHandler(async (req, res) => {
   else if (action === 'unblock' && hasBlocked) currentUser.blockedUsers = currentUser.blockedUsers.filter((item) => !item.equals(targetId));
 
   await currentUser.save();
+
+  // Emit realtime cho cả 2 phía
+  const blockerId = req.user._id.toString();
+  if (action === 'block') {
+    // Thông báo người bị chặn biết họ bị chặn
+    emitToUser(targetId, 'user_blocked', { blockerId });
+    // Thông báo người chặn để đồng bộ tab/thiết bị khác
+    emitToUser(blockerId, 'you_blocked_user', { targetId });
+  } else {
+    emitToUser(targetId, 'user_unblocked', { blockerId });
+    emitToUser(blockerId, 'you_unblocked_user', { targetId });
+  }
+
   return successResponse(res, { blockedUsers: currentUser.blockedUsers, action }, `User ${action === 'block' ? 'blocked' : 'unblocked'} successfully`);
 });
 

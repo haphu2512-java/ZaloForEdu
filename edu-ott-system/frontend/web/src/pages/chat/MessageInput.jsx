@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { FaSpinner, FaPaperPlane, FaThumbsUp, FaSmile, FaMicrophone, FaPoll } from 'react-icons/fa';
 import { VoiceRecorder } from '../../components/shared/VoiceRecorder';
 import { StickerSuggest } from './StickerSuggest';
+import { socketService } from '../../services/socketService';
 
 export const MessageInput = ({
   theme,
@@ -14,7 +15,9 @@ export const MessageInput = ({
   members = [],
   replyTo = null,
   onCancelReply,
-  isGroup = false
+  isGroup = false,
+  conversationId = null,
+  userId = null,
 }) => {
   const [text, setText] = useState('');
   const [showEmoji, setShowEmoji] = useState(false);
@@ -26,6 +29,8 @@ export const MessageInput = ({
   const [stickerQuery, setStickerQuery] = useState('');   // query đang search
   const [showSticker, setShowSticker] = useState(false);  // đang hiện panel
   const stickerTimerRef = useRef(null);
+  const typingTimerRef = useRef(null);
+  const isTypingRef = useRef(false);
   const inputRef = useRef(null);
 
   const imageRef = useRef(null);
@@ -35,8 +40,10 @@ export const MessageInput = ({
   const emojiRef = useRef(null);
 
   // Filter members based on mentionQuery
-  const filteredMembers = mentionQuery === null ? [] :
-    [{ _id: 'all', username: 'all', fullName: 'Tất cả mọi người' }, ...members]
+  // Chat 1-1: không hiện mention list
+  // Chat nhóm: hiện @all + các thành viên, trừ bản thân
+  const filteredMembers = mentionQuery === null || !isGroup ? [] :
+    [{ _id: 'all', username: 'all', fullName: 'Tất cả mọi người' }, ...members.filter(m => String(m._id || m.id) !== String(userId))]
       .filter(m =>
         m.username?.toLowerCase().includes(mentionQuery.toLowerCase()) ||
         m.fullName?.toLowerCase().includes(mentionQuery.toLowerCase())
@@ -45,6 +52,19 @@ export const MessageInput = ({
   const handleTextChange = (e) => {
     const val = e.target.value;
     setText(val);
+
+    // Emit typing event
+    if (conversationId) {
+      if (!isTypingRef.current) {
+        isTypingRef.current = true;
+        socketService.emitTyping(conversationId);
+      }
+      clearTimeout(typingTimerRef.current);
+      typingTimerRef.current = setTimeout(() => {
+        isTypingRef.current = false;
+        socketService.emitStopTyping(conversationId);
+      }, 2000);
+    }
 
     // Detect @ mention
     const cursorPos = e.target.selectionStart;
@@ -136,6 +156,12 @@ export const MessageInput = ({
     setStickerQuery('');
     setIsSending(true);
     setMentionQuery(null);
+    // Stop typing immediately when sending
+    if (conversationId && isTypingRef.current) {
+      clearTimeout(typingTimerRef.current);
+      isTypingRef.current = false;
+      socketService.emitStopTyping(conversationId);
+    }
     try {
       await onSend(textToSend);
       if (onCancelReply) onCancelReply();
