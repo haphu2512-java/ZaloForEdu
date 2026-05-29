@@ -402,10 +402,58 @@ export default function ChatScreen() {
       }
     };
 
+    const handleBlockStatusChanged = async () => {
+      // Clear accepted warnings so modal can show again
+      setAcceptedBlockWarnings(prev => {
+        const copy = { ...prev };
+        delete copy[conversationId];
+        return copy;
+      });
+
+      const conflictRes = await checkBlockConflict(conversationId);
+      
+      try {
+        const convRes = await getConversations(null, 100);
+        const matched = convRes.items.find((c: any) => String(c._id || c.id) === String(conversationId));
+        if (!matched) return;
+        
+        if (matched.type === 'group') {
+          if (conflictRes.hasConflict) {
+            setBlockConflictDetails(conflictRes.details);
+            setShowBlockWarning(true);
+          } else {
+            setShowBlockWarning(false);
+          }
+        } else {
+          const blockedList = await getBlockedUsers();
+          const blockedIds = blockedList.map((u: any) => u._id || u.id || '');
+          const other = matched.participants?.find((p: any) => (p._id || p.id || '') !== currentUserId);
+          if (other) {
+            setIsBlockedByMe(blockedIds.includes(other._id || other.id || ''));
+          }
+          if (conflictRes.hasConflict && conflictRes.details?.blockedMe?.length > 0) {
+            setIsBlockedByThem(true);
+          } else {
+            setIsBlockedByThem(false);
+          }
+        }
+      } catch (error) {
+        console.log('[Socket] handleBlockStatusChanged error', error);
+      }
+    };
+
     socket.on('group_updated', handleGroupUpdated);
+    socket.on('you_blocked_user', handleBlockStatusChanged);
+    socket.on('you_unblocked_user', handleBlockStatusChanged);
+    socket.on('user_blocked', handleBlockStatusChanged);
+    socket.on('user_unblocked', handleBlockStatusChanged);
 
     return () => {
       socket.off('group_updated', handleGroupUpdated);
+      socket.off('you_blocked_user', handleBlockStatusChanged);
+      socket.off('you_unblocked_user', handleBlockStatusChanged);
+      socket.off('user_blocked', handleBlockStatusChanged);
+      socket.off('user_unblocked', handleBlockStatusChanged);
     };
   }, [conversationId]);
 

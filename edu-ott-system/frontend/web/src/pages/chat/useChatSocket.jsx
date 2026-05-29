@@ -28,10 +28,10 @@ export const useChatSocket = ({
   fetchFriends,
   fetchOutgoingRequests,
   toast,
-  setTypingUsers,   // thêm mới: typing indicator
+  setTypingUsers,
+  setBlockedUsersRealtime,
+  onBlockStatusChanged,
 }) => {
-  const setBlockedUsersRealtime = useFriendStore(state => state.setBlockedUsersRealtime);
-
   useEffect(() => {
     if (!token) return;
     socketService.connect(token);
@@ -318,12 +318,22 @@ export const useChatSocket = ({
           ? prev
           : [...prev, { _id: targetId }]
       );
+      if (onBlockStatusChanged) onBlockStatusChanged(targetId);
     };
 
     const handleYouUnblockedUser = ({ targetId }) => {
       setBlockedUsersRealtime?.(prev =>
         prev.filter(u => String(u._id || u.id) !== String(targetId))
       );
+      if (onBlockStatusChanged) onBlockStatusChanged(targetId);
+    };
+
+    const handleUserBlocked = ({ blockerId }) => {
+      if (onBlockStatusChanged) onBlockStatusChanged(blockerId);
+    };
+
+    const handleUserUnblocked = ({ blockerId }) => {
+      if (onBlockStatusChanged) onBlockStatusChanged(blockerId);
     };
 
     // ── message_seen / message_delivered (đồng bộ mobile) ──
@@ -381,6 +391,8 @@ export const useChatSocket = ({
     socketService.on("group_updated", handleGroupUpdated);
     socketService.on("you_blocked_user", handleYouBlockedUser);
     socketService.on("you_unblocked_user", handleYouUnblockedUser);
+    socketService.on("user_blocked", handleUserBlocked);
+    socketService.on("user_unblocked", handleUserUnblocked);
     socketService.on("message_seen", handleMessageSeen);
     socketService.on("message_delivered", handleMessageDelivered);
     socketService.on("typing", handleTyping);
@@ -403,6 +415,8 @@ export const useChatSocket = ({
       socketService.off("group_updated", handleGroupUpdated);
       socketService.off("you_blocked_user", handleYouBlockedUser);
       socketService.off("you_unblocked_user", handleYouUnblockedUser);
+      socketService.off("user_blocked", handleUserBlocked);
+      socketService.off("user_unblocked", handleUserUnblocked);
       socketService.off("message_seen", handleMessageSeen);
       socketService.off("message_delivered", handleMessageDelivered);
       socketService.off("typing", handleTyping);

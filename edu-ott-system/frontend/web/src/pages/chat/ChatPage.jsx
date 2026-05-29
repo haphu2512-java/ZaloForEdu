@@ -209,6 +209,38 @@ export default function ChatPage() {
   const activeConvIdRef = useRef(null);
   const activeConversationRef = useRef(null);
   const conversationsRef = useRef([]);
+  const setBlockedUsersRealtime = useFriendStore(state => state.setBlockedUsersRealtime);
+
+  const handleBlockStatusChanged = useCallback(() => {
+    const activeId = activeConvIdRef.current;
+    if (!activeId) return;
+    const isGroup = activeConversationRef.current?.type === 'group' || activeConversationRef.current?.roomModel === 'Group';
+    
+    setAcceptedBlockWarnings(prev => {
+      const copy = { ...prev };
+      delete copy[activeId];
+      return copy;
+    });
+
+    conversationService.checkBlockConflict(activeId).then(res => {
+      const hasConflict = res.data?.hasConflict || res.hasConflict;
+      const details = res.data?.details || res.details;
+      if (isGroup) {
+        if (hasConflict) {
+          setBlockConflictDetails(details);
+          setShowBlockWarningModal(true);
+        } else {
+          setShowBlockWarningModal(false);
+        }
+      } else {
+        if (details?.blockedMe?.length > 0) {
+          setIsBlockedByThem(true);
+        } else {
+          setIsBlockedByThem(false);
+        }
+      }
+    }).catch(console.error);
+  }, []);
 
   // ── Auth ──────────────────────────────────────────────────────────────────
   const userId = useMemo(() => {
@@ -385,6 +417,8 @@ export default function ChatPage() {
     fetchConversationsData, fetchIncomingRequests, fetchFriends, fetchOutgoingRequests,
     toast,
     setTypingUsers,
+    setBlockedUsersRealtime,
+    onBlockStatusChanged: handleBlockStatusChanged,
   });
 
   // ── Merged conversation list ───────────────────────────────────────────────
