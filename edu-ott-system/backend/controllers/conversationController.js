@@ -735,6 +735,39 @@ const updateConversationPreference = asyncHandler(async (req, res) => {
   return successResponse(res, pref, 'Conversation preference updated');
 });
 
+const checkBlockConflict = asyncHandler(async (req, res) => {
+  const conversation = await Conversation.findById(req.params.id);
+  if (!conversation) {
+    return successResponse(res, { hasConflict: false });
+  }
+
+  const currentUserIdStr = req.user._id.toString();
+  const participantIds = conversation.participants.map(p => p.toString());
+
+  // 1. Kiểm tra xem user hiện tại có chặn ai trong nhóm không
+  const currentUser = await User.findById(req.user._id).select('blockedUsers');
+  const myBlockedIds = (currentUser?.blockedUsers || []).map(id => id.toString());
+  const iBlockedSomeone = participantIds.some(pid => pid !== currentUserIdStr && myBlockedIds.includes(pid));
+
+  if (iBlockedSomeone) {
+    return successResponse(res, { hasConflict: true }, 'You blocked someone in this group');
+  }
+
+  // 2. Kiểm tra xem có ai trong nhóm chặn user hiện tại không
+  const participants = await User.find({ _id: { $in: conversation.participants } }).select('blockedUsers');
+  const someoneBlockedMe = participants.some(p => {
+    if (p._id.toString() === currentUserIdStr) return false;
+    const theirBlockedIds = (p.blockedUsers || []).map(id => id.toString());
+    return theirBlockedIds.includes(currentUserIdStr);
+  });
+
+  if (someoneBlockedMe) {
+    return successResponse(res, { hasConflict: true }, 'Someone in this group blocked you');
+  }
+
+  return successResponse(res, { hasConflict: false }, 'No block conflict');
+});
+
 module.exports = {
   listConversations,
   listArchivedConversations,
@@ -752,5 +785,6 @@ module.exports = {
   pinGroupMessage,
   unpinGroupMessage,
   updateConversationPreference,
+  checkBlockConflict,
 };
 

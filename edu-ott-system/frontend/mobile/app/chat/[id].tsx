@@ -31,6 +31,7 @@ import {
   recallMessage,
   reactToMessage,
   getConversations,
+  checkBlockConflict,
 } from '../../utils/messageService';
 import { API_BASE_URL } from '../../utils/api';
 import { getPinnedMessages, pinMessage, unpinMessage } from '../../utils/groupFeatureService';
@@ -341,10 +342,8 @@ export default function ChatScreen() {
             setIsBlockedByMe(blockedIds.includes(targetId));
           }
         } else if (matched.type === 'group' && !acceptedBlockWarnings[conversationId]) {
-          const participantIds = (matched.participants || []).map(p => typeof p === 'string' ? p : (p._id || p.id || ''));
-          const hasConflict = participantIds.some(pid => pid !== currentUserId && blockedIds.includes(pid));
-          
-          if (hasConflict) {
+          const conflictRes = await checkBlockConflict(conversationId);
+          if (conflictRes.hasConflict) {
             setShowBlockWarning(true);
           }
         }

@@ -198,6 +198,8 @@ export default function ChatPage() {
   const [unblockLoading, setUnblockLoading] = useState(false);
   const { blockedUsers, unblockUser: unblockUserStore, fetchBlockedUsers } = useFriendStore();
 
+  const [showBlockWarningModal, setShowBlockWarningModal] = useState(false);
+  const [acceptedBlockWarnings, setAcceptedBlockWarnings] = useState({});
   const pageRef = useRef(null);
   const messagesEndRef = useRef(null);
   const activeConvIdRef = useRef(null);
@@ -476,6 +478,14 @@ export default function ChatPage() {
     setJustSentRequestTo(null);
     if (activeConversation.isMock) return;
 
+    if (activeConversation.type === 'group' && !acceptedBlockWarnings[activeConversation._id]) {
+      conversationService.checkBlockConflict(activeConversation._id).then(res => {
+        if (res.hasConflict) {
+          setShowBlockWarningModal(true);
+        }
+      }).catch(console.error);
+    }
+
     const fetchMessages = async () => {
       try {
         const res = await axios.get(`${API_BASE_URL}/messages/conversation/${activeConversation._id}?limit=50`, { headers: { Authorization: `Bearer ${token}` } });
@@ -570,6 +580,37 @@ export default function ChatPage() {
       <TransferOwnerModal isOpen={showTransferOwnerModal} onClose={() => setShowTransferOwnerModal(false)}
         members={(activeConversation?.participants || []).filter(p => String(p._id || p) !== String(userId)).map(p => p._id ? p : { _id: p })}
         adminIds={activeConversation?.adminIds || []} loading={transferOwnerLoading} onConfirm={handleTransferOwnerAndLeave} />
+
+      {showBlockWarningModal && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 3000, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.5)' }}>
+          <div style={{ background: 'var(--z-bg-sidebar)', padding: '24px', borderRadius: '12px', width: '400px', maxWidth: '90%', textAlign: 'center' }}>
+            <h3 style={{ margin: '0 0 16px', color: '#E11D48' }}>Cảnh báo chặn</h3>
+            <p style={{ margin: '0 0 24px', color: 'var(--z-text-secondary)', fontSize: '15px' }}>
+              Trong nhóm có thành viên đang có xung đột chặn với bạn (bạn chặn họ hoặc họ chặn bạn). Bạn có muốn tiếp tục cuộc trò chuyện?
+            </p>
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
+              <button
+                onClick={() => {
+                  setShowBlockWarningModal(false);
+                  setActiveConversation(null); // Quay lại / rời khỏi chat
+                }}
+                style={{ padding: '8px 24px', borderRadius: '8px', border: '1px solid var(--z-border)', background: 'transparent', color: 'var(--z-text-secondary)', cursor: 'pointer', fontWeight: 600 }}
+              >
+                Không
+              </button>
+              <button
+                onClick={() => {
+                  setShowBlockWarningModal(false);
+                  setAcceptedBlockWarnings(prev => ({ ...prev, [activeConversation._id]: true }));
+                }}
+                style={{ padding: '8px 24px', borderRadius: '8px', border: 'none', background: 'var(--z-primary)', color: 'white', cursor: 'pointer', fontWeight: 600 }}
+              >
+                Có
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {isDragging && <div className="mdc-drag-overlay"><div className="mdc-drag-inner"><FaCloud size={52} /><p>Thả file vào đây để gửi</p></div></div>}
 

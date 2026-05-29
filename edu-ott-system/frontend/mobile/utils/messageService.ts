@@ -300,3 +300,13 @@ export async function uploadMedia(payload: { fileName: string; mimeType: string;
   });
   return res.data;
 }
+
+export async function checkBlockConflict(conversationId: string): Promise<{ hasConflict: boolean }> {
+  try {
+    const res = await fetchAPI(`${CONVERSATIONS_ENDPOINT}/${conversationId}/check-block-conflict`);
+    return res.data || { hasConflict: false };
+  } catch (error) {
+    console.log('Error checking block conflict:', error);
+    return { hasConflict: false };
+  }
+}
