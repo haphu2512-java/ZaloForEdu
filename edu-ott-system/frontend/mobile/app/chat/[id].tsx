@@ -1886,16 +1886,6 @@ export default function ChatScreen() {
             );
           }
 
-          if (isBlockedByThem) {
-            return (
-              <View style={[styles.inputBar, { borderTopColor: colors.border, backgroundColor: colors.surface, paddingBottom: Math.max(12, insets.bottom), alignItems: 'center', justifyContent: 'center', paddingVertical: 12, flexDirection: 'column' }]}>
-                <Ionicons name="warning" size={24} color="#EF4444" style={{ marginBottom: 4 }} />
-                <Text style={{ color: '#EF4444', fontWeight: 'bold', marginBottom: 4 }}>Thông báo</Text>
-                <Text style={{ color: colors.muted, textAlign: 'center' }}>Bạn đã bị người này chặn.{'\n'}Không thể gửi tin nhắn.</Text>
-              </View>
-            );
-          }
-
           // Check permission to send message in group
           const isGroupConv = conversation?.type === 'group';
           const ownerId = (conversation?.ownerId as any)?._id || conversation?.ownerId;

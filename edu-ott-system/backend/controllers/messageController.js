@@ -53,12 +53,13 @@ const sendMessage = asyncHandler(async (req, res) => {
     const otherParticipantId = conversation.participants.find(p => toStr(p) !== toStr(req.user._id));
     if (otherParticipantId) {
       const currentUser = await User.findById(req.user._id);
-      const otherUser = await User.findById(otherParticipantId).select('blockedUsers messagePrivacy friends');
+      const otherUser = await User.findById(otherParticipantId).select('blockedUsers messagePrivacy friends username fullName');
       if (currentUser?.blockedUsers?.some(id => toStr(id) === toStr(otherParticipantId))) {
         throw new ApiError(403, 'FORBIDDEN', 'Bạn đã chặn người này');
       }
       if (otherUser?.blockedUsers?.some(id => toStr(id) === toStr(req.user._id))) {
-        throw new ApiError(403, 'FORBIDDEN', 'Bạn đã bị người này chặn');
+        const otherName = otherUser.fullName || otherUser.username || 'người dùng';
+        throw new ApiError(403, 'FORBIDDEN', `Bạn đã bị ${otherName} chặn, hiện tại không thể gửi tin nhắn.`);
       }
       if (otherUser?.messagePrivacy === 'friends') {
         const isFriend = (otherUser.friends || []).some(f => toStr(f) === toStr(req.user._id));
