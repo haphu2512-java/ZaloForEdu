@@ -478,9 +478,11 @@ export default function ChatPage() {
     setJustSentRequestTo(null);
     if (activeConversation.isMock) return;
 
-    if (activeConversation.type === 'group' && !acceptedBlockWarnings[activeConversation._id]) {
+    const isGroup = activeConversation.type === 'group' || activeConversation.roomModel === 'Group';
+    if (isGroup && !acceptedBlockWarnings[activeConversation._id]) {
       conversationService.checkBlockConflict(activeConversation._id).then(res => {
-        if (res.hasConflict) {
+        const hasConflict = res.data?.hasConflict || res.hasConflict;
+        if (hasConflict) {
           setShowBlockWarningModal(true);
         }
       }).catch(console.error);

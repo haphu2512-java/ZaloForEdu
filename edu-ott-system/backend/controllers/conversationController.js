@@ -742,11 +742,11 @@ const checkBlockConflict = asyncHandler(async (req, res) => {
   }
 
   const currentUserIdStr = req.user._id.toString();
-  const participantIds = conversation.participants.map(p => p.toString());
+  const participantIds = conversation.participants.map(p => (p._id || p).toString());
 
   // 1. Kiểm tra xem user hiện tại có chặn ai trong nhóm không
   const currentUser = await User.findById(req.user._id).select('blockedUsers');
-  const myBlockedIds = (currentUser?.blockedUsers || []).map(id => id.toString());
+  const myBlockedIds = (currentUser?.blockedUsers || []).map(id => (id._id || id).toString());
   const iBlockedSomeone = participantIds.some(pid => pid !== currentUserIdStr && myBlockedIds.includes(pid));
 
   if (iBlockedSomeone) {
@@ -757,7 +757,7 @@ const checkBlockConflict = asyncHandler(async (req, res) => {
   const participants = await User.find({ _id: { $in: conversation.participants } }).select('blockedUsers');
   const someoneBlockedMe = participants.some(p => {
     if (p._id.toString() === currentUserIdStr) return false;
-    const theirBlockedIds = (p.blockedUsers || []).map(id => id.toString());
+    const theirBlockedIds = (p.blockedUsers || []).map(id => (id._id || id).toString());
     return theirBlockedIds.includes(currentUserIdStr);
   });
 
