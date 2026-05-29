@@ -16,6 +16,9 @@ const API_ORIGIN = (import.meta.env.VITE_API_URL || 'http://localhost:5000/api/v
 
 const EMOJIS = ['😀', '😂', '😍', '🥰', '👍', '❤️', '🔥', '😭', '🙏', '🎉'];
 
+// Fallback SVG avatar
+const DEFAULT_AVATAR_SVG = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' rx='20' fill='%23d8dadf'/%3E%3Ccircle cx='20' cy='15' r='7' fill='%23bcc0c4'/%3E%3Cpath d='M6 35 Q6 26 20 26 Q34 26 34 35' fill='%23bcc0c4'/%3E%3C/svg%3E";
+
 // Render URLs as clickable links
 const renderContent = (text) => {
   if (!text) return null;
@@ -57,6 +60,15 @@ export const MessageBubble = ({
   const isAdmin = adminIds.some(aid => String(aid._id || aid) === String(senderId));
   const isPrivilegedSender = isOwner || isAdmin;
   const shouldShowAdminBadge = isPrivilegedSender && activeConversation?.settings?.markAdminMessages !== false;
+
+  const editHistory = message.editHistory || [];
+
+  // Check if message is soft-deleted for this user (deletedBy contains userId)
+  const deletedByMe = Array.isArray(message.deletedBy)
+    ? message.deletedBy.some(id => String(id?._id || id) === String(userId))
+    : false;
+
+  if (deletedByMe) return null;
 
   // Highlight mentions function
   const renderContentWithMentions = (text) => {
@@ -116,7 +128,7 @@ export const MessageBubble = ({
   if (stickerUrl) {
     return (
       <div id={`msg-${_id}`} className={`mdc-msg-wrap ${isMe ? 'me' : 'them'}`}>
-        {!isMe && <img src={avatar} alt="avatar" className="mdc-msg-avatar" />}
+        {!isMe && <img src={avatar} alt="avatar" className="mdc-msg-avatar" onError={e => { e.currentTarget.src = DEFAULT_AVATAR_SVG; }} />}
         <div className="mdc-msg-body">
           {!isMe && sender && <div className="mdc-msg-sender-name">{name}</div>}
           <img
@@ -156,7 +168,7 @@ export const MessageBubble = ({
     if (pollData) {
       return (
         <div id={`msg-${_id}`} className={`mdc-msg-wrap ${isMe ? 'me' : 'them'}`}>
-          {!isMe && <img src={avatar} alt="avatar" className="mdc-msg-avatar" />}
+          {!isMe && <img src={avatar} alt="avatar" className="mdc-msg-avatar" onError={e => { e.currentTarget.src = DEFAULT_AVATAR_SVG; }} />}
           <div className="mdc-msg-body">
             {!isMe && sender && <div className="mdc-msg-sender-name">{name}</div>}
             {isPinned && (
@@ -234,7 +246,7 @@ export const MessageBubble = ({
       onMouseLeave={() => { setIsHovered(false); if (!showMoreMenu && !showEmojiPicker) setShowMoreMenu(false); }}
       style={{ position: 'relative' }}
     >
-      {!isMe && <img src={avatar} alt="avatar" className="mdc-msg-avatar" />}
+      {!isMe && <img src={avatar} alt="avatar" className="mdc-msg-avatar" onError={e => { e.currentTarget.src = DEFAULT_AVATAR_SVG; }} />}
 
       <div className="mdc-msg-body">
 
