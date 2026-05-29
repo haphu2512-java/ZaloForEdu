@@ -1063,7 +1063,7 @@ export default function ChatPage() {
                   </div>
                   <div style={{ flex: 1 }}>
                     <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--z-text-primary)', marginBottom: 2 }}>
-                      Lỗi
+                      Thông báo
                     </div>
                     <div style={{ fontSize: 12, color: 'var(--z-text-secondary)', lineHeight: 1.4 }}>
                       Bạn đã bị người này chặn. Không thể gửi tin nhắn.
