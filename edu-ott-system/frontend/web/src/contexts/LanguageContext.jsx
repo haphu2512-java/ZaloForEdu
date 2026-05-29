@@ -1,4 +1,5 @@
-import { createContext, useContext, useState, useCallback } from "react";
+import { createContext, useContext, useState, useCallback, useEffect, useRef } from "react";
+import { useAuthStore } from "../store/authStore";
 
 // ─── Bản dịch ───────────────────────────────────────────────────────────────
 const translations = {
@@ -58,7 +59,12 @@ const translations = {
     groupTab: "Nhóm",
     directTab: "1-1",
     noteTab: "Ghi chú",
+    primaryTab: "Chính",
+    workTab: "Việc",
+    familyTab: "G.đình",
+    otherTab: "Khác",
     searchPlaceholder: "Tìm kiếm...",
+    searchFriendsPlace: "Tìm bạn bè, số điện thoại...",
     noConversations: "Không có hội thoại nào",
     selectConversation: "Vui lòng chọn một cuộc trò chuyện để bắt đầu",
     typeMessage: "Nhập tin nhắn...",
@@ -68,6 +74,20 @@ const translations = {
     noImageVideo: "Chưa có Ảnh/Video nào",
     members: "Thành viên",
     groupInfo: "Thông tin nhóm",
+    groupManage: "Quản lý nhóm",
+    groupMembers: "Thành viên nhóm",
+    groupOwner: "Trưởng nhóm",
+    groupAdmin: "Phó nhóm",
+    remindersList: "Danh sách nhắc hẹn",
+    pinnedMessages: "Tin nhắn đã ghim",
+    polls: "Bình chọn",
+    files: "File",
+    links: "Link",
+    pin: "Ghim",
+    addMember: "Thêm TV",
+    manage: "Quản lý",
+    unmute: "Bật TB",
+    mute: "Tắt TB",
     cloudStorage: "Dung lượng",
     cleanupBtn: "Xem và dọn dẹp My Documents",
     upgradeTitle: "Nâng cấp dung lượng My Documents",
@@ -77,6 +97,10 @@ const translations = {
 
     // Contacts
     contactsTitle: "Danh bạ",
+    friendsTab: "Bạn bè",
+    groupsTab: "Nhóm",
+    requestsTab: "Lời mời",
+    sentTab: "Đã gửi",
     addFriend: "Thêm bạn bè",
     searchFriends: "Tìm bạn bè, nhóm...",
     friendList: "Danh sách bạn bè",
@@ -181,7 +205,12 @@ const translations = {
     groupTab: "Group",
     directTab: "1-1",
     noteTab: "Notes",
+    primaryTab: "Primary",
+    workTab: "Work",
+    familyTab: "Family",
+    otherTab: "Other",
     searchPlaceholder: "Search...",
+    searchFriendsPlace: "Search friends, phone...",
     noConversations: "No conversations",
     selectConversation: "Please select a conversation to start",
     typeMessage: "Type a message...",
@@ -191,6 +220,20 @@ const translations = {
     noImageVideo: "No images/videos yet",
     members: "Members",
     groupInfo: "Group Info",
+    groupManage: "Manage Group",
+    groupMembers: "Group Members",
+    groupOwner: "Group Owner",
+    groupAdmin: "Group Admin",
+    remindersList: "Reminders List",
+    pinnedMessages: "Pinned Messages",
+    polls: "Polls",
+    files: "Files",
+    links: "Links",
+    pin: "Pin",
+    addMember: "Add Member",
+    manage: "Manage",
+    unmute: "Unmute",
+    mute: "Mute",
     cloudStorage: "Storage",
     cleanupBtn: "View & Clean My Documents",
     upgradeTitle: "Upgrade My Documents Storage",
@@ -200,6 +243,10 @@ const translations = {
 
     // Contacts
     contactsTitle: "Contacts",
+    friendsTab: "Friends",
+    groupsTab: "Groups",
+    requestsTab: "Requests",
+    sentTab: "Sent",
     addFriend: "Add Friend",
     searchFriends: "Search friends, groups...",
     friendList: "Friend List",
@@ -253,15 +300,53 @@ const translations = {
 const LanguageContext = createContext();
 
 export function LanguageProvider({ children }) {
-  const [language, setLanguage] = useState(
-    () => localStorage.getItem("app-language") || "vi"
-  );
+  const [language, setLanguage] = useState(() => {
+    // Khởi tạo: đọc ngôn ngữ của user hiện tại nếu có, fallback về 'vi'
+    try {
+      const savedUser = JSON.parse(localStorage.getItem("user") || "null");
+      if (savedUser?._id) {
+        return localStorage.getItem(`app-language-${savedUser._id}`) || "vi";
+      }
+    } catch (_) {}
+    return "vi";
+  });
 
-  const changeLanguage = useCallback((lang) => {
+  const applyLanguage = useCallback((lang) => {
     setLanguage(lang);
-    localStorage.setItem("app-language", lang);
     document.documentElement.setAttribute("lang", lang);
   }, []);
+
+  // Lắng nghe window events từ authStore (đáng tin cậy hơn Zustand selector trong mọi tình huống)
+  useEffect(() => {
+    const handleLogout = () => {
+      // Logout → về tiếng Việt
+      applyLanguage("vi");
+    };
+
+    const handleLogin = () => {
+      // Login → restore ngôn ngữ đã lưu của user này
+      const uid = useAuthStore.getState().user?._id;
+      if (uid) {
+        const saved = localStorage.getItem(`app-language-${uid}`);
+        applyLanguage(saved || "vi");
+      }
+    };
+
+    window.addEventListener("user-logout", handleLogout);
+    window.addEventListener("user-login", handleLogin);
+    return () => {
+      window.removeEventListener("user-logout", handleLogout);
+      window.removeEventListener("user-login", handleLogin);
+    };
+  }, [applyLanguage]);
+
+  const changeLanguage = useCallback((lang) => {
+    applyLanguage(lang);
+    const user = useAuthStore.getState().user;
+    if (user?._id) {
+      localStorage.setItem(`app-language-${user._id}`, lang);
+    }
+  }, [applyLanguage]);
 
   const t = useCallback(
     (key) => translations[language]?.[key] ?? translations["vi"][key] ?? key,

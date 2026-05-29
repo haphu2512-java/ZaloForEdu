@@ -10,6 +10,8 @@ import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { toAbsoluteUrl } from '../chat/chatUtils';
 import { DEFAULT_AVATAR } from '../../utils/constants';
+import { useConfirm } from "../../contexts/ConfirmContext";
+import toast from "react-hot-toast";
 
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api/v1';
@@ -35,6 +37,8 @@ const getStrength = (pw) => {
 
 export default function ProfilePage() {
   const { t } = useLanguage();
+  const { user, setUser } = useAuthStore();
+  const confirm = useConfirm();
   const navigate = useNavigate();
   
   const [profile, setProfile] = useState({
@@ -124,7 +128,7 @@ export default function ProfilePage() {
       
       const userId = profile.id;
       if (!userId) {
-        alert("Lỗi: Không tìm thấy ID User. Vui lòng F5 lại trang!");
+        toast.error("Lỗi: Không tìm thấy ID User. Vui lòng F5 lại trang!");
         setIsSaving(false);
         return;
       }
@@ -138,7 +142,7 @@ export default function ProfilePage() {
           finalAvatarUrl = uploadRes.url || profile.avatarUrl;
         } catch (err) {
           console.error("Lỗi upload ảnh:", err);
-          alert("Tải ảnh lên thất bại. Hệ thống hủy cập nhật để tránh lỗi dữ liệu!");
+          toast.error("Tải ảnh lên thất bại. Hệ thống hủy cập nhật để tránh lỗi dữ liệu!");
           setIsSaving(false); 
           return; 
         }
@@ -199,11 +203,11 @@ export default function ProfilePage() {
         setOtpError('');
         setOtpModal({ type: 'email', contact: updateData.email });
       } else {
-        alert('Cập nhật thông tin thành công!');
+        toast.success('Cập nhật thông tin thành công!');
       }
     } catch (error) {
       console.error('Lỗi cập nhật:', error);
-      alert('Cập nhật thất bại, kiểm tra lại số điện thoại (nếu có thì phải đủ 8 số) nhé!');
+      toast.error('Cập nhật thất bại, kiểm tra lại số điện thoại (nếu có thì phải đủ 8 số) nhé!');
     } finally {
       setIsSaving(false);
     }
@@ -249,7 +253,7 @@ export default function ProfilePage() {
       });
       setVerifiedContacts(prev => ({ ...prev, [otpModal.type]: true }));
       setOtpModal(null);
-      alert(`Xác thực ${otpModal.type === 'phone' ? 'số điện thoại' : 'email'} thành công! Bạn có thể đăng nhập bằng ${otpModal.type === 'phone' ? 'SĐT' : 'email'} này.`);
+      toast.success(`Xác thực ${otpModal.type === 'phone' ? 'số điện thoại' : 'email'} thành công! Bạn có thể đăng nhập bằng ${otpModal.type === 'phone' ? 'SĐT' : 'email'} này.`);
     } catch (err) {
       setOtpError(err.response?.data?.message || 'Mã OTP không đúng hoặc đã hết hạn');
       setOtpDigits(['','','','','','']);
@@ -279,10 +283,10 @@ export default function ProfilePage() {
 
   const submitPasswordChange = async () => {
     if (!passwordForm.oldPassword || !passwordForm.newPassword || !passwordForm.confirmPassword) {
-      return alert("Vui lòng điền đầy đủ thông tin mật khẩu!");
+      return toast.error("Vui lòng điền đầy đủ thông tin mật khẩu!");
     }
     if (passwordForm.newPassword !== passwordForm.confirmPassword) {
-      return alert("Mật khẩu xác nhận không khớp!");
+      return toast.error("Mật khẩu xác nhận không khớp!");
     }
     
     try {
@@ -292,18 +296,18 @@ export default function ProfilePage() {
         newPassword: passwordForm.newPassword 
       });
       
-      alert('Đổi mật khẩu thành công!');
+      toast.success('Đổi mật khẩu thành công!');
       setPasswordForm({ oldPassword: '', newPassword: '', confirmPassword: '' });
       setActiveTab('view_profile'); 
     } catch (error) {
       console.error('Lỗi đổi mật khẩu:', error);
-      alert(error.response?.data?.message || 'Đổi mật khẩu thất bại! Vui lòng kiểm tra lại mật khẩu hiện tại.');
+      toast.error(error.response?.data?.message || 'Đổi mật khẩu thất bại! Vui lòng kiểm tra lại mật khẩu hiện tại.');
     }
   };
 
   const handleDeleteAccount = async () => {
     if (!deletePassword) {
-      alert("Vui lòng nhập mật khẩu để xác nhận!");
+      toast.error("Vui lòng nhập mật khẩu để xác nhận!");
       return;
     }
 
@@ -311,12 +315,12 @@ export default function ProfilePage() {
       setIsDeleting(true);
       await userService.deleteUser(profile.id, { password: deletePassword });
       
-      alert("Tài khoản của bạn đã được xóa thành công.");
+      toast.success("Tài khoản của bạn đã được xóa thành công.");
       localStorage.clear();
       window.location.href = '/login';
     } catch (error) {
       console.error("Lỗi xóa tài khoản:", error);
-      alert(error.response?.data?.message || "Xóa tài khoản thất bại. Sai mật khẩu hoặc lỗi hệ thống!");
+      toast.error(error.response?.data?.message || "Xóa tài khoản thất bại. Sai mật khẩu hoặc lỗi hệ thống!");
     } finally {
       setIsDeleting(false);
       setShowDeleteModal(false);
@@ -324,8 +328,8 @@ export default function ProfilePage() {
     }
   };
 
-  const handleLogout = () => {
-    if (window.confirm('Bạn có chắc chắn muốn đăng xuất?')) {
+  const handleLogout = async () => {
+    if (await confirm('Bạn có chắc chắn muốn đăng xuất?', { isDanger: true })) {
       localStorage.removeItem('token');
       localStorage.removeItem('refreshToken');
       sessionStorage.clear();
@@ -336,13 +340,13 @@ export default function ProfilePage() {
   };
 
   const handleLogoutAll = async () => {
-    if (!window.confirm('Bạn có chắc chắn muốn đăng xuất trên tất cả thiết bị?')) {
+    if (!await confirm('Bạn có chắc chắn muốn đăng xuất trên tất cả thiết bị?', { isDanger: true })) {
       return;
     }
     
     try {
       await authService.logoutAll();
-      alert('Đã đăng xuất trên tất cả thiết bị thành công!');
+      toast.success('Đã đăng xuất trên tất cả thiết bị thành công!');
       localStorage.removeItem('token');
       localStorage.removeItem('refreshToken');
       sessionStorage.clear();
@@ -351,7 +355,7 @@ export default function ProfilePage() {
       navigate('/login');
     } catch (error) {
       console.error('Lỗi đăng xuất tất cả thiết bị:', error);
-      alert(error.response?.data?.message || 'Đăng xuất thất bại!');
+      toast.error(error.response?.data?.message || 'Đăng xuất thất bại!');
     }
   };
 
@@ -659,48 +663,48 @@ export default function ProfilePage() {
 
         <div style={styles.sidebar}>
           <div style={styles.menuGroup}>
-            <div style={styles.menuTitle}>Tài khoản</div>
+            <div style={styles.menuTitle}>{t('menuAccount')}</div>
             <div style={styles.menuItem(activeTab === 'view_profile')} onClick={() => setActiveTab('view_profile')}>
               <User size={22} style={styles.menuIcon(activeTab === 'view_profile')} />
-              <div style={{fontSize: '15px'}}>Hồ sơ của tôi</div>
+              <div style={{fontSize: '15px'}}>{t('menuMyProfile')}</div>
             </div>
             <div style={styles.menuItem(activeTab === 'edit_profile')} onClick={() => setActiveTab('edit_profile')}>
               <Edit3 size={22} style={styles.menuIcon(activeTab === 'edit_profile')} />
-              <div style={{fontSize: '15px'}}>Chỉnh sửa hồ sơ</div>
+              <div style={{fontSize: '15px'}}>{t('menuEditProfile')}</div>
             </div>
             <div style={styles.menuItem(false)} onClick={() => { setActiveTab('edit_profile'); setTimeout(() => fileInputRef.current?.click(), 100); }}>
               <ImageIcon size={22} style={styles.menuIcon(false)} />
-              <div style={{fontSize: '15px'}}>Đổi ảnh đại diện</div>
+              <div style={{fontSize: '15px'}}>{t('menuChangeAvatar')}</div>
             </div>
             <div style={styles.menuItem(activeTab === 'password')} onClick={() => setActiveTab('password')}>
               <Lock size={22} style={styles.menuIcon(activeTab === 'password')} />
-              <div style={{fontSize: '15px'}}>Đổi mật khẩu</div>
+              <div style={{fontSize: '15px'}}>{t('menuChangePassword')}</div>
             </div>
           </div>
 
           <div style={styles.menuGroup}>
-            <div style={styles.menuTitle}>Khác</div>
+            <div style={styles.menuTitle}>{t('menuOther')}</div>
             <div style={styles.menuItem(activeTab === 'friends')} onClick={() => setActiveTab('friends')}>
               <Users size={22} style={styles.menuIcon(activeTab === 'friends')} />
-              <div style={{fontSize: '15px'}}>Danh sách bạn bè</div>
+              <div style={{fontSize: '15px'}}>{t('friendList')}</div>
             </div>
             <div style={styles.menuItem(activeTab === 'notifications')} onClick={() => setActiveTab('notifications')}>
               <Bell size={22} style={styles.menuIcon(activeTab === 'notifications')} />
-              <div style={{fontSize: '15px'}}>Thông báo</div>
+              <div style={{fontSize: '15px'}}>{t('menuNotifications')}</div>
             </div>
             <div style={styles.menuItem(activeTab === 'privacy')} onClick={() => setActiveTab('privacy')}>
               <Shield size={22} style={styles.menuIcon(activeTab === 'privacy')} />
-              <div style={{fontSize: '15px'}}>Quyền riêng tư</div>
+              <div style={{fontSize: '15px'}}>{t('menuPrivacy')}</div>
             </div>
             <div style={styles.menuItem(activeTab === 'about')} onClick={() => setActiveTab('about')}>
               <Info size={22} style={styles.menuIcon(activeTab === 'about')} />
-              <div style={{fontSize: '15px'}}>Về hệ thống</div>
+              <div style={{fontSize: '15px'}}>{t('menuAbout')}</div>
             </div>
             
             <div style={{ marginTop: '20px', paddingTop: '20px', borderTop: '1px solid var(--border-color)' }}>
               <div style={styles.menuItem(false)} onClick={handleLogout}>
                 <LogOut size={22} style={styles.menuIcon(false)} />
-                <div style={{fontSize: '15px'}}>Đăng xuất</div>
+                <div style={{fontSize: '15px'}}>{t('logout')}</div>
               </div>
               <div style={styles.menuItem(false)} onClick={handleLogoutAll}>
                 <LogOut size={22} style={styles.menuIcon(false)} />
@@ -769,12 +773,10 @@ export default function ProfilePage() {
             </div>
 
             <p style={{ ...styles.modalText, marginBottom: 20, fontSize: 14 }}>
-              Mã OTP đã được gửi đến <strong>{otpModal.contact}</strong>.
-              {otpModal.type === 'phone' && (
-                <span style={{ display: 'block', marginTop: 6, color: '#3b82f6', fontSize: 12 }}>
-                  💡 Xem mã OTP ở Terminal Backend (màn hình đang chạy server)
-                </span>
-              )}
+              Mã OTP xác thực đã được gửi đến <strong>{otpModal.type === 'phone' ? 'Email của bạn' : otpModal.contact}</strong>.
+              <span style={{ display: 'block', marginTop: 6, color: '#666', fontSize: 12 }}>
+                Vui lòng kiểm tra hộp thư đến (hoặc mục Spam).
+              </span>
             </p>
 
             {otpError && (

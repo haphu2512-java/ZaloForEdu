@@ -71,12 +71,14 @@ const sendEmail = async ({ to, subject, text, html }) => {
       html,
     });
     logger.info(`Email sent: ${info.messageId}`);
-    console.log(`[EMAIL] Sent message: ${info.messageId}`);
+    console.log(`[EMAIL] ✅ Đã gửi email tới ${to} | messageId: ${info.messageId}`);
     logPreviewUrlIfAny(info);
     return info;
   } catch (error) {
-    if (!env.smtpUseEthereal && (env.nodeEnv === 'development' || env.smtpAllowUnauthorized)) {
-      logger.warn(`Primary SMTP failed (${error.message}). Falling back to Ethereal.`);
+    // Chỉ fallback sang Ethereal nếu đã bật SMTP_USE_ETHEREAL=true
+    // Nếu dùng Gmail thật (SMTP_USE_ETHEREAL=false) thì throw ngay để lỗi nổi lên
+    if (env.smtpUseEthereal) {
+      logger.warn(`Ethereal fallback: ${error.message}`);
       const fallbackTransporter = await getEtherealTransporter();
       const info = await fallbackTransporter.sendMail({
         from: env.smtpFrom || '"Zalo Clone" <noreply@example.com>',
@@ -91,7 +93,8 @@ const sendEmail = async ({ to, subject, text, html }) => {
       return info;
     }
 
-    logger.error(`Error sending email to ${to}: ${error.message}`);
+    logger.error(`❌ Lỗi gửi email tới ${to}: ${error.message}`);
+    console.error(`[EMAIL] ❌ SMTP Error gửi tới ${to}:`, error.message);
     throw error;
   }
 };
