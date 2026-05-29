@@ -342,6 +342,12 @@ export default function ChatScreen() {
             const targetId = other._id || other.id || '';
             setIsBlockedByMe(blockedIds.includes(targetId));
           }
+          const conflictRes = await checkBlockConflict(conversationId);
+          if (conflictRes.hasConflict && conflictRes.details?.blockedMe?.length > 0) {
+            setIsBlockedByThem(true);
+          } else {
+            setIsBlockedByThem(false);
+          }
         } else if (matched.type === 'group' && !acceptedBlockWarnings[conversationId]) {
           const conflictRes = await checkBlockConflict(conversationId);
           if (conflictRes.hasConflict) {
@@ -1828,6 +1834,16 @@ export default function ChatScreen() {
                 <TouchableOpacity onPress={handleUnblock} disabled={unblockLoading} style={{ backgroundColor: '#DBEAFE', paddingHorizontal: 20, paddingVertical: 8, borderRadius: 20 }}>
                   {unblockLoading ? <ActivityIndicator size="small" color={colors.tint} /> : <Text style={{ color: colors.tint, fontWeight: 'bold' }}>BỎ CHẶN</Text>}
                 </TouchableOpacity>
+              </View>
+            );
+          }
+
+          if (isBlockedByThem) {
+            return (
+              <View style={[styles.inputBar, { borderTopColor: colors.border, backgroundColor: colors.surface, paddingBottom: Math.max(12, insets.bottom), alignItems: 'center', justifyContent: 'center', paddingVertical: 12, flexDirection: 'column' }]}>
+                <Ionicons name="warning" size={24} color="#EF4444" style={{ marginBottom: 4 }} />
+                <Text style={{ color: '#EF4444', fontWeight: 'bold', marginBottom: 4 }}>Lỗi</Text>
+                <Text style={{ color: colors.muted, textAlign: 'center' }}>Bạn đã bị người này chặn.{'\n'}Không thể gửi tin nhắn.</Text>
               </View>
             );
           }

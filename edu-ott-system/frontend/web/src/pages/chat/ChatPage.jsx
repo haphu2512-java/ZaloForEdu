@@ -198,6 +198,7 @@ export default function ChatPage() {
   const [showSearchInConv, setShowSearchInConv] = useState(false);
   const [typingUsers, setTypingUsers] = useState({}); // { conversationId: [{userId, username}] }
   const [unblockLoading, setUnblockLoading] = useState(false);
+  const [isBlockedByThem, setIsBlockedByThem] = useState(false);
   const { blockedUsers, unblockUser: unblockUserStore, fetchBlockedUsers, previouslyBlockedIds } = useFriendStore();
 
   const [showBlockWarningModal, setShowBlockWarningModal] = useState(false);
@@ -490,12 +491,20 @@ export default function ChatPage() {
     if (activeConversation.isMock) return;
 
     const isGroup = activeConversation.type === 'group' || activeConversation.roomModel === 'Group';
+    setIsBlockedByThem(false); // Reset on conv change
     if (isGroup && !acceptedBlockWarnings[activeConversation._id]) {
       conversationService.checkBlockConflict(activeConversation._id).then(res => {
         const hasConflict = res.data?.hasConflict || res.hasConflict;
         if (hasConflict) {
           setBlockConflictDetails(res.data?.details || res.details);
           setShowBlockWarningModal(true);
+        }
+      }).catch(console.error);
+    } else if (!isGroup) {
+      conversationService.checkBlockConflict(activeConversation._id).then(res => {
+        const details = res.data?.details || res.details;
+        if (details?.blockedMe?.length > 0) {
+          setIsBlockedByThem(true);
         }
       }).catch(console.error);
     }
@@ -992,6 +1001,40 @@ export default function ChatPage() {
                     }
                     {unblockLoading ? 'Đang xử lý...' : 'Bỏ chặn'}
                   </button>
+                </div>
+              );
+            }
+
+            if (!isGroupConv && isBlockedByThem) {
+              return (
+                <div style={{
+                  padding: '16px 20px',
+                  background: 'var(--z-bg-sidebar)',
+                  borderTop: '1px solid var(--z-border)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 14,
+                }}>
+                  {/* Shield icon */}
+                  <div style={{
+                    width: 40, height: 40, borderRadius: '50%',
+                    background: 'rgba(239,68,68,0.1)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    flexShrink: 0,
+                  }}>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <circle cx="12" cy="12" r="10" />
+                      <line x1="4.93" y1="4.93" x2="19.07" y2="19.07" />
+                    </svg>
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--z-text-primary)', marginBottom: 2 }}>
+                      Lỗi
+                    </div>
+                    <div style={{ fontSize: 12, color: 'var(--z-text-secondary)', lineHeight: 1.4 }}>
+                      Bạn đã bị người này chặn. Không thể gửi tin nhắn.
+                    </div>
+                  </div>
                 </div>
               );
             }
