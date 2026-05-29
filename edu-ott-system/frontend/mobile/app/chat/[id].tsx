@@ -181,6 +181,7 @@ export default function ChatScreen() {
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [showBlockWarning, setShowBlockWarning] = useState(false);
+  const [blockConflictDetails, setBlockConflictDetails] = useState<any>(null);
   const currentUserId = user?.id || (user as any)?._id || '';
   const [inputText, setInputText] = useState('');
   const [isLoading, setIsLoading] = useState(true);
@@ -344,6 +345,7 @@ export default function ChatScreen() {
         } else if (matched.type === 'group' && !acceptedBlockWarnings[conversationId]) {
           const conflictRes = await checkBlockConflict(conversationId);
           if (conflictRes.hasConflict) {
+            setBlockConflictDetails(conflictRes.details);
             setShowBlockWarning(true);
           }
         }
@@ -2122,7 +2124,15 @@ export default function ChatScreen() {
             </View>
             
             <Text style={{ color: colors.text, fontSize: 15, textAlign: 'center', marginBottom: 24, lineHeight: 22 }}>
-              Trong nhóm có thành viên đang chặn nhau. Bạn có muốn tiếp tục cuộc trò chuyện?
+              {blockConflictDetails?.iBlocked?.length > 0 && blockConflictDetails?.blockedMe?.length > 0 ? (
+                `Bạn đã chặn ${blockConflictDetails.iBlocked.join(', ')} và bị ${blockConflictDetails.blockedMe.join(', ')} chặn. Bạn có muốn tiếp tục cuộc trò chuyện?`
+              ) : blockConflictDetails?.iBlocked?.length > 0 ? (
+                `Bạn đã chặn ${blockConflictDetails.iBlocked.join(', ')}. Bạn có muốn tiếp tục cuộc trò chuyện?`
+              ) : blockConflictDetails?.blockedMe?.length > 0 ? (
+                `Bạn đã bị ${blockConflictDetails.blockedMe.join(', ')} chặn. Bạn có muốn tiếp tục cuộc trò chuyện?`
+              ) : (
+                'Trong nhóm có thành viên đang có xung đột chặn với bạn (bạn chặn họ hoặc họ chặn bạn). Bạn có muốn tiếp tục cuộc trò chuyện?'
+              )}
             </Text>
 
             <View style={{ flexDirection: 'row', gap: 12 }}>

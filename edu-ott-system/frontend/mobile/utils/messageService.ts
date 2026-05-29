@@ -301,7 +301,7 @@ export async function uploadMedia(payload: { fileName: string; mimeType: string;
   return res.data;
 }
 
-export async function checkBlockConflict(conversationId: string): Promise<{ hasConflict: boolean }> {
+export async function checkBlockConflict(conversationId: string): Promise<{ hasConflict: boolean, details?: { iBlocked: string[], blockedMe: string[] } }> {
   try {
     const res = await fetchAPI(`${CONVERSATIONS_ENDPOINT}/${conversationId}/check-block-conflict`);
     return res.data || { hasConflict: false };
