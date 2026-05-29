@@ -747,25 +747,35 @@ const checkBlockConflict = asyncHandler(async (req, res) => {
   // 1. Kiểm tra xem user hiện tại có chặn ai trong nhóm không
   const currentUser = await User.findById(req.user._id).select('blockedUsers');
   const myBlockedIds = (currentUser?.blockedUsers || []).map(id => (id._id || id).toString());
-  const iBlockedSomeone = participantIds.some(pid => pid !== currentUserIdStr && myBlockedIds.includes(pid));
+  
+  // 2. Lấy thông tin các participants
+  const participants = await User.find({ _id: { $in: conversation.participants } }).select('blockedUsers fullName username');
+  
+  const iBlocked = [];
+  const blockedMe = [];
 
-  if (iBlockedSomeone) {
-    return successResponse(res, { hasConflict: true }, 'You blocked someone in this group');
-  }
+  participants.forEach(p => {
+    const pid = p._id.toString();
+    if (pid === currentUserIdStr) return;
 
-  // 2. Kiểm tra xem có ai trong nhóm chặn user hiện tại không
-  const participants = await User.find({ _id: { $in: conversation.participants } }).select('blockedUsers');
-  const someoneBlockedMe = participants.some(p => {
-    if (p._id.toString() === currentUserIdStr) return false;
+    // Xem mình có chặn họ không
+    if (myBlockedIds.includes(pid)) {
+      iBlocked.push(p.fullName || p.username || 'Người dùng');
+    }
+
+    // Xem họ có chặn mình không
     const theirBlockedIds = (p.blockedUsers || []).map(id => (id._id || id).toString());
-    return theirBlockedIds.includes(currentUserIdStr);
+    if (theirBlockedIds.includes(currentUserIdStr)) {
+      blockedMe.push(p.fullName || p.username || 'Người dùng');
+    }
   });
 
-  if (someoneBlockedMe) {
-    return successResponse(res, { hasConflict: true }, 'Someone in this group blocked you');
-  }
+  const hasConflict = iBlocked.length > 0 || blockedMe.length > 0;
 
-  return successResponse(res, { hasConflict: false }, 'No block conflict');
+  return successResponse(res, { 
+    hasConflict, 
+    details: { iBlocked, blockedMe } 
+  }, hasConflict ? 'Block conflict found' : 'No block conflict');
 });
 
 module.exports = {

@@ -201,6 +201,7 @@ export default function ChatPage() {
   const { blockedUsers, unblockUser: unblockUserStore, fetchBlockedUsers, previouslyBlockedIds } = useFriendStore();
 
   const [showBlockWarningModal, setShowBlockWarningModal] = useState(false);
+  const [blockConflictDetails, setBlockConflictDetails] = useState(null);
   const [acceptedBlockWarnings, setAcceptedBlockWarnings] = useState({});
   const pageRef = useRef(null);
   const messagesEndRef = useRef(null);
@@ -493,6 +494,7 @@ export default function ChatPage() {
       conversationService.checkBlockConflict(activeConversation._id).then(res => {
         const hasConflict = res.data?.hasConflict || res.hasConflict;
         if (hasConflict) {
+          setBlockConflictDetails(res.data?.details || res.details);
           setShowBlockWarningModal(true);
         }
       }).catch(console.error);
@@ -598,7 +600,15 @@ export default function ChatPage() {
           <div style={{ background: 'var(--z-bg-sidebar)', padding: '24px', borderRadius: '12px', width: '400px', maxWidth: '90%', textAlign: 'center' }}>
             <h3 style={{ margin: '0 0 16px', color: '#E11D48' }}>Cảnh báo chặn</h3>
             <p style={{ margin: '0 0 24px', color: 'var(--z-text-secondary)', fontSize: '15px' }}>
-              Trong nhóm có thành viên đang có xung đột chặn với bạn (bạn chặn họ hoặc họ chặn bạn). Bạn có muốn tiếp tục cuộc trò chuyện?
+              {blockConflictDetails?.iBlocked?.length > 0 && blockConflictDetails?.blockedMe?.length > 0 ? (
+                <>Bạn đã chặn <b>{blockConflictDetails.iBlocked.join(', ')}</b> và bị <b>{blockConflictDetails.blockedMe.join(', ')}</b> chặn. Bạn có muốn tiếp tục cuộc trò chuyện?</>
+              ) : blockConflictDetails?.iBlocked?.length > 0 ? (
+                <>Bạn đã chặn <b>{blockConflictDetails.iBlocked.join(', ')}</b>. Bạn có muốn tiếp tục cuộc trò chuyện?</>
+              ) : blockConflictDetails?.blockedMe?.length > 0 ? (
+                <>Bạn đã bị <b>{blockConflictDetails.blockedMe.join(', ')}</b> chặn. Bạn có muốn tiếp tục cuộc trò chuyện?</>
+              ) : (
+                'Trong nhóm có thành viên đang có xung đột chặn với bạn (bạn chặn họ hoặc họ chặn bạn). Bạn có muốn tiếp tục cuộc trò chuyện?'
+              )}
             </p>
             <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
               <button
