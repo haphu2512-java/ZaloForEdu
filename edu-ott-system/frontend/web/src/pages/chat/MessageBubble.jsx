@@ -840,5 +840,6 @@ export const MessageBubble = ({
         document.body
       )}
     </div>
+  </>
   );
 };
