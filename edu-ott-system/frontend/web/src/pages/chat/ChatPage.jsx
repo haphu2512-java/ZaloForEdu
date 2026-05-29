@@ -1039,7 +1039,6 @@ export default function ChatPage() {
               );
             }
 
-            }
 
             const otherP = !isGroupConv ? getOtherParticipant(activeConversation) : null;
             const otherIdP = otherP ? typeof otherP === 'object' ? String(otherP._id || otherP.id || '') : String(otherP) : null;
