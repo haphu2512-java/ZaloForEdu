@@ -840,6 +840,7 @@ export const MessageBubble = ({
         document.body
       )}
     </div>
+  </div>
   </>
   );
 };
