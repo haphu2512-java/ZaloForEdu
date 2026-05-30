@@ -1,3 +1,4 @@
+import toast from "react-hot-toast";
 import React, { useState, useEffect } from 'react';
 import { Search, ShieldAlert, Loader2, ChevronLeft, ChevronRight, UserX, UserCheck, Trash2, Shield, Users, Activity, Eye, AlertCircle, AlertTriangle, X } from 'lucide-react';
 import { userService } from '../../services/userService';
@@ -53,7 +54,7 @@ export default function UserManagement() {
   const executeBanOrUnban = async () => {
     const { type, user } = modalState;
     if (type === 'ban' && banReasonInput.trim() === '') {
-      alert("Vui lòng không để trống lý do khóa!");
+      toast.error("Vui lòng không để trống lý do khóa!");
       return;
     }
 
@@ -74,7 +75,7 @@ export default function UserManagement() {
       ));
       closeModal();
     } catch (error) {
-      alert(error.response?.data?.message || 'Thao tác thất bại!');
+      toast.error(error.response?.data?.message || 'Thao tác thất bại!');
       setIsProcessing(false);
     }
   };
@@ -103,7 +104,7 @@ export default function UserManagement() {
       }));
       closeModal();
     } catch (error) {
-      alert(error.response?.data?.message || 'Ghi nhận vi phạm thất bại!');
+      toast.error(error.response?.data?.message || 'Ghi nhận vi phạm thất bại!');
       setIsProcessing(false);
     }
   };
@@ -118,7 +119,7 @@ export default function UserManagement() {
       setUsers(users.filter(u => (u.id || u._id) !== userId));
       closeModal();
     } catch (error) {
-      alert(error.response?.data?.message || 'Xóa thất bại!');
+      toast.error(error.response?.data?.message || 'Xóa thất bại!');
       setIsProcessing(false);
     }
   };

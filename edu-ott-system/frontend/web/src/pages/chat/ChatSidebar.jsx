@@ -46,11 +46,11 @@ export const ChatSidebar = ({
   const { t } = useLanguage();
 
   const CATS = [
-    { key: 'all', label: 'Tất cả', emoji: null },
-    { key: 'primary', label: 'Chính', emoji: '💬' },
-    { key: 'work', label: 'Việc', emoji: '💼' },
-    { key: 'family', label: 'G.đình', emoji: '🏠' },
-    { key: 'other', label: 'Khác', emoji: '🗂️' },
+    { key: 'all', label: t('allTab'), emoji: null },
+    { key: 'primary', label: t('primaryTab'), emoji: '💬' },
+    { key: 'work', label: t('workTab'), emoji: '💼' },
+    { key: 'family', label: t('familyTab'), emoji: '🏠' },
+    { key: 'other', label: t('otherTab'), emoji: '🗂️' },
   ];
 
   return (
@@ -63,7 +63,7 @@ export const ChatSidebar = ({
             onMouseEnter={e => e.currentTarget.style.background = "var(--z-border)"}
             onMouseLeave={e => e.currentTarget.style.background = "var(--z-bg-hover)"}
           ><FaUserPlus size={15} /></button>
-          <button title="Tạo nhóm" onClick={() => setShowCreateGroupModal(true)}
+          <button title={t('createGroup')} onClick={() => setShowCreateGroupModal(true)}
             style={{ width: 34, height: 34, borderRadius: "50%", border: "none", background: "var(--z-bg-hover)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--z-text-secondary)", transition: "background 0.2s" }}
             onMouseEnter={e => e.currentTarget.style.background = "var(--z-border)"}
             onMouseLeave={e => e.currentTarget.style.background = "var(--z-bg-hover)"}

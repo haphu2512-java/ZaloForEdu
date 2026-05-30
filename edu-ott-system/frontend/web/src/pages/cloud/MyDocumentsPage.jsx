@@ -6,6 +6,7 @@ import { useAuthStore } from "../../store/authStore";
 import { useFriendStore } from "../../store/friendStore";
 import { socketService } from "../../services/socketService";
 import { userService } from "../../services/userService";
+import { useConfirm } from "../../contexts/ConfirmContext";
 import toast from "react-hot-toast";
 import "./MyDocumentsPage.css";
 
@@ -40,6 +41,7 @@ import { DEFAULT_AVATAR } from '../../utils/constants';
 /* ===== MAIN PAGE ===== */
 export default function MyDocumentsPage(){
   const{user}=useAuthStore();
+  const confirm = useConfirm();
   const { friends, fetchFriends } = useFriendStore();
   const[convId,setConvId]=useState(null);
   const[messages,setMessages]=useState([]);
@@ -297,7 +299,7 @@ export default function MyDocumentsPage(){
   };
 
   const handleBulkDelete = async (msgIds) => {
-    if(!window.confirm(`Xóa ${msgIds.length} tin nhắn đã chọn?`))return;
+    if(!await confirm(`Xóa ${msgIds.length} tin nhắn đã chọn?`, { isDanger: true }))return;
     try{
       await Promise.all(msgIds.map(id=>chatService.deleteMessage(id)));
       setMessages(prev=>prev.filter(m=>!msgIds.includes(m._id)));

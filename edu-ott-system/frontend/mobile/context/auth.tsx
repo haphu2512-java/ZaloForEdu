@@ -3,7 +3,7 @@ import { useRouter, useSegments } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as authService from '../utils/authService';
 import type { User, LoginPayload, RegisterPayload, UpdateProfilePayload } from '../types/auth';
-import { getMySettings } from '../utils/settingsService';
+import { getMySettings, setCurrentUserIdForTheme, reloadThemeMode } from '../utils/settingsService';
 import { getUserById } from '../utils/userService';
 import { connectSocket, disconnectSocket } from '../utils/socketService';
 
@@ -75,10 +75,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     };
 
+    const handleYouBlockedUser = ({ targetId }: { targetId: string }) => {
+      setUser((prev: any) => {
+        if (!prev) return prev;
+        const currentBlocked = prev.blockedUsers || [];
+        if (currentBlocked.includes(targetId)) return prev;
+        return { ...prev, blockedUsers: [...currentBlocked, targetId] };
+      });
+    };
+
+    const handleYouUnblockedUser = ({ targetId }: { targetId: string }) => {
+      setUser((prev: any) => {
+        if (!prev) return prev;
+        const currentBlocked = prev.blockedUsers || [];
+        return { ...prev, blockedUsers: currentBlocked.filter((id: string) => id !== targetId) };
+      });
+    };
+
     socket.on('settings_changed', handleSettingsChanged);
+    socket.on('you_blocked_user', handleYouBlockedUser);
+    socket.on('you_unblocked_user', handleYouUnblockedUser);
 
     return () => {
       socket.off('settings_changed', handleSettingsChanged);
+      socket.off('you_blocked_user', handleYouBlockedUser);
+      socket.off('you_unblocked_user', handleYouUnblockedUser);
     };
   }, [user]);
 
@@ -127,6 +148,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const token = await authService.getToken();
         if (!token) {
           // No token, user not logged in
+          setCurrentUserIdForTheme(null);
+          await reloadThemeMode();
           setUser(null);
           setIsLoading(false);
           return;
@@ -135,12 +158,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // Load cached user info first for instant UX
         const cachedUser = await authService.getCachedUserInfo();
         if (cachedUser) {
+          setCurrentUserIdForTheme(cachedUser._id || cachedUser.id);
+          await reloadThemeMode();
           setUser(cachedUser);
         }
 
         // Try to refresh token to validate session is still active
         const refreshResult = await authService.refreshAccessToken();
         if (refreshResult?.success && refreshResult.user) {
+          setCurrentUserIdForTheme(refreshResult.user._id || refreshResult.user.id);
+          await reloadThemeMode();
           setUser(refreshResult.user);
           // Connect socket with fresh token
           if (refreshResult.accessToken) {
@@ -148,12 +175,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           }
           await syncThemeSettings();
         } else {
-          // Refresh failed, clear user
+          setCurrentUserIdForTheme(null);
+          await reloadThemeMode();
           setUser(null);
         }
       } catch (error) {
         console.warn('[Auth] Error loading user:', error);
         await authService.removeToken();
+        setCurrentUserIdForTheme(null);
+        await reloadThemeMode();
         setUser(null);
       } finally {
         setIsLoading(false);
@@ -168,6 +198,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.log('[Auth] Auth error detected, logging out immediately...');
       disconnectSocket();
       await authService.removeToken();
+      setCurrentUserIdForTheme(null);
+      await reloadThemeMode();
       setUser(null);
     });
     
@@ -203,6 +235,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (res.accessToken) {
         connectSocket(res.accessToken);
       }
+      setCurrentUserIdForTheme(res.user._id || res.user.id);
+      await reloadThemeMode();
       setUser(res.user);
       await syncThemeSettings();
       return res.user;
@@ -222,6 +256,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = useCallback(async () => {
     disconnectSocket();
     await authService.logout();
+    setCurrentUserIdForTheme(null);
+    await reloadThemeMode();
     setUser(null);
   }, []);
 

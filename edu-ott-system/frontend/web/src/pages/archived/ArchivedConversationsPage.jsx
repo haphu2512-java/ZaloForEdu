@@ -7,6 +7,7 @@ import { format } from "date-fns";
 import toast from "react-hot-toast";
 import "./ArchivedConversationsPage.css";
 import { DEFAULT_AVATAR } from '../../utils/constants';
+import { useConfirm } from "../../contexts/ConfirmContext";
 
 
 function getConvName(conv, myUserId) {
@@ -29,6 +30,7 @@ export default function ArchivedConversationsPage({ myUserId }) {
   const [processingId, setProcessingId] = useState(null);
   const navigate = useNavigate();
   const { setActiveRoom } = useChatStore();
+  const confirm = useConfirm();
 
   useEffect(() => {
     loadArchived();
@@ -64,7 +66,7 @@ export default function ArchivedConversationsPage({ myUserId }) {
 
   const handleDelete = async (e, conv) => {
     e.stopPropagation();
-    if (!window.confirm("Xóa hội thoại này? Hành động không thể hoàn tác.")) return;
+    if (!await confirm("Xóa hội thoại này? Hành động không thể hoàn tác.", { isDanger: true })) return;
     const id = conv._id || conv.id;
     setProcessingId(id);
     try {

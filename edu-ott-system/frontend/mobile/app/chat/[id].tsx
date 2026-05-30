@@ -343,7 +343,7 @@ export default function ChatScreen() {
             setIsBlockedByMe(blockedIds.includes(targetId));
           }
           const conflictRes = await checkBlockConflict(conversationId);
-          if (conflictRes.hasConflict && conflictRes.details?.blockedMe?.length > 0) {
+          if (conflictRes.hasConflict && (conflictRes.details?.blockedMe?.length || 0) > 0) {
             setIsBlockedByThem(true);
           } else {
             setIsBlockedByThem(false);
@@ -403,12 +403,10 @@ export default function ChatScreen() {
     };
 
     const handleBlockStatusChanged = async () => {
-      // Clear accepted warnings so modal can show again
-      setAcceptedBlockWarnings(prev => {
-        const copy = { ...prev };
-        delete copy[conversationId];
-        return copy;
-      });
+      // Clear all accepted warnings so modal can show again
+      for (const key in acceptedBlockWarnings) {
+        delete acceptedBlockWarnings[key];
+      }
 
       const conflictRes = await checkBlockConflict(conversationId);
       
@@ -431,7 +429,7 @@ export default function ChatScreen() {
           if (other) {
             setIsBlockedByMe(blockedIds.includes(other._id || other.id || ''));
           }
-          if (conflictRes.hasConflict && conflictRes.details?.blockedMe?.length > 0) {
+          if (conflictRes.hasConflict && (conflictRes.details?.blockedMe?.length || 0) > 0) {
             setIsBlockedByThem(true);
           } else {
             setIsBlockedByThem(false);
@@ -851,9 +849,9 @@ export default function ChatScreen() {
       if (error.errorCode === 'ONLY_ADMIN_CAN_SEND' || error.message?.includes('Only admin/owner can send messages')) {
         errorTitle = 'Không có quyền gửi tin nhắn';
         errorMessage = 'Chỉ trưởng nhóm và phó nhóm mới có thể gửi tin nhắn trong nhóm này.';
-      } else if (error.errorCode === 'BLOCKED_BY_USER') {
-        errorTitle = 'Không thể gửi tin nhắn';
-        errorMessage = 'Bạn đã bị người này chặn.';
+      } else if (error.errorCode === 'BLOCKED_BY_USER' || error.message?.includes('chặn')) {
+        errorTitle = 'Thông báo';
+        errorMessage = error.message || 'Bạn đã bị người này chặn.';
       } else if (error.message) {
         errorMessage = error.message;
       }
@@ -926,7 +924,9 @@ export default function ChatScreen() {
         prev.some((m) => getMessageId(m) === getMessageId(newMsg)) ? prev : [newMsg, ...prev]
       );
     } catch (err: any) {
-      Alert.alert('Lỗi', err?.message || 'Không thể gửi ghi âm');
+      const errorMsg = err?.message || 'Không thể gửi ghi âm';
+      const title = errorMsg.includes('chặn') ? 'Thông báo' : 'Lỗi';
+      Alert.alert(title, errorMsg);
       console.log('Voice send failed:', err);
     } finally {
       setIsSending(false);
@@ -965,7 +965,9 @@ export default function ChatScreen() {
         prev.some((m) => getMessageId(m) === getMessageId(newMsg)) ? prev : [newMsg, ...prev]
       );
     } catch (err: any) {
-      Alert.alert('Lỗi', err.message || 'Không thể gửi ảnh');
+      const errorMsg = err?.message || 'Không thể gửi ảnh';
+      const title = errorMsg.includes('chặn') ? 'Thông báo' : 'Lỗi';
+      Alert.alert(title, errorMsg);
     } finally {
       setIsSending(false);
       isPicking.current = false;
@@ -1019,7 +1021,9 @@ export default function ChatScreen() {
         prev.some((m) => getMessageId(m) === getMessageId(newMsg)) ? prev : [newMsg, ...prev]
       );
     } catch (err: any) {
-      Alert.alert('Lỗi', err.message || 'Không thể gửi ảnh');
+      const errorMsg = err?.message || 'Không thể gửi ảnh';
+      const title = errorMsg.includes('chặn') ? 'Thông báo' : 'Lỗi';
+      Alert.alert(title, errorMsg);
     } finally {
       setIsSending(false);
       isPicking.current = false;
@@ -1071,7 +1075,9 @@ export default function ChatScreen() {
       );
     } catch (e: any) {
       console.log('Document picker error:', e);
-      Alert.alert('Lỗi', e.message || 'Không thể chọn file');
+      const errorMsg = e?.message || 'Không thể gửi file';
+      const title = errorMsg.includes('chặn') ? 'Thông báo' : 'Lỗi';
+      Alert.alert(title, errorMsg);
     } finally {
       setIsSending(false);
       isPicking.current = false;

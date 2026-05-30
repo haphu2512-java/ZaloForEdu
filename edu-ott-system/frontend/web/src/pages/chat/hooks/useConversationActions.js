@@ -5,6 +5,9 @@ import { conversationService } from '../../../services/conversationService';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api/v1';
 
+import { useConfirm } from '../../../contexts/ConfirmContext';
+import { useLanguage } from '../../../contexts/LanguageContext';
+
 export function useConversationActions({
   token, userId, navigate,
   activeConversation, setActiveConversation,
@@ -12,6 +15,8 @@ export function useConversationActions({
   getConversationName,
   fetchConversationsData,
 }) {
+  const confirm = useConfirm();
+  const { t } = useLanguage();
   const [showTransferOwnerModal, setShowTransferOwnerModal] = useState(false);
   const [transferOwnerLoading, setTransferOwnerLoading] = useState(false);
   const [showPrivacyModal, setShowPrivacyModal] = useState(false);
@@ -125,7 +130,7 @@ export function useConversationActions({
 
   // ── Hide conversation ─────────────────────────────────────────────────────
   const handleHideConversation = useCallback(async (conv) => {
-    if (!window.confirm(`Ẩn hội thoại với "${getConversationName(conv)}"? Bạn có thể xem lại trong mục Hội thoại ẩn.`)) return;
+    if (!await confirm(`Ẩn hội thoại với "${getConversationName(conv)}"? Bạn có thể xem lại trong mục Hội thoại ẩn.`)) return;
     try {
       await axios.put(
         `${API_BASE_URL}/conversations/${conv._id}/preferences`,
@@ -150,7 +155,7 @@ export function useConversationActions({
 
   // ── Leave group (from ctx menu) ───────────────────────────────────────────
   const handleLeaveGroupCtx = useCallback(async (conv) => {
-    if (!window.confirm(`Rời nhóm "${getConversationName(conv)}"?`)) return;
+    if (!await confirm(`Rời nhóm "${getConversationName(conv)}"?`)) return;
     try {
       await axios.post(`${API_BASE_URL}/conversations/${conv._id}/leave`, {}, { headers: { Authorization: `Bearer ${token}` } });
       setConversations(prev => prev.filter(c => String(c._id) !== String(conv._id)));
@@ -250,7 +255,7 @@ export function useConversationActions({
   // ── Disband group ─────────────────────────────────────────────────────────
   const handleDisbandGroup = async () => {
     if (!activeConversation) return;
-    if (!window.confirm('Giải tán nhóm sẽ xóa toàn bộ nội dung trò chuyện và các thành viên khỏi nhóm.\n\nBạn có chắc chắn muốn giải tán nhóm không?')) return;
+    if (!await confirm('Giải tán nhóm sẽ xóa toàn bộ nội dung trò chuyện và các thành viên khỏi nhóm.\n\nBạn có chắc chắn muốn giải tán nhóm không?', { isDanger: true })) return;
     try {
       await conversationService.disbandGroup(activeConversation._id);
       toast.success('Đã giải tán nhóm thành công!');
@@ -266,7 +271,7 @@ export function useConversationActions({
     if (!activeConversation) return;
     const isOwner = String(activeConversation.ownerId?._id || activeConversation.ownerId) === String(userId);
     if (isOwner) { setShowTransferOwnerModal(true); return; }
-    if (!window.confirm(`Bạn có chắc chắn muốn rời khỏi nhóm ${getConversationName(activeConversation)} không?`)) return;
+    if (!await confirm(`Bạn có chắc chắn muốn rời khỏi nhóm ${getConversationName(activeConversation)} không?`, { isDanger: true })) return;
     try {
       await conversationService.leaveGroup(activeConversation._id);
       toast.success('Đã rời nhóm thành công');

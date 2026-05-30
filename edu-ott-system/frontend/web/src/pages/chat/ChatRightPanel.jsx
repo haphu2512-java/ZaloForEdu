@@ -10,6 +10,7 @@ import { getFileColor, getExt, formatBytes, toAbsoluteUrl, openDocument } from '
 import PinnedMessagesPanel from './Modals/PinnedMessagesPanel';
 import ReportUserModal from './Modals/ReportUserModal';
 import { useFriendStore } from '../../store/friendStore';
+import { useConfirm } from '../../contexts/ConfirmContext';
 import ClassifyConversationModal from './Modals/ClassifyConversationModal';
 import ConfirmTransferModal from './Modals/ConfirmTransferModal';
 import './MemberMenu.css';
@@ -92,6 +93,7 @@ export const ChatRightPanel = ({
   loadingPolls = false,
 }) => {
   const { t } = useLanguage();
+  const confirm = useConfirm();
 
   // Local states
   const [rightPanelMode, setRightPanelMode] = useState('default');
@@ -321,29 +323,29 @@ export const ChatRightPanel = ({
                   <div className="crp-action-icon" style={{ background: isMuted ? 'var(--z-primary-light, #e8f0fe)' : 'var(--z-bg-main)', width: 36, height: 36, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     {isMuted ? <FaBellSlash size={16} color="var(--z-primary)" /> : <FaBell size={16} />}
                   </div>
-                  <span style={{ fontSize: 12 }}>{isMuted ? 'Bật TB' : 'Tắt TB'}</span>
+                  <span style={{ fontSize: 12 }}>{isMuted ? t('unmute') : t('mute')}</span>
                 </div>
 
                 {!isGroup ? (
                   <>
                     <div className="crp-action-btn" style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, cursor: 'pointer', color: 'var(--z-text-primary)' }} onClick={() => toast.success('Đã ghim hội thoại')}>
                       <div className="crp-action-icon" style={{ background: 'var(--z-bg-main)', width: 36, height: 36, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><FaThumbtack size={16} /></div>
-                      <span style={{ fontSize: 12 }}>Ghim</span>
+                      <span style={{ fontSize: 12 }}>{t('pin')}</span>
                     </div>
                     <div className="crp-action-btn" style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, cursor: 'pointer', color: 'var(--z-text-primary)' }} onClick={() => setShowCreateGroupModal(true)}>
                       <div className="crp-action-icon" style={{ background: 'var(--z-bg-main)', width: 36, height: 36, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><FaUserPlus size={16} /></div>
-                      <span style={{ fontSize: 12 }}>Tạo nhóm</span>
+                      <span style={{ fontSize: 12 }}>{t('createGroup')}</span>
                     </div>
                   </>
                 ) : (
                   <>
                     <div className="crp-action-btn" style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, cursor: 'pointer', color: 'var(--z-text-primary)' }} onClick={onShowAddMember}>
                       <div className="crp-action-icon" style={{ background: 'var(--z-bg-main)', width: 36, height: 36, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><FaUserPlus size={16} /></div>
-                      <span style={{ fontSize: 12 }}>Thêm TV</span>
+                      <span style={{ fontSize: 12 }}>{t('addMember')}</span>
                     </div>
                     <div className="crp-action-btn" style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, cursor: 'pointer', color: 'var(--z-text-primary)' }} onClick={() => setRightPanelMode('manage')}>
                       <div className="crp-action-icon" style={{ background: 'var(--z-bg-main)', width: 36, height: 36, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><FaUserSecret size={16} /></div>
-                      <span style={{ fontSize: 12 }}>Quản lý</span>
+                      <span style={{ fontSize: 12 }}>{t('manage')}</span>
                     </div>
                   </>
                 )}
@@ -355,7 +357,7 @@ export const ChatRightPanel = ({
 
               {/* ACCORDION THÀNH VIÊN */}
               {isGroup && (
-                <Accordion title={`Thành viên nhóm (${activeConversation.participants?.length || 0})`}>
+                <Accordion title={`${t('groupMembers')} (${activeConversation.participants?.length || 0})`}>
                   <div style={{ padding: '8px 16px' }}>
                     {(activeConversation.participants || []).map((p, idx) => {
                       const role = getMemberRole(p);
@@ -373,12 +375,12 @@ export const ChatRightPanel = ({
                                 {role === 'owner' ? (
                                   <>
                                     <FaCrown size={10} color="#f59e0b" />
-                                    <span>Trưởng nhóm</span>
+                                    <span>{t('groupOwner')}</span>
                                   </>
                                 ) : (
                                   <>
                                     <FaStar size={10} color="var(--z-primary)" />
-                                    <span>Phó nhóm</span>
+                                    <span>{t('groupAdmin')}</span>
                                   </>
                                 )}
                               </div>
@@ -478,7 +480,7 @@ export const ChatRightPanel = ({
                               {isOwner && <div className="member-menu-divider" />}
 
                               {/* Mời ra khỏi nhóm */}
-                              <div className="member-action-item danger" onClick={() => { if (window.confirm(`Mời ${displayName} ra khỏi nhóm?`)) handleGroupAction('remove', keyStr); setShowMemberActionId(null); }}>
+                              <div className="member-action-item danger" onClick={async () => { if (await confirm(`Mời ${displayName} ra khỏi nhóm?`, { isDanger: true })) handleGroupAction('remove', keyStr); setShowMemberActionId(null); }}>
                                 <FaBan />
                                 <span>Mời ra khỏi nhóm</span>
                               </div>
@@ -493,7 +495,7 @@ export const ChatRightPanel = ({
 
               {/* NHẮC HẸN */}
               {isGroup && (
-                <Accordion title={<span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><FaCalendarAlt size={13} /> Danh sách nhắc hẹn</span>} defaultOpen={false}>
+                <Accordion title={<span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><FaCalendarAlt size={13} /> {t('remindersList')}</span>} defaultOpen={false}>
                   <div style={{ padding: '8px 16px' }}>
                     <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
                       <button
@@ -517,7 +519,7 @@ export const ChatRightPanel = ({
 
               {/* ẢNH / VIDEO */}
               {/* GHIM & GHI CHÚ */}
-              <Accordion title={<span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><FaThumbtack size={13} /> Tin nhắn đã ghim</span>} defaultOpen={false}>
+              <Accordion title={<span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><FaThumbtack size={13} /> {t('pinnedMessages')}</span>} defaultOpen={false}>
                 <div style={{ padding: '8px 16px' }}>
                   <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
                     <button
@@ -542,9 +544,9 @@ export const ChatRightPanel = ({
                           </div>
                         </div>
                         <button title="Bỏ ghim" style={{ border: 'none', background: 'none', color: '#ef4444', cursor: 'pointer', padding: '2px', flexShrink: 0 }}
-                          onClick={(e) => {
+                          onClick={async (e) => {
                             e.stopPropagation();
-                            if (window.confirm('Bỏ ghim tin nhắn này?')) {
+                            if (await confirm('Bỏ ghim tin nhắn này?')) {
                               onUnpin && onUnpin(pin.messageId?._id || pin.messageId);
                             }
                           }}>
@@ -558,7 +560,7 @@ export const ChatRightPanel = ({
 
               {/* BÌNH CHỌN */}
               {isGroup && (
-                <Accordion title={<span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><FaPoll size={13} /> Bình chọn</span>} defaultOpen={false}>
+                <Accordion title={<span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><FaPoll size={13} /> {t('polls')}</span>} defaultOpen={false}>
                   <div style={{ padding: '8px 16px' }}>
                     <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
                       <button
@@ -611,7 +613,7 @@ export const ChatRightPanel = ({
               </Accordion>
 
               {/* FILE */}
-              <Accordion title="File">
+              <Accordion title={t('files')}>
                 <div style={{ padding: '8px 16px' }}>
                   {docFiles.length > 0 ? (
                     <div style={{ marginTop: 4, display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -635,7 +637,7 @@ export const ChatRightPanel = ({
               </Accordion>
 
               {/* LINK */}
-              <Accordion title="Link">
+              <Accordion title={t('links')}>
                 <div style={{ padding: '8px 16px' }}>
                   {linkItems && linkItems.length > 0 ? (
                     <div style={{ marginTop: 4, display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -657,7 +659,7 @@ export const ChatRightPanel = ({
           <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
             <div style={{ display: 'flex', alignItems: 'center', padding: '16px', borderBottom: '1px solid var(--z-border)', cursor: 'pointer' }} onClick={() => setRightPanelMode('default')}>
               <FaArrowLeft size={16} color="var(--z-text-secondary)" style={{ marginRight: 12 }} />
-              <span style={{ fontSize: 16, fontWeight: 600, color: 'var(--z-text-primary)' }}>Quản lý nhóm</span>
+              <span style={{ fontSize: 16, fontWeight: 600, color: 'var(--z-text-primary)' }}>{t('groupManage')}</span>
             </div>
             <div style={{ flex: 1, overflowY: 'auto' }}>
               <div className="crp-group-manage" style={{ padding: 0 }}>
@@ -835,7 +837,7 @@ export const ChatRightPanel = ({
                           </div>
                           {isOwner && (
                             <button style={{ border: 'none', background: '#ffe4e6', color: '#e11d48', padding: '6px 16px', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
-                              onClick={() => { if (window.confirm(`Gỡ quyền phó nhóm của ${admin.fullName || admin.username}?`)) handleGroupAction('demote', adminId); }}>
+                              onClick={async () => { if (await confirm(`Gỡ quyền phó nhóm của ${admin.fullName || admin.username}?`)) handleGroupAction('demote', adminId); }}>
                               Xóa
                             </button>
                           )}
@@ -866,8 +868,8 @@ export const ChatRightPanel = ({
             <div style={{ flex: 1, overflowY: 'auto', padding: '0 16px' }}>
               {(activeConversation?.participants?.filter(p => getMemberRole(p) === 'member') || []).map(member => (
                 <div key={member._id || member.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 0', borderBottom: '1px solid var(--z-border)', cursor: 'pointer' }}
-                  onClick={() => {
-                    if (window.confirm(`Chỉ định ${member.fullName || member.username} làm phó nhóm?`)) {
+                  onClick={async () => {
+                    if (await confirm(`Chỉ định ${member.fullName || member.username} làm phó nhóm?`)) {
                       handleGroupAction('promote', member._id || member.id);
                       setRightPanelMode('manage-roles');
                     }
@@ -891,8 +893,8 @@ export const ChatRightPanel = ({
               <div style={{ padding: '16px 0', fontSize: 13, color: 'var(--z-text-muted)' }}>Lưu ý: Nếu chuyển quyền trưởng nhóm, bạn sẽ trở thành Phó nhóm.</div>
               {(activeConversation?.participants?.filter(p => getMemberRole(p) !== 'owner') || []).map(member => (
                 <div key={member._id || member.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 0', borderBottom: '1px solid var(--z-border)', cursor: 'pointer' }}
-                  onClick={() => {
-                    if (window.confirm(`Bạn có muốn nhường quyền trưởng nhóm cho ${member.fullName || member.username}? Bạn sẽ không thể khôi phục lại quyền trừ khi người đó chuyển lại cho bạn.`)) {
+                  onClick={async () => {
+                    if (await confirm(`Bạn có muốn nhường quyền trưởng nhóm cho ${member.fullName || member.username}? Bạn sẽ không thể khôi phục lại quyền trừ khi người đó chuyển lại cho bạn.`, { isDanger: true })) {
                       handleGroupAction('transfer', member._id || member.id);
                       setRightPanelMode('default'); // Xong thì nhảy ra ngoài vì không còn là owner
                     }
@@ -961,7 +963,7 @@ export const ChatRightPanel = ({
                     <div style={{ flex: 1, fontSize: 13, fontWeight: 500 }}>{p.username || 'Thành viên'}</div>
                     {!isAlreadyBlocked && (
                       <button onClick={async () => {
-                        if (!window.confirm(`Chặn ${p.username || 'thành viên này'} khỏi nhóm?`)) return;
+                        if (!await confirm(`Chặn ${p.username || 'thành viên này'} khỏi nhóm?`, { isDanger: true })) return;
                         try {
                           await conversationService.blockMember(activeConversation._id, pid);
                           toast.success('Đã chặn thành viên');
@@ -1047,7 +1049,7 @@ export const ChatRightPanel = ({
                         if (res?.success) toast.success(`Đã bỏ chặn ${targetName}`);
                         else toast.error(res?.error || 'Bỏ chặn thất bại');
                       } else {
-                        if (!window.confirm(`Chặn ${targetName}? Bạn sẽ không thể nhắn tin cho nhau.`)) return;
+                        if (!await confirm(`Chặn ${targetName}? Bạn sẽ không thể nhắn tin cho nhau.`, { isDanger: true })) return;
                         const res = await blockFriend(targetId);
                         if (res?.success) toast.success(`Đã chặn ${targetName}`);
                         else toast.error(res?.error || 'Chặn thất bại');

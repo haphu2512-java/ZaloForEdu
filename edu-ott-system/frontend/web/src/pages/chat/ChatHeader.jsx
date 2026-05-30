@@ -1,3 +1,4 @@
+import toast from "react-hot-toast";
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FaPhone, FaVideo, FaEllipsisV, FaUsers, FaFileAlt, FaSearch } from 'react-icons/fa';
@@ -75,7 +76,7 @@ export const ChatHeader = ({ room, onCall, onVideo, onInfo, onSearchInConv }) =>
     }
 
     if (!myId || !targetUserId) {
-      alert('Không tìm thấy thông tin người nhận.');
+      toast.error('Không tìm thấy thông tin người nhận.');
       return;
     }
 
@@ -91,7 +92,7 @@ export const ChatHeader = ({ room, onCall, onVideo, onInfo, onSearchInConv }) =>
     });
 
     if (!sent) {
-      alert('Mất kết nối realtime, vui lòng thử lại.');
+      toast.error('Mất kết nối realtime, vui lòng thử lại.');
       return;
     }
 
@@ -102,10 +103,10 @@ export const ChatHeader = ({ room, onCall, onVideo, onInfo, onSearchInConv }) =>
   const [callLoading, setCallLoading] = useState(false);
 
   useEffect(() => {
-    const onCallBusy = () => alert('Người dùng đang bận cuộc gọi khác.');
-    const onCallAccepted = () => alert('Người dùng đã chấp nhận cuộc gọi.');
-    const onMissedCall = () => alert('Cuộc gọi không được trả lời.');
-    const onCallDeclined = () => alert('Người dùng đã từ chối cuộc gọi.');
+    const onCallBusy = () => toast.error('Người dùng đang bận cuộc gọi khác.');
+    const onCallAccepted = () => toast.error('Người dùng đã chấp nhận cuộc gọi.');
+    const onMissedCall = () => toast.error('Cuộc gọi không được trả lời.');
+    const onCallDeclined = () => toast.error('Người dùng đã từ chối cuộc gọi.');
 
     socketService.on('call_busy', onCallBusy);
     socketService.on('call:accepted', onCallAccepted);
@@ -128,7 +129,7 @@ export const ChatHeader = ({ room, onCall, onVideo, onInfo, onSearchInConv }) =>
     const conversationId = room._id || room.conversationId || room.id;
 
     if (!myId || !conversationId) {
-      alert('Không tìm thấy thông tin nhóm.');
+      toast.error('Không tìm thấy thông tin nhóm.');
       return;
     }
 
@@ -146,7 +147,7 @@ export const ChatHeader = ({ room, onCall, onVideo, onInfo, onSearchInConv }) =>
     });
 
     if (!sent) {
-      alert('Mất kết nối realtime, vui lòng thử lại.');
+      toast.error('Mất kết nối realtime, vui lòng thử lại.');
       setCallLoading(false);
       return;
     }

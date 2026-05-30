@@ -79,7 +79,14 @@ export function useMessages({ activeConversation, userId, token, getOtherPartici
         (typeof errData?.error === 'object' ? errData?.error?.message : errData?.error) ||
         errData?.message ||
         'Lỗi gửi tin nhắn';
-      toast.error(typeof serverMsg === 'string' ? serverMsg : 'Lỗi gửi tin nhắn');
+
+      // Xử lý riêng cho lỗi bị chặn hoặc chặn người khác (HTTP 403)
+      if (err?.response?.status === 403 && typeof serverMsg === 'string' && serverMsg.includes('chặn')) {
+        toast(serverMsg, { icon: 'ℹ️', duration: 4000 });
+      } else {
+        toast.error(typeof serverMsg === 'string' ? serverMsg : 'Lỗi gửi tin nhắn');
+      }
+      
       setMessages(prev => prev.filter(m => m._id !== tempId));
     }
   };

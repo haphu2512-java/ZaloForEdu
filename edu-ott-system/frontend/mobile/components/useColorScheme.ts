@@ -16,7 +16,8 @@ function resolveTheme(
 ): 'light' | 'dark' {
   if (themeMode === 'light' || themeMode === 'dark') return themeMode;
   if (themeMode === 'system') {
-    return systemTheme === 'dark' ? 'dark' : DEFAULT_THEME_FALLBACK;
+    const hour = new Date().getHours();
+    return (hour >= 18 || hour < 6) ? 'dark' : 'light';
   }
   return DEFAULT_THEME_FALLBACK;
 }

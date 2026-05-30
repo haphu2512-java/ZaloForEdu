@@ -9,6 +9,8 @@ import { useFriendStore } from "../../store/friendStore";
 import { blockService } from "../../services/blockService";
 import api from "../../services/authService";
 import { useNavigate } from "react-router-dom";
+import { useConfirm } from "../../contexts/ConfirmContext";
+import toast from "react-hot-toast";
 import "./UserProfileModal.css";
 import { DEFAULT_AVATAR } from '../../utils/constants';
 
@@ -16,6 +18,7 @@ import { DEFAULT_AVATAR } from '../../utils/constants';
 
 export default function UserProfileModal({ isOpen, onClose, user, status: initialStatus, onStatusChange, onChatOpened }) {
   const navigate = useNavigate();
+  const confirm = useConfirm();
   const { 
     unfriend, 
     blockedUsers, 
@@ -207,7 +210,7 @@ export default function UserProfileModal({ isOpen, onClose, user, status: initia
   };
 
   const handleUnfriend = async () => {
-    if (!window.confirm(`Xóa ${user.username} khỏi danh sách bạn bè?`)) return;
+    if (!await confirm(`Xóa ${user.username} khỏi danh sách bạn bè?`, { isDanger: true })) return;
     setActionLoading("unfriend");
     actionTakenRef.current = true;
     try {
@@ -222,7 +225,7 @@ export default function UserProfileModal({ isOpen, onClose, user, status: initia
 
   // ── Block / Unblock ──────────────────────────────────────────
   const handleBlock = async () => {
-    if (!window.confirm(`Chặn ${user.username}? Người này sẽ không thể liên lạc với bạn.`)) return;
+    if (!await confirm(`Chặn ${user.username}? Người này sẽ không thể liên lạc với bạn.`, { isDanger: true })) return;
     setActionLoading("block");
     actionTakenRef.current = true;
     try {
@@ -230,7 +233,7 @@ export default function UserProfileModal({ isOpen, onClose, user, status: initia
       if (res.success) {
         setStatus("none");
       } else {
-        alert(res.error || "Chặn người dùng thất bại");
+        toast.error(res.error || "Chặn người dùng thất bại");
       }
     } catch {
       actionTakenRef.current = false;
@@ -242,10 +245,10 @@ export default function UserProfileModal({ isOpen, onClose, user, status: initia
     try {
       const res = await unblockUserStore(uid);
       if (!res.success) {
-        alert(res.error || "Không thể bỏ chặn. Thử lại sau.");
+        toast.error(res.error || "Không thể bỏ chặn. Thử lại sau.");
       }
     } catch {
-      alert("Không thể bỏ chặn. Thử lại sau.");
+      toast.error("Không thể bỏ chặn. Thử lại sau.");
     } finally { setActionLoading(null); }
   };
 

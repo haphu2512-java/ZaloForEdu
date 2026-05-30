@@ -4,6 +4,8 @@ import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { FaSearch, FaUsers, FaCloud, FaSpinner, FaUserSecret, FaArrowLeft, FaUserPlus, FaCheck, FaTimes, FaLock, FaGlobe, FaUserFriends, FaInbox, FaShieldAlt } from "react-icons/fa";
 import toast from "react-hot-toast";
 
+import { useConfirm } from "../../contexts/ConfirmContext";
+
 import { uploadFile } from "../../services/mediaService";
 import { useFriendStore } from "../../store/friendStore";
 import { socketService } from "../../services/socketService";
@@ -105,6 +107,7 @@ function UploadBubble({ name, percent }) {
 // ── ReminderDetailModal (tách ra khỏi ChatPage render) ────────────────────────
 function ReminderDetailModal({ reminderId, reminders, userId, onClose, onEdit, onDelete, onJoin, onDecline }) {
   const rem = reminders.find(r => r._id === reminderId);
+  const confirm = useConfirm();
   if (!rem) return null;
   const remDate = new Date(rem.remindAt);
   const dayNames = ['Chủ Nhật', 'Thứ Hai', 'Thứ Ba', 'Thứ Tư', 'Thứ Năm', 'Thứ Sáu', 'Thứ Bảy'];
@@ -162,7 +165,7 @@ function ReminderDetailModal({ reminderId, reminders, userId, onClose, onEdit, o
         </div>
         <div style={{ padding: '12px 20px', borderTop: '1px solid var(--z-border)', display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
           <button onClick={() => { onEdit(rem); onClose(); }} style={{ padding: '8px 20px', borderRadius: 8, border: '1px solid var(--z-border)', background: 'transparent', color: 'var(--z-text-primary)', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>Chỉnh sửa</button>
-          <button onClick={() => { if (window.confirm(`Hủy nhắc hẹn "${rem.title}"?`)) { onDelete(rem._id); onClose(); } }} style={{ padding: '8px 20px', borderRadius: 8, border: 'none', background: '#ffe4e6', color: '#e11d48', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>Hủy nhắc hẹn</button>
+          <button onClick={async () => { if (await confirm(`Hủy nhắc hẹn "${rem.title}"?`)) { onDelete(rem._id); onClose(); } }} style={{ padding: '8px 20px', borderRadius: 8, border: 'none', background: '#ffe4e6', color: '#e11d48', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>Hủy nhắc hẹn</button>
           <button onClick={onClose} style={{ padding: '8px 20px', borderRadius: 8, border: 'none', background: 'var(--z-primary)', color: 'white', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>Đóng</button>
         </div>
       </div>
@@ -177,6 +180,7 @@ export default function ChatPage() {
   const { roomId } = useParams();
   const { appliedTheme } = useTheme();
   const { t } = useLanguage();
+  const confirm = useConfirm();
 
   // ── Core state ────────────────────────────────────────────────────────────
   const [conversations, setConversations] = useState([]);
@@ -213,15 +217,12 @@ export default function ChatPage() {
   const setBlockedUsersRealtime = useFriendStore(state => state.setBlockedUsersRealtime);
 
   const handleBlockStatusChanged = useCallback(() => {
+    // Xóa tất cả các cảnh báo đã chấp nhận vì trạng thái chặn vừa thay đổi
+    setAcceptedBlockWarnings({});
+
     const activeId = activeConvIdRef.current;
     if (!activeId) return;
     const isGroup = activeConversationRef.current?.type === 'group' || activeConversationRef.current?.roomModel === 'Group';
-    
-    setAcceptedBlockWarnings(prev => {
-      const copy = { ...prev };
-      delete copy[activeId];
-      return copy;
-    });
 
     conversationService.checkBlockConflict(activeId).then(res => {
       const hasConflict = res.data?.hasConflict || res.hasConflict;
@@ -803,9 +804,9 @@ export default function ChatPage() {
                   <FaUserPlus size={14} color="var(--z-primary)" style={{ flexShrink: 0 }} />
                   <span style={{ flex: 1, fontSize: 13, color: 'var(--z-text-secondary)' }}><strong style={{ color: 'var(--z-text-primary)' }}>{otherName}</strong> đã gửi lời mời kết bạn</span>
                   <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
-                    <button onClick={async () => { try { await acceptRequest(String(incomingReq._id || incomingReq.id)); await Promise.all([fetchIncomingRequests(), fetchFriends()]); } catch { alert('Không thể chấp nhận'); } }}
+                    <button onClick={async () => { try { await acceptRequest(String(incomingReq._id || incomingReq.id)); await Promise.all([fetchIncomingRequests(), fetchFriends()]); } catch { toast.error('Không thể chấp nhận'); } }}
                       style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 14px', borderRadius: 8, border: 'none', background: 'var(--z-primary)', color: '#fff', cursor: 'pointer', fontWeight: 600, fontSize: 13 }}><FaCheck size={11} />Đồng ý</button>
-                    <button onClick={async () => { try { await rejectRequest(String(incomingReq._id || incomingReq.id)); await fetchIncomingRequests(); } catch { alert('Không thể từ chối'); } }}
+                    <button onClick={async () => { try { await rejectRequest(String(incomingReq._id || incomingReq.id)); await fetchIncomingRequests(); } catch { toast.error('Không thể từ chối'); } }}
                       style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 14px', borderRadius: 8, border: '1px solid var(--z-border)', background: 'transparent', color: 'var(--z-text-secondary)', cursor: 'pointer', fontWeight: 600, fontSize: 13 }}><FaTimes size={11} />Từ chối</button>
                   </div>
                 </div>
