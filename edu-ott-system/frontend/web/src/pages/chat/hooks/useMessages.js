@@ -225,14 +225,18 @@ export function useMessages({ activeConversation, userId, token, getOtherPartici
     setMessages(prev => prev.map(m => {
       if (String(m._id) === String(messageId)) {
         const filtered = (m.reactions || []).filter(r => String(r.userId) !== String(userId));
+        if (!emoji) {
+          return { ...m, reactions: filtered };
+        }
         return { ...m, reactions: [...filtered, { emoji, userId }] };
       }
       return m;
     }));
     try {
+      const payload = emoji ? { emoji } : {};
       await axios.put(
         `${API_BASE_URL}/messages/${messageId}/react`,
-        { emoji },
+        payload,
         { headers: { Authorization: `Bearer ${token}` } }
       );
     } catch { toast.error('Lỗi thả cảm xúc'); }

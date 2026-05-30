@@ -2088,12 +2088,27 @@ export default function ChatScreen() {
                   keyExtractor={(item: any, index) => `${typeof item?.userId === 'string' ? item.userId : item?.userId?._id || item?.userId?.id || index}-${item?.emoji || ''}-${index}`}
                   renderItem={({ item }) => {
                     const info = getReactionUserInfo(item);
+                    const isMyReaction = String(info._id || info.id) === String(currentUserId);
                     return (
                       <View style={styles.reactionUserRow}>
                         <Image source={{ uri: toAbsoluteUrl(info.avatarUrl) }} style={styles.reactionAvatar} />
                         <View style={{ flex: 1 }}>
                           <Text style={{ color: colors.text, fontSize: 18, fontWeight: '700' }}>{info.username}</Text>
-                          <Text style={{ color: colors.muted, fontSize: 14 }}>Nhấn để gỡ</Text>
+                          {isMyReaction ? (
+                            <TouchableOpacity onPress={async () => {
+                              try {
+                                const newReactions = await reactToMessage(getMessageId(reactionModal.message), undefined);
+                                setMessages(prev => prev.map(m => getMessageId(m) === getMessageId(reactionModal.message) ? { ...m, reactions: newReactions || [] } : m));
+                                setReactionModal(prev => ({ ...prev, message: { ...prev.message, reactions: newReactions || [] } as any }));
+                              } catch {
+                                Alert.alert("Lỗi", "Không thể gỡ cảm xúc");
+                              }
+                            }}>
+                              <Text style={{ color: '#0068FF', fontSize: 14, fontWeight: '600' }}>Nhấn để gỡ</Text>
+                            </TouchableOpacity>
+                          ) : (
+                            <Text style={{ color: colors.muted, fontSize: 14 }}>Đã thả cảm xúc</Text>
+                          )}
                         </View>
                         <Text style={{ fontSize: 36 }}>{item?.emoji || '🙂'}</Text>
                       </View>

@@ -368,7 +368,13 @@ export const MessageBubble = ({
             )}
 
             {!isRecalled && reactions?.length > 0 && (
-              <div style={{
+              <div
+                title={reactions.some(r => String(r.userId) === String(userId) || String(r.userId?._id) === String(userId)) ? "Nhấn để gỡ cảm xúc của bạn" : ""}
+                onClick={() => {
+                  const hasReacted = reactions.some(r => String(r.userId) === String(userId) || String(r.userId?._id) === String(userId));
+                  if (hasReacted) onReaction(_id, null);
+                }}
+                style={{
                 position: 'absolute',
                 bottom: '-14px',
                 right: isMe ? '4px' : 'auto',
@@ -383,7 +389,8 @@ export const MessageBubble = ({
                 zIndex: 10,
                 border: '1px solid var(--z-border)',
                 color: 'var(--z-text-primary)',
-                fontSize: '11px'
+                fontSize: '11px',
+                cursor: reactions.some(r => String(r.userId) === String(userId) || String(r.userId?._id) === String(userId)) ? 'pointer' : 'default'
               }}>
                 {reactions.slice(0, 3).map((r, i) => (
                   <div key={i} style={{ display: 'flex', alignItems: 'center' }}>
@@ -456,17 +463,20 @@ export const MessageBubble = ({
 
               {showEmojiPicker && (
                 <div className="mdc-msg-emoji-tray" style={{ right: isMe ? '0' : 'auto', left: isMe ? 'auto' : '0' }}>
-                  {EMOJIS.map(e => (
-                    <span
-                      key={e}
-                      onClick={() => { onReaction(_id, e); setShowEmojiPicker(false); }}
-                      style={{ fontSize: '18px', cursor: 'pointer', transition: 'transform 0.1s' }}
-                      onMouseEnter={(ev) => ev.currentTarget.style.transform = 'scale(1.2)'}
-                      onMouseLeave={(ev) => ev.currentTarget.style.transform = 'scale(1)'}
-                    >
-                      {e}
-                    </span>
-                  ))}
+                  {EMOJIS.map(e => {
+                    const isSelected = reactions?.some(r => r.emoji === e && (String(r.userId) === String(userId) || String(r.userId?._id) === String(userId)));
+                    return (
+                      <span
+                        key={e}
+                        onClick={() => { onReaction(_id, isSelected ? null : e); setShowEmojiPicker(false); }}
+                        style={{ fontSize: '18px', cursor: 'pointer', transition: 'transform 0.1s', background: isSelected ? 'var(--z-primary-light)' : 'transparent', borderRadius: '50%', padding: '0 2px' }}
+                        onMouseEnter={(ev) => ev.currentTarget.style.transform = 'scale(1.2)'}
+                        onMouseLeave={(ev) => ev.currentTarget.style.transform = 'scale(1)'}
+                      >
+                        {e}
+                      </span>
+                    );
+                  })}
                 </div>
               )}
             </div>
