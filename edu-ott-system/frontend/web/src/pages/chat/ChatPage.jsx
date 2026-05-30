@@ -72,17 +72,20 @@ const shouldShowDateDivider = (curr, prev) => {
   return c - p >= DIVIDER_GAP_MS;
 };
 
+// FIX 2 — chỉ hiện nhãn ngữ nghĩa, không có timeStr
 const formatDateDivider = (dateString) => {
   const d = new Date(dateString);
   const now = new Date();
-  const diffDays = Math.round((new Date(now.getFullYear(), now.getMonth(), now.getDate()) - new Date(d.getFullYear(), d.getMonth(), d.getDate())) / 86400000);
+  const diffDays = Math.round(
+    (new Date(now.getFullYear(), now.getMonth(), now.getDate()) -
+      new Date(d.getFullYear(), d.getMonth(), d.getDate())) / 86400000
+  );
   const timeStr = d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', hour12: false });
-  let label;
-  if (diffDays === 0) label = 'Hôm nay';
-  else if (diffDays === 1) label = 'Hôm qua';
-  else if (diffDays < 7) label = ['Chủ nhật', 'Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7'][d.getDay()];
-  else label = d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' });
-  return `${timeStr} ${label}`;
+  if (diffDays === 0) return `Hôm nay ${timeStr}`;
+  if (diffDays === 1) return `Hôm qua ${timeStr}`;
+  const dayNames = ['Chủ nhật', 'Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7'];
+  const dateStr = d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  return `${dayNames[d.getDay()]}, ${dateStr} ${timeStr}`;
 };
 
 function UploadBubble({ name, percent }) {
@@ -195,6 +198,7 @@ export default function ChatPage() {
   const [reportTarget, setReportTarget] = useState(null);
   const [showAddFriendModal, setShowAddFriendModal] = useState(false);
   const [showCreateGroupModal, setShowCreateGroupModal] = useState(false);
+  const [createGroupInitialSelected, setCreateGroupInitialSelected] = useState([]);
   const [showCreatePollModal, setShowCreatePollModal] = useState(false);
   const [showAddMemberModal, setShowAddMemberModal] = useState(false);
   const [reminderDetailId, setReminderDetailId] = useState(null);
@@ -209,6 +213,13 @@ export default function ChatPage() {
   const [showBlockWarningModal, setShowBlockWarningModal] = useState(false);
   const [blockConflictDetails, setBlockConflictDetails] = useState(null);
   const [acceptedBlockWarnings, setAcceptedBlockWarnings] = useState({});
+
+  // ── Pagination state ──────────────────────────────────────────────────────
+  const [msgCursor, setMsgCursor] = useState(null);
+  const [hasMoreMessages, setHasMoreMessages] = useState(false);
+  const [loadingMoreMessages, setLoadingMoreMessages] = useState(false);
+  const messagesContainerRef = useRef(null);
+
   const pageRef = useRef(null);
   const messagesEndRef = useRef(null);
   const activeConvIdRef = useRef(null);
@@ -529,6 +540,10 @@ export default function ChatPage() {
     if (!activeConversation) return;
     setMessages([]);
     setJustSentRequestTo(null);
+    // ── Reset pagination on conversation change ──
+    setMsgCursor(null);
+    setHasMoreMessages(false);
+    setLoadingMoreMessages(false);
     if (activeConversation.isMock) return;
 
     const isGroup = activeConversation.type === 'group' || activeConversation.roomModel === 'Group';
@@ -552,8 +567,9 @@ export default function ChatPage() {
 
     const fetchMessages = async () => {
       try {
-        const res = await axios.get(`${API_BASE_URL}/messages/conversation/${activeConversation._id}?limit=50`, { headers: { Authorization: `Bearer ${token}` } });
+        const res = await axios.get(`${API_BASE_URL}/messages/conversation/${activeConversation._id}?limit=30`, { headers: { Authorization: `Bearer ${token}` } });
         const fetched = res.data.data?.items || res.data.items || [];
+        const nextCursor = res.data.data?.nextCursor || res.data.nextCursor || null;
         const normalized = fetched.map(m => ({
           ...m,
           mediaIds: (m.mediaIds || []).map(media => typeof media === 'object' && media.url && !/^https?:\/\//i.test(media.url) ? { ...media, url: `${API_ORIGIN}${media.url}` } : media)
@@ -564,6 +580,8 @@ export default function ChatPage() {
           return merged.filter(m => { const id = String(m._id); if (seen.has(id)) return false; seen.add(id); return true; })
             .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
         });
+        setMsgCursor(nextCursor);
+        setHasMoreMessages(!!nextCursor);
         setConversations(prev => prev.map(c => String(c._id) === String(activeConversation._id) ? { ...c, unreadCount: 0 } : c));
       } catch { setMessages([]); }
     };
@@ -575,6 +593,64 @@ export default function ChatPage() {
     socketService.socket?.emit("join_conversation", { conversationId: activeConversation._id });
 
   }, [activeConversation?._id, token]);
+
+  // ── Load more messages (pagination) ──────────────────────────────────────
+  const loadMoreMessages = useCallback(async () => {
+    if (!activeConversation || !msgCursor || loadingMoreMessages || !hasMoreMessages) return;
+    setLoadingMoreMessages(true);
+
+    const container = messagesContainerRef.current;
+    const prevScrollHeight = container?.scrollHeight || 0;
+
+    try {
+      const res = await axios.get(
+        `${API_BASE_URL}/messages/conversation/${activeConversation._id}?limit=30&cursor=${msgCursor}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      const fetched = res.data.data?.items || res.data.items || [];
+      const nextCursor = res.data.data?.nextCursor || res.data.nextCursor || null;
+      const normalized = fetched.map(m => ({
+        ...m,
+        mediaIds: (m.mediaIds || []).map(media =>
+          typeof media === 'object' && media.url && !/^https?:\/\//i.test(media.url)
+            ? { ...media, url: `${API_ORIGIN}${media.url}` }
+            : media
+        )
+      }));
+
+      // FIX 1 — snapshot scrollHeight trước setState, restore sau double rAF
+      setMessages(prev => {
+        const merged = [...normalized, ...prev];
+        const seen = new Set();
+        return merged
+          .filter(m => { const id = String(m._id); if (seen.has(id)) return false; seen.add(id); return true; })
+          .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+      });
+      setMsgCursor(nextCursor);
+      setHasMoreMessages(!!nextCursor);
+
+      // Double rAF: lần 1 chờ React schedule, lần 2 chờ DOM paint xong thật sự
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          if (container) {
+            container.scrollTop = container.scrollHeight - prevScrollHeight;
+          }
+        });
+      });
+    } catch (err) {
+      console.error("Lỗi tải thêm tin nhắn:", err);
+    } finally {
+      setLoadingMoreMessages(false);
+    }
+  }, [activeConversation, msgCursor, loadingMoreMessages, hasMoreMessages, token]);
+
+  // ── Scroll handler for infinite load ─────────────────────────────────────
+  const handleMessagesScroll = useCallback((e) => {
+    const container = e.currentTarget;
+    if (container.scrollTop < 80 && hasMoreMessages && !loadingMoreMessages) {
+      loadMoreMessages();
+    }
+  }, [hasMoreMessages, loadingMoreMessages, loadMoreMessages]);
 
   useEffect(() => {
     if (!activeConversation || activeConversation.isMock) return;
@@ -620,6 +696,14 @@ export default function ChatPage() {
   const linkItems = [];
   messages.forEach(m => { if (m.content) { const urls = m.content.match(linkRegex); if (urls) urls.forEach(u => linkItems.push(u)); } });
 
+  const openCreateGroupModal = useCallback(() => {
+    const other = getOtherParticipant(activeConversation);
+    // Truyền object đầy đủ để CreateGroupModal có thể hiển thị badge + so sánh ID
+    const initialSelected = other && typeof other === 'object' ? [other] : [];
+    setCreateGroupInitialSelected(initialSelected);
+    setShowCreateGroupModal(true);
+  }, [activeConversation, getOtherParticipant]);
+
   // ─────────────────────────────────────────────────────────────────────────
   return (
     <div className={`chat-page ${appliedTheme === 'dark' ? 'dark-mode' : ''}`} ref={pageRef}>
@@ -640,7 +724,21 @@ export default function ChatPage() {
       )}
 
       <AddFriendModal isOpen={showAddFriendModal} onClose={() => setShowAddFriendModal(false)} outgoingRequestIds={outgoingRequestIds} friends={friends} />
-      <CreateGroupModal isOpen={showCreateGroupModal} onClose={() => setShowCreateGroupModal(false)} friends={friends} onCreated={newConv => { fetchConversationsData(); setActiveConversation(newConv); }} />
+      <CreateGroupModal
+        isOpen={showCreateGroupModal}
+        onClose={() => {
+          setShowCreateGroupModal(false);
+          setCreateGroupInitialSelected([]);
+        }}
+        friends={friends}
+        initialSelected={createGroupInitialSelected}
+        onCreated={newConv => {
+          fetchConversationsData();
+          setActiveConversation(newConv);
+          navigate('/chat/' + newConv._id);
+          socketService.socket?.emit("join_conversation", { conversationId: newConv._id });
+        }}
+      />
       <TransferOwnerModal isOpen={showTransferOwnerModal} onClose={() => setShowTransferOwnerModal(false)}
         members={(activeConversation?.participants || []).filter(p => String(p._id || p) !== String(userId)).map(p => p._id ? p : { _id: p })}
         adminIds={activeConversation?.adminIds || []} loading={transferOwnerLoading} onConfirm={handleTransferOwnerAndLeave} />
@@ -693,7 +791,7 @@ export default function ChatPage() {
         friendConvs={friendConvs} strangerConvs={strangerConvs}
         activeConversation={activeConversation} setActiveConversation={setActiveConversation}
         navigate={navigate} getConversationName={getConversationName} getConversationAvatar={getConversationAvatar} getOtherParticipant={getOtherParticipant}
-        setShowAddFriendModal={setShowAddFriendModal} setShowCreateGroupModal={setShowCreateGroupModal} setShowStrangerPanel={setShowStrangerPanel}
+        setShowAddFriendModal={setShowAddFriendModal} setShowCreateGroupModal={openCreateGroupModal} setShowStrangerPanel={setShowStrangerPanel}
         userId={userId} friendIds={friendIds}
         handlePinConversation={handlePinConversation} handleClassifyConversation={handleClassifyConversation}
         handleHideConversation={handleHideConversation} handleMuteConversation={handleMuteConversation}
@@ -735,7 +833,12 @@ export default function ChatPage() {
           />
           <PinnedBar pinnedMessages={pinnedMessages} jumpToMessage={jumpToMessage} setShowRightPanel={setShowRightPanel} setUnpinTargetId={setUnpinTargetId} setShowUnpinConfirmModal={setShowUnpinConfirmModal} />
 
-          <div className="chat-messages" style={{ position: 'relative' }}>
+          <div
+            className="chat-messages"
+            style={{ position: 'relative' }}
+            ref={messagesContainerRef}
+            onScroll={handleMessagesScroll}
+          >
             {showSearchInConv && (
               <SearchInConversation
                 conversationId={activeConversation._id}
@@ -750,6 +853,14 @@ export default function ChatPage() {
                 }}
               />
             )}
+
+            {/* ── Load more spinner ── */}
+            {loadingMoreMessages && (
+              <div style={{ display: 'flex', justifyContent: 'center', padding: '12px 0' }}>
+                <FaSpinner className="spin" size={18} color="var(--z-primary)" />
+              </div>
+            )}
+
             {/* Friend request banner */}
             {(() => {
               if (!activeConversation || activeConversation.type === 'group' || activeConversation.roomModel === 'Group') return null;
@@ -1097,7 +1208,8 @@ export default function ChatPage() {
           fetchConversations={fetchConversationsData}
           imgFiles={imgFiles} docFiles={docFiles} linkItems={linkItems}
           handleDeleteConversation={handleDeleteConversation} handleLeaveGroup={handleLeaveGroup}
-          handleDisbandGroup={handleDisbandGroup} setShowCreateGroupModal={setShowCreateGroupModal}
+          handleDisbandGroup={handleDisbandGroup}
+          setShowCreateGroupModal={openCreateGroupModal}
           handleUpdateGroupSettings={handleUpdateGroupSettings} handleMute={handleMute} handleGroupAction={handleGroupAction}
           reminders={reminders} polls={polls} loadingPolls={loadingPolls}
           handleCreateReminder={handleCreateReminder} handleUpdateReminder={handleUpdateReminder} handleDeleteReminder={handleDeleteReminder}
