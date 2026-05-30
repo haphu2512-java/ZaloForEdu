@@ -522,12 +522,14 @@
   border-radius: 24px;
   padding: 8px 12px;
   display: flex;
-  gap: 12px;
+  gap: 8px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
   z-index: 100;
   align-items: center;
   justify-content: center;
   min-width: max-content;
+  max-width: 250px;
+  flex-wrap: wrap;
 }
 
 .mdc-msg-emoji-tray span {
@@ -1330,7 +1332,7 @@
   border: 1px solid var(--z-border);
   border-radius: 8px;
   padding: 12px;
-  box-shadow: 0 10px 25px rgba(0,0,0,0.15);
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
   display: flex;
   align-items: center;
   gap: 12px;
@@ -1397,6 +1399,21 @@
 }
 
 @keyframes slideIn {
-  from { transform: translateX(100%); opacity: 0; }
-  to { transform: translateX(0); opacity: 1; }
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.crp-avatar-overlay {
+  opacity: 0 !important;
+}
+
+div:hover>.crp-avatar-overlay {
+  opacity: 1 !important;
 }

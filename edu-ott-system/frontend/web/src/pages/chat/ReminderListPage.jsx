@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { FaArrowLeft, FaPlus, FaEdit, FaTrash, FaClock, FaCalendarAlt } from 'react-icons/fa';
 import { conversationService } from '../../services/conversationService';
 import toast from 'react-hot-toast';
+import { DEFAULT_AVATAR } from '../../utils/constants';
+
 
 export function ReminderListPage({ 
   conversationId, 
@@ -146,7 +148,7 @@ export function ReminderListPage({
             </div>
             {(rem.participants || []).map(p => (
               <div key={p._id || p} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 0' }}>
-                <img src={p.avatarUrl || 'https://i.pravatar.cc/150'} style={{ width: 40, height: 40, borderRadius: '50%', objectFit: 'cover' }} alt="" />
+                <img src={p.avatarUrl || DEFAULT_AVATAR} style={{ width: 40, height: 40, borderRadius: '50%', objectFit: 'cover' }} alt="" />
                 <span style={{ fontSize: 14, fontWeight: 500, color: 'var(--z-text-primary)' }}>{p.username || 'Người dùng'}</span>
               </div>
             ))}

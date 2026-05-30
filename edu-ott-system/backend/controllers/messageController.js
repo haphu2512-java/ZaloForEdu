@@ -2,6 +2,7 @@ const mongoose = require('mongoose');
 
 const Message = require('../models/Message');
 const User = require('../models/User');
+const Conversation = require('../models/Conversation');
 const ConversationPreference = require('../models/ConversationPreference');
 const GroupMember = require('../models/GroupMember');
 const { createMessage, ensureConversationMember } = require('../services/messageService');
@@ -52,12 +53,13 @@ const sendMessage = asyncHandler(async (req, res) => {
     const otherParticipantId = conversation.participants.find(p => toStr(p) !== toStr(req.user._id));
     if (otherParticipantId) {
       const currentUser = await User.findById(req.user._id);
-      const otherUser = await User.findById(otherParticipantId).select('blockedUsers messagePrivacy friends');
+      const otherUser = await User.findById(otherParticipantId).select('blockedUsers messagePrivacy friends username fullName');
       if (currentUser?.blockedUsers?.some(id => toStr(id) === toStr(otherParticipantId))) {
         throw new ApiError(403, 'FORBIDDEN', 'Bạn đã chặn người này');
       }
       if (otherUser?.blockedUsers?.some(id => toStr(id) === toStr(req.user._id))) {
-        throw new ApiError(403, 'FORBIDDEN', 'Bạn đã bị người này chặn');
+        const otherName = otherUser.fullName || otherUser.username || 'người dùng';
+        throw new ApiError(403, 'FORBIDDEN', `Bạn đã bị ${otherName} chặn, hiện tại không thể gửi tin nhắn.`);
       }
       if (otherUser?.messagePrivacy === 'friends') {
         const isFriend = (otherUser.friends || []).some(f => toStr(f) === toStr(req.user._id));
@@ -86,15 +88,19 @@ const sendMessage = asyncHandler(async (req, res) => {
     await conversation.save();
   }
 
+  // Khi gửi tin nhắn → reset isDeleted=false cho người nhận (giữ deletedHistoryAt để ẩn tin cũ)
+  // Người gửi cũng reset isDeleted của chính mình nếu có
+  const allParticipantIds = (conversation.participants || []).map(p => p.toString());
+  if (allParticipantIds.length > 0) {
+    await ConversationPreference.updateMany(
+      { conversationId, userId: { $in: allParticipantIds }, isDeleted: true },
+      { $set: { isDeleted: false, isHidden: false } }
+    );
+  }
+
   // Populate media để frontend hiển thị ngay
   await message.populate('mediaIds', 'fileName url size mimeType providerResourceType duration');
   await message.populate('senderId', 'username avatarUrl');
-
-  // Un-hide conversation for all participants who had hidden it (e.g. via "delete conversation")
-  await ConversationPreference.updateMany(
-    { conversationId, isHidden: true },
-    { $set: { isHidden: false } }
-  );
 
   if (message.type === 'announcement') {
     socketService.emitToCommunityChannel(
@@ -125,13 +131,52 @@ const listMessagesByConversation = asyncHandler(async (req, res) => {
   const { cursor } = req.query;
   const channelId = req.query.channelId || null;
 
-  await ensureConversationMember(conversationId, req.user._id);
+  const conversation = await ensureConversationMember(conversationId, req.user._id, true);
 
   const query = {
     conversationId,
     channelId,
     deletedBy: { $ne: req.user._id } // Do not fetch messages deleted by this user
   };
+
+  if (conversation._leftAt) {
+    query.createdAt = { $lte: conversation._leftAt };
+  }
+
+  // Lọc tin nhắn trước thời điểm user xóa lịch sử hội thoại
+  const userDeletePref = await mongoose.model('ConversationPreference').findOne({ conversationId, userId: req.user._id });
+  if (userDeletePref && userDeletePref.deletedHistoryAt) {
+    const minDate = userDeletePref.deletedHistoryAt;
+    if (query.createdAt) {
+      if (!query.createdAt.$gte || query.createdAt.$gte < minDate) {
+        query.createdAt.$gte = minDate;
+      }
+    } else {
+      query.createdAt = { $gte: minDate };
+    }
+  }
+
+  if (conversation.type === 'group' && String(conversation.createdBy) !== String(req.user._id)) {
+    const pref = userDeletePref || await mongoose.model('ConversationPreference').findOne({ conversationId, userId: req.user._id });
+    if (pref) {
+      const joinedAt = pref.createdAt;
+      const allowReadHistory = conversation.settings?.allowNewMembersReadHistory;
+      let minDate;
+      if (allowReadHistory === false) {
+        minDate = joinedAt; // Only from the exact moment they joined
+      } else {
+        // allowNewMembersReadHistory is true (default) -> allow reading messages from "today" (00:00 of joined day)
+        minDate = new Date(joinedAt);
+        minDate.setHours(0, 0, 0, 0);
+      }
+      
+      if (query.createdAt) {
+        query.createdAt.$gte = minDate;
+      } else {
+        query.createdAt = { $gte: minDate };
+      }
+    }
+  }
 
   if (cursor) {
     const parsedCursor = decodeCursor(cursor);
@@ -301,6 +346,87 @@ const reactToMessage = asyncHandler(async (req, res) => {
   return successResponse(res, message.reactions, 'Reaction updated');
 });
 
+const searchMessagesInConversation = asyncHandler(async (req, res) => {
+  const { id: conversationId } = req.params;
+  const { q, limit: limitRaw, cursor } = req.query;
+  if (!q || !q.trim()) throw new ApiError(400, 'INVALID_QUERY', 'Search query is required');
+
+  const limit = Math.min(Number(limitRaw) || 20, 100);
+
+  const conversation = await Conversation.findById(conversationId);
+  if (!conversation) throw new ApiError(404, 'NOT_FOUND', 'Conversation not found');
+
+  let isMember = conversation.participants.some((p) => String(p) === String(req.user._id));
+  let leftAt = null;
+  if (!isMember && conversation.pastParticipants) {
+    const pastMember = conversation.pastParticipants.find(p => String(p.userId) === String(req.user._id));
+    if (pastMember) {
+      isMember = true;
+      leftAt = pastMember.leftAt;
+    }
+  }
+
+  if (!isMember) throw new ApiError(403, 'FORBIDDEN', 'Not a member of this conversation');
+
+  const escaped = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const queryRegex = new RegExp(escaped, 'i');
+  const filter = {
+    conversationId,
+    content: queryRegex,
+    isRecalled: { $ne: true },
+    deletedBy: { $ne: req.user._id },
+  };
+
+  if (leftAt) {
+    filter.createdAt = { $lte: leftAt };
+  }
+
+  if (conversation.type === 'group' && String(conversation.createdBy) !== String(req.user._id)) {
+    const pref = await mongoose.model('ConversationPreference').findOne({ conversationId, userId: req.user._id });
+    if (pref) {
+      const joinedAt = pref.createdAt;
+      const allowReadHistory = conversation.settings?.allowNewMembersReadHistory;
+      let minDate;
+      if (allowReadHistory === false) {
+        minDate = joinedAt;
+      } else {
+        minDate = new Date(joinedAt);
+        minDate.setHours(0, 0, 0, 0);
+      }
+      
+      if (filter.createdAt) {
+        filter.createdAt.$gte = minDate;
+      } else {
+        filter.createdAt = { $gte: minDate };
+      }
+    }
+  }
+
+  if (cursor) {
+    const parsed = decodeCursor(cursor);
+    if (!parsed) throw new ApiError(400, 'INVALID_CURSOR', 'Bad cursor');
+    filter.$or = [
+      { createdAt: { $lt: parsed.createdAt } },
+      { createdAt: parsed.createdAt, _id: { $lt: parsed.id } },
+    ];
+  }
+
+  const items = await Message.find(filter)
+    .sort({ createdAt: -1, _id: -1 })
+    .limit(limit + 1)
+    .populate('senderId', 'username avatarUrl fullName');
+
+  let nextCursor = null;
+  let finalItems = items;
+  if (items.length > limit) {
+    const next = items[limit - 1];
+    nextCursor = encodeCursor({ createdAt: next.createdAt, id: next._id.toString() });
+    finalItems = items.slice(0, limit);
+  }
+
+  return successResponse(res, { items: finalItems, nextCursor, limit }, 'Messages found');
+});
+
 module.exports = {
   sendMessage,
   listMessagesByConversation,
@@ -308,4 +434,5 @@ module.exports = {
   deleteMessage: deleteMessageForMe,
   recallMessage,
   reactToMessage,
+  searchMessagesInConversation,
 };

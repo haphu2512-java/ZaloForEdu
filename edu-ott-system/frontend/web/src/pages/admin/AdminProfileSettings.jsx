@@ -1,7 +1,10 @@
 import React, { useState, useEffect, useRef } from "react";
 import { FaUserAlt, FaLock, FaSave, FaSpinner, FaEye, FaEyeSlash, FaShieldAlt, FaEdit, FaCamera, FaTimes, FaEnvelope, FaUserShield } from "react-icons/fa";
+import { toast } from "react-hot-toast";
 import { userService } from "../../services/userService";
 import { authService } from "../../services/authService";
+import { DEFAULT_AVATAR } from '../../utils/constants';
+
 
 export default function AdminProfileSettings() {
   const [adminProfile, setAdminProfile] = useState({ 
@@ -34,7 +37,7 @@ export default function AdminProfileSettings() {
             fullName: userData.fullName || userData.username || "", 
             email: userData.email || "",
             phone: userData.phone || userData.phoneNumber || "",
-            avatarUrl: userData.avatarUrl || userData.avatar || "https://i.pravatar.cc/150?img=11",
+            avatarUrl: userData.avatarUrl || userData.avatar || DEFAULT_AVATAR,
             role: userData.role || "admin"
           });
         }
@@ -65,7 +68,7 @@ export default function AdminProfileSettings() {
       setIsSaving(true);
       
       if (!adminProfile.id) {
-        alert("Lỗi: Không tìm thấy ID User. Vui lòng F5 lại trang!");
+        toast.error("Lỗi: Không tìm thấy ID User. Vui lòng F5 lại trang!");
         setIsSaving(false); return;
       }
 
@@ -78,7 +81,7 @@ export default function AdminProfileSettings() {
           finalAvatarUrl = uploadRes.url || adminProfile.avatarUrl;
         } catch (err) {
           console.error("Lỗi upload ảnh:", err);
-          alert("Tải ảnh lên thất bại. Hệ thống hủy cập nhật để bảo toàn dữ liệu.");
+          toast.error("Tải ảnh lên thất bại. Hệ thống hủy cập nhật để bảo toàn dữ liệu.");
           setIsSaving(false); return;
         }
       }
@@ -116,11 +119,11 @@ export default function AdminProfileSettings() {
       }
       
       setAvatarFile(null);
-      alert("Cập nhật hồ sơ thành công!");
+      toast.success("Cập nhật hồ sơ thành công!");
       setIsEditing(false); 
     } catch (error) { 
       console.error(error);
-      alert("Cập nhật thất bại. Vui lòng kiểm tra lại thông tin!"); 
+      toast.error("Cập nhật thất bại. Vui lòng kiểm tra lại thông tin!"); 
     } finally {
       setIsSaving(false);
     }
@@ -128,18 +131,18 @@ export default function AdminProfileSettings() {
 
   const handleUpdatePassword = async () => {
     if (!passForm.currentPassword || !passForm.newPassword || !passForm.confirmPassword) {
-      return alert("Vui lòng điền đầy đủ thông tin mật khẩu!");
+      return toast.error("Vui lòng điền đầy đủ thông tin mật khẩu!");
     }
     if (passForm.newPassword !== passForm.confirmPassword) {
-      return alert("Mật khẩu xác nhận không khớp!");
+      return toast.error("Mật khẩu xác nhận không khớp!");
     }
     try {
       await authService.changePassword({ currentPassword: passForm.currentPassword, newPassword: passForm.newPassword });
-      alert("Đổi mật khẩu thành công!");
+      toast.success("Đổi mật khẩu thành công!");
       setPassForm({ currentPassword: "", newPassword: "", confirmPassword: "" });
     } catch (error) {
       const errorMsg = error.response?.data?.message || "Đổi mật khẩu thất bại. Vui lòng kiểm tra lại mật khẩu cũ!";
-      alert(errorMsg);
+      toast.error(errorMsg);
     }
   };
 

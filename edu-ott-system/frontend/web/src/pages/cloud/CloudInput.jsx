@@ -132,7 +132,7 @@ export const CloudInput = ({ onSendText, isSending, onUploadFiles, replyTo, onCl
         {/* Emoji picker */}
         {showEmoji && (
           <div ref={emojiRef} style={{ position: 'absolute', bottom: '100%', left: '10px', marginBottom: '10px', zIndex: 50, background: '#fff', border: '1px solid var(--border-color, #E5E7EB)', padding: '8px 12px', borderRadius: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', display: 'flex', gap: '12px' }}>
-            {['😀', '😂', '❤️', '👍', '😢', '🙏'].map(e => (
+            {['😀', '😂', '😍', '🥰', '👍', '❤️', '🔥', '😭', '🙏', '🎉'].map(e => (
               <span key={e} style={{ fontSize: '18px', cursor: 'pointer', transition: 'transform 0.1s' }}
                 onMouseEnter={(ev) => ev.currentTarget.style.transform = 'scale(1.2)'}
                 onMouseLeave={(ev) => ev.currentTarget.style.transform = 'scale(1)'}

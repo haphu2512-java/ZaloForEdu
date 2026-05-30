@@ -20,6 +20,12 @@ const userSettingsSchema = new mongoose.Schema(
       groupEnabled: { type: Boolean, default: true },
       soundEnabled: { type: Boolean, default: true },
     },
+    // Hashed PIN used to lock/unlock hidden conversations (bcrypt)
+    hiddenPinHash: {
+      type: String,
+      default: null,
+      select: false, // Never returned in normal queries
+    },
   },
   { timestamps: true },
 );

@@ -197,7 +197,7 @@ export async function updateProfile(userId: string, payload: UpdateProfilePayloa
     method: 'PUT',
     body: JSON.stringify(payload),
   });
-  const user = res.data;
+  const user = res.data?.user || res.data;
   if (user) {
     await storeUserInfo(user);
   }
@@ -243,24 +243,31 @@ export async function logoutAll(): Promise<void> {
 }
 
 /**
- * Xác thực email
- * POST /auth/verify-email { token, email }
+ * Xác thực email / phone
+ * POST /auth/verify-email { token, email?, phone? }
  */
-export async function verifyEmail(token: string, email: string): Promise<void> {
+export async function verifyEmail(token: string, identifier: string): Promise<void> {
+  const isEmail = identifier.includes('@');
   await fetchAPI(`${AUTH_ENDPOINT}/verify-email`, {
     method: 'POST',
-    body: JSON.stringify({ token, email: email.toLowerCase() }),
+    body: JSON.stringify({ 
+      token, 
+      ...(isEmail ? { email: identifier.toLowerCase() } : { phone: identifier }) 
+    }),
   });
 }
 
 /**
- * Gửi lại mã OTP xác thực email cho user đang đăng nhập
- * POST /auth/resend-verification
+ * Gửi lại mã OTP xác thực email / phone cho user đang đăng nhập
+ * POST /auth/resend-verification { email?, phone? }
  */
-export async function resendVerificationEmail(email: string): Promise<void> {
+export async function resendVerificationEmail(identifier: string): Promise<void> {
+  const isEmail = identifier.includes('@');
   await fetchAPI(`${AUTH_ENDPOINT}/resend-verification`, {
     method: 'POST',
-    body: JSON.stringify({ email }),
+    body: JSON.stringify({
+      ...(isEmail ? { email: identifier.toLowerCase() } : { phone: identifier })
+    }),
   });
 }
 

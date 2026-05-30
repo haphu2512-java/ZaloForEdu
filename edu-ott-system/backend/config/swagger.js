@@ -6,7 +6,7 @@ const options = {
     info: {
       title: 'Zalo Clone - OTT Messaging Platform API',
       version: '2.0.0',
-      description: 'Complete REST API documentation for authentication, users, messaging, friends, conversations, media, notifications, search, settings and chatbot.',
+      description: 'Complete REST API documentation for authentication, users, messaging, friends, conversations, media, notifications, search, settings, chatbot, polls, reminders, communities, channels, social and calls.',
       contact: {
         name: 'Development Team',
         url: 'https://github.com/ZaloClone',
@@ -46,6 +46,11 @@ const options = {
       { name: 'ChatBot' },
       { name: 'Polls', description: 'Tính năng bình chọn trong nhóm lớp học' },
       { name: 'GroupFeatures', description: 'Bảng tin ghim, Duyệt thành viên, Invite Links' },
+      { name: 'Reminders', description: 'Nhắc hẹn trong hội thoại nhóm' },
+      { name: 'Communities', description: 'Cộng đồng / lớp học' },
+      { name: 'Channels', description: 'Kênh thông báo trong cộng đồng' },
+      { name: 'Social', description: 'Bài đăng, bình luận, cảm xúc' },
+      { name: 'Calls', description: 'Gọi thoại và gọi video' },
     ],
     components: {
       securitySchemes: {

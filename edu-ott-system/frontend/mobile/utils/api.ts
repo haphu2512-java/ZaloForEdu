@@ -73,7 +73,7 @@ export const API_BASE_URL = getApiBaseUrl();
 
 export const fetchAPI = async (endpoint: string, options: RequestInit = {}): Promise<any> => {
   const controller = new AbortController();
-  const id = setTimeout(() => controller.abort(), 15000);
+  const id = setTimeout(() => controller.abort(), 60000); // Increased timeout to 60s for media uploads
 
   try {
     let url = `${API_BASE_URL}${endpoint}`;
@@ -168,7 +168,7 @@ export const fetchAPI = async (endpoint: string, options: RequestInit = {}): Pro
     }
     // Only log non-auth errors to reduce noise
     if (error.errorCode !== 'TOKEN_EXPIRED') {
-      console.error(`API Error on ${endpoint}:`, error.message);
+      console.log(`API Error on ${endpoint}:`, error.message);
     }
     throw error; // Rethrow to preserve custom fields like errorCode
   }

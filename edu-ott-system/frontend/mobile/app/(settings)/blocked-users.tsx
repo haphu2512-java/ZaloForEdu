@@ -137,6 +137,7 @@ export default function BlockedUsersScreen() {
             <Stack.Screen
                 options={{
                     title: 'Danh sách chặn',
+                    headerShown: true,
                     headerStyle: {
                         backgroundColor: colorScheme === 'dark' ? colors.surface : colors.tint,
                     },

@@ -79,7 +79,10 @@ const listConversations = asyncHandler(async (req, res) => {
   const excludedConversationIds = hiddenOrDeletedPrefs.map((item) => item.conversationId);
 
   const baseFilter = {
-    participants: req.user._id,
+    $or: [
+      { participants: req.user._id },
+      { 'pastParticipants.userId': req.user._id }
+    ],
     ...(excludedConversationIds.length > 0 ? { _id: { $nin: excludedConversationIds } } : {}),
   };
 
@@ -143,7 +146,7 @@ const listConversations = asyncHandler(async (req, res) => {
   const items = finalItems.map((conversation, index) => {
     const latest = latestMessagesArr[index];
     return {
-      ...conversation.toObject(),
+      ...conversation.toObject({ flattenMaps: true }),
       latestMessage: latest ? latest.toObject() : null,
     };
   });
@@ -200,6 +203,12 @@ const createConversation = asyncHandler(async (req, res) => {
         : { type: 'direct', participants: { $all: uniqueParticipants, $size: 2 } }
     );
     if (existing) {
+      // Khi hội thoại bị xóa được mở lại, giữ nguyên deletedHistoryAt để tin nhắn cũ vẫn bị ẩn
+      // Chỉ reset cờ isDeleted/isHidden để hiện lại trong danh sách
+      await ConversationPreference.updateMany(
+        { conversationId: existing._id, userId: myId },
+        { $set: { isDeleted: false, isHidden: false } }
+      );
       await existing.populate('participants', 'username email avatarUrl isOnline lastSeen messagePrivacy');
       return successResponse(res, existing, 'Conversation already exists');
     }
@@ -214,6 +223,19 @@ const createConversation = asyncHandler(async (req, res) => {
     adminIds: type === 'group' ? [req.user._id] : [],
     lastMessageAt: new Date(),
   });
+
+  const participantsToCreatePref = isSelfConv ? [myId] : uniqueParticipants;
+  const prefOps = participantsToCreatePref.map(uid => ({
+    updateOne: {
+      filter: { conversationId: conversation._id, userId: uid },
+      update: { $set: { conversationId: conversation._id, userId: uid } },
+      upsert: true,
+      setDefaultsOnInsert: true
+    }
+  }));
+  if (prefOps.length > 0) {
+    await ConversationPreference.bulkWrite(prefOps);
+  }
 
   await conversation.populate('participants', 'username email avatarUrl isOnline lastSeen messagePrivacy');
   return successResponse(res, conversation, 'Conversation created', 201);
@@ -233,6 +255,12 @@ const updateGroupName = asyncHandler(async (req, res) => {
     conversationId: conversation._id,
     senderId: req.user._id,
     content: `${senderName} đã đổi tên nhóm thành "${conversation.name}"`,
+  });
+
+  await socketService.emitGroupUpdated(conversation._id.toString(), {
+    conversationId: conversation._id.toString(),
+    action: 'group_name_updated',
+    name: conversation.name
   });
   return successResponse(res, conversation, 'Group name updated');
 });
@@ -296,8 +324,27 @@ const addGroupMembers = asyncHandler(async (req, res) => {
     throw new ApiError(400, 'NO_NEW_MEMBERS', 'All users are already in the group');
   }
 
+  // Remove from pastParticipants if they were previously kicked
+  conversation.pastParticipants = (conversation.pastParticipants || []).filter(
+    (p) => !validMemberIds.includes(toStr(p.userId))
+  );
+
   conversation.participants.push(...validMemberIds);
   await conversation.save();
+
+  // Create or update preferences for new members to track joinedAt date
+  const prefOps = validMemberIds.map(uid => ({
+    updateOne: {
+      filter: { conversationId: conversation._id, userId: uid },
+      update: { 
+        $set: { conversationId: conversation._id, userId: uid, createdAt: new Date() } 
+      },
+      upsert: true
+    }
+  }));
+  if (prefOps.length > 0) {
+    await ConversationPreference.bulkWrite(prefOps);
+  }
 
   const addedUsers = await User.find({ _id: { $in: validMemberIds } }).select('fullName username');
   const addedNames = addedUsers
@@ -311,6 +358,11 @@ const addGroupMembers = asyncHandler(async (req, res) => {
     conversationId: conversation._id,
     senderId: req.user._id,
     content: `${senderName} đã thêm ${addedText} vào nhóm`,
+  });
+
+  await socketService.emitGroupUpdated(conversation._id.toString(), {
+    conversationId: conversation._id.toString(),
+    action: 'members_added',
   });
 
   return successResponse(res, conversation, 'Members added to group');
@@ -341,6 +393,8 @@ const removeGroupMember = asyncHandler(async (req, res) => {
     throw new ApiError(403, 'FORBIDDEN', 'Only group owner can remove other admins');
   }
 
+  if (!conversation.pastParticipants) conversation.pastParticipants = [];
+  conversation.pastParticipants.push({ userId: memberId, leftAt: new Date() });
   conversation.participants = conversation.participants.filter((participantId) => toStr(participantId) !== memberId);
   conversation.adminIds = (conversation.adminIds || []).filter((adminId) => toStr(adminId) !== memberId);
   await conversation.save();
@@ -352,6 +406,12 @@ const removeGroupMember = asyncHandler(async (req, res) => {
     conversationId: conversation._id,
     senderId: req.user._id,
     content: `${senderName} đã mời ${removedName} ra khỏi nhóm`,
+  });
+
+  await socketService.emitGroupUpdated(conversation._id.toString(), {
+    conversationId: conversation._id.toString(),
+    action: 'member_removed',
+    memberId,
   });
 
   return successResponse(res, conversation, 'Member removed from group');
@@ -494,6 +554,8 @@ const leaveGroup = asyncHandler(async (req, res) => {
     throw new ApiError(400, 'OWNER_CANNOT_LEAVE', 'Owner must transfer ownership before leaving group');
   }
 
+  if (!conversation.pastParticipants) conversation.pastParticipants = [];
+  conversation.pastParticipants.push({ userId, leftAt: new Date() });
   conversation.participants = conversation.participants.filter((participantId) => toStr(participantId) !== userId);
   conversation.adminIds = (conversation.adminIds || []).filter((adminId) => toStr(adminId) !== userId);
   await conversation.save();
@@ -503,6 +565,12 @@ const leaveGroup = asyncHandler(async (req, res) => {
     conversationId: conversation._id,
     senderId: req.user._id,
     content: `${senderName} đã rời nhóm`,
+  });
+
+  await socketService.emitGroupUpdated(conversation._id.toString(), {
+    conversationId: conversation._id.toString(),
+    action: 'member_left',
+    userId,
   });
 
   return successResponse(res, conversation, 'Left group successfully');
@@ -520,6 +588,11 @@ const disbandGroup = asyncHandler(async (req, res) => {
   await ConversationPreference.deleteMany({ conversationId: id });
   // Delete conversation
   await conversation.deleteOne();
+
+  await socketService.emitGroupUpdated(id, {
+    conversationId: id,
+    action: 'group_disbanded',
+  });
 
   return successResponse(res, null, 'Group disbanded successfully');
 });
@@ -540,6 +613,12 @@ const updateGroupAvatar = asyncHandler(async (req, res) => {
     content: `${senderName} đã cập nhật ảnh đại diện nhóm`,
   });
 
+  await socketService.emitGroupUpdated(conversation._id.toString(), {
+    conversationId: conversation._id.toString(),
+    action: 'group_avatar_updated',
+    avatarUrl: conversation.avatarUrl
+  });
+
   return successResponse(res, conversation, 'Group avatar updated');
 });
 
@@ -555,7 +634,11 @@ const updateGroupNickname = asyncHandler(async (req, res) => {
     throw new ApiError(404, 'MEMBER_NOT_FOUND', 'User is not in this group');
   }
 
-  conversation.nicknames.set(memberId, nickname.trim());
+  if (nickname.trim() === '') {
+    conversation.nicknames.delete(memberId);
+  } else {
+    conversation.nicknames.set(memberId, nickname.trim());
+  }
   await conversation.save();
 
   const targetUser = await User.findById(memberId).select('fullName username');
@@ -625,7 +708,7 @@ const listArchivedConversations = asyncHandler(async (req, res) => {
   const latestMessagesArr = await Promise.all(latestMessagePromises);
 
   const items = conversations.map((conv, idx) => ({
-    ...conv.toObject(),
+    ...conv.toObject({ flattenMaps: true }),
     latestMessage: latestMessagesArr[idx] ? latestMessagesArr[idx].toObject() : null,
   }));
 
@@ -654,6 +737,49 @@ const updateConversationPreference = asyncHandler(async (req, res) => {
   return successResponse(res, pref, 'Conversation preference updated');
 });
 
+const checkBlockConflict = asyncHandler(async (req, res) => {
+  const conversation = await Conversation.findById(req.params.id);
+  if (!conversation) {
+    return successResponse(res, { hasConflict: false });
+  }
+
+  const currentUserIdStr = req.user._id.toString();
+  const participantIds = conversation.participants.map(p => (p._id || p).toString());
+
+  // 1. Kiểm tra xem user hiện tại có chặn ai trong nhóm không
+  const currentUser = await User.findById(req.user._id).select('blockedUsers');
+  const myBlockedIds = (currentUser?.blockedUsers || []).map(id => (id._id || id).toString());
+  
+  // 2. Lấy thông tin các participants
+  const participants = await User.find({ _id: { $in: conversation.participants } }).select('blockedUsers fullName username');
+  
+  const iBlocked = [];
+  const blockedMe = [];
+
+  participants.forEach(p => {
+    const pid = p._id.toString();
+    if (pid === currentUserIdStr) return;
+
+    // Xem mình có chặn họ không
+    if (myBlockedIds.includes(pid)) {
+      iBlocked.push(p.fullName || p.username || 'Người dùng');
+    }
+
+    // Xem họ có chặn mình không
+    const theirBlockedIds = (p.blockedUsers || []).map(id => (id._id || id).toString());
+    if (theirBlockedIds.includes(currentUserIdStr)) {
+      blockedMe.push(p.fullName || p.username || 'Người dùng');
+    }
+  });
+
+  const hasConflict = iBlocked.length > 0 || blockedMe.length > 0;
+
+  return successResponse(res, { 
+    hasConflict, 
+    details: { iBlocked, blockedMe } 
+  }, hasConflict ? 'Block conflict found' : 'No block conflict');
+});
+
 module.exports = {
   listConversations,
   listArchivedConversations,
@@ -671,5 +797,5 @@ module.exports = {
   pinGroupMessage,
   unpinGroupMessage,
   updateConversationPreference,
+  checkBlockConflict,
 };
-

@@ -4,7 +4,7 @@ import toast from 'react-hot-toast';
 import { fmtTime, getCategory, getExt, getFileColor, formatBytes } from './CloudUtils';
 import { AudioBubble } from '../../components/shared/AudioBubble';
 
-const EMOJIS = ['👍','❤️','😂','😲','😢','😡'];
+const EMOJIS = ['😀', '😂', '😍', '🥰', '👍', '❤️', '🔥', '😭', '🙏', '🎉'];
 
 /* Highlight search keyword trong text */
 function HighlightText({ text, query }) {
@@ -29,12 +29,16 @@ const ReplyIcon = () => (
   </svg>
 );
 
-export function ImagePreview({url,name,onClose}) {
+export function MediaPreview({url,name,type,onClose}) {
   return (
     <div className="mdc-img-overlay" onClick={onClose}>
       <div className="mdc-img-box" onClick={e=>e.stopPropagation()}>
         <button className="mdc-img-close" onClick={onClose}><FaTimes size={16}/></button>
-        <img src={url} alt={name} className="mdc-img-full"/>
+        {type === 'video' ? (
+          <video src={url} controls autoPlay className="mdc-img-full" />
+        ) : (
+          <img src={url} alt={name} className="mdc-img-full"/>
+        )}
         <div className="mdc-img-name">{name}</div>
       </div>
     </div>
@@ -82,8 +86,9 @@ export function CloudMsgBubble({msg, onDelete, onPreview, onReaction, pinnedIds,
   const hasMedia = mediaList.length > 0;
   const media = hasMedia ? mediaList[0] : null;
   const isImage = hasMedia && ((media.mimeType && media.mimeType.startsWith('image/')) || getCategory(media.fileName || "") === "image");
+  const isVideo = hasMedia && ((media.mimeType && media.mimeType.startsWith('video/')) || getCategory(media.fileName || "") === "video");
   const isAudio = hasMedia && ((media.mimeType && media.mimeType.startsWith('audio/')) || getCategory(media.fileName || "") === "audio");
-  const isDocOrVideo = hasMedia && !isImage && !isAudio;
+  const isDoc = hasMedia && !isImage && !isVideo && !isAudio;
   const reactions = msg.reactions || [];
   const isPinned = pinnedIds?.has(msg._id);
 
@@ -174,7 +179,7 @@ export function CloudMsgBubble({msg, onDelete, onPreview, onReaction, pinnedIds,
 
         {/* Image bubble — clean, no filename bar */}
         {hasMedia && isImage && (
-          <div className="mdc-img-bubble" onClick={()=>onPreview(media.url, media.fileName)}>
+          <div className="mdc-img-bubble" onClick={()=>onPreview(media.url, media.fileName, 'image')}>
             <img src={media.url} alt={media.fileName} className="mdc-img-thumb"/>
             {/* Floating download button on hover */}
             <a
@@ -190,8 +195,19 @@ export function CloudMsgBubble({msg, onDelete, onPreview, onReaction, pinnedIds,
           </div>
         )}
 
+        {/* Video bubble */}
+        {hasMedia && isVideo && (
+          <div className="mdc-img-bubble" style={{position:'relative'}} onClick={()=>onPreview(media.url, media.fileName, 'video')}>
+            <video src={media.url} className="mdc-img-thumb" style={{objectFit:'cover'}} />
+            <div style={{position:'absolute',top:0,left:0,right:0,bottom:0,background:'rgba(0,0,0,0.3)',display:'flex',alignItems:'center',justifyContent:'center'}}>
+              <FaPlay size={24} color="white" />
+            </div>
+            <a className="mdc-img-dl-btn" href={media.url} target="_blank" rel="noreferrer" onClick={e=>e.stopPropagation()} title="Tải về"><FaDownload size={11}/></a>
+          </div>
+        )}
+
         {/* File bubble */}
-        {hasMedia && isDocOrVideo && (
+        {hasMedia && isDoc && (
           <div className="mdc-file-bubble">
             <div className="mdc-fb-icon" style={{background:getFileColor(media.fileName)}}>
               <span>{getExt(media.fileName).toUpperCase().slice(0,4) || 'FILE'}</span>

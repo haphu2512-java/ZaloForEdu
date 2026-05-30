@@ -1,15 +1,22 @@
-import { useState, useEffect } from 'react';
-import { FaBell, FaBellSlash, FaThumbtack, FaUserPlus, FaUserSecret, FaArrowLeft, FaTrashAlt, FaSignOutAlt, FaLink, FaEllipsisH, FaChevronDown, FaChevronUp, FaCalendarAlt, FaUserTimes, FaKey, FaSync, FaPen, FaCheck, FaTimes, FaFlag, FaTag, FaPoll, FaCrown, FaStar, FaEdit, FaLevelUpAlt, FaLevelDownAlt, FaBan } from 'react-icons/fa';
+import { useState, useEffect, useRef } from 'react';
+import { FaBell, FaBellSlash, FaThumbtack, FaUserPlus, FaUserSecret, FaArrowLeft, FaTrashAlt, FaSignOutAlt, FaLink, FaEllipsisH, FaChevronDown, FaChevronUp, FaCalendarAlt, FaUserTimes, FaKey, FaSync, FaPen, FaCheck, FaTimes, FaFlag, FaTag, FaPoll, FaCrown, FaStar, FaEdit, FaLevelUpAlt, FaLevelDownAlt, FaBan, FaCamera } from 'react-icons/fa';
 import toast from 'react-hot-toast';
 import { conversationService } from '../../services/conversationService';
 import { pollService } from '../../services/pollService';
+import { uploadFile } from '../../services/mediaService';
+import { userService } from '../../services/userService';
 import { useLanguage } from '../../contexts/LanguageContext';
-import { getFileColor, getExt, formatBytes, toAbsoluteUrl } from './chatUtils';
+import { getFileColor, getExt, formatBytes, toAbsoluteUrl, openDocument } from './chatUtils';
 import PinnedMessagesPanel from './Modals/PinnedMessagesPanel';
 import ReportUserModal from './Modals/ReportUserModal';
+import { useFriendStore } from '../../store/friendStore';
+import { useConfirm } from '../../contexts/ConfirmContext';
 import ClassifyConversationModal from './Modals/ClassifyConversationModal';
 import ConfirmTransferModal from './Modals/ConfirmTransferModal';
 import './MemberMenu.css';
+import { DEFAULT_AVATAR } from '../../utils/constants';
+
+
 
 // Tooltip component
 const Tooltip = ({ text, children }) => {
@@ -76,7 +83,7 @@ export const ChatRightPanel = ({
   handleProcessJoinRequest,
   pendingEditReminder,
   onPendingEditConsumed,
-  onShowReminderList = () => {},
+  onShowReminderList = () => { },
   onShowAddMember,
   onShowPoll,
   pinnedMessages = [],
@@ -86,6 +93,7 @@ export const ChatRightPanel = ({
   loadingPolls = false,
 }) => {
   const { t } = useLanguage();
+  const confirm = useConfirm();
 
   // Local states
   const [rightPanelMode, setRightPanelMode] = useState('default');
@@ -110,6 +118,10 @@ export const ChatRightPanel = ({
   const [convCategory, setConvCategory] = useState('primary');
   const [showConfirmTransfer, setShowConfirmTransfer] = useState(false);
   const [transferTarget, setTransferTarget] = useState(null);
+  const groupAvatarInputRef = useRef(null);
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
+  const [editingNicknameId, setEditingNicknameId] = useState(null);
+  const [nicknameDraft, setNicknameDraft] = useState('');
 
   // Sync category từ preference khi đổi conversation
   useEffect(() => {
@@ -149,10 +161,11 @@ export const ChatRightPanel = ({
       })
       .catch(() => { });
   }, [activeConversation?._id]);
-  
+
 
   const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
   const myId = currentUser._id || currentUser.id;
+  const { blockFriend, unblockUser, blockedUsers } = useFriendStore();
 
   // Only check ownerId, not createdBy (owner can be transferred)
   const isOwner = activeConversation?.ownerId?._id === myId || activeConversation?.ownerId === myId;
@@ -186,6 +199,50 @@ export const ChatRightPanel = ({
     setShowMuteModal(false);
     handleMute(muteOption);
   };
+  const handleGroupAvatarChange = async (e) => {
+    const file = e.target.files[0];
+    if (!file || !isGroup || !canEditGroupInfo) return;
+    try {
+      setIsUploadingAvatar(true);
+      const uploadRes = await userService.uploadAvatar(file);
+      const newAvatarUrl = toAbsoluteUrl(uploadRes.url);
+      await conversationService.updateGroupAvatar(activeConversation._id, newAvatarUrl);
+      setActiveConversation(prev => ({ ...prev, avatarUrl: newAvatarUrl }));
+      fetchConversations?.();
+      toast.success('Cập nhật ảnh nhóm thành công');
+    } catch (err) {
+      console.error('Upload group avatar error:', err);
+      toast.error('Tải ảnh lên thất bại');
+    } finally {
+      setIsUploadingAvatar(false);
+      e.target.value = '';
+    }
+  };
+
+  const handleSaveNickname = async (memberId) => {
+    const keyStr = String(memberId);
+    const current = activeConversation.nicknames?.[keyStr] || '';
+    const draft = nicknameDraft.trim();
+    if (draft === current) { setEditingNicknameId(null); return; }
+    try {
+      await conversationService.updateNickname(activeConversation._id, memberId, draft);
+      setActiveConversation(prev => {
+        const next = { ...prev, nicknames: { ...prev.nicknames } };
+        if (draft === '') {
+          delete next.nicknames[keyStr];
+        } else {
+          next.nicknames[keyStr] = draft;
+        }
+        return next;
+      });
+      fetchConversations?.();
+      toast.success(draft === '' ? 'Đã xóa biệt danh' : 'Đã cập nhật biệt danh');
+    } catch {
+      toast.error('Cập nhật biệt danh thất bại');
+    } finally {
+      setEditingNicknameId(null);
+    }
+  };
 
   return (
     <>
@@ -194,7 +251,40 @@ export const ChatRightPanel = ({
           <>
             {/* HEADER */}
             <div className="crp-header" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '20px 16px', borderBottom: '1px solid var(--z-border)' }}>
-              <img className="crp-avatar" src={getConversationAvatar(activeConversation)} alt="avt" style={{ width: 64, height: 64, borderRadius: '50%', objectFit: 'cover', marginBottom: 12 }} />
+              <div
+                style={{ position: 'relative', width: 64, height: 64, marginBottom: 12, flexShrink: 0 }}
+                onClick={() => isGroup && canEditGroupInfo && !isUploadingAvatar && groupAvatarInputRef.current?.click()}
+              >
+                <img
+                  className="crp-avatar"
+                  src={getConversationAvatar(activeConversation)}
+                  alt="avt"
+                  style={{ width: 64, height: 64, borderRadius: '50%', objectFit: 'cover', opacity: isUploadingAvatar ? 0.5 : 1 }}
+                />
+                {isGroup && canEditGroupInfo && (
+                  <div style={{
+                    position: 'absolute', inset: 0, borderRadius: '50%',
+                    background: 'rgba(0,0,0,0.35)', display: 'flex',
+                    alignItems: 'center', justifyContent: 'center',
+                    opacity: isUploadingAvatar ? 1 : 0,
+                    transition: '0.2s', cursor: 'pointer',
+                    color: '#fff',
+                  }}
+                    className="crp-avatar-overlay"
+                  >
+                    {isUploadingAvatar
+                      ? <span style={{ fontSize: 10 }}>...</span>
+                      : <FaCamera size={18} />}
+                  </div>
+                )}
+                <input
+                  ref={groupAvatarInputRef}
+                  type="file"
+                  accept="image/*"
+                  style={{ display: 'none' }}
+                  onChange={handleGroupAvatarChange}
+                />
+              </div>
 
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, width: '100%', justifyContent: 'center' }}>
                 {isGroupNameEditing ? (
@@ -233,29 +323,29 @@ export const ChatRightPanel = ({
                   <div className="crp-action-icon" style={{ background: isMuted ? 'var(--z-primary-light, #e8f0fe)' : 'var(--z-bg-main)', width: 36, height: 36, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     {isMuted ? <FaBellSlash size={16} color="var(--z-primary)" /> : <FaBell size={16} />}
                   </div>
-                  <span style={{ fontSize: 12 }}>{isMuted ? 'Bật TB' : 'Tắt TB'}</span>
+                  <span style={{ fontSize: 12 }}>{isMuted ? t('unmute') : t('mute')}</span>
                 </div>
 
                 {!isGroup ? (
                   <>
                     <div className="crp-action-btn" style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, cursor: 'pointer', color: 'var(--z-text-primary)' }} onClick={() => toast.success('Đã ghim hội thoại')}>
                       <div className="crp-action-icon" style={{ background: 'var(--z-bg-main)', width: 36, height: 36, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><FaThumbtack size={16} /></div>
-                      <span style={{ fontSize: 12 }}>Ghim</span>
+                      <span style={{ fontSize: 12 }}>{t('pin')}</span>
                     </div>
                     <div className="crp-action-btn" style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, cursor: 'pointer', color: 'var(--z-text-primary)' }} onClick={() => setShowCreateGroupModal(true)}>
                       <div className="crp-action-icon" style={{ background: 'var(--z-bg-main)', width: 36, height: 36, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><FaUserPlus size={16} /></div>
-                      <span style={{ fontSize: 12 }}>Tạo nhóm</span>
+                      <span style={{ fontSize: 12 }}>{t('createGroup')}</span>
                     </div>
                   </>
                 ) : (
                   <>
                     <div className="crp-action-btn" style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, cursor: 'pointer', color: 'var(--z-text-primary)' }} onClick={onShowAddMember}>
                       <div className="crp-action-icon" style={{ background: 'var(--z-bg-main)', width: 36, height: 36, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><FaUserPlus size={16} /></div>
-                      <span style={{ fontSize: 12 }}>Thêm TV</span>
+                      <span style={{ fontSize: 12 }}>{t('addMember')}</span>
                     </div>
                     <div className="crp-action-btn" style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, cursor: 'pointer', color: 'var(--z-text-primary)' }} onClick={() => setRightPanelMode('manage')}>
                       <div className="crp-action-icon" style={{ background: 'var(--z-bg-main)', width: 36, height: 36, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><FaUserSecret size={16} /></div>
-                      <span style={{ fontSize: 12 }}>Quản lý</span>
+                      <span style={{ fontSize: 12 }}>{t('manage')}</span>
                     </div>
                   </>
                 )}
@@ -267,14 +357,14 @@ export const ChatRightPanel = ({
 
               {/* ACCORDION THÀNH VIÊN */}
               {isGroup && (
-                <Accordion title={`Thành viên nhóm (${activeConversation.participants?.length || 0})`}>
+                <Accordion title={`${t('groupMembers')} (${activeConversation.participants?.length || 0})`}>
                   <div style={{ padding: '8px 16px' }}>
                     {(activeConversation.participants || []).map((p, idx) => {
                       const role = getMemberRole(p);
                       const pid = p._id || p.id || p;
                       const keyStr = typeof pid === 'string' ? pid : (pid?._id || pid?.id || `member-${idx}`);
                       const displayName = p.fullName || p.username || 'Người dùng';
-                      const avatarSrc = toAbsoluteUrl(p.avatar || p.avatarUrl) || 'https://i.pravatar.cc/150';
+                      const avatarSrc = toAbsoluteUrl(p.avatar || p.avatarUrl) || DEFAULT_AVATAR;
                       return (
                         <div key={keyStr} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', position: 'relative', borderBottom: '1px solid var(--z-border)' }}>
                           <img src={avatarSrc} style={{ width: 34, height: 34, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} alt="" />
@@ -285,16 +375,48 @@ export const ChatRightPanel = ({
                                 {role === 'owner' ? (
                                   <>
                                     <FaCrown size={10} color="#f59e0b" />
-                                    <span>Trưởng nhóm</span>
+                                    <span>{t('groupOwner')}</span>
                                   </>
                                 ) : (
                                   <>
                                     <FaStar size={10} color="var(--z-primary)" />
-                                    <span>Phó nhóm</span>
+                                    <span>{t('groupAdmin')}</span>
                                   </>
                                 )}
                               </div>
                             )}
+                            {/* Biệt danh */}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 2 }}>
+                              {editingNicknameId === keyStr ? (
+                                <input
+                                  autoFocus
+                                  value={nicknameDraft}
+                                  onChange={e => setNicknameDraft(e.target.value)}
+                                  onBlur={() => handleSaveNickname(p._id || p.id)}
+                                  onKeyDown={e => {
+                                    if (e.key === 'Enter') handleSaveNickname(p._id || p.id);
+                                    if (e.key === 'Escape') setEditingNicknameId(null);
+                                  }}
+                                  style={{
+                                    border: 'none', borderBottom: '1px solid var(--z-primary)',
+                                    background: 'transparent', outline: 'none',
+                                    fontSize: 11, color: 'var(--z-text-secondary)', width: 90
+                                  }}
+                                  placeholder="Biệt danh..."
+                                />
+                              ) : (
+                                <span
+                                  title="Click để đặt biệt danh"
+                                  style={{ fontSize: 11, color: 'var(--z-text-secondary)', cursor: 'pointer' }}
+                                  onClick={() => {
+                                    setNicknameDraft(activeConversation.nicknames?.[keyStr] || '');
+                                    setEditingNicknameId(keyStr);
+                                  }}
+                                >
+                                  {activeConversation.nicknames?.[keyStr] || <em style={{ opacity: 0.5 }}>Đặt biệt danh</em>}
+                                </span>
+                              )}
+                            </div>
                           </div>
                           {isAdmin && keyStr !== myId && role !== 'owner' && (
                             <div
@@ -307,26 +429,18 @@ export const ChatRightPanel = ({
                           {showMemberActionId === keyStr && (
                             <div className="member-action-menu">
                               {/* Đổi biệt danh */}
-                              <div className="member-action-item" onClick={async () => {
-                                const newNickname = prompt('Nhập biệt danh mới cho ' + displayName, activeConversation.nicknames?.[keyStr] || '');
-                                if (newNickname !== null) {
-                                  try {
-                                    await conversationService.updateNickname(activeConversation._id, keyStr, newNickname);
-                                    toast.success('Đã cập nhật biệt danh');
-                                    fetchConversations();
-                                  } catch (err) {
-                                    toast.error('Lỗi khi cập nhật biệt danh');
-                                  }
-                                }
+                              <div className="member-action-item" onClick={() => {
+                                setNicknameDraft(activeConversation.nicknames?.[keyStr] || '');
+                                setEditingNicknameId(keyStr);
                                 setShowMemberActionId(null);
                               }}>
                                 <FaEdit />
                                 <span>Đổi biệt danh</span>
                               </div>
-                              
+
                               {/* Divider */}
                               {isOwner && <div className="member-menu-divider" />}
-                              
+
                               {/* Nâng quyền / Hạ quyền */}
                               {isOwner && role === 'member' && (
                                 <>
@@ -344,7 +458,7 @@ export const ChatRightPanel = ({
                                   </div>
                                 </>
                               )}
-                              
+
                               {isOwner && role === 'admin' && (
                                 <>
                                   <div className="member-action-item" onClick={() => { handleGroupAction('demote', keyStr); setShowMemberActionId(null); }}>
@@ -361,12 +475,12 @@ export const ChatRightPanel = ({
                                   </div>
                                 </>
                               )}
-                              
+
                               {/* Divider */}
                               {isOwner && <div className="member-menu-divider" />}
-                              
+
                               {/* Mời ra khỏi nhóm */}
-                              <div className="member-action-item danger" onClick={() => { if (window.confirm(`Mời ${displayName} ra khỏi nhóm?`)) handleGroupAction('remove', keyStr); setShowMemberActionId(null); }}>
+                              <div className="member-action-item danger" onClick={async () => { if (await confirm(`Mời ${displayName} ra khỏi nhóm?`, { isDanger: true })) handleGroupAction('remove', keyStr); setShowMemberActionId(null); }}>
                                 <FaBan />
                                 <span>Mời ra khỏi nhóm</span>
                               </div>
@@ -381,7 +495,7 @@ export const ChatRightPanel = ({
 
               {/* NHẮC HẸN */}
               {isGroup && (
-                <Accordion title={<span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><FaCalendarAlt size={13} /> Danh sách nhắc hẹn</span>} defaultOpen={false}>
+                <Accordion title={<span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><FaCalendarAlt size={13} /> {t('remindersList')}</span>} defaultOpen={false}>
                   <div style={{ padding: '8px 16px' }}>
                     <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
                       <button
@@ -405,7 +519,7 @@ export const ChatRightPanel = ({
 
               {/* ẢNH / VIDEO */}
               {/* GHIM & GHI CHÚ */}
-              <Accordion title={<span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><FaThumbtack size={13} /> Tin nhắn đã ghim</span>} defaultOpen={false}>
+              <Accordion title={<span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><FaThumbtack size={13} /> {t('pinnedMessages')}</span>} defaultOpen={false}>
                 <div style={{ padding: '8px 16px' }}>
                   <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
                     <button
@@ -430,9 +544,9 @@ export const ChatRightPanel = ({
                           </div>
                         </div>
                         <button title="Bỏ ghim" style={{ border: 'none', background: 'none', color: '#ef4444', cursor: 'pointer', padding: '2px', flexShrink: 0 }}
-                          onClick={(e) => {
+                          onClick={async (e) => {
                             e.stopPropagation();
-                            if (window.confirm('Bỏ ghim tin nhắn này?')) {
+                            if (await confirm('Bỏ ghim tin nhắn này?')) {
                               onUnpin && onUnpin(pin.messageId?._id || pin.messageId);
                             }
                           }}>
@@ -446,7 +560,7 @@ export const ChatRightPanel = ({
 
               {/* BÌNH CHỌN */}
               {isGroup && (
-                <Accordion title={<span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><FaPoll size={13} /> Bình chọn</span>} defaultOpen={false}>
+                <Accordion title={<span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><FaPoll size={13} /> {t('polls')}</span>} defaultOpen={false}>
                   <div style={{ padding: '8px 16px' }}>
                     <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
                       <button
@@ -491,7 +605,7 @@ export const ChatRightPanel = ({
                   {imgFiles.length > 0 ? (
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 4, marginTop: 4 }}>
                       {imgFiles.slice(0, 8).map((m, i) => (
-                        <img key={i} src={m.url} alt="" style={{ width: '100%', aspectRatio: '1/1', objectFit: 'cover', borderRadius: 4 }} />
+                        <img key={i} src={m.url} alt="" style={{ width: '100%', aspectRatio: '1/1', objectFit: 'cover', borderRadius: 4, cursor: 'pointer' }} onClick={() => window.open(m.url, '_blank')} title="Xem ảnh" />
                       ))}
                     </div>
                   ) : <div style={{ fontSize: 13, color: 'var(--z-text-muted)', marginTop: 4, textAlign: 'center' }}>{t('noImageVideo') || 'Chưa có ảnh/video'}</div>}
@@ -499,14 +613,14 @@ export const ChatRightPanel = ({
               </Accordion>
 
               {/* FILE */}
-              <Accordion title="File">
+              <Accordion title={t('files')}>
                 <div style={{ padding: '8px 16px' }}>
                   {docFiles.length > 0 ? (
                     <div style={{ marginTop: 4, display: 'flex', flexDirection: 'column', gap: 10 }}>
                       {docFiles.slice(0, 3).map((m, i) => {
                         const fname = m.name || m.fileName;
                         return (
-                          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }} onClick={() => openDocument(m.url, fname)} title="Xem tài liệu">
                             <div style={{ width: 36, height: 40, borderRadius: 6, background: getFileColor(fname), display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: 10, fontWeight: 'bold', flexShrink: 0 }}>
                               {getExt(fname).substring(0, 3).toUpperCase()}
                             </div>
@@ -523,7 +637,7 @@ export const ChatRightPanel = ({
               </Accordion>
 
               {/* LINK */}
-              <Accordion title="Link">
+              <Accordion title={t('links')}>
                 <div style={{ padding: '8px 16px' }}>
                   {linkItems && linkItems.length > 0 ? (
                     <div style={{ marginTop: 4, display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -545,7 +659,7 @@ export const ChatRightPanel = ({
           <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
             <div style={{ display: 'flex', alignItems: 'center', padding: '16px', borderBottom: '1px solid var(--z-border)', cursor: 'pointer' }} onClick={() => setRightPanelMode('default')}>
               <FaArrowLeft size={16} color="var(--z-text-secondary)" style={{ marginRight: 12 }} />
-              <span style={{ fontSize: 16, fontWeight: 600, color: 'var(--z-text-primary)' }}>Quản lý nhóm</span>
+              <span style={{ fontSize: 16, fontWeight: 600, color: 'var(--z-text-primary)' }}>{t('groupManage')}</span>
             </div>
             <div style={{ flex: 1, overflowY: 'auto' }}>
               <div className="crp-group-manage" style={{ padding: 0 }}>
@@ -705,7 +819,7 @@ export const ChatRightPanel = ({
                   <>
                     {owner && (
                       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-                        <img src={toAbsoluteUrl(owner.avatarUrl || owner.avatar) || 'https://i.pravatar.cc/150'} style={{ width: 44, height: 44, borderRadius: '50%', objectFit: 'cover' }} alt="" />
+                        <img src={toAbsoluteUrl(owner.avatarUrl || owner.avatar) || DEFAULT_AVATAR} style={{ width: 44, height: 44, borderRadius: '50%', objectFit: 'cover' }} alt="" />
                         <div>
                           <div style={{ fontWeight: 600, fontSize: 14 }}>{owner.fullName || owner.username}</div>
                           <div style={{ fontSize: 13, color: 'var(--z-text-secondary)' }}>Trưởng nhóm</div>
@@ -716,14 +830,14 @@ export const ChatRightPanel = ({
                       const adminId = admin._id || admin.id;
                       return (
                         <div key={adminId} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 0', borderTop: '1px solid var(--z-border)' }}>
-                          <img src={toAbsoluteUrl(admin.avatarUrl || admin.avatar) || 'https://i.pravatar.cc/150'} style={{ width: 44, height: 44, borderRadius: '50%', objectFit: 'cover' }} alt="" />
+                          <img src={toAbsoluteUrl(admin.avatarUrl || admin.avatar) || DEFAULT_AVATAR} style={{ width: 44, height: 44, borderRadius: '50%', objectFit: 'cover' }} alt="" />
                           <div style={{ flex: 1 }}>
                             <div style={{ fontWeight: 600, fontSize: 14 }}>{admin.fullName || admin.username}</div>
                             <div style={{ fontSize: 13, color: 'var(--z-text-secondary)' }}>Phó nhóm</div>
                           </div>
                           {isOwner && (
                             <button style={{ border: 'none', background: '#ffe4e6', color: '#e11d48', padding: '6px 16px', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
-                              onClick={() => { if (window.confirm(`Gỡ quyền phó nhóm của ${admin.fullName || admin.username}?`)) handleGroupAction('demote', adminId); }}>
+                              onClick={async () => { if (await confirm(`Gỡ quyền phó nhóm của ${admin.fullName || admin.username}?`)) handleGroupAction('demote', adminId); }}>
                               Xóa
                             </button>
                           )}
@@ -754,13 +868,13 @@ export const ChatRightPanel = ({
             <div style={{ flex: 1, overflowY: 'auto', padding: '0 16px' }}>
               {(activeConversation?.participants?.filter(p => getMemberRole(p) === 'member') || []).map(member => (
                 <div key={member._id || member.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 0', borderBottom: '1px solid var(--z-border)', cursor: 'pointer' }}
-                  onClick={() => {
-                    if (window.confirm(`Chỉ định ${member.fullName || member.username} làm phó nhóm?`)) {
+                  onClick={async () => {
+                    if (await confirm(`Chỉ định ${member.fullName || member.username} làm phó nhóm?`)) {
                       handleGroupAction('promote', member._id || member.id);
                       setRightPanelMode('manage-roles');
                     }
                   }}>
-                  <img src={toAbsoluteUrl(member.avatarUrl || member.avatar) || 'https://i.pravatar.cc/150'} style={{ width: 44, height: 44, borderRadius: '50%', objectFit: 'cover' }} alt="" />
+                  <img src={toAbsoluteUrl(member.avatarUrl || member.avatar) || DEFAULT_AVATAR} style={{ width: 44, height: 44, borderRadius: '50%', objectFit: 'cover' }} alt="" />
                   <div style={{ flex: 1, fontWeight: 500, fontSize: 14 }}>{member.fullName || member.username}</div>
                 </div>
               ))}
@@ -779,13 +893,13 @@ export const ChatRightPanel = ({
               <div style={{ padding: '16px 0', fontSize: 13, color: 'var(--z-text-muted)' }}>Lưu ý: Nếu chuyển quyền trưởng nhóm, bạn sẽ trở thành Phó nhóm.</div>
               {(activeConversation?.participants?.filter(p => getMemberRole(p) !== 'owner') || []).map(member => (
                 <div key={member._id || member.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 0', borderBottom: '1px solid var(--z-border)', cursor: 'pointer' }}
-                  onClick={() => {
-                    if (window.confirm(`Bạn có muốn nhường quyền trưởng nhóm cho ${member.fullName || member.username}? Bạn sẽ không thể khôi phục lại quyền trừ khi người đó chuyển lại cho bạn.`)) {
+                  onClick={async () => {
+                    if (await confirm(`Bạn có muốn nhường quyền trưởng nhóm cho ${member.fullName || member.username}? Bạn sẽ không thể khôi phục lại quyền trừ khi người đó chuyển lại cho bạn.`, { isDanger: true })) {
                       handleGroupAction('transfer', member._id || member.id);
                       setRightPanelMode('default'); // Xong thì nhảy ra ngoài vì không còn là owner
                     }
                   }}>
-                  <img src={toAbsoluteUrl(member.avatarUrl || member.avatar) || 'https://i.pravatar.cc/150'} style={{ width: 44, height: 44, borderRadius: '50%', objectFit: 'cover' }} alt="" />
+                  <img src={toAbsoluteUrl(member.avatarUrl || member.avatar) || DEFAULT_AVATAR} style={{ width: 44, height: 44, borderRadius: '50%', objectFit: 'cover' }} alt="" />
                   <div style={{ flex: 1, fontWeight: 500, fontSize: 14 }}>{member.fullName || member.username}</div>
                 </div>
               ))}
@@ -804,7 +918,7 @@ export const ChatRightPanel = ({
                 const user = req.userId || {};
                 return (
                   <div key={req._id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: '1px solid var(--z-border)' }}>
-                    <img src={user.avatarUrl || 'https://i.pravatar.cc/150'} style={{ width: 44, height: 44, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} alt="" />
+                    <img src={toAbsoluteUrl(user.avatarUrl || user.avatar) || DEFAULT_AVATAR} style={{ width: 44, height: 44, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} alt="" />
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--z-text-primary)' }}>{user.username || 'Người dùng'}</div>
                       {req.reason && <div style={{ fontSize: 12, color: 'var(--z-text-secondary)', marginTop: 2 }}>"{req.reason}"</div>}
@@ -845,11 +959,11 @@ export const ChatRightPanel = ({
                 const isAlreadyBlocked = blockedMembers.some(b => String(b._id || b) === pid);
                 return (
                   <div key={pid} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 0' }}>
-                    <img src={p.avatarUrl || 'https://i.pravatar.cc/150'} style={{ width: 36, height: 36, borderRadius: '50%', objectFit: 'cover' }} alt="" />
+                    <img src={toAbsoluteUrl(p.avatarUrl || p.avatar) || DEFAULT_AVATAR} style={{ width: 36, height: 36, borderRadius: '50%', objectFit: 'cover' }} alt="" />
                     <div style={{ flex: 1, fontSize: 13, fontWeight: 500 }}>{p.username || 'Thành viên'}</div>
                     {!isAlreadyBlocked && (
                       <button onClick={async () => {
-                        if (!window.confirm(`Chặn ${p.username || 'thành viên này'} khỏi nhóm?`)) return;
+                        if (!await confirm(`Chặn ${p.username || 'thành viên này'} khỏi nhóm?`, { isDanger: true })) return;
                         try {
                           await conversationService.blockMember(activeConversation._id, pid);
                           toast.success('Đã chặn thành viên');
@@ -873,7 +987,7 @@ export const ChatRightPanel = ({
               ) : blockedMembers.map(u => {
                 const uid = typeof u === 'string' ? u : (u.id || u._id || String(u));
                 const name = u.username || 'Người dùng';
-                
+
                 const handleUnblock = async () => {
                   try {
                     await conversationService.unblockMember(activeConversation._id, uid);
@@ -887,7 +1001,7 @@ export const ChatRightPanel = ({
 
                 return (
                   <div key={uid} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 0', borderBottom: '1px solid var(--z-border)' }}>
-                    <img src={u.avatarUrl || 'https://i.pravatar.cc/150'} style={{ width: 40, height: 40, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} alt="" />
+                    <img src={toAbsoluteUrl(u.avatarUrl || u.avatar) || DEFAULT_AVATAR} style={{ width: 40, height: 40, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} alt="" />
                     <div style={{ flex: 1, fontSize: 14, fontWeight: 500, color: 'var(--z-text-primary)' }}>{name}</div>
                     <button onClick={handleUnblock} style={{ padding: '5px 14px', borderRadius: 8, border: 'none', background: 'var(--z-bg-main)', color: 'var(--z-primary)', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
                       Bỏ chặn
@@ -915,7 +1029,7 @@ export const ChatRightPanel = ({
               })()}
             </button>
 
-            {/* Nút báo cáo (chỉ hiện với hội thoại 1-1) */}
+            {/* Nút chặn + báo cáo (chỉ hiện với hội thoại 1-1) */}
             {!isGroup && (() => {
               const otherParticipant = (activeConversation?.participants || []).find(p => {
                 const pid = String(p._id || p.id || p);
@@ -924,8 +1038,30 @@ export const ChatRightPanel = ({
               if (!otherParticipant) return null;
               const targetId = String(otherParticipant._id || otherParticipant.id || otherParticipant);
               const targetName = otherParticipant.username || otherParticipant.fullName || 'người dùng này';
+              const isBlockedByMe = blockedUsers.some(u => String(u._id || u.id) === targetId);
               return (
                 <>
+                  {/* Nút chặn / bỏ chặn */}
+                  <button
+                    onClick={async () => {
+                      if (isBlockedByMe) {
+                        const res = await unblockUser(targetId);
+                        if (res?.success) toast.success(`Đã bỏ chặn ${targetName}`);
+                        else toast.error(res?.error || 'Bỏ chặn thất bại');
+                      } else {
+                        if (!await confirm(`Chặn ${targetName}? Bạn sẽ không thể nhắn tin cho nhau.`, { isDanger: true })) return;
+                        const res = await blockFriend(targetId);
+                        if (res?.success) toast.success(`Đã chặn ${targetName}`);
+                        else toast.error(res?.error || 'Chặn thất bại');
+                      }
+                    }}
+                    style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 10, border: `1px solid ${isBlockedByMe ? '#fde68a' : '#fee2e2'}`, background: isBlockedByMe ? '#fffbeb' : '#fff5f5', color: isBlockedByMe ? '#d97706' : '#ef4444', cursor: 'pointer', fontSize: 14, fontWeight: 500 }}
+                  >
+                    <FaBan size={14} />
+                    {isBlockedByMe ? `Bỏ chặn ${targetName}` : `Chặn ${targetName}`}
+                  </button>
+
+                  {/* Nút báo cáo */}
                   <button
                     onClick={() => setShowReportModal(true)}
                     style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 10, border: '1px solid #fee2e2', background: '#fff5f5', color: '#ef4444', cursor: 'pointer', fontSize: 14, fontWeight: 500 }}
@@ -933,7 +1069,6 @@ export const ChatRightPanel = ({
                     <FaFlag size={14} />
                     Báo cáo tài khoản
                   </button>
-                  {/* Modal báo cáo — phải đặt NGOÀI button, không được lồng bên trong */}
                   {showReportModal && (
                     <ReportUserModal
                       targetUserId={targetId}
@@ -1043,10 +1178,10 @@ export const ChatRightPanel = ({
                           if (opt.special === 'custom') return;
                           const now = new Date();
                           let d;
-                          if (opt.special === 'tomorrow9') { 
+                          if (opt.special === 'tomorrow9') {
                             d = new Date(now);
-                            d.setDate(d.getDate() + 1); 
-                            d.setHours(9, 0, 0, 0); 
+                            d.setDate(d.getDate() + 1);
+                            d.setHours(9, 0, 0, 0);
                           } else {
                             d = new Date(now.getTime() + opt.mins * 60000);
                           }

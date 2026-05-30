@@ -29,6 +29,12 @@ const conversationSchema = new mongoose.Schema(
         required: true,
       },
     ],
+    pastParticipants: [
+      {
+        userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+        leftAt: { type: Date, default: Date.now },
+      },
+    ],
     createdBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',

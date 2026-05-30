@@ -6,6 +6,14 @@ const { promisify } = require('node:util');
 
 const execFileAsync = promisify(execFile);
 
+// Use bundled ffmpeg-static binary (no system install required)
+let ffmpegBin;
+try {
+  ffmpegBin = require('ffmpeg-static');
+} catch (_) {
+  ffmpegBin = process.env.FFMPEG_PATH || 'ffmpeg';
+}
+
 const Media = require('../models/Media');
 const asyncHandler = require('../utils/asyncHandler');
 const ApiError = require('../utils/apiError');
@@ -14,17 +22,17 @@ const cloudinaryService = require('../services/cloudinaryService');
 
 const uploadsFolder = path.join(__dirname, '..', 'uploads');
 
-// Convert audio to AAC/M4A using ffmpeg for iOS compatibility
+// Convert audio to AAC/M4A using ffmpeg for browser compatibility
 const convertToM4A = async (inputPath, outputPath) => {
-  const ffmpegPath = process.env.FFMPEG_PATH || 'ffmpeg';
+  const ffmpegPath = ffmpegBin || process.env.FFMPEG_PATH || 'ffmpeg';
   try {
     await execFileAsync(ffmpegPath, [
       '-i', inputPath,
       '-vn',                    // No video
-      '-acodec', 'aac',         // AAC codec - iOS compatible
+      '-acodec', 'aac',         // AAC codec
       '-ar', '44100',           // Sample rate
       '-ab', '128k',            // Bitrate
-      '-movflags', '+faststart', // Optimize for streaming
+      '-movflags', '+faststart', // CRITICAL: put moov atom at front for Chrome streaming
       '-y',                     // Overwrite output
       outputPath
     ]);
@@ -38,6 +46,8 @@ const convertToM4A = async (inputPath, outputPath) => {
 // Determine if a file needs conversion for iOS compatibility
 const needsConversion = (mimeType, filename) => {
   const ext = path.extname(filename).toLowerCase();
+  // ALL m4a from mobile need faststart re-encoding for Chrome compatibility
+  if (ext === '.m4a') return true;
   // WebM and raw MP4 from browser MediaRecorder need conversion
   if (ext === '.webm') return true;
   if (mimeType?.includes('webm')) return true;
@@ -76,12 +86,12 @@ const uploadMediaForm = asyncHandler(async (req, res) => {
   if (isAudio && needsConversion(req.file.mimetype, req.file.originalname)) {
     const inputPath = path.join(uploadsFolder, req.file.filename);
     const baseName = req.file.filename.replace(/\.[^.]+$/, '');
+    const tmpFilename = `${baseName}.tmp_convert.m4a`;
     const m4aFilename = `${baseName}.m4a`;
-    const tmpFilename = `${baseName}.converted.m4a`;
     const tempOutputPath = path.join(uploadsFolder, tmpFilename);
     const outputPath = path.join(uploadsFolder, m4aFilename);
 
-    console.log(`Converting audio: ${req.file.filename} -> ${m4aFilename} (via temp file)`);
+    console.log(`[Audio] Re-encoding with faststart: ${req.file.filename} -> ${m4aFilename}`);
     const converted = await withTimeout(
       convertToM4A(inputPath, tempOutputPath),
       30000,
@@ -89,7 +99,7 @@ const uploadMediaForm = asyncHandler(async (req, res) => {
     );
 
     if (converted) {
-      // Delete original and move converted temp into final path
+      // Remove original (whether it's .m4a or other format), rename temp to final
       await fs.unlink(inputPath).catch(() => null);
       await fs.rename(tempOutputPath, outputPath);
       const stat = await fs.stat(outputPath).catch(() => null);
@@ -97,11 +107,10 @@ const uploadMediaForm = asyncHandler(async (req, res) => {
       finalMimeType = 'audio/mp4';
       finalSize = stat?.size || req.file.size;
       finalUrl = `/uploads/${m4aFilename}`;
-      console.log(`Audio converted successfully: ${m4aFilename}`);
+      console.log(`[Audio] Re-encoded successfully: ${m4aFilename}`);
     } else {
       await fs.unlink(tempOutputPath).catch(() => null);
-      // Fallback: giữ file gốc để không làm mất tin nhắn voice
-      console.warn(`Audio conversion failed, fallback to original file: ${req.file.filename}`);
+      console.warn(`[Audio] Re-encoding failed, serving original: ${req.file.filename}`);
     }
   }
 
