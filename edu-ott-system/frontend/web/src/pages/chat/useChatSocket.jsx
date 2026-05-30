@@ -31,6 +31,7 @@ export const useChatSocket = ({
   setTypingUsers,
   setBlockedUsersRealtime,
   onBlockStatusChanged,
+  setDeletedFriendIds,
 }) => {
   useEffect(() => {
     if (!token) return;
@@ -134,6 +135,22 @@ export const useChatSocket = ({
         if (index === -1) {
           const mockId = `mock_${String(latestMessage?.senderId?._id || latestMessage?.senderId || '')}`;
           const hasMock = prevConvs.some(c => c._id === mockId);
+          if (!isMyMessage) {
+            const senderId = String(latestMessage?.senderId?._id || latestMessage?.senderId || '');
+            if (senderId && setDeletedFriendIds) {
+              // Xóa friendId rồi fetch — dùng Promise để đảm bảo thứ tự
+              setDeletedFriendIds(prev => {
+                const next = new Set(prev);
+                next.delete(senderId);
+                try { sessionStorage.setItem('deletedFriendIds', JSON.stringify([...next])); } catch {}
+                // Fetch sau khi state update xong
+                setTimeout(() => fetchConversationsData(), 50);
+                return next;
+              });
+            } else {
+              setTimeout(() => fetchConversationsData(), 50);
+            }
+          }
           if (hasMock) return prevConvs.filter(c => c._id !== mockId);
           return prevConvs;
         }

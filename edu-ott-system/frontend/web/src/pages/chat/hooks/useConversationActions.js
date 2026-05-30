@@ -21,6 +21,11 @@ export function useConversationActions({
   const [shareModalOpen, setShareModalOpen] = useState(false);
   const [msgToShare, setMsgToShare] = useState(null);
   const [justSentRequestTo, setJustSentRequestTo] = useState(null);
+  const [deleteConfirmTarget, setDeleteConfirmTarget] = useState(null);
+  // Track friendId đã xóa conversation để block mock xuất hiện lại
+  const [deletedFriendIds, setDeletedFriendIds] = useState(() => {
+    try { return new Set(JSON.parse(sessionStorage.getItem('deletedFriendIds') || '[]')); } catch { return new Set(); }
+  });
 
   // ── Pin conversation ───────────────────────────────────────────────────────
   const handlePinConversation = useCallback(async (conv, e) => {
@@ -138,24 +143,10 @@ export function useConversationActions({
     }
   }, [token, activeConversation, getConversationName, navigate]);
 
-  // ── Delete conversation (from ctx menu) ───────────────────────────────────
-  const handleDeleteConversationCtx = useCallback(async (conv) => {
-    if (!window.confirm(`Xóa lịch sử trò chuyện với "${getConversationName(conv)}"?`)) return;
-    try {
-      await conversationService.updateConversationPreference(conv._id, {
-        isHidden: true,
-        clearHistoryAt: new Date().toISOString(),
-      });
-      setConversations(prev => prev.filter(c => String(c._id) !== String(conv._id)));
-      if (String(activeConversation?._id) === String(conv._id)) {
-        setActiveConversation(null);
-        navigate('/chat');
-      }
-      toast.success('Đã xóa cuộc trò chuyện');
-    } catch {
-      toast.error('Có lỗi xảy ra khi xóa');
-    }
-  }, [activeConversation, getConversationName, navigate]);
+  // ── Delete conversation (from ctx menu) — chỉ mở modal xác nhận ────────
+  const handleDeleteConversationCtx = useCallback((conv) => {
+    setDeleteConfirmTarget(conv);
+  }, []);
 
   // ── Leave group (from ctx menu) ───────────────────────────────────────────
   const handleLeaveGroupCtx = useCallback(async (conv) => {
@@ -173,32 +164,57 @@ export function useConversationActions({
     }
   }, [token, activeConversation, getConversationName, navigate]);
 
-  // ── Delete active conversation ────────────────────────────────────────────
-  const handleDeleteConversation = async () => {
+  // ── Delete active conversation (từ right panel) — mở modal xác nhận ────
+  const handleDeleteConversation = () => {
     if (!activeConversation) return;
-    if (!window.confirm(`Bạn có chắc chắn muốn xóa cuộc trò chuyện với ${getConversationName(activeConversation)} không?`)) return;
-    try {
-      if (activeConversation.isMock) { setActiveConversation(null); navigate('/chat'); return; }
-      await conversationService.archiveConversation(activeConversation._id);
-      toast.success('Đã xóa cuộc trò chuyện');
-      setActiveConversation(null);
-      navigate('/chat');
-      fetchConversationsData();
-    } catch {
-      toast.error('Có lỗi xảy ra khi xóa cuộc trò chuyện');
-    }
+    if (activeConversation.isMock) { setActiveConversation(null); navigate('/chat'); return; }
+    setDeleteConfirmTarget(activeConversation);
   };
+
+  // ── Thực sự xóa sau khi user bấm Xác nhận trong modal ─────────────────
+  const confirmDeleteConversation = useCallback(async () => {
+    const conv = deleteConfirmTarget;
+    setDeleteConfirmTarget(null);
+    if (!conv) return;
+    try {
+      await conversationService.updateConversationPreference(conv._id, {
+        isDeleted: true,
+        isHidden: false,
+        deletedHistoryAt: new Date().toISOString(),
+      });
+      setConversations(prev => prev.filter(c => String(c._id) !== String(conv._id)));
+
+      // Lưu friendId để block mock xuất hiện lại (vì backend exclude conv khỏi list)
+      const otherParticipant = (conv.participants || []).find(
+        p => String(p._id || p.id || p) !== String(userId)
+      );
+      if (otherParticipant) {
+        const friendId = String(otherParticipant._id || otherParticipant.id || otherParticipant);
+        setDeletedFriendIds(prev => {
+          const next = new Set(prev);
+          next.add(friendId);
+          try { sessionStorage.setItem('deletedFriendIds', JSON.stringify([...next])); } catch {}
+          return next;
+        });
+      }
+
+      if (String(activeConversation?._id) === String(conv._id)) {
+        setActiveConversation(null);
+        navigate('/chat');
+      }
+      toast.success('Đã xóa cuộc trò chuyện');
+    } catch {
+      toast.error('Có lỗi xảy ra khi xóa');
+    }
+  }, [deleteConfirmTarget, activeConversation, userId, navigate]);
 
   // ── Update group settings ─────────────────────────────────────────────────
   const handleUpdateGroupSettings = async (settings) => {
     if (!activeConversation) return;
-    
-    // Optimistic update
-    setActiveConversation(prev => prev ? { 
-      ...prev, 
-      settings: { ...prev.settings, ...settings } 
+    setActiveConversation(prev => prev ? {
+      ...prev,
+      settings: { ...prev.settings, ...settings }
     } : prev);
-
     try {
       await axios.put(
         `${API_BASE_URL}/conversations/${activeConversation._id}/settings`,
@@ -208,10 +224,9 @@ export function useConversationActions({
       toast.success('Đã cập nhật cài đặt nhóm');
       fetchConversationsData();
     } catch {
-      // Revert optimistic update on error
-      setActiveConversation(prev => prev ? { 
-        ...prev, 
-        settings: activeConversation.settings 
+      setActiveConversation(prev => prev ? {
+        ...prev,
+        settings: activeConversation.settings
       } : prev);
       toast.error('Lỗi cập nhật cài đặt');
     }
@@ -332,6 +347,9 @@ export function useConversationActions({
     handleDeleteConversationCtx,
     handleLeaveGroupCtx,
     handleDeleteConversation,
+    confirmDeleteConversation,
+    deleteConfirmTarget, setDeleteConfirmTarget,
+    deletedFriendIds, setDeletedFriendIds,
     handleUpdateGroupSettings,
     handleGroupAction,
     handleDisbandGroup,

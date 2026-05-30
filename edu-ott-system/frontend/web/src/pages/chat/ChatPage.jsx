@@ -33,6 +33,7 @@ import { conversationService } from "../../services/conversationService";
 import ConversationContextMenu from "./Modals/ConversationContextMenu";
 import ReportUserModal from "./Modals/ReportUserModal";
 import AddMemberModal from "./Modals/AddMemberModal";
+import DeleteConversationModal from "./Modals/DeleteConversationModal";
 
 // ── Custom hooks ──────────────────────────────────────────────────────────────
 import { useMessages } from "./hooks/useMessages";
@@ -386,7 +387,10 @@ export default function ChatPage() {
     handlePinConversation, handleClassifyConversation,
     handleMuteConversation, handleMute,
     handleHideConversation, handleDeleteConversationCtx, handleLeaveGroupCtx,
-    handleDeleteConversation, handleUpdateGroupSettings,
+    handleDeleteConversation, confirmDeleteConversation,
+    deleteConfirmTarget, setDeleteConfirmTarget,
+    deletedFriendIds, setDeletedFriendIds,
+    handleUpdateGroupSettings,
     handleGroupAction, handleDisbandGroup, handleLeaveGroup, handleTransferOwnerAndLeave,
     openShareModal, executeForward, saveMessagePrivacy,
   } = useConversationActions({
@@ -419,6 +423,7 @@ export default function ChatPage() {
     setTypingUsers,
     setBlockedUsersRealtime,
     onBlockStatusChanged: handleBlockStatusChanged,
+    setDeletedFriendIds,
   });
 
   // ── Merged conversation list ───────────────────────────────────────────────
@@ -437,15 +442,16 @@ export default function ChatPage() {
         if (other) directMap.add(String(typeof other === 'string' ? other : (other._id || other.id)));
       }
     });
-    // Build set of participant IDs who have a hidden conversation — skip mock for them
-    const hiddenParticipantIds = new Set(
-      hiddenConvs.flatMap(c =>
+    // Build set of participant IDs who have a hidden OR deleted conversation — skip mock for them
+    const excludedParticipantIds = new Set([
+      ...hiddenConvs.flatMap(c =>
         (c.participants || []).map(p => String(p._id || p.id || p)).filter(id => id !== String(userId))
-      )
-    );
+      ),
+      ...[...deletedFriendIds],
+    ]);
     friends.forEach(friend => {
       const fId = String(friend._id || friend.id);
-      if (!directMap.has(fId) && !hiddenParticipantIds.has(fId)) {
+      if (!directMap.has(fId) && !excludedParticipantIds.has(fId)) {
         convs.push({ _id: `mock_${fId}`, isMock: true, type: 'direct', participants: [{ _id: userId }, friend], latestMessage: null, unreadCount: 0 });
       }
     });
@@ -466,7 +472,7 @@ export default function ChatPage() {
     const filtered = categoryFilter !== 'all' ? deduped.filter(c => (c.preference?.category || 'primary') === categoryFilter) : deduped;
     if (!searchQuery.trim()) return filtered;
     return filtered.filter(c => getConversationName(c).toLowerCase().includes(searchQuery.toLowerCase()));
-  }, [conversations, friends, hiddenConvs, searchQuery, categoryFilter, userId, getConversationName, getOtherParticipant]);
+  }, [conversations, friends, hiddenConvs, deletedFriendIds, searchQuery, categoryFilter, userId, getConversationName, getOtherParticipant]);
 
   const activeIdStr = String(activeConversation?._id || '');
   const { friendConvs, strangerConvs } = useMemo(() => {
@@ -1212,6 +1218,11 @@ export default function ChatPage() {
 
       {ctxMenu && <ConversationContextMenu conv={ctxMenu.conv} position={{ x: ctxMenu.x, y: ctxMenu.y }} onClose={() => setCtxMenu(null)} onPin={handlePinConversation} onClassify={handleClassifyConversation} onHide={handleHideConversation} onDelete={handleDeleteConversationCtx} onReport={conv => { const other = getOtherParticipant(conv); if (other) setReportTarget({ id: String(other._id || other.id), name: other.username || other.fullName || 'người dùng' }); setCtxMenu(null); }} myId={userId} />}
       {reportTarget && <ReportUserModal targetUserId={reportTarget.id} targetUserName={reportTarget.name} onClose={() => setReportTarget(null)} />}
+      <DeleteConversationModal
+        isOpen={!!deleteConfirmTarget}
+        onClose={() => setDeleteConfirmTarget(null)}
+        onConfirm={confirmDeleteConversation}
+      />
     </div>
   );
 }
