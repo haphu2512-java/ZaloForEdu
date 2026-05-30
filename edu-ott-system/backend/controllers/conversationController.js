@@ -203,8 +203,10 @@ const createConversation = asyncHandler(async (req, res) => {
         : { type: 'direct', participants: { $all: uniqueParticipants, $size: 2 } }
     );
     if (existing) {
+      // Khi hội thoại bị xóa được mở lại, giữ nguyên deletedHistoryAt để tin nhắn cũ vẫn bị ẩn
+      // Chỉ reset cờ isDeleted/isHidden để hiện lại trong danh sách
       await ConversationPreference.updateMany(
-        { conversationId: existing._id, userId: { $in: uniqueParticipants } },
+        { conversationId: existing._id, userId: myId },
         { $set: { isDeleted: false, isHidden: false } }
       );
       await existing.populate('participants', 'username email avatarUrl isOnline lastSeen messagePrivacy');
@@ -797,4 +799,3 @@ module.exports = {
   updateConversationPreference,
   checkBlockConflict,
 };
-

@@ -88,6 +88,16 @@ const sendMessage = asyncHandler(async (req, res) => {
     await conversation.save();
   }
 
+  // Khi gửi tin nhắn → reset isDeleted=false cho người nhận (giữ deletedHistoryAt để ẩn tin cũ)
+  // Người gửi cũng reset isDeleted của chính mình nếu có
+  const allParticipantIds = (conversation.participants || []).map(p => p.toString());
+  if (allParticipantIds.length > 0) {
+    await ConversationPreference.updateMany(
+      { conversationId, userId: { $in: allParticipantIds }, isDeleted: true },
+      { $set: { isDeleted: false, isHidden: false } }
+    );
+  }
+
   // Populate media để frontend hiển thị ngay
   await message.populate('mediaIds', 'fileName url size mimeType providerResourceType duration');
   await message.populate('senderId', 'username avatarUrl');
@@ -133,8 +143,21 @@ const listMessagesByConversation = asyncHandler(async (req, res) => {
     query.createdAt = { $lte: conversation._leftAt };
   }
 
+  // Lọc tin nhắn trước thời điểm user xóa lịch sử hội thoại
+  const userDeletePref = await mongoose.model('ConversationPreference').findOne({ conversationId, userId: req.user._id });
+  if (userDeletePref && userDeletePref.deletedHistoryAt) {
+    const minDate = userDeletePref.deletedHistoryAt;
+    if (query.createdAt) {
+      if (!query.createdAt.$gte || query.createdAt.$gte < minDate) {
+        query.createdAt.$gte = minDate;
+      }
+    } else {
+      query.createdAt = { $gte: minDate };
+    }
+  }
+
   if (conversation.type === 'group' && String(conversation.createdBy) !== String(req.user._id)) {
-    const pref = await mongoose.model('ConversationPreference').findOne({ conversationId, userId: req.user._id });
+    const pref = userDeletePref || await mongoose.model('ConversationPreference').findOne({ conversationId, userId: req.user._id });
     if (pref) {
       const joinedAt = pref.createdAt;
       const allowReadHistory = conversation.settings?.allowNewMembersReadHistory;
