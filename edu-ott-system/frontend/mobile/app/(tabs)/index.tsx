@@ -248,8 +248,31 @@ export default function MessagesScreen() {
         await loadConversations();
         Alert.alert('Đã lưu trữ', 'Xem lại trong Cá nhân > Tin nhắn lưu trữ');
       } else if (actionType === 'delete') {
-        await updateConversationPreference(item._id, { isDeleted: true });
-        await loadConversations();
+        // Hiển thị confirmation alert trước khi xóa (không dùng window.alert)
+        Alert.alert(
+          'Xác nhận',
+          'Toàn bộ nội dung trò chuyện sẽ bị xóa vĩnh viễn.\nBạn có chắc chắn muốn xóa?',
+          [
+            { text: 'Không', style: 'cancel' },
+            {
+              text: 'Xóa',
+              style: 'destructive',
+              onPress: async () => {
+                try {
+                  await updateConversationPreference(item._id, {
+                    isDeleted: true,
+                    isHidden: false,
+                    deletedHistoryAt: new Date().toISOString(),
+                  });
+                  await loadConversations();
+                } catch (e: any) {
+                  Alert.alert('Lỗi', e.message || 'Không thể xóa cuộc trò chuyện');
+                }
+              },
+            },
+          ]
+        );
+        return; // không rơi vào catch bên ngoài
       } else if (actionType === 'details') {
         router.push({ pathname: '/conversation-details', params: { id: item._id } });
       } else if (actionType === 'pin') {
