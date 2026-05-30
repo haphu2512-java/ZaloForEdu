@@ -71,6 +71,17 @@ export default function ProfilePage() {
   const [otpVerifying, setOtpVerifying] = useState(false);
   const [verifiedContacts, setVerifiedContacts] = useState({ email: true, phone: true });
   const otpInputRefs = useRef([]);
+  const [resendCooldown, setResendCooldown] = useState(0);
+
+  useEffect(() => {
+    let timer;
+    if (resendCooldown > 0) {
+      timer = setInterval(() => {
+        setResendCooldown((prev) => prev - 1);
+      }, 1000);
+    }
+    return () => clearInterval(timer);
+  }, [resendCooldown]);
 
   useEffect(() => {
     const fetchUserProfile = async () => {
@@ -198,10 +209,12 @@ export default function ProfilePage() {
         setOtpDigits(['','','','','','']);
         setOtpError('');
         setOtpModal({ type: 'phone', contact: updateData.phone });
+        setResendCooldown(60);
       } else if (requiresEmailVerification && updateData.email) {
         setOtpDigits(['','','','','','']);
         setOtpError('');
         setOtpModal({ type: 'email', contact: updateData.email });
+        setResendCooldown(60);
       } else {
         toast.success('Cập nhật thông tin thành công!');
       }
@@ -268,6 +281,7 @@ export default function ProfilePage() {
     setOtpDigits(['','','','','','']);
     setOtpError('');
     setOtpModal({ type, contact });
+    setResendCooldown(60);
     const token = localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken');
     try {
       const payload = type === 'phone' ? { phone: contact } : { email: contact };
@@ -278,6 +292,31 @@ export default function ProfilePage() {
       // Nếu OTP cũ còn hạn cooldown → báo lỗi nhẹ, không đóng modal
       const msg = err.response?.data?.message || '';
       if (msg) setOtpError(msg);
+      if (err.response?.status === 429) {
+         const match = msg.match(/\d+/);
+         if (match) setResendCooldown(parseInt(match[0], 10));
+      }
+    }
+  };
+
+  const handleResendOtp = async () => {
+    if (resendCooldown > 0) return;
+    const token = localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken');
+    try {
+      const payload = otpModal.type === 'phone' ? { phone: otpModal.contact } : { email: otpModal.contact };
+      await axios.post(`${API_BASE_URL}/auth/resend-otp`, payload, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      setResendCooldown(60);
+      setOtpError('');
+      toast.success('Đã gửi lại mã OTP!');
+    } catch (err) {
+      const msg = err.response?.data?.message || 'Lỗi gửi lại mã OTP';
+      setOtpError(msg);
+      if (err.response?.status === 429) {
+         const match = msg.match(/\d+/);
+         if (match) setResendCooldown(parseInt(match[0], 10));
+      }
     }
   };
 
@@ -800,6 +839,26 @@ export default function ProfilePage() {
                   style={{ width: 46, height: 56, textAlign: 'center', fontSize: 22, fontWeight: 700, borderRadius: 12, border: `1.5px solid ${otpError ? '#ef4444' : 'var(--border-color)'}`, background: 'var(--input-bg)', color: 'var(--text-primary)', outline: 'none', boxSizing: 'border-box' }}
                 />
               ))}
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 20 }}>
+              <span style={{ fontSize: 14, color: 'var(--text-secondary)' }}>
+                Bạn chưa nhận được mã?{' '}
+                <button
+                  onClick={handleResendOtp}
+                  disabled={resendCooldown > 0 || otpVerifying}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: resendCooldown > 0 ? '#9CA3AF' : '#4F46E5',
+                    fontWeight: 600,
+                    cursor: resendCooldown > 0 ? 'not-allowed' : 'pointer',
+                    padding: 0,
+                  }}
+                >
+                  {resendCooldown > 0 ? `Gửi lại mã (${resendCooldown}s)` : 'Gửi lại mã'}
+                </button>
+              </span>
             </div>
 
             <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>

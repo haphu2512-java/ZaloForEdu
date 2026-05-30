@@ -231,6 +231,11 @@ const resendOtp = asyncHandler(async (req, res) => {
     user.lastOtpSentAt = now;
     await user.save();
     sendSmsOtp(phone, otp, 'verify');
+    if (user.email) {
+      await sendEmailOtp(user.email, otp, 'Mã OTP xác thực số điện thoại ZaloApp').catch((err) =>
+        console.error('[RESEND OTP] ❌ Lỗi gửi email OTP thay thế SMS:', err.message)
+      );
+    }
   }
 
   return successResponse(res, {}, 'Đã gửi lại mã OTP');
@@ -354,6 +359,11 @@ const forgotPassword = asyncHandler(async (req, res) => {
     );
   } else if (phone) {
     sendSmsOtp(phone, otp, 'forgot_password');
+    if (user.email) {
+      await sendEmailOtp(user.email, otp, 'Mã OTP đặt lại mật khẩu ZaloApp').catch((err) =>
+        console.error('Failed to send reset email fallback', err),
+      );
+    }
   }
 
   return successResponse(res, {}, 'Nếu tài khoản tồn tại, mã OTP đã được gửi đi.');
