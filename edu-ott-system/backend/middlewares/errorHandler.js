@@ -53,9 +53,10 @@ const errorHandler = (err, _req, res, _next) => {
     details = err.keyValue;
   }
 
-  if (err instanceof ZodError) {
+  if (err instanceof ZodError || err.details?.name === 'ZodError') {
+    const zodErr = err instanceof ZodError ? err : err.details;
     message = 'Invalid payload';
-    details = err.flatten();
+    details = zodErr.flatten();
   }
 
   if (statusCode >= 500) {
