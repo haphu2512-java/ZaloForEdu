@@ -47,6 +47,14 @@ const router = express.Router();
  */
 router.get('/', auth, validate({ query: conversationPaginationQuerySchema }), conversationController.listConversations);
 
+// API kiểm tra block conflict trong group
+router.get(
+  '/:id/check-block-conflict',
+  auth,
+  validate({ params: conversationIdParamSchema }),
+  conversationController.checkBlockConflict
+);
+
 /**
  * @openapi
  * /conversations/archived:

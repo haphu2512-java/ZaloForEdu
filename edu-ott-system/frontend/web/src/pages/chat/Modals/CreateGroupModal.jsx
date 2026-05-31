@@ -3,7 +3,7 @@ import { FaTimes, FaCamera, FaSearch, FaSpinner, FaUsers } from "react-icons/fa"
 import { conversationService } from "../../../services/conversationService";
 import { userService } from "../../../services/userService";
 
-export default function CreateGroupModal({ isOpen, onClose, friends = [], onCreated }) {
+export default function CreateGroupModal({ isOpen, onClose, friends = [], onCreated, initialSelected = [] }) {
   const [groupName, setGroupName] = useState("");
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState(new Set());
@@ -14,13 +14,24 @@ export default function CreateGroupModal({ isOpen, onClose, friends = [], onCrea
   const fileInputRef = useRef(null);
 
   useEffect(() => {
-    if (!isOpen) { 
-      setGroupName(""); 
-      setSearch(""); 
-      setSelected(new Set()); 
-      setError(""); 
+    if (!isOpen) {
+      setGroupName("");
+      setSearch("");
+      setSelected(new Set());
+      setError("");
       setAvatarFile(null);
       setAvatarPreview(null);
+    } else {
+      // Khi modal mở, sync initialSelected vào selected (dạng Set<string ID>)
+      if (initialSelected && initialSelected.length > 0) {
+        const ids = initialSelected.map(f => {
+          if (typeof f === 'string') return f;
+          return String(f._id || f.id || '');
+        }).filter(Boolean);
+        setSelected(new Set(ids));
+      } else {
+        setSelected(new Set());
+      }
     }
   }, [isOpen]);
 
@@ -103,12 +114,12 @@ export default function CreateGroupModal({ isOpen, onClose, friends = [], onCrea
 
         {/* Group name + avatar placeholder */}
         <div style={styles.nameRow}>
-          <input 
-            type="file" 
-            accept="image/*" 
-            ref={fileInputRef} 
-            onChange={handleFileChange} 
-            style={{ display: 'none' }} 
+          <input
+            type="file"
+            accept="image/*"
+            ref={fileInputRef}
+            onChange={handleFileChange}
+            style={{ display: 'none' }}
           />
           <div style={styles.groupAvatarLocator} onClick={() => fileInputRef.current?.click()}>
             {avatarPreview ? (

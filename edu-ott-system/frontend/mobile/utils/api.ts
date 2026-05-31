@@ -166,9 +166,9 @@ export const fetchAPI = async (endpoint: string, options: RequestInit = {}): Pro
     if (error.name === 'AbortError') {
       throw new Error('Lỗi kết nối tới máy chủ (Timeout). Vui lòng kiểm tra lại mạng hoặc IP backend.');
     }
-    // Only log non-auth errors to reduce noise (warn, not error, to avoid LogBox)
+    // Only log non-auth errors to reduce noise
     if (error.errorCode !== 'TOKEN_EXPIRED') {
-      console.warn(`API Error on ${endpoint}:`, error.message);
+      console.log(`API Error on ${endpoint}:`, error.message);
     }
     throw error; // Rethrow to preserve custom fields like errorCode
   }

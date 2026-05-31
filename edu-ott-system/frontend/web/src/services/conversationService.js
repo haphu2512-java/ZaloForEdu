@@ -294,4 +294,8 @@ export const conversationService = {
     );
     return res.data;
   },
+  checkBlockConflict: async (conversationId) => {
+    const res = await axios.get(`${API_URL}/conversations/${conversationId}/check-block-conflict`, getAuthHeaders());
+    return res.data;
+  },
 };

@@ -5,7 +5,12 @@ import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { LogBox } from 'react-native';
 import 'react-native-reanimated';
+
+// Tắt toàn bộ LogBox warning/error banner trước khi deploy sản phẩm
+// (người dùng cuối không cần thấy các cảnh báo kỹ thuật nội bộ)
+LogBox.ignoreAllLogs();
 
 import { useColorScheme } from '@/components/useColorScheme';
 import { AuthProvider } from '../context/auth';

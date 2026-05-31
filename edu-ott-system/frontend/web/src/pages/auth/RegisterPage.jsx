@@ -57,7 +57,9 @@ export default function RegisterPage() {
     } else {
       const isEmail = idVal.includes("@") || /[a-zA-Z]/.test(idVal);
       if (isEmail) {
-        if (!/^[^\s@]+@gmail\.com$/.test(idVal)) {
+        if (!/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(idVal)) {
+          errs.identifier = "Email không đúng định dạng (VD: abc@gmail.com)";
+        } else if (!/@gmail\.com$/.test(idVal)) {
           errs.identifier = "Chỉ hỗ trợ tài khoản @gmail.com";
         }
       } else {
@@ -70,6 +72,8 @@ export default function RegisterPage() {
 
     if (!form.password) errs.password = "Vui lòng nhập mật khẩu";
     else if (form.password.length < 6) errs.password = "Tối thiểu 6 ký tự";
+    else if (!/[0-9]/.test(form.password)) errs.password = "Mật khẩu phải chứa ít nhất một số";
+    else if (!/[A-Z]/.test(form.password)) errs.password = "Mật khẩu phải chứa ít nhất một chữ in hoa";
 
     if (!form.confirmPassword) errs.confirmPassword = "Vui lòng xác nhận mật khẩu";
     else if (form.password !== form.confirmPassword) errs.confirmPassword = "Mật khẩu không khớp";
@@ -110,7 +114,7 @@ export default function RegisterPage() {
         newErrs.identifier = result.error;
       } else if (errMsg.includes("username") || errMsg.includes("người dùng") || errMsg.includes("tên")) {
         newErrs.username = result.error;
-      } else if (errMsg.includes("password") || errMsg.includes("mật khẩu")) {
+      } else if (errMsg.includes("password") || errMsg.includes("mật khẩu") || errMsg.includes("ký tự") || errMsg.includes("số") || errMsg.includes("in hoa")) {
         newErrs.password = result.error;
       }
       

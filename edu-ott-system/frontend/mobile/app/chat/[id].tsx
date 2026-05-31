@@ -31,11 +31,12 @@ import {
   recallMessage,
   reactToMessage,
   getConversations,
+  checkBlockConflict,
 } from '../../utils/messageService';
 import { API_BASE_URL } from '../../utils/api';
 import { getPinnedMessages, pinMessage, unpinMessage } from '../../utils/groupFeatureService';
 import { getMediaById, uploadMediaForm } from '../../utils/mediaService';
-import { getBlockedUsers, blockOrUnblockUser } from '@/utils/userService';
+import { getBlockedUsers, blockOrUnblockUser, getMyCloudStorage } from '@/utils/userService';
 import { toAbsoluteUrl } from '@/utils/url';
 import {
   connectSocket,
@@ -76,8 +77,9 @@ function getConversationIdFromMessage(msg: Message): string {
 
 function getConversationTitle(conv: Conversation, currentUserId: string) {
   if (conv.type === 'group') return conv.name || 'Nhóm chat';
+  if (conv.type === 'direct' && conv.participants?.every(p => (typeof p === 'string' ? p : (p._id || p.id || '')) === currentUserId)) return 'My Documents';
   const otherUser = conv.participants?.find((p) => (p._id || p.id) !== currentUserId);
-  return otherUser?.username || 'Cuộc trò chuyện';
+  return otherUser?.username || otherUser?.fullName || 'Cuộc trò chuyện';
 }
 
 function isImageMimeType(mimeType?: string): boolean {
@@ -150,8 +152,27 @@ function extractMediaId(mediaItem: any): string {
   return mediaItem._id || mediaItem.id || '';
 }
 
+const formatBytes = (bytes: number, decimals = 2) => {
+  if (!bytes || bytes === 0) return '0 Bytes';
+  const k = 1024;
+  const dm = decimals < 0 ? 0 : decimals;
+  const sizes = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+};
+
+const getCategory = (filename: string) => {
+  const ext = filename.split('.').pop()?.toLowerCase() || '';
+  if (['png', 'jpg', 'jpeg', 'gif', 'webp'].includes(ext)) return 'image';
+  if (['mp4', 'mov', 'avi', 'mkv'].includes(ext)) return 'video';
+  if (['mp3', 'wav', 'm4a'].includes(ext)) return 'audio';
+  return 'document';
+};
+
+const acceptedBlockWarnings: Record<string, boolean> = {};
+
 export default function ChatScreen() {
-  const { id: conversationId } = useLocalSearchParams<{ id: string }>();
+  const { id: conversationId, isSelf } = useLocalSearchParams<{ id: string; isSelf?: string }>();
   const router = useRouter();
   const { user } = useAuth();
   const insets = useSafeAreaInsets();
@@ -159,6 +180,8 @@ export default function ChatScreen() {
   const colors = Colors[colorScheme === 'dark' ? 'dark' : 'light'];
 
   const [messages, setMessages] = useState<Message[]>([]);
+  const [showBlockWarning, setShowBlockWarning] = useState(false);
+  const [blockConflictDetails, setBlockConflictDetails] = useState<any>(null);
   const currentUserId = user?.id || (user as any)?._id || '';
   const [inputText, setInputText] = useState('');
   const [isLoading, setIsLoading] = useState(true);
@@ -180,6 +203,8 @@ export default function ChatScreen() {
   const [isForwarding, setIsForwarding] = useState(false);
   const [conversation, setConversation] = useState<Conversation | null>(null);
   const [pinnedItems, setPinnedItems] = useState<any[]>([]);
+  const [storageData, setStorageData] = useState<{ totalBytes: number; imageCount: number; docCount: number; linkCount: number } | null>(null);
+  const [cloudFilterTab, setCloudFilterTab] = useState<'all' | 'image' | 'file' | 'text'>('all');
   const [mediaById, setMediaById] = useState<Record<string, MediaItem>>({});
   const [actionMenu, setActionMenu] = useState<{ visible: boolean; options: ChatActionMenuOption[] }>({ visible: false, options: [] });
   const [viewImageUrl, setViewImageUrl] = useState<string | null>(null);
@@ -193,6 +218,13 @@ export default function ChatScreen() {
     emojiFilter: null,
   });
   const [reactionPickerMsg, setReactionPickerMsg] = useState<Message | null>(null);
+  const [messageDetailsModal, setMessageDetailsModal] = useState<{
+    visible: boolean;
+    message: Message | null;
+  }>({
+    visible: false,
+    message: null,
+  });
 
   // Tránh mở Picker nhiều lần cùng lúc gây lỗi "picking in progress"
   const isPicking = useRef(false);
@@ -201,18 +233,43 @@ export default function ChatScreen() {
   const isTypingRef = useRef(false);
   const typingStopTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const otherParticipant =
-    conversation?.type === 'direct'
-      ? conversation.participants?.find((p) => (p._id || p.id || '') !== currentUserId)
-      : null;
+  const otherParticipant = conversation?.type === 'group'
+    ? null
+    : conversation?.participants?.length === 1 && conversation.participants[0] === currentUserId
+      ? conversation.participants[0]
+      : conversation?.participants?.find((p) => (p._id || p.id || '') !== currentUserId);
+
+  const isSelfConv = isSelf === 'true' || (conversation?.type === 'direct' && conversation?.participants?.every(p => (typeof p === 'string' ? p : (p._id || p.id || '')) === currentUserId));
+
+  const filteredMessages = useMemo(() => {
+    if (!isSelfConv || cloudFilterTab === 'all') return messages;
+    return messages.filter(msg => {
+      const media = msg.mediaIds?.[0] ? mediaById[typeof msg.mediaIds[0] === 'string' ? msg.mediaIds[0] : (msg.mediaIds[0] as any)._id] : null;
+      const isImageOrVideo = media && ['image', 'video'].includes(getCategory(media.fileName || ''));
+      const isFile = media && !isImageOrVideo;
+      
+      if (cloudFilterTab === 'text') return !media && !!msg.content;
+      if (cloudFilterTab === 'image') return isImageOrVideo;
+      if (cloudFilterTab === 'file') return isFile;
+      return true;
+    });
+  }, [messages, isSelfConv, cloudFilterTab, mediaById]);
+
+  useEffect(() => {
+    if (isSelfConv) {
+      getMyCloudStorage().then(res => setStorageData(res)).catch(err => console.log('Fetch storage error:', err));
+    }
+  }, [isSelfConv]);
 
   const conversationTitle =
     conversation?.preference?.nickname ||
-    (conversation ? getConversationTitle(conversation, currentUserId) : 'Trò chuyện');
+    (isSelfConv ? 'My Documents' : (conversation ? getConversationTitle(conversation, currentUserId) : 'Trò chuyện'));
 
   const headerAvatarUrl = conversation?.type === 'group'
     ? toAbsoluteUrl(conversation.avatarUrl || (conversation as any).avatar) || `https://ui-avatars.com/api/?name=${encodeURIComponent(conversationTitle)}&background=8B5CF6&color=fff&size=150&bold=true`
-    : toAbsoluteUrl(otherParticipant?.avatarUrl || (otherParticipant as any)?.avatar) || `https://ui-avatars.com/api/?name=${encodeURIComponent(conversationTitle)}&background=2563EB&color=fff&size=150&bold=true`;
+    : (conversation?.type === 'direct' && conversation?.participants?.every(p => (typeof p === 'string' ? p : (p._id || p.id || '')) === currentUserId)
+      ? 'cloud'
+      : toAbsoluteUrl(otherParticipant?.avatarUrl || (otherParticipant as any)?.avatar) || `https://ui-avatars.com/api/?name=${encodeURIComponent(conversationTitle)}&background=2563EB&color=fff&size=150&bold=true`);
 
   // ==================== MEDIA HARVESTING ====================
   // Trích xuất thông tin Media từ tin nhắn vào cache, tránh gọi API thừa
@@ -274,13 +331,28 @@ export default function ChatScreen() {
       const matched = (convRes.items || []).find((item) => (item._id || item.id) === conversationId) || null;
       setConversation(matched);
       if (matched) {
-        getPinnedMessages(conversationId).then(setPinnedItems).catch(console.error);
+        getPinnedMessages(conversationId).then(setPinnedItems).catch(() => null);
+        
+        const blockedList = await getBlockedUsers();
+        const blockedIds = blockedList.map((u: any) => u._id || u.id || '');
+        
         if (matched.type !== 'group') {
           const other = matched.participants?.find((p) => (p._id || p.id || '') !== currentUserId);
           if (other) {
-            const blockedList = await getBlockedUsers();
             const targetId = other._id || other.id || '';
-            setIsBlockedByMe(blockedList.some((u: any) => (u._id || u.id || '') === targetId));
+            setIsBlockedByMe(blockedIds.includes(targetId));
+          }
+          const conflictRes = await checkBlockConflict(conversationId);
+          if (conflictRes.hasConflict && (conflictRes.details?.blockedMe?.length || 0) > 0) {
+            setIsBlockedByThem(true);
+          } else {
+            setIsBlockedByThem(false);
+          }
+        } else if (matched.type === 'group' && !acceptedBlockWarnings[conversationId]) {
+          const conflictRes = await checkBlockConflict(conversationId);
+          if (conflictRes.hasConflict) {
+            setBlockConflictDetails(conflictRes.details);
+            setShowBlockWarning(true);
           }
         }
       }
@@ -325,15 +397,61 @@ export default function ChatScreen() {
             setConversation(updatedConv);
           }
         } catch (error) {
-          console.error('[Socket] Failed to reload conversation:', error);
+          console.log('[Socket] Failed to reload conversation:', error);
         }
       }
     };
 
+    const handleBlockStatusChanged = async () => {
+      // Clear all accepted warnings so modal can show again
+      for (const key in acceptedBlockWarnings) {
+        delete acceptedBlockWarnings[key];
+      }
+
+      const conflictRes = await checkBlockConflict(conversationId);
+      
+      try {
+        const convRes = await getConversations(null, 100);
+        const matched = convRes.items.find((c: any) => String(c._id || c.id) === String(conversationId));
+        if (!matched) return;
+        
+        if (matched.type === 'group') {
+          if (conflictRes.hasConflict) {
+            setBlockConflictDetails(conflictRes.details);
+            setShowBlockWarning(true);
+          } else {
+            setShowBlockWarning(false);
+          }
+        } else {
+          const blockedList = await getBlockedUsers();
+          const blockedIds = blockedList.map((u: any) => u._id || u.id || '');
+          const other = matched.participants?.find((p: any) => (p._id || p.id || '') !== currentUserId);
+          if (other) {
+            setIsBlockedByMe(blockedIds.includes(other._id || other.id || ''));
+          }
+          if (conflictRes.hasConflict && (conflictRes.details?.blockedMe?.length || 0) > 0) {
+            setIsBlockedByThem(true);
+          } else {
+            setIsBlockedByThem(false);
+          }
+        }
+      } catch (error) {
+        console.log('[Socket] handleBlockStatusChanged error', error);
+      }
+    };
+
     socket.on('group_updated', handleGroupUpdated);
+    socket.on('you_blocked_user', handleBlockStatusChanged);
+    socket.on('you_unblocked_user', handleBlockStatusChanged);
+    socket.on('user_blocked', handleBlockStatusChanged);
+    socket.on('user_unblocked', handleBlockStatusChanged);
 
     return () => {
       socket.off('group_updated', handleGroupUpdated);
+      socket.off('you_blocked_user', handleBlockStatusChanged);
+      socket.off('you_unblocked_user', handleBlockStatusChanged);
+      socket.off('user_blocked', handleBlockStatusChanged);
+      socket.off('user_unblocked', handleBlockStatusChanged);
     };
   }, [conversationId]);
 
@@ -554,9 +672,10 @@ export default function ChatScreen() {
         );
       };
 
-      const onConversationSettingsUpdated = (newSettings: any) => {
-        console.log('[Mobile Chat] conversation_settings_updated:', newSettings);
-        setConversation((prev) => prev ? { ...prev, settings: newSettings } : prev);
+      const onConversationSettingsUpdated = (payload: any) => {
+        console.log('[Mobile Chat] conversation_settings_updated:', payload);
+        if (payload?.conversationId && String(payload.conversationId) !== String(conversationId)) return;
+        setConversation((prev) => prev ? { ...prev, settings: payload.settings || payload } : prev);
       };
       const onPollUpdated = (updatedPoll: any) => {
         if (!updatedPoll?._id) return;
@@ -730,9 +849,9 @@ export default function ChatScreen() {
       if (error.errorCode === 'ONLY_ADMIN_CAN_SEND' || error.message?.includes('Only admin/owner can send messages')) {
         errorTitle = 'Không có quyền gửi tin nhắn';
         errorMessage = 'Chỉ trưởng nhóm và phó nhóm mới có thể gửi tin nhắn trong nhóm này.';
-      } else if (error.errorCode === 'BLOCKED_BY_USER') {
-        errorTitle = 'Không thể gửi tin nhắn';
-        errorMessage = 'Bạn đã bị người này chặn.';
+      } else if (error.errorCode === 'BLOCKED_BY_USER' || error.message?.includes('chặn')) {
+        errorTitle = 'Thông báo';
+        errorMessage = error.message || 'Bạn đã bị người này chặn.';
       } else if (error.message) {
         errorMessage = error.message;
       }
@@ -805,8 +924,10 @@ export default function ChatScreen() {
         prev.some((m) => getMessageId(m) === getMessageId(newMsg)) ? prev : [newMsg, ...prev]
       );
     } catch (err: any) {
-      Alert.alert('Lỗi', err?.message || 'Không thể gửi ghi âm');
-      console.error('Voice send failed:', err);
+      const errorMsg = err?.message || 'Không thể gửi ghi âm';
+      const title = errorMsg.includes('chặn') ? 'Thông báo' : 'Lỗi';
+      Alert.alert(title, errorMsg);
+      console.log('Voice send failed:', err);
     } finally {
       setIsSending(false);
     }
@@ -844,7 +965,9 @@ export default function ChatScreen() {
         prev.some((m) => getMessageId(m) === getMessageId(newMsg)) ? prev : [newMsg, ...prev]
       );
     } catch (err: any) {
-      Alert.alert('Lỗi', err.message || 'Không thể gửi ảnh');
+      const errorMsg = err?.message || 'Không thể gửi ảnh';
+      const title = errorMsg.includes('chặn') ? 'Thông báo' : 'Lỗi';
+      Alert.alert(title, errorMsg);
     } finally {
       setIsSending(false);
       isPicking.current = false;
@@ -878,7 +1001,7 @@ export default function ChatScreen() {
             const fileName = asset.fileName || `photo-${Date.now()}.${ext}`;
             return await uploadMediaForm({ uri: asset.uri, fileName, mimeType });
           } catch (e) {
-            console.error('Failed to upload image:', e);
+            console.log('Failed to upload image:', e);
             return null;
           }
         })
@@ -898,7 +1021,9 @@ export default function ChatScreen() {
         prev.some((m) => getMessageId(m) === getMessageId(newMsg)) ? prev : [newMsg, ...prev]
       );
     } catch (err: any) {
-      Alert.alert('Lỗi', err.message || 'Không thể gửi ảnh');
+      const errorMsg = err?.message || 'Không thể gửi ảnh';
+      const title = errorMsg.includes('chặn') ? 'Thông báo' : 'Lỗi';
+      Alert.alert(title, errorMsg);
     } finally {
       setIsSending(false);
       isPicking.current = false;
@@ -925,7 +1050,7 @@ export default function ChatScreen() {
               mimeType: asset.mimeType || getMimeTypeFromFileName(fileName),
             });
           } catch (e) {
-            console.error('Failed to upload file:', e);
+            console.log('Failed to upload file:', e);
             return null;
           }
         })
@@ -949,8 +1074,10 @@ export default function ChatScreen() {
         prev.some((m) => getMessageId(m) === getMessageId(newMsg)) ? prev : [newMsg, ...prev]
       );
     } catch (e: any) {
-      console.error('Document picker error:', e);
-      Alert.alert('Lỗi', e.message || 'Không thể chọn file');
+      console.log('Document picker error:', e);
+      const errorMsg = e?.message || 'Không thể gửi file';
+      const title = errorMsg.includes('chặn') ? 'Thông báo' : 'Lỗi';
+      Alert.alert(title, errorMsg);
     } finally {
       setIsSending(false);
       isPicking.current = false;
@@ -1173,6 +1300,9 @@ export default function ChatScreen() {
     const isPinned = pinnedItems.some((item) => getPinnedMessageId(item) === messageId);
     const buttons: ChatActionMenuOption[] = [{ text: 'Hủy', style: 'cancel', onPress: () => { } }];
 
+    // Chỉ cho ghim nếu messageId hợp lệ (đã được lưu DB, không phải tin tạm)
+    const hasValidId = !!messageId && !messageId.startsWith('temp-');
+
     if (!msg.isRecalled) {
       buttons.push({ text: '↩ Trả lời', onPress: () => setReplyTo(msg) });
     }
@@ -1191,6 +1321,12 @@ export default function ChatScreen() {
     }
     if (!msg.isRecalled) {
       buttons.push({
+        text: 'ℹ️ Xem chi tiết',
+        onPress: () => {
+          setMessageDetailsModal({ visible: true, message: msg });
+        }
+      });
+      buttons.push({
         text: '✕ Xóa phía tôi',
         isDestructive: true,
         onPress: async () => {
@@ -1203,7 +1339,7 @@ export default function ChatScreen() {
       buttons.push({ text: '😊 Thả cảm xúc', onPress: () => handleReactToMessage(msg) });
       buttons.push({ text: '↗ Chuyển tiếp', onPress: () => openForwardModal(msg) });
     }
-    if (!msg.isRecalled && canPinMessage) {
+    if (!msg.isRecalled && canPinMessage && hasValidId) {
       buttons.push({
         text: isPinned ? 'Bỏ ghim' : 'Ghim tin nhắn',
         onPress: async () => {
@@ -1443,7 +1579,12 @@ export default function ChatScreen() {
 
                     if (isImage && media?.url) {
                       return (
-                        <TouchableOpacity key={`${mediaId}-${idx}`} onPress={() => setViewImageUrl(media.url || null)} activeOpacity={0.9}>
+                        <TouchableOpacity 
+                          key={`${mediaId}-${idx}`} 
+                          onPress={() => setViewImageUrl(media.url || null)} 
+                          onLongPress={() => !isSendingMsg && handleMessageLongPress(item)}
+                          activeOpacity={0.9}
+                        >
                           <Image source={{ uri: media.url }} style={styles.inlineImage} resizeMode="cover" />
                         </TouchableOpacity>
                       );
@@ -1462,6 +1603,7 @@ export default function ChatScreen() {
                         key={`${mediaId}-${idx}`}
                         disabled={!canOpen}
                         onPress={() => openAttachment(media)}
+                        onLongPress={() => !isSendingMsg && handleMessageLongPress(item)}
                         style={[
                           styles.fileAttachment,
                           {
@@ -1531,12 +1673,18 @@ export default function ChatScreen() {
 
   // ==================== MAIN RENDER ====================
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }} edges={['bottom']}>
       <Stack.Screen
         options={{
           headerTitle: () => (
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-              <Image source={{ uri: headerAvatarUrl }} style={{ width: 34, height: 34, borderRadius: 17 }} />
+              {headerAvatarUrl === 'cloud' ? (
+                <View style={{ width: 34, height: 34, borderRadius: 17, backgroundColor: '#0068FF', alignItems: 'center', justifyContent: 'center' }}>
+                  <Ionicons name="cloud" size={20} color="#fff" style={{ marginTop: 2 }} />
+                </View>
+              ) : (
+                <Image source={{ uri: headerAvatarUrl }} style={{ width: 34, height: 34, borderRadius: 17 }} />
+              )}
               <Text style={{ fontSize: 17, fontWeight: '600', color: colors.text }} numberOfLines={1}>
                 {conversationTitle}
               </Text>
@@ -1552,7 +1700,7 @@ export default function ChatScreen() {
               <Ionicons name="arrow-back" size={24} color={colors.text} />
             </TouchableOpacity>
           ),
-          headerRight: () => (
+          headerRight: () => isSelfConv ? null : (
             <View style={{ flexDirection: 'row', alignItems: 'center', marginRight: 2 }}>
               <TouchableOpacity onPress={handleVoiceCall} style={{ padding: 8 }}>
                 <Ionicons name="call-outline" size={20} color={colors.text} />
@@ -1571,6 +1719,60 @@ export default function ChatScreen() {
       {!isSocketReady && (
         <View style={{ paddingVertical: 5, backgroundColor: colorScheme === 'dark' ? '#78350F' : '#FEF3C7', alignItems: 'center' }}>
           <Text style={{ color: colorScheme === 'dark' ? '#FDE68A' : '#92400E', fontSize: 11 }}>Đang kết nối...</Text>
+        </View>
+      )}
+
+      {isSelfConv && (
+        <View style={{ backgroundColor: colors.surface, borderBottomWidth: 1, borderBottomColor: colors.border, zIndex: 5 }}>
+          {/* Storage Banner */}
+          <View style={{ paddingHorizontal: 16, paddingVertical: 12, flexDirection: 'row', alignItems: 'center' }}>
+            <View style={{ width: 48, height: 48, borderRadius: 16, backgroundColor: colorScheme === 'dark' ? '#1E3A8A' : '#E5F0FF', alignItems: 'center', justifyContent: 'center' }}>
+              <Ionicons name="cloud-done" size={24} color={colorScheme === 'dark' ? '#60A5FA' : '#0068FF'} />
+            </View>
+            <View style={{ marginLeft: 14, flex: 1 }}>
+              <Text style={{ fontSize: 15, fontWeight: '700', color: colors.text }}>Lưu trữ dữ liệu Cloud</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
+                <Text style={{ fontSize: 13, color: colorScheme === 'dark' ? '#60A5FA' : '#0068FF', fontWeight: '700' }}>{formatBytes(storageData?.totalBytes || 0)}</Text>
+                <Text style={{ fontSize: 13, color: '#6B7280', fontWeight: '500' }}> / 1 GB</Text>
+              </View>
+              {/* Progress Bar */}
+              <View style={{ height: 4, backgroundColor: colorScheme === 'dark' ? '#374151' : '#E5E7EB', borderRadius: 2, marginTop: 8, overflow: 'hidden' }}>
+                <View style={{ height: '100%', width: `${Math.min(100, ((storageData?.totalBytes || 0) / (1024 * 1024 * 1024)) * 100)}%`, backgroundColor: colorScheme === 'dark' ? '#60A5FA' : '#0068FF', borderRadius: 2 }} />
+              </View>
+            </View>
+          </View>
+
+          {/* Filter Tabs */}
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 12, gap: 8 }}>
+            {[
+              { id: 'all', label: 'Tất cả', icon: 'apps' },
+              { id: 'image', label: 'Ảnh/Video', icon: 'image' },
+              { id: 'file', label: 'File', icon: 'document-text' },
+              { id: 'text', label: 'Ghi chú', icon: 'pencil' }
+            ].map(tab => {
+              const isActive = cloudFilterTab === tab.id;
+              const activeColor = colorScheme === 'dark' ? '#60A5FA' : '#0068FF';
+              return (
+                <TouchableOpacity
+                  key={tab.id}
+                  onPress={() => setCloudFilterTab(tab.id as any)}
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    paddingHorizontal: 14,
+                    paddingVertical: 8,
+                    borderRadius: 20,
+                    backgroundColor: isActive ? activeColor : (colorScheme === 'dark' ? '#374151' : '#F3F4F6'),
+                  }}
+                >
+                  {isActive && <Ionicons name={tab.icon as any} size={14} color="#fff" style={{ marginRight: 6 }} />}
+                  <Text style={{ fontSize: 13, fontWeight: isActive ? '600' : '500', color: isActive ? '#fff' : (colorScheme === 'dark' ? '#D1D5DB' : '#4B5563') }}>
+                    {tab.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
         </View>
       )}
 
@@ -1598,7 +1800,7 @@ export default function ChatScreen() {
 
       <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding" keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}>
         <FlatList
-          data={messages}
+          data={filteredMessages}
           keyExtractor={(item) => getMessageId(item)}
           renderItem={renderMessage}
           keyboardShouldPersistTaps="handled"
@@ -1666,14 +1868,30 @@ export default function ChatScreen() {
           </View>
         )}
 
-        {isBlockedByMe ? (
-          <View style={[styles.inputBar, { borderTopColor: colors.border, backgroundColor: colors.surface, paddingBottom: Math.max(12, insets.bottom), alignItems: 'center', justifyContent: 'center', paddingVertical: 12, flexDirection: 'column' }]}>
-            <Text style={{ color: colors.muted, marginBottom: 8 }}>Bạn đã chặn người dùng này</Text>
-            <TouchableOpacity onPress={handleUnblock} disabled={unblockLoading} style={{ backgroundColor: '#DBEAFE', paddingHorizontal: 20, paddingVertical: 8, borderRadius: 20 }}>
-              {unblockLoading ? <ActivityIndicator size="small" color={colors.tint} /> : <Text style={{ color: colors.tint, fontWeight: 'bold' }}>BỎ CHẶN</Text>}
-            </TouchableOpacity>
-          </View>
-        ) : (() => {
+        {(() => {
+          const isParticipant = !conversation || !conversation.participants || conversation.participants.some(p => String((p as any)._id || p) === String(currentUserId));
+          
+          if (!isParticipant) {
+            return (
+              <View style={[styles.inputBar, { borderTopColor: colors.border, backgroundColor: '#ffecec', paddingBottom: Math.max(12, insets.bottom), alignItems: 'center', justifyContent: 'center', paddingVertical: 16, flexDirection: 'column' }]}>
+                <Text style={{ color: '#e53e3e', fontWeight: 'bold', textAlign: 'center' }}>
+                  Bạn không còn là thành viên của nhóm này. Bạn chỉ có thể xem lịch sử trò chuyện.
+                </Text>
+              </View>
+            );
+          }
+
+          if (isBlockedByMe) {
+            return (
+              <View style={[styles.inputBar, { borderTopColor: colors.border, backgroundColor: colors.surface, paddingBottom: Math.max(12, insets.bottom), alignItems: 'center', justifyContent: 'center', paddingVertical: 12, flexDirection: 'column' }]}>
+                <Text style={{ color: colors.muted, marginBottom: 8 }}>Bạn đã chặn người dùng này</Text>
+                <TouchableOpacity onPress={handleUnblock} disabled={unblockLoading} style={{ backgroundColor: '#DBEAFE', paddingHorizontal: 20, paddingVertical: 8, borderRadius: 20 }}>
+                  {unblockLoading ? <ActivityIndicator size="small" color={colors.tint} /> : <Text style={{ color: colors.tint, fontWeight: 'bold' }}>BỎ CHẶN</Text>}
+                </TouchableOpacity>
+              </View>
+            );
+          }
+
           // Check permission to send message in group
           const isGroupConv = conversation?.type === 'group';
           const ownerId = (conversation?.ownerId as any)?._id || conversation?.ownerId;
@@ -1870,12 +2088,27 @@ export default function ChatScreen() {
                   keyExtractor={(item: any, index) => `${typeof item?.userId === 'string' ? item.userId : item?.userId?._id || item?.userId?.id || index}-${item?.emoji || ''}-${index}`}
                   renderItem={({ item }) => {
                     const info = getReactionUserInfo(item);
+                    const isMyReaction = String(info._id || info.id) === String(currentUserId);
                     return (
                       <View style={styles.reactionUserRow}>
                         <Image source={{ uri: toAbsoluteUrl(info.avatarUrl) }} style={styles.reactionAvatar} />
                         <View style={{ flex: 1 }}>
                           <Text style={{ color: colors.text, fontSize: 18, fontWeight: '700' }}>{info.username}</Text>
-                          <Text style={{ color: colors.muted, fontSize: 14 }}>Nhấn để gỡ</Text>
+                          {isMyReaction ? (
+                            <TouchableOpacity onPress={async () => {
+                              try {
+                                const newReactions = await reactToMessage(getMessageId(reactionModal.message), undefined);
+                                setMessages(prev => prev.map(m => getMessageId(m) === getMessageId(reactionModal.message) ? { ...m, reactions: newReactions || [] } : m));
+                                setReactionModal(prev => ({ ...prev, message: { ...prev.message, reactions: newReactions || [] } as any }));
+                              } catch {
+                                Alert.alert("Lỗi", "Không thể gỡ cảm xúc");
+                              }
+                            }}>
+                              <Text style={{ color: '#0068FF', fontSize: 14, fontWeight: '600' }}>Nhấn để gỡ</Text>
+                            </TouchableOpacity>
+                          ) : (
+                            <Text style={{ color: colors.muted, fontSize: 14 }}>Đã thả cảm xúc</Text>
+                          )}
                         </View>
                         <Text style={{ fontSize: 36 }}>{item?.emoji || '🙂'}</Text>
                       </View>
@@ -1892,6 +2125,116 @@ export default function ChatScreen() {
           </View>
         </View>
       </Modal>
+      
+      <Modal visible={messageDetailsModal.visible} transparent animationType="fade" onRequestClose={() => setMessageDetailsModal({ visible: false, message: null })}>
+        <View style={styles.reactionPickerOverlay}>
+          <View style={[styles.reactionPickerBox, { backgroundColor: colors.surface }]}>
+            <Text style={{ fontSize: 20, fontWeight: '700', color: colors.text, marginBottom: 16 }}>Chi tiết tin nhắn</Text>
+            
+            <View style={{ flexDirection: 'row', marginBottom: 12 }}>
+              <Text style={{ width: 100, color: colors.muted }}>Người gửi:</Text>
+              <Text style={{ flex: 1, color: colors.text, fontWeight: '500' }}>
+                {(() => {
+                  const msg = messageDetailsModal.message;
+                  if (!msg) return '';
+                  if (getMessageSenderId(msg) === currentUserId) return 'Bạn';
+                  const senderObj = msg.senderId as any;
+                  if (senderObj && senderObj.username) return senderObj.username;
+                  const participant = conversation?.participants?.find((p) => (p._id || p.id || '') === getMessageSenderId(msg));
+                  return participant?.username || 'Người dùng';
+                })()}
+              </Text>
+            </View>
+
+            <View style={{ flexDirection: 'row', marginBottom: 16 }}>
+              <Text style={{ width: 100, color: colors.muted }}>Thời gian:</Text>
+              <Text style={{ flex: 1, color: colors.text, fontWeight: '500' }}>
+                {messageDetailsModal.message?.createdAt ? `${new Date(messageDetailsModal.message.createdAt).toLocaleTimeString('vi-VN', {hour: '2-digit', minute: '2-digit'})} - ${new Date(messageDetailsModal.message.createdAt).toLocaleDateString('vi-VN')}` : ''}
+              </Text>
+            </View>
+
+            {messageDetailsModal.message?.mediaIds && messageDetailsModal.message.mediaIds.length > 0 && (
+              <View style={{ marginBottom: 16 }}>
+                <Text style={{ color: colors.muted, marginBottom: 8 }}>
+                  Tệp đính kèm ({messageDetailsModal.message.mediaIds.length}):
+                </Text>
+                {messageDetailsModal.message.mediaIds.map((mediaRef: any, idx: number) => {
+                  const mediaId = typeof mediaRef === 'string' ? mediaRef : (mediaRef._id || mediaRef.id || '');
+                  const media = mediaById[mediaId];
+                  if (!media) return null;
+                  return (
+                    <View key={mediaId} style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: colorScheme === 'dark' ? '#374151' : '#F3F4F6', padding: 12, borderRadius: 12, marginBottom: 8 }}>
+                      <Text style={{ color: '#2563EB', fontWeight: '700', marginRight: 12, width: 40, textAlign: 'center' }}>
+                        {media.fileName ? (media.fileName.split('.').pop() || '').toUpperCase() : 'FILE'}
+                      </Text>
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ color: colors.text, fontWeight: '600' }} numberOfLines={1}>{media.fileName || 'Tệp đính kèm'}</Text>
+                        <Text style={{ color: colors.muted, fontSize: 13 }}>{formatBytes(media.fileSize || 0)}</Text>
+                      </View>
+                    </View>
+                  );
+                })}
+              </View>
+            )}
+
+            <TouchableOpacity 
+              style={{ backgroundColor: '#0068FF', paddingVertical: 12, borderRadius: 12, alignItems: 'center', marginTop: 8 }}
+              onPress={() => setMessageDetailsModal({ visible: false, message: null })}
+            >
+              <Text style={{ color: '#fff', fontSize: 16, fontWeight: '700' }}>Đóng</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Block Warning Modal for Group Chats */}
+      <Modal visible={showBlockWarning} transparent animationType="fade" onRequestClose={() => {}}>
+        <View style={styles.reactionPickerOverlay}>
+          <View style={[styles.reactionPickerBox, { backgroundColor: colors.surface }]}>
+            <View style={{ alignItems: 'center', marginBottom: 16 }}>
+              <Ionicons name="warning" size={40} color="#F59E0B" />
+              <Text style={{ fontSize: 18, fontWeight: '700', color: colors.text, marginTop: 12, textAlign: 'center' }}>
+                Cảnh báo chặn
+              </Text>
+            </View>
+            
+            <Text style={{ color: colors.text, fontSize: 15, textAlign: 'center', marginBottom: 24, lineHeight: 22 }}>
+              {blockConflictDetails?.iBlocked?.length > 0 && blockConflictDetails?.blockedMe?.length > 0 ? (
+                `Bạn đã chặn ${blockConflictDetails.iBlocked.join(', ')} và bị ${blockConflictDetails.blockedMe.join(', ')} chặn. Bạn có muốn tiếp tục cuộc trò chuyện?`
+              ) : blockConflictDetails?.iBlocked?.length > 0 ? (
+                `Bạn đã chặn ${blockConflictDetails.iBlocked.join(', ')}. Bạn có muốn tiếp tục cuộc trò chuyện?`
+              ) : blockConflictDetails?.blockedMe?.length > 0 ? (
+                `Bạn đã bị ${blockConflictDetails.blockedMe.join(', ')} chặn. Bạn có muốn tiếp tục cuộc trò chuyện?`
+              ) : (
+                'Trong nhóm có thành viên đang có xung đột chặn với bạn (bạn chặn họ hoặc họ chặn bạn). Bạn có muốn tiếp tục cuộc trò chuyện?'
+              )}
+            </Text>
+
+            <View style={{ flexDirection: 'row', gap: 12 }}>
+              <TouchableOpacity 
+                style={{ flex: 1, backgroundColor: colorScheme === 'dark' ? '#374151' : '#E5E7EB', paddingVertical: 12, borderRadius: 12, alignItems: 'center' }}
+                onPress={() => {
+                  setShowBlockWarning(false);
+                  router.back();
+                }}
+              >
+                <Text style={{ color: colors.text, fontSize: 16, fontWeight: '600' }}>Quay lại</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                style={{ flex: 1, backgroundColor: '#0068FF', paddingVertical: 12, borderRadius: 12, alignItems: 'center' }}
+                onPress={() => {
+                  acceptedBlockWarnings[conversationId] = true;
+                  setShowBlockWarning(false);
+                }}
+              >
+                <Text style={{ color: '#fff', fontSize: 16, fontWeight: '600' }}>Tiếp tục</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
     </SafeAreaView>
   );
 }

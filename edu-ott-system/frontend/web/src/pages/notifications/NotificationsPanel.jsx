@@ -15,6 +15,7 @@ function getNotifIcon(type) {
   if (type === "friend_accepted") return <FaCheck size={14} color="#16a34a" />;
   if (type === "new_message") return <FaCommentDots size={14} color="#9333ea" />;
   if (type === "group_invite") return <FaUsers size={14} color="#f59e0b" />;
+  if (type === "admin_warning") return <span style={{ fontSize: 14 }}>⚠️</span>;
   return <FaBell size={14} color="#6b7280" />;
 }
 
@@ -112,9 +113,14 @@ export default function NotificationsPanel({ onClose }) {
                 key={notif._id}
                 className={`np-item ${!notif.isRead ? "unread" : ""}`}
                 onClick={() => handleClick(notif)}
+                style={notif.type === 'admin_warning' && !notif.isRead ? { borderLeft: '3px solid #f59e0b', background: 'rgba(245,158,11,0.05)' } : {}}
               >
                 <div className="np-icon-wrap">
-                  {notif.actor?.avatarUrl ? (
+                  {notif.type === 'admin_warning' ? (
+                    <div className="np-avatar-placeholder" style={{ background: notif.data?.isBanned ? '#fef2f2' : '#fffbeb', fontSize: 20 }}>
+                      {notif.data?.isBanned ? '🔒' : '⚠️'}
+                    </div>
+                  ) : notif.actor?.avatarUrl ? (
                     <img src={notif.actor.avatarUrl} className="np-avatar" alt="" />
                   ) : (
                     <div className="np-avatar-placeholder">
@@ -125,10 +131,21 @@ export default function NotificationsPanel({ onClose }) {
                 </div>
 
                 <div className="np-content">
-                  <p className="np-text">
-                    <strong>{notif.actor?.username || "Ai đó"}</strong>{" "}
-                    {notif.message || notif.body || "đã gửi thông báo"}
-                  </p>
+                  {notif.type === 'admin_warning' ? (
+                    <>
+                      <p className="np-text" style={{ fontWeight: 700, color: notif.data?.isBanned ? '#dc2626' : '#d97706' }}>
+                        {notif.title}
+                      </p>
+                      <p className="np-text" style={{ fontWeight: 400, color: '#475569', marginTop: 2 }}>
+                        {notif.body}
+                      </p>
+                    </>
+                  ) : (
+                    <p className="np-text">
+                      <strong>{notif.actor?.username || "Ai đó"}</strong>{" "}
+                      {notif.message || notif.body || "đã gửi thông báo"}
+                    </p>
+                  )}
                   <span className="np-time">{timeAgo(notif.createdAt)}</span>
 
                   {/* Friend request actions */}

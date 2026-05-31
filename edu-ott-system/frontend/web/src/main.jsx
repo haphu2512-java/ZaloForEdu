@@ -5,11 +5,15 @@ import App from "./App.jsx";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { LanguageProvider } from "./contexts/LanguageContext";
 
+import { ConfirmProvider } from "./contexts/ConfirmContext";
+
 createRoot(document.getElementById("root")).render(
   <StrictMode>
     <ThemeProvider>
       <LanguageProvider>
-        <App />
+        <ConfirmProvider>
+          <App />
+        </ConfirmProvider>
       </LanguageProvider>
     </ThemeProvider>
   </StrictMode>,

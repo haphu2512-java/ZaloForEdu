@@ -4,8 +4,9 @@ import { friendService } from "../../../services/friendService";
 import { useFriendStore } from "../../../store/friendStore";
 import { useAuthStore } from "../../../store/authStore";
 import UserProfileModal from "../../../components/Modals/UserProfileModal";
+import { DEFAULT_AVATAR } from '../../../utils/constants';
 
-const DEFAULT_AVATAR = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' rx='20' fill='%23bdbdbd'/%3E%3Ccircle cx='20' cy='15' r='7' fill='%23fff'/%3E%3Cellipse cx='20' cy='35' rx='12' ry='9' fill='%23fff'/%3E%3C/svg%3E";
+
 
 export default function AddFriendModal({ isOpen, onClose }) {
   const { user: currentUser } = useAuthStore();
@@ -19,7 +20,10 @@ export default function AddFriendModal({ isOpen, onClose }) {
 
   useEffect(() => {
     if (isOpen && currentUser) {
-      Promise.all([fetchFriends(), fetchIncomingRequests(), fetchOutgoingRequests()]);
+      // FIX: Không gọi fetchOutgoingRequests đừn đây — nó REPLACE toàn bộ store bằng API data
+      // Làm mất optimistic update từ handleSendRequest khi đóng mở lại modal
+      // Store đã được persist (localStorage) nên outgoingRequests vẫn giữ nguyên
+      Promise.all([fetchFriends(), fetchIncomingRequests()]);
     }
   }, [isOpen, currentUser]);
 
@@ -48,17 +52,18 @@ export default function AddFriendModal({ isOpen, onClose }) {
     const myId = String(currentUser?._id || currentUser?.id);
     if (id === myId) return "self";
     if (friends.some(f => String(f._id || f.id) === id)) return "friend";
-    if (outgoingRequests.some(r => String(r.toUserId?._id || r.toUserId || "") === id)) return "outgoing";
-    if (incomingRequests.some(r => String(r.fromUserId?._id || r.fromUserId || "") === id)) return "incoming";
+    if (outgoingRequests.some(r => String(r.toUserId?._id || r.toUserId?.id || r.toUserId || r.to?._id || r.to?.id || r.to || "") === id)) return "outgoing";
+    if (incomingRequests.some(r => String(r.fromUserId?._id || r.fromUserId?.id || r.fromUserId || r.from?._id || r.from?.id || r.from || "") === id)) return "incoming";
     return "none";
   };
 
   return (
     <>
-      <div
-        style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 9998, display: "flex", alignItems: "center", justifyContent: "center" }}
-        onClick={onClose}
-      >
+      {!selectedUser && (
+        <div
+          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 9998, display: "flex", alignItems: "center", justifyContent: "center" }}
+          onClick={onClose}
+        >
         <div
           style={{ background: "var(--bg-primary)", borderRadius: 14, width: 420, maxWidth: "95vw", boxShadow: "0 20px 60px rgba(0,0,0,0.2)", overflow: "hidden", display: "flex", flexDirection: "column", maxHeight: "80vh" }}
           onClick={e => e.stopPropagation()}
@@ -149,17 +154,20 @@ export default function AddFriendModal({ isOpen, onClose }) {
           </div>
         </div>
       </div>
+      )}
 
       {selectedUser && (
         <UserProfileModal
           isOpen={true}
-          onClose={() => setSelectedUser(null)}
+          onClose={() => { setSelectedUser(null); onClose(); }}
           user={selectedUser.user}
           status={selectedUser.status}
           onChatOpened={onClose}
           onStatusChange={(newStatus) => {
             setSelectedUser(prev => prev ? { ...prev, status: newStatus } : null);
-            Promise.all([fetchFriends(), fetchOutgoingRequests(), fetchIncomingRequests()]);
+            // FIX: Không gọi fetchOutgoingRequests ở đây — tránh race condition
+            // overwrite optimistic store update từ handleSendRequest trước khi server index xong
+            Promise.all([fetchFriends(), fetchIncomingRequests()]);
           }}
         />
       )}

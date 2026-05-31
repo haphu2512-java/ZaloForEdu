@@ -9,6 +9,10 @@ import { useAuthStore } from '../../store/authStore';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { toAbsoluteUrl } from '../chat/chatUtils';
+import { DEFAULT_AVATAR } from '../../utils/constants';
+import { useConfirm } from "../../contexts/ConfirmContext";
+import toast from "react-hot-toast";
+
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api/v1';
 
@@ -33,6 +37,8 @@ const getStrength = (pw) => {
 
 export default function ProfilePage() {
   const { t } = useLanguage();
+  const { user, setUser } = useAuthStore();
+  const confirm = useConfirm();
   const navigate = useNavigate();
   
   const [profile, setProfile] = useState({
@@ -40,7 +46,7 @@ export default function ProfilePage() {
     username: '',
     email: '',
     phone: '',
-    avatarUrl: 'https://i.pravatar.cc/150?img=11',
+    avatarUrl: DEFAULT_AVATAR,
     createdAt: '',
     friends: [],
     isOnline: true
@@ -53,6 +59,7 @@ export default function ProfilePage() {
   const fileInputRef = useRef(null); 
   const [activeTab, setActiveTab] = useState('view_profile'); 
   const [avatarFile, setAvatarFile] = useState(null);
+  const [originalProfile, setOriginalProfile] = useState(null);
 
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deletePassword, setDeletePassword] = useState("");
@@ -65,6 +72,17 @@ export default function ProfilePage() {
   const [otpVerifying, setOtpVerifying] = useState(false);
   const [verifiedContacts, setVerifiedContacts] = useState({ email: true, phone: true });
   const otpInputRefs = useRef([]);
+  const [resendCooldown, setResendCooldown] = useState(0);
+
+  useEffect(() => {
+    let timer;
+    if (resendCooldown > 0) {
+      timer = setInterval(() => {
+        setResendCooldown((prev) => prev - 1);
+      }, 1000);
+    }
+    return () => clearInterval(timer);
+  }, [resendCooldown]);
 
   useEffect(() => {
     const fetchUserProfile = async () => {
@@ -81,16 +99,18 @@ export default function ProfilePage() {
              if (!isNaN(createdObj)) joinDate = `${createdObj.getMonth() + 1}/${createdObj.getFullYear()}`;
           }
 
-          setProfile({
+          const newProfile = {
             id: userData._id || userData.id || '',
             username: userData.username || userData.fullName || '', 
             email: userData.email || '',
             phone: userData.phone || userData.phoneNumber || '',
-            avatarUrl: toAbsoluteUrl(userData.avatarUrl || userData.avatar) || 'https://i.pravatar.cc/150?img=11',
+            avatarUrl: toAbsoluteUrl(userData.avatarUrl || userData.avatar) || DEFAULT_AVATAR,
             createdAt: joinDate,
             friends: userData.friends || [],
             isOnline: true
-          });
+          };
+          setProfile(newProfile);
+          setOriginalProfile(newProfile);
           setVerifiedContacts({
             email: userData.isEmailVerified !== false,
             phone: userData.isPhoneVerified !== false,
@@ -122,7 +142,7 @@ export default function ProfilePage() {
       
       const userId = profile.id;
       if (!userId) {
-        alert("Lỗi: Không tìm thấy ID User. Vui lòng F5 lại trang!");
+        toast.error("Lỗi: Không tìm thấy ID User. Vui lòng F5 lại trang!");
         setIsSaving(false);
         return;
       }
@@ -136,7 +156,7 @@ export default function ProfilePage() {
           finalAvatarUrl = uploadRes.url || profile.avatarUrl;
         } catch (err) {
           console.error("Lỗi upload ảnh:", err);
-          alert("Tải ảnh lên thất bại. Hệ thống hủy cập nhật để tránh lỗi dữ liệu!");
+          toast.error("Tải ảnh lên thất bại. Hệ thống hủy cập nhật để tránh lỗi dữ liệu!");
           setIsSaving(false); 
           return; 
         }
@@ -166,13 +186,17 @@ export default function ProfilePage() {
       const requiresEmailVerification = resData?.requiresEmailVerification;
 
       if (updatedUser) {
-        setProfile((prev) => ({ 
-          ...prev, 
-          avatarUrl: updatedUser.avatarUrl || prev.avatarUrl,
-          username: updatedUser.username || prev.username,
-          phone: updatedUser.phone || prev.phone,
-          email: updatedUser.email !== undefined ? updatedUser.email : prev.email
-        }));
+        setProfile((prev) => {
+          const updated = { 
+            ...prev, 
+            avatarUrl: updatedUser.avatarUrl || prev.avatarUrl,
+            username: updatedUser.username || prev.username,
+            phone: updatedUser.phone !== undefined ? updatedUser.phone : prev.phone,
+            email: updatedUser.email !== undefined ? updatedUser.email : prev.email
+          };
+          setOriginalProfile(updated);
+          return updated;
+        });
         
         // Cập nhật global state và localStorage để đồng bộ avatar/tên trên toàn ứng dụng web
         localStorage.setItem("user", JSON.stringify(updatedUser));
@@ -192,16 +216,19 @@ export default function ProfilePage() {
         setOtpDigits(['','','','','','']);
         setOtpError('');
         setOtpModal({ type: 'phone', contact: updateData.phone });
+        setResendCooldown(60);
       } else if (requiresEmailVerification && updateData.email) {
         setOtpDigits(['','','','','','']);
         setOtpError('');
         setOtpModal({ type: 'email', contact: updateData.email });
+        setResendCooldown(60);
       } else {
-        alert('Cập nhật thông tin thành công!');
+        toast.success('Cập nhật thông tin thành công!');
       }
     } catch (error) {
       console.error('Lỗi cập nhật:', error);
-      alert('Cập nhật thất bại, kiểm tra lại số điện thoại (nếu có thì phải đủ 8 số) nhé!');
+      const backendErr = error.response?.data?.error?.message || error.response?.data?.message;
+      toast.error(backendErr || 'Cập nhật thất bại, kiểm tra lại dữ liệu nhập vào nhé!');
     } finally {
       setIsSaving(false);
     }
@@ -247,7 +274,7 @@ export default function ProfilePage() {
       });
       setVerifiedContacts(prev => ({ ...prev, [otpModal.type]: true }));
       setOtpModal(null);
-      alert(`Xác thực ${otpModal.type === 'phone' ? 'số điện thoại' : 'email'} thành công! Bạn có thể đăng nhập bằng ${otpModal.type === 'phone' ? 'SĐT' : 'email'} này.`);
+      toast.success(`Xác thực ${otpModal.type === 'phone' ? 'số điện thoại' : 'email'} thành công! Bạn có thể đăng nhập bằng ${otpModal.type === 'phone' ? 'SĐT' : 'email'} này.`);
     } catch (err) {
       setOtpError(err.response?.data?.message || 'Mã OTP không đúng hoặc đã hết hạn');
       setOtpDigits(['','','','','','']);
@@ -262,6 +289,7 @@ export default function ProfilePage() {
     setOtpDigits(['','','','','','']);
     setOtpError('');
     setOtpModal({ type, contact });
+    setResendCooldown(60);
     const token = localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken');
     try {
       const payload = type === 'phone' ? { phone: contact } : { email: contact };
@@ -272,36 +300,70 @@ export default function ProfilePage() {
       // Nếu OTP cũ còn hạn cooldown → báo lỗi nhẹ, không đóng modal
       const msg = err.response?.data?.message || '';
       if (msg) setOtpError(msg);
+      if (err.response?.status === 429) {
+         const match = msg.match(/\d+/);
+         if (match) setResendCooldown(parseInt(match[0], 10));
+      }
+    }
+  };
+
+  const handleResendOtp = async () => {
+    if (resendCooldown > 0) return;
+    const token = localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken');
+    try {
+      const payload = otpModal.type === 'phone' ? { phone: otpModal.contact } : { email: otpModal.contact };
+      await axios.post(`${API_BASE_URL}/auth/resend-otp`, payload, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      setResendCooldown(60);
+      setOtpError('');
+      toast.success('Đã gửi lại mã OTP!');
+    } catch (err) {
+      const msg = err.response?.data?.message || 'Lỗi gửi lại mã OTP';
+      setOtpError(msg);
+      if (err.response?.status === 429) {
+         const match = msg.match(/\d+/);
+         if (match) setResendCooldown(parseInt(match[0], 10));
+      }
     }
   };
 
   const submitPasswordChange = async () => {
     if (!passwordForm.oldPassword || !passwordForm.newPassword || !passwordForm.confirmPassword) {
-      return alert("Vui lòng điền đầy đủ thông tin mật khẩu!");
+      return toast.error("Vui lòng điền đầy đủ thông tin mật khẩu!");
+    }
+    if (passwordForm.newPassword.length < 6) {
+      return toast.error("Mật khẩu mới phải có ít nhất 6 ký tự!");
     }
     if (passwordForm.newPassword !== passwordForm.confirmPassword) {
-      return alert("Mật khẩu xác nhận không khớp!");
+      return toast.error("Mật khẩu xác nhận không khớp!");
     }
     
     try {
-      // Đã gỡ bỏ lệnh chặn độ dài thủ công ở Frontend để API thực hiện trọn vẹn luồng
       await authService.changePassword({ 
         currentPassword: passwordForm.oldPassword, 
         newPassword: passwordForm.newPassword 
       });
       
-      alert('Đổi mật khẩu thành công!');
+      toast.success('Đổi mật khẩu thành công! Vui lòng đăng nhập lại.');
       setPasswordForm({ oldPassword: '', newPassword: '', confirmPassword: '' });
-      setActiveTab('view_profile'); 
+      // Tự động đăng xuất sau 1.5s để bảo mật
+      setTimeout(() => {
+        localStorage.removeItem('token');
+        localStorage.removeItem('refreshToken');
+        sessionStorage.clear();
+        window.dispatchEvent(new Event('user-logout'));
+        navigate('/login');
+      }, 1500);
     } catch (error) {
       console.error('Lỗi đổi mật khẩu:', error);
-      alert(error.response?.data?.message || 'Đổi mật khẩu thất bại! Vui lòng kiểm tra lại mật khẩu hiện tại.');
+      toast.error(error.response?.data?.message || 'Đổi mật khẩu thất bại! Vui lòng kiểm tra lại mật khẩu hiện tại.');
     }
   };
 
   const handleDeleteAccount = async () => {
     if (!deletePassword) {
-      alert("Vui lòng nhập mật khẩu để xác nhận!");
+      toast.error("Vui lòng nhập mật khẩu để xác nhận!");
       return;
     }
 
@@ -309,12 +371,12 @@ export default function ProfilePage() {
       setIsDeleting(true);
       await userService.deleteUser(profile.id, { password: deletePassword });
       
-      alert("Tài khoản của bạn đã được xóa thành công.");
+      toast.success("Tài khoản của bạn đã được xóa thành công.");
       localStorage.clear();
       window.location.href = '/login';
     } catch (error) {
       console.error("Lỗi xóa tài khoản:", error);
-      alert(error.response?.data?.message || "Xóa tài khoản thất bại. Sai mật khẩu hoặc lỗi hệ thống!");
+      toast.error(error.response?.data?.message || "Xóa tài khoản thất bại. Sai mật khẩu hoặc lỗi hệ thống!");
     } finally {
       setIsDeleting(false);
       setShowDeleteModal(false);
@@ -322,8 +384,8 @@ export default function ProfilePage() {
     }
   };
 
-  const handleLogout = () => {
-    if (window.confirm('Bạn có chắc chắn muốn đăng xuất?')) {
+  const handleLogout = async () => {
+    if (await confirm('Bạn có chắc chắn muốn đăng xuất?', { isDanger: true })) {
       localStorage.removeItem('token');
       localStorage.removeItem('refreshToken');
       sessionStorage.clear();
@@ -334,13 +396,13 @@ export default function ProfilePage() {
   };
 
   const handleLogoutAll = async () => {
-    if (!window.confirm('Bạn có chắc chắn muốn đăng xuất trên tất cả thiết bị?')) {
+    if (!await confirm('Bạn có chắc chắn muốn đăng xuất trên tất cả thiết bị?', { isDanger: true })) {
       return;
     }
     
     try {
       await authService.logoutAll();
-      alert('Đã đăng xuất trên tất cả thiết bị thành công!');
+      toast.success('Đã đăng xuất trên tất cả thiết bị thành công!');
       localStorage.removeItem('token');
       localStorage.removeItem('refreshToken');
       sessionStorage.clear();
@@ -349,7 +411,7 @@ export default function ProfilePage() {
       navigate('/login');
     } catch (error) {
       console.error('Lỗi đăng xuất tất cả thiết bị:', error);
-      alert(error.response?.data?.message || 'Đăng xuất thất bại!');
+      toast.error(error.response?.data?.message || 'Đăng xuất thất bại!');
     }
   };
 
@@ -358,12 +420,22 @@ export default function ProfilePage() {
   // Khởi tạo các giá trị cho thanh đo độ mạnh mật khẩu
   const strength = getStrength(passwordForm.newPassword);
   const getStrengthColor = () => {
-    if (strength === 'weak') return '#EF4444'; // Đỏ
-    if (strength === 'medium') return '#F59E0B'; // Vàng cam
-    if (strength === 'strong') return '#10B981'; // Xanh lá
-    return '#E2E8F0'; // Xám mặc định
+    if (strength === 'weak') return '#EF4444';
+    if (strength === 'medium') return '#F59E0B';
+    if (strength === 'strong') return '#10B981';
+    return '#E2E8F0';
   };
   const activeBars = { weak: 1, medium: 2, strong: 3 }[strength] || 0;
+
+  // Checklist yêu cầu mật khẩu
+  const pw = passwordForm.newPassword;
+  const pwChecks = [
+    { label: 'Ít nhất 6 ký tự', pass: pw.length >= 6 },
+    { label: 'Có chữ hoa (A-Z)', pass: /[A-Z]/.test(pw) },
+    { label: 'Có chữ thường (a-z)', pass: /[a-z]/.test(pw) },
+    { label: 'Có chữ số (0-9)', pass: /[0-9]/.test(pw) },
+    { label: 'Có ký tự đặc biệt (!@#$...)', pass: /[^A-Za-z0-9]/.test(pw) },
+  ];
 
   // --- UI STYLES ---
   const styles = {
@@ -523,7 +595,11 @@ export default function ProfilePage() {
                     </div>
 
                       <div style={styles.actionRow}>
-                        <button onClick={() => { setAvatarFile(null); setActiveTab('view_profile'); }} style={styles.btnSecondary} disabled={isSaving}>Hủy bỏ</button>
+                        <button onClick={() => { 
+                          if (originalProfile) setProfile(originalProfile);
+                          setAvatarFile(null); 
+                          setActiveTab('view_profile'); 
+                        }} style={styles.btnSecondary} disabled={isSaving}>Hủy bỏ</button>
                         <button onClick={handleSaveProfile} style={styles.btnPrimary} disabled={isSaving}>
                           <Save size={18} /> {isSaving ? 'Đang lưu...' : 'Lưu thay đổi'}
                         </button>
@@ -543,7 +619,7 @@ export default function ProfilePage() {
                   {profile.friends.map((friend, idx) => {
                     const isObj = typeof friend === 'object' && friend !== null;
                     const fName = isObj ? (friend.username || friend.fullName || 'Người dùng Zalo') : 'Người dùng ẩn danh';
-                    const fAva = isObj ? (friend.avatarUrl || friend.avatar || 'https://i.pravatar.cc/150?img=11') : 'https://i.pravatar.cc/150?img=11';
+                    const fAva = isObj ? (friend.avatarUrl || friend.avatar || DEFAULT_AVATAR) : DEFAULT_AVATAR;
                     
                     return (
                       <div key={idx} style={styles.friendCard}>
@@ -583,16 +659,28 @@ export default function ProfilePage() {
                   <div style={styles.eyeIconWrap} onClick={() => togglePasswordVisibility('new')}>{showPassword.new ? <EyeOff size={20} /> : <Eye size={20} />}</div>
                 </div>
                 
-                {/* THANH ĐO ĐỘ MẠNH CHUẨN XÁC THEO SỐ LƯỢNG VẠCH */}
+                {/* THANH ĐO ĐỘ MẠNH + CHECKLIST YÊU CẦU */}
                 {passwordForm.newPassword && (
-                  <div style={styles.strengthContainer}>
-                    {[1, 2, 3].map((num) => (
-                      <div key={num} style={styles.strengthBar(num <= activeBars)} />
-                    ))}
-                    <span style={styles.strengthLabel}>
-                      {strength === "weak" ? "Yếu" : strength === "medium" ? "Trung bình" : "Mạnh"}
-                    </span>
-                  </div>
+                  <>
+                    <div style={styles.strengthContainer}>
+                      {[1, 2, 3].map((num) => (
+                        <div key={num} style={styles.strengthBar(num <= activeBars)} />
+                      ))}
+                      <span style={styles.strengthLabel}>
+                        {strength === "weak" ? "Yếu" : strength === "medium" ? "Trung bình" : "Mạnh"}
+                      </span>
+                    </div>
+                    <div style={{ marginTop: 10, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px 16px' }}>
+                      {pwChecks.map((c) => (
+                        <div key={c.label} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: c.pass ? '#16a34a' : '#94a3b8', fontWeight: c.pass ? 600 : 400 }}>
+                          <span style={{ width: 16, height: 16, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, backgroundColor: c.pass ? '#dcfce7' : '#f1f5f9', color: c.pass ? '#16a34a' : '#94a3b8', flexShrink: 0 }}>
+                            {c.pass ? '✓' : '○'}
+                          </span>
+                          {c.label}
+                        </div>
+                      ))}
+                    </div>
+                  </>
                 )}
               </div>
 
@@ -648,57 +736,94 @@ export default function ProfilePage() {
           )}
 
           {activeTab === 'privacy' && (
-            <div style={styles.comingSoon}>
-              <h2>Đang xây dựng...</h2>
-              <p>Tính năng này sẽ sớm ra mắt.</p>
+            <div>
+              <h3 style={styles.sectionTitle}><Shield size={22} color="#4F46E5" /> Chính sách Quyền riêng tư</h3>
+              <p style={{ fontSize: 14, color: 'var(--text-secondary)', marginBottom: 24, lineHeight: 1.7 }}>
+                Chúng tôi cam kết bảo vệ quyền riêng tư và dữ liệu cá nhân của bạn. Dưới đây là các nguyên tắc cơ bản về cách chúng tôi thu thập, sử dụng và bảo vệ thông tin của bạn.
+              </p>
+              {[
+                {
+                  icon: '🔐',
+                  title: 'Thu thập dữ liệu',
+                  body: 'Chúng tôi chỉ thu thập thông tin cần thiết như tên hiển thị, email, số điện thoại và ảnh đại diện. Dữ liệu được mã hóa và lưu trữ an toàn trên hệ thống đám mây.'
+                },
+                {
+                  icon: '💬',
+                  title: 'Tin nhắn & Nội dung',
+                  body: 'Tin nhắn của bạn được truyền tải qua kết nối bảo mật. Chúng tôi không đọc nội dung tin nhắn riêng tư. Nội dung bạn chia sẻ thuộc quyền sở hữu của bạn.'
+                },
+                {
+                  icon: '🚫',
+                  title: 'Không bán dữ liệu',
+                  body: 'Chúng tôi cam kết không bán, cho thuê hay chia sẻ thông tin cá nhân của bạn với bất kỳ bên thứ ba nào vì mục đích thương mại.'
+                },
+                {
+                  icon: '🗑️',
+                  title: 'Quyền xóa dữ liệu',
+                  body: 'Bạn có quyền yêu cầu xóa toàn bộ dữ liệu cá nhân khỏi hệ thống bất cứ lúc nào thông qua tùy chọn "Xóa tài khoản" trong menu bên trái.'
+                },
+                {
+                  icon: '🍪',
+                  title: 'Cookie & Phiên đăng nhập',
+                  body: 'Chúng tôi sử dụng token xác thực (JWT) để duy trì phiên đăng nhập. Bạn có thể đăng xuất hoặc xóa cookie trình duyệt bất cứ lúc nào.'
+                },
+                {
+                  icon: '📧',
+                  title: 'Liên hệ',
+                  body: 'Nếu bạn có câu hỏi về chính sách quyền riêng tư, vui lòng liên hệ đội ngũ hỗ trợ qua email: support@zaloop.edu.vn'
+                },
+              ].map((item) => (
+                <div key={item.title} style={{ display: 'flex', gap: 16, padding: '18px 20px', backgroundColor: 'var(--input-bg)', borderRadius: 14, border: '1px solid var(--border-color)', marginBottom: 14 }}>
+                  <span style={{ fontSize: 28, flexShrink: 0, marginTop: 2 }}>{item.icon}</span>
+                  <div>
+                    <p style={{ margin: '0 0 6px', fontWeight: 700, fontSize: 15, color: 'var(--text-primary)' }}>{item.title}</p>
+                    <p style={{ margin: 0, fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.65 }}>{item.body}</p>
+                  </div>
+                </div>
+              ))}
+              <p style={{ marginTop: 20, fontSize: 12, color: 'var(--text-tertiary)', textAlign: 'center' }}>
+                Cập nhật lần cuối: 31/05/2026 · Phiên bản 1.0
+              </p>
             </div>
           )}
         </div>
 
         <div style={styles.sidebar}>
           <div style={styles.menuGroup}>
-            <div style={styles.menuTitle}>Tài khoản</div>
+            <div style={styles.menuTitle}>{t('menuAccount')}</div>
             <div style={styles.menuItem(activeTab === 'view_profile')} onClick={() => setActiveTab('view_profile')}>
               <User size={22} style={styles.menuIcon(activeTab === 'view_profile')} />
-              <div style={{fontSize: '15px'}}>Hồ sơ của tôi</div>
+              <div style={{fontSize: '15px'}}>{t('menuMyProfile')}</div>
             </div>
             <div style={styles.menuItem(activeTab === 'edit_profile')} onClick={() => setActiveTab('edit_profile')}>
               <Edit3 size={22} style={styles.menuIcon(activeTab === 'edit_profile')} />
-              <div style={{fontSize: '15px'}}>Chỉnh sửa hồ sơ</div>
+              <div style={{fontSize: '15px'}}>{t('menuEditProfile')}</div>
             </div>
             <div style={styles.menuItem(false)} onClick={() => { setActiveTab('edit_profile'); setTimeout(() => fileInputRef.current?.click(), 100); }}>
               <ImageIcon size={22} style={styles.menuIcon(false)} />
-              <div style={{fontSize: '15px'}}>Đổi ảnh đại diện</div>
+              <div style={{fontSize: '15px'}}>{t('menuChangeAvatar')}</div>
             </div>
             <div style={styles.menuItem(activeTab === 'password')} onClick={() => setActiveTab('password')}>
               <Lock size={22} style={styles.menuIcon(activeTab === 'password')} />
-              <div style={{fontSize: '15px'}}>Đổi mật khẩu</div>
+              <div style={{fontSize: '15px'}}>{t('menuChangePassword')}</div>
             </div>
           </div>
 
           <div style={styles.menuGroup}>
-            <div style={styles.menuTitle}>Khác</div>
-            <div style={styles.menuItem(activeTab === 'friends')} onClick={() => setActiveTab('friends')}>
-              <Users size={22} style={styles.menuIcon(activeTab === 'friends')} />
-              <div style={{fontSize: '15px'}}>Danh sách bạn bè</div>
-            </div>
-            <div style={styles.menuItem(activeTab === 'notifications')} onClick={() => setActiveTab('notifications')}>
-              <Bell size={22} style={styles.menuIcon(activeTab === 'notifications')} />
-              <div style={{fontSize: '15px'}}>Thông báo</div>
-            </div>
+            <div style={styles.menuTitle}>{t('menuOther')}</div>
             <div style={styles.menuItem(activeTab === 'privacy')} onClick={() => setActiveTab('privacy')}>
               <Shield size={22} style={styles.menuIcon(activeTab === 'privacy')} />
-              <div style={{fontSize: '15px'}}>Quyền riêng tư</div>
+              <div style={{fontSize: '15px'}}>{t('menuPrivacy')}</div>
             </div>
             <div style={styles.menuItem(activeTab === 'about')} onClick={() => setActiveTab('about')}>
               <Info size={22} style={styles.menuIcon(activeTab === 'about')} />
-              <div style={{fontSize: '15px'}}>Về hệ thống</div>
+              <div style={{fontSize: '15px'}}>{t('menuAbout')}</div>
             </div>
             
             <div style={{ marginTop: '20px', paddingTop: '20px', borderTop: '1px solid var(--border-color)' }}>
               <div style={styles.menuItem(false)} onClick={handleLogout}>
                 <LogOut size={22} style={styles.menuIcon(false)} />
-                <div style={{fontSize: '15px'}}>Đăng xuất</div>
+                <div style={{fontSize: '15px'}}>{t('logout')}</div>
               </div>
               <div style={styles.menuItem(false)} onClick={handleLogoutAll}>
                 <LogOut size={22} style={styles.menuIcon(false)} />
@@ -767,12 +892,10 @@ export default function ProfilePage() {
             </div>
 
             <p style={{ ...styles.modalText, marginBottom: 20, fontSize: 14 }}>
-              Mã OTP đã được gửi đến <strong>{otpModal.contact}</strong>.
-              {otpModal.type === 'phone' && (
-                <span style={{ display: 'block', marginTop: 6, color: '#3b82f6', fontSize: 12 }}>
-                  💡 Xem mã OTP ở Terminal Backend (màn hình đang chạy server)
-                </span>
-              )}
+              Mã OTP xác thực đã được gửi đến <strong>{otpModal.type === 'phone' ? 'Email của bạn' : otpModal.contact}</strong>.
+              <span style={{ display: 'block', marginTop: 6, color: '#666', fontSize: 12 }}>
+                Vui lòng kiểm tra hộp thư đến (hoặc mục Spam).
+              </span>
             </p>
 
             {otpError && (
@@ -796,6 +919,26 @@ export default function ProfilePage() {
                   style={{ width: 46, height: 56, textAlign: 'center', fontSize: 22, fontWeight: 700, borderRadius: 12, border: `1.5px solid ${otpError ? '#ef4444' : 'var(--border-color)'}`, background: 'var(--input-bg)', color: 'var(--text-primary)', outline: 'none', boxSizing: 'border-box' }}
                 />
               ))}
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 20 }}>
+              <span style={{ fontSize: 14, color: 'var(--text-secondary)' }}>
+                Bạn chưa nhận được mã?{' '}
+                <button
+                  onClick={handleResendOtp}
+                  disabled={resendCooldown > 0 || otpVerifying}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: resendCooldown > 0 ? '#9CA3AF' : '#4F46E5',
+                    fontWeight: 600,
+                    cursor: resendCooldown > 0 ? 'not-allowed' : 'pointer',
+                    padding: 0,
+                  }}
+                >
+                  {resendCooldown > 0 ? `Gửi lại mã (${resendCooldown}s)` : 'Gửi lại mã'}
+                </button>
+              </span>
             </div>
 
             <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>

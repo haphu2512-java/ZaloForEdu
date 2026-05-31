@@ -8,20 +8,20 @@ const phoneSchema = z
 const registerSchema = z
   .object({
     username: z.string().trim().min(3).max(50).optional(),
-    email: z.string().trim().email().regex(/@gmail\.com$/, 'Chỉ hỗ trợ đăng ký bằng @gmail.com').optional(),
-    password: z.string().min(6).max(100),
+    email: z.string().trim().email('Email không đúng định dạng').regex(/@gmail\.com$/, 'Chỉ hỗ trợ đăng ký bằng @gmail.com').optional(),
+    password: z.string().min(6, 'Mật khẩu tối thiểu 6 ký tự').regex(/[0-9]/, 'Mật khẩu phải chứa ít nhất một số').regex(/[A-Z]/, 'Mật khẩu phải chứa ít nhất một chữ in hoa').max(100),
     phone: phoneSchema.optional(),
   })
   .refine((input) => input.email || input.phone, {
-    message: 'Either email or phone is required',
+    message: 'Cần cung cấp email hoặc số điện thoại',
   });
 
 const loginSchema = z
   .object({
-    email: z.string().trim().email().regex(/@gmail\.com$/, 'Chỉ hỗ trợ Gmail').optional(),
+    email: z.string().trim().email('Email không đúng định dạng').regex(/@gmail\.com$/, 'Chỉ hỗ trợ Gmail').optional(),
     username: z.string().trim().min(3).max(50).optional(),
     phone: phoneSchema.optional(),
-    password: z.string().min(6).max(100),
+    password: z.string().min(6, 'Mật khẩu tối thiểu 6 ký tự').max(100),
     device: z.enum(['web', 'mobile']).optional(), // Allow device parameter for session management
   })
   .refine((input) => input.email || input.username || input.phone, {

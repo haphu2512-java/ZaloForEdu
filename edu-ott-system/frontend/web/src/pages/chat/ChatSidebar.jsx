@@ -1,8 +1,9 @@
 import React, { useState } from "react";
 import { FaSearch, FaUsers, FaCloud, FaUserSecret, FaArrowLeft, FaUserPlus, FaThumbtack } from "react-icons/fa";
 import { useLanguage } from '../../contexts/LanguageContext';
+import { DEFAULT_AVATAR } from '../../utils/constants';
 
-const DEFAULT_AVATAR = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' rx='20' fill='%23d8dadf'/%3E%3Ccircle cx='20' cy='15' r='7' fill='%23bcc0c4'/%3E%3Cpath d='M6 35 Q6 26 20 26 Q34 26 34 35' fill='%23bcc0c4'/%3E%3C/svg%3E";
+
 
 const formatChatTimestamp = (dateString) => {
   const d = new Date(dateString);
@@ -45,11 +46,11 @@ export const ChatSidebar = ({
   const { t } = useLanguage();
 
   const CATS = [
-    { key: 'all', label: 'Tất cả', emoji: null },
-    { key: 'primary', label: 'Chính', emoji: '💬' },
-    { key: 'work', label: 'Việc', emoji: '💼' },
-    { key: 'family', label: 'G.đình', emoji: '🏠' },
-    { key: 'other', label: 'Khác', emoji: '🗂️' },
+    { key: 'all', label: t('allTab'), emoji: null },
+    { key: 'primary', label: t('primaryTab'), emoji: '💬' },
+    { key: 'work', label: t('workTab'), emoji: '💼' },
+    { key: 'family', label: t('familyTab'), emoji: '🏠' },
+    { key: 'other', label: t('otherTab'), emoji: '🗂️' },
   ];
 
   return (
@@ -62,7 +63,7 @@ export const ChatSidebar = ({
             onMouseEnter={e => e.currentTarget.style.background = "var(--z-border)"}
             onMouseLeave={e => e.currentTarget.style.background = "var(--z-bg-hover)"}
           ><FaUserPlus size={15} /></button>
-          <button title="Tạo nhóm" onClick={() => setShowCreateGroupModal(true)}
+          <button title={t('createGroup')} onClick={() => setShowCreateGroupModal(true)}
             style={{ width: 34, height: 34, borderRadius: "50%", border: "none", background: "var(--z-bg-hover)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--z-text-secondary)", transition: "background 0.2s" }}
             onMouseEnter={e => e.currentTarget.style.background = "var(--z-border)"}
             onMouseLeave={e => e.currentTarget.style.background = "var(--z-bg-hover)"}

@@ -9,18 +9,26 @@ import { useFriendStore } from "../../store/friendStore";
 import { blockService } from "../../services/blockService";
 import api from "../../services/authService";
 import { useNavigate } from "react-router-dom";
+import { useConfirm } from "../../contexts/ConfirmContext";
+import toast from "react-hot-toast";
+import ReportUserModal from "../../pages/chat/Modals/ReportUserModal";
 import "./UserProfileModal.css";
+import { DEFAULT_AVATAR } from '../../utils/constants';
 
-const DEFAULT_AVATAR = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' rx='20' fill='%23bdbdbd'/%3E%3Ccircle cx='20' cy='15' r='7' fill='%23fff'/%3E%3Cellipse cx='20' cy='35' rx='12' ry='9' fill='%23fff'/%3E%3C/svg%3E";
+
 
 export default function UserProfileModal({ isOpen, onClose, user, status: initialStatus, onStatusChange, onChatOpened }) {
   const navigate = useNavigate();
+  const confirm = useConfirm();
   const { 
     unfriend, 
     blockedUsers, 
     blockFriend: blockFriendStore, 
     unblockUser: unblockUserStore, 
-    fetchBlockedUsers 
+    fetchBlockedUsers,
+    friends: storeFriends,
+    outgoingRequests: storeOut,
+    incomingRequests: storeIn,
   } = useFriendStore();
 
   const [status, setStatus] = useState(initialStatus || "none");
@@ -28,6 +36,7 @@ export default function UserProfileModal({ isOpen, onClose, user, status: initia
   const [chatLoading, setChatLoading] = useState(false);
   const [outgoingReqId, setOutgoingReqId] = useState(null);
   const [incomingReqId, setIncomingReqId] = useState(null);
+  const [showReportModal, setShowReportModal] = useState(false);
 
   const isBlockedByMe = useMemo(() => {
     if (!user) return false;
@@ -37,6 +46,19 @@ export default function UserProfileModal({ isOpen, onClose, user, status: initia
 
   // Ref để tránh checkRelationship ghi đè status sau khi user đã click
   const actionTakenRef = useRef(false);
+
+  // FIX: Đồng bộ status từ Zustand store theo thời gian thực
+  // Khi user mở lại modal, status luôn phản ánh đúng trạng thái trong store
+  const targetUid = user ? String(user._id || user.id) : null;
+  useEffect(() => {
+    if (!targetUid || !isOpen) return;
+    const isFriend = storeFriends.some(f => String(f._id || f.id) === targetUid);
+    const outReq = storeOut.find(r => String(r.toUserId?._id || r.toUserId || '') === targetUid);
+    const inReq  = storeIn.find(r => String(r.fromUserId?._id || r.fromUserId || '') === targetUid);
+    if (isFriend)      { setStatus('friend');   return; }
+    if (outReq)        { setStatus('outgoing');  setOutgoingReqId(outReq._id ? String(outReq._id) : null); return; }
+    if (inReq)         { setStatus('incoming');  setIncomingReqId(inReq._id  ? String(inReq._id)  : null); return; }
+  }, [targetUid, isOpen, storeFriends, storeOut, storeIn]);
 
   useEffect(() => {
     if (!isOpen || !user) return;
@@ -58,47 +80,38 @@ export default function UserProfileModal({ isOpen, onClose, user, status: initia
         ]);
         if (cancelled) return;
 
-        // Check blocked - uses global list
+        // Kiểm tra blocked
         if (blockedUsers.length === 0) {
           await fetchBlockedUsers();
         }
 
-        // Merge store additively
-        const { friends: curFriends, outgoingRequests: curOut, incomingRequests: curIn } = useFriendStore.getState();
-
-        const serverFriendIds = new Set((friendData?.items || []).map(f => String(f._id || f.id)));
-        const mergedFriends = [
-          ...(friendData?.items || []),
-          ...curFriends.filter(f => !serverFriendIds.has(String(f._id || f.id))),
-        ];
-
-        const serverOut = outData?.items || [];
-        const serverOutIds = new Set(serverOut.map(r => String(r.toUserId?._id || r.toUserId || '')));
-        const mergedOut = [
-          ...serverOut,
-          ...curOut.filter(r => !serverOutIds.has(String(r.toUserId?._id || r.toUserId || ''))),
-        ];
-
-        const serverIn = inData?.items || [];
-        const serverInIds = new Set(serverIn.map(r => String(r.fromUserId?._id || r.fromUserId || '')));
-        const mergedIn = [
-          ...serverIn,
-          ...curIn.filter(r => !serverInIds.has(String(r.fromUserId?._id || r.fromUserId || ''))),
-        ];
-
-        useFriendStore.setState({ friends: mergedFriends, outgoingRequests: mergedOut, incomingRequests: mergedIn });
+        // FIX: KHÔNG ghi đè Zustand store ở đây — tránh race condition
+        // Store đã được cập nhật bởi handleSendRequest (optimistic) và fetchOutgoingRequests khác
+        // Chỉ dùng kết quả API để set local status
 
         if (actionTakenRef.current) return;
 
         const isFriend = (friendData?.items || []).some(f => String(f._id || f.id) === uid);
         if (isFriend) { setStatus("friend"); return; }
 
-        const outReq = mergedOut.find(r => String(r.toUserId?._id || r.toUserId || "") === uid);
+        const serverOut = outData?.items || [];
+        const outReq = serverOut.find(r => String(r.toUserId?._id || r.toUserId?.id || r.toUserId || r.to?._id || r.to?.id || r.to || "") === uid);
         if (outReq) { setStatus("outgoing"); setOutgoingReqId(String(outReq._id)); return; }
 
-        const inReq = mergedIn.find(r => String(r.fromUserId?._id || r.fromUserId || "") === uid);
+        const serverIn = inData?.items || [];
+        const inReq = serverIn.find(r => String(r.fromUserId?._id || r.fromUserId?.id || r.fromUserId || r.from?._id || r.from?.id || r.from || "") === uid);
         if (inReq) { setStatus("incoming"); setIncomingReqId(String(inReq._id)); return; }
 
+        // FIX: Trước khi đặt 'none', kiểm tra lại live store
+        // (có thể handleSendRequest đã optimistic update nhưng API chưa phản ánh)
+        const { outgoingRequests: liveOut, incomingRequests: liveIn, friends: liveFriends } = useFriendStore.getState();
+        const liveIsFriend = liveFriends.some(f => String(f._id || f.id) === uid);
+        const liveOutgoing = liveOut.some(r => String(r.toUserId?._id || r.toUserId?.id || r.toUserId || r.to?._id || r.to?.id || r.to || '') === uid);
+        const liveIncoming = liveIn.some(r => String(r.fromUserId?._id || r.fromUserId?.id || r.fromUserId || r.from?._id || r.from?.id || r.from || '') === uid);
+        if (liveIsFriend)  { setStatus("friend");   return; }
+        if (liveOutgoing)  { setStatus("outgoing");  return; }
+        if (liveIncoming)  { setStatus("incoming");  return; }
+        // Chỉ set 'none' khi cả API lẫn store đều không có quan hệ
         setStatus("none");
       } catch {
         if (!actionTakenRef.current) setStatus(initialStatus || "none");
@@ -199,7 +212,7 @@ export default function UserProfileModal({ isOpen, onClose, user, status: initia
   };
 
   const handleUnfriend = async () => {
-    if (!window.confirm(`Xóa ${user.username} khỏi danh sách bạn bè?`)) return;
+    if (!await confirm(`Xóa ${user.username} khỏi danh sách bạn bè?`, { isDanger: true })) return;
     setActionLoading("unfriend");
     actionTakenRef.current = true;
     try {
@@ -214,7 +227,7 @@ export default function UserProfileModal({ isOpen, onClose, user, status: initia
 
   // ── Block / Unblock ──────────────────────────────────────────
   const handleBlock = async () => {
-    if (!window.confirm(`Chặn ${user.username}? Người này sẽ không thể liên lạc với bạn.`)) return;
+    if (!await confirm(`Chặn ${user.username}? Người này sẽ không thể liên lạc với bạn.`, { isDanger: true })) return;
     setActionLoading("block");
     actionTakenRef.current = true;
     try {
@@ -222,7 +235,7 @@ export default function UserProfileModal({ isOpen, onClose, user, status: initia
       if (res.success) {
         setStatus("none");
       } else {
-        alert(res.error || "Chặn người dùng thất bại");
+        toast.error(res.error || "Chặn người dùng thất bại");
       }
     } catch {
       actionTakenRef.current = false;
@@ -234,16 +247,17 @@ export default function UserProfileModal({ isOpen, onClose, user, status: initia
     try {
       const res = await unblockUserStore(uid);
       if (!res.success) {
-        alert(res.error || "Không thể bỏ chặn. Thử lại sau.");
+        toast.error(res.error || "Không thể bỏ chặn. Thử lại sau.");
       }
     } catch {
-      alert("Không thể bỏ chặn. Thử lại sau.");
+      toast.error("Không thể bỏ chặn. Thử lại sau.");
     } finally { setActionLoading(null); }
   };
 
   const isFriend = status === "friend";
 
   return (
+    <>
     <div className="upm-overlay" onClick={onClose}>
       <div className="upm-modal" onClick={e => e.stopPropagation()}>
         {/* Cover + Avatar */}
@@ -411,7 +425,7 @@ export default function UserProfileModal({ isOpen, onClose, user, status: initia
               </button>
             )}
 
-            <button className="upm-list-item">
+            <button className="upm-list-item" onClick={() => setShowReportModal(true)}>
               <FaFlag size={15} className="upm-list-icon" />
               <span>Báo xấu</span>
               <FaChevronRight size={12} className="upm-list-chevron" />
@@ -427,5 +441,15 @@ export default function UserProfileModal({ isOpen, onClose, user, status: initia
         </div>
       </div>
     </div>
+
+    {/* Report Modal */}
+    {showReportModal && (
+      <ReportUserModal
+        targetUserId={uid}
+        targetUserName={user.username || "Người dùng"}
+        onClose={() => setShowReportModal(false)}
+      />
+    )}
+    </>
   );
 }

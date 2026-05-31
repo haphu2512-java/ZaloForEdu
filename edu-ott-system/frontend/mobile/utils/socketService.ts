@@ -99,7 +99,7 @@ export async function connectSocket(freshToken?: string): Promise<Socket | null>
     });
 
     socket.on('socket_error', (data) => {
-      console.warn('[Socket] Server error:', data.message);
+      console.log('[Socket] Server error:', data.message);
     });
 
     return socket;

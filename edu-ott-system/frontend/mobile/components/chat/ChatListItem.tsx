@@ -66,12 +66,18 @@ export const ChatListItem: React.FC<ChatListItemProps> = ({
     >
       {/* Avatar */}
       <View style={styles.avatarWrapper}>
-        <Image
-          source={{
-            uri: avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=0068FF&color=fff&size=100&bold=true`,
-          }}
-          style={[styles.avatar, !isActive && { opacity: 0.4, tintColor: 'gray' as any }]}
-        />
+        {avatar === 'cloud' ? (
+          <View style={[styles.avatar, { backgroundColor: '#0068FF', alignItems: 'center', justifyContent: 'center' }]}>
+            <Ionicons name="cloud" size={26} color="#fff" style={{ marginTop: 2 }} />
+          </View>
+        ) : (
+          <Image
+            source={{
+              uri: avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=0068FF&color=fff&size=100&bold=true`,
+            }}
+            style={[styles.avatar, !isActive && { opacity: 0.4, tintColor: 'gray' as any }]}
+          />
+        )}
         {badge && (
           <View style={[styles.badgeIcon, { backgroundColor: badge.color }]}>
             <Ionicons name={badge.icon} size={10} color="#fff" />

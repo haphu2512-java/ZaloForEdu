@@ -12,6 +12,7 @@ import {
   StyleSheet,
   Platform,
 } from 'react-native';
+import { verifyEmail } from '../../utils/authService';
 
 type EditableFields = {
   username: string;
@@ -80,6 +81,9 @@ export default function EditProfileModal({
     avatarUrl: user?.avatarUrl || '',
   });
   const [isUpdating, setIsUpdating] = useState(false);
+  const [showOtp, setShowOtp] = useState(false);
+  const [otpCode, setOtpCode] = useState('');
+  const [verifyingOtp, setVerifyingOtp] = useState(false);
 
   useEffect(() => {
     if (visible && user) {
@@ -89,6 +93,8 @@ export default function EditProfileModal({
         email: user.email || '',
         avatarUrl: user.avatarUrl || '',
       });
+      setShowOtp(false);
+      setOtpCode('');
     }
   }, [visible, user]);
 
@@ -140,12 +146,36 @@ export default function EditProfileModal({
     setIsUpdating(true);
     try {
       await updateUser(payload);
-      onClose();
-      Alert.alert('Thành công ✅', 'Hồ sơ đã được cập nhật!');
+      
+      // If phone was changed, we need to verify OTP sent to email!
+      if (payload.phone) {
+         setShowOtp(true);
+      } else {
+         onClose();
+         Alert.alert('Thành công ✅', 'Hồ sơ đã được cập nhật!');
+      }
     } catch (error: any) {
       Alert.alert('Lỗi', error.message || 'Cập nhật thất bại');
     } finally {
       setIsUpdating(false);
+    }
+  };
+
+  const handleVerifyOtp = async () => {
+    if (!otpCode || otpCode.length !== 6) {
+       Alert.alert('Lỗi', 'Vui lòng nhập đủ 6 số OTP');
+       return;
+    }
+    setVerifyingOtp(true);
+    try {
+      await verifyEmail(otpCode, editFields.phone);
+      setShowOtp(false);
+      onClose();
+      Alert.alert('Thành công ✅', 'Xác thực số điện thoại thành công!');
+    } catch (error: any) {
+      Alert.alert('Lỗi', error.message || 'Mã OTP không đúng');
+    } finally {
+      setVerifyingOtp(false);
     }
   };
 
@@ -163,9 +193,9 @@ export default function EditProfileModal({
           <TouchableOpacity onPress={onClose}>
             <Text style={{ color: colors.error, fontSize: 16, fontWeight: '600' }}>Hủy</Text>
           </TouchableOpacity>
-          <Text style={[styles.modalTitle, { color: colors.text }]}>Chỉnh sửa hồ sơ</Text>
-          <TouchableOpacity onPress={handleSaveProfile} disabled={isUpdating}>
-            {isUpdating ? (
+          <Text style={[styles.modalTitle, { color: colors.text }]}>{showOtp ? 'Xác thực OTP' : 'Chỉnh sửa hồ sơ'}</Text>
+          <TouchableOpacity onPress={showOtp ? handleVerifyOtp : handleSaveProfile} disabled={isUpdating || verifyingOtp}>
+            {isUpdating || verifyingOtp ? (
               <ActivityIndicator size="small" color={colors.tint} />
             ) : (
               <Text style={{ color: colors.tint, fontSize: 16, fontWeight: '700' }}>Lưu</Text>
@@ -174,31 +204,56 @@ export default function EditProfileModal({
         </View>
 
         <ScrollView style={{ padding: 20 }}>
-          <ModalInput
-            label="Username *"
-            value={editFields.username}
-            onChangeText={(v: string) => setEditFields({ ...editFields, username: v })}
-            placeholder="Nhập username (ít nhất 3 ký tự)"
-            autoCapitalize="none"
-            colors={colors}
-          />
-          <ModalInput
-            label="Email"
-            value={editFields.email}
-            onChangeText={(v: string) => setEditFields({ ...editFields, email: v })}
-            placeholder="Nhập email"
-            keyboardType="email-address"
-            autoCapitalize="none"
-            colors={colors}
-          />
-          <ModalInput
-            label="Số điện thoại"
-            value={editFields.phone}
-            onChangeText={(v: string) => setEditFields({ ...editFields, phone: v })}
-            placeholder="0901234567"
-            keyboardType="phone-pad"
-            colors={colors}
-          />
+          {!showOtp ? (
+            <>
+              <ModalInput
+                label="Username *"
+                value={editFields.username}
+                onChangeText={(v: string) => setEditFields({ ...editFields, username: v })}
+                placeholder="Nhập username (ít nhất 3 ký tự)"
+                autoCapitalize="none"
+                colors={colors}
+              />
+              <ModalInput
+                label="Email"
+                value={editFields.email}
+                onChangeText={(v: string) => setEditFields({ ...editFields, email: v })}
+                placeholder="Nhập email"
+                keyboardType="email-address"
+                autoCapitalize="none"
+                colors={colors}
+              />
+              <ModalInput
+                label="Số điện thoại"
+                value={editFields.phone}
+                onChangeText={(v: string) => setEditFields({ ...editFields, phone: v })}
+                placeholder="0901234567"
+                keyboardType="phone-pad"
+                colors={colors}
+              />
+            </>
+          ) : (
+            <View>
+              <Text style={{ color: colors.text, fontSize: 15, marginBottom: 16, lineHeight: 22 }}>
+                Mã OTP xác thực đã được gửi đến <Text style={{fontWeight: 'bold'}}>Email của bạn</Text>. Vui lòng kiểm tra hộp thư đến hoặc mục Spam.
+              </Text>
+              <ModalInput
+                label="Mã OTP (6 chữ số)"
+                value={otpCode}
+                onChangeText={setOtpCode}
+                placeholder="Nhập OTP"
+                keyboardType="phone-pad"
+                colors={colors}
+              />
+              <TouchableOpacity
+                onPress={handleVerifyOtp}
+                disabled={verifyingOtp}
+                style={{ backgroundColor: colors.tint, padding: 16, borderRadius: 12, alignItems: 'center', marginTop: 10 }}
+              >
+                {verifyingOtp ? <ActivityIndicator color="#fff" /> : <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 16 }}>Xác nhận</Text>}
+              </TouchableOpacity>
+            </View>
+          )}
         </ScrollView>
       </KeyboardAvoidingView>
     </Modal>
