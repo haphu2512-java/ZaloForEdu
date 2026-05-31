@@ -59,6 +59,7 @@ export default function ProfilePage() {
   const fileInputRef = useRef(null); 
   const [activeTab, setActiveTab] = useState('view_profile'); 
   const [avatarFile, setAvatarFile] = useState(null);
+  const [originalProfile, setOriginalProfile] = useState(null);
 
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deletePassword, setDeletePassword] = useState("");
@@ -98,7 +99,7 @@ export default function ProfilePage() {
              if (!isNaN(createdObj)) joinDate = `${createdObj.getMonth() + 1}/${createdObj.getFullYear()}`;
           }
 
-          setProfile({
+          const newProfile = {
             id: userData._id || userData.id || '',
             username: userData.username || userData.fullName || '', 
             email: userData.email || '',
@@ -107,7 +108,9 @@ export default function ProfilePage() {
             createdAt: joinDate,
             friends: userData.friends || [],
             isOnline: true
-          });
+          };
+          setProfile(newProfile);
+          setOriginalProfile(newProfile);
           setVerifiedContacts({
             email: userData.isEmailVerified !== false,
             phone: userData.isPhoneVerified !== false,
@@ -183,13 +186,17 @@ export default function ProfilePage() {
       const requiresEmailVerification = resData?.requiresEmailVerification;
 
       if (updatedUser) {
-        setProfile((prev) => ({ 
-          ...prev, 
-          avatarUrl: updatedUser.avatarUrl || prev.avatarUrl,
-          username: updatedUser.username || prev.username,
-          phone: updatedUser.phone || prev.phone,
-          email: updatedUser.email !== undefined ? updatedUser.email : prev.email
-        }));
+        setProfile((prev) => {
+          const updated = { 
+            ...prev, 
+            avatarUrl: updatedUser.avatarUrl || prev.avatarUrl,
+            username: updatedUser.username || prev.username,
+            phone: updatedUser.phone !== undefined ? updatedUser.phone : prev.phone,
+            email: updatedUser.email !== undefined ? updatedUser.email : prev.email
+          };
+          setOriginalProfile(updated);
+          return updated;
+        });
         
         // Cập nhật global state và localStorage để đồng bộ avatar/tên trên toàn ứng dụng web
         localStorage.setItem("user", JSON.stringify(updatedUser));
@@ -588,7 +595,11 @@ export default function ProfilePage() {
                     </div>
 
                       <div style={styles.actionRow}>
-                        <button onClick={() => { setAvatarFile(null); setActiveTab('view_profile'); }} style={styles.btnSecondary} disabled={isSaving}>Hủy bỏ</button>
+                        <button onClick={() => { 
+                          if (originalProfile) setProfile(originalProfile);
+                          setAvatarFile(null); 
+                          setActiveTab('view_profile'); 
+                        }} style={styles.btnSecondary} disabled={isSaving}>Hủy bỏ</button>
                         <button onClick={handleSaveProfile} style={styles.btnPrimary} disabled={isSaving}>
                           <Save size={18} /> {isSaving ? 'Đang lưu...' : 'Lưu thay đổi'}
                         </button>
