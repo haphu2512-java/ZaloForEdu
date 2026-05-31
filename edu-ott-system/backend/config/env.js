@@ -60,4 +60,10 @@ module.exports = {
   // ZegoCloud (Video/Audio Call) — kept server-side, never sent to client
   zegoAppId: Number(process.env.ZEGO_APP_ID || 0),
   zegoServerSecret: process.env.ZEGO_SERVER_SECRET || '',
+
+  // AWS S3
+  awsAccessKeyId: process.env.AWS_ACCESS_KEY_ID || '',
+  awsSecretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || '',
+  awsRegion: process.env.AWS_REGION || '',
+  awsS3Bucket: process.env.AWS_S3_BUCKET || '',
 };
