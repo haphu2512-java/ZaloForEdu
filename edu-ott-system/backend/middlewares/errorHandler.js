@@ -23,6 +23,7 @@ const errorHandler = (err, _req, res, _next) => {
     'User is not in this group': 'Thành viên không có trong nhóm',
     'Member is already an admin': 'Thành viên đã là phó nhóm',
     'User is already in this group': 'Thành viên đã có trong nhóm',
+    'Email already exists': 'Email này đã được sử dụng bởi tài khoản khác',
     'All users are already in the group': 'Tất cả người dùng đã có trong nhóm',
     'Direct conversation must contain exactly 2 participants': 'Cuộc trò chuyện cá nhân phải có đúng 2 người',
     'Missing Bearer token': 'Vui lòng đăng nhập lại',

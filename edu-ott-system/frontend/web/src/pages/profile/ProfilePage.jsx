@@ -220,7 +220,8 @@ export default function ProfilePage() {
       }
     } catch (error) {
       console.error('Lỗi cập nhật:', error);
-      toast.error('Cập nhật thất bại, kiểm tra lại số điện thoại (nếu có thì phải đủ 8 số) nhé!');
+      const backendErr = error.response?.data?.error?.message || error.response?.data?.message;
+      toast.error(backendErr || 'Cập nhật thất bại, kiểm tra lại dữ liệu nhập vào nhé!');
     } finally {
       setIsSaving(false);
     }
