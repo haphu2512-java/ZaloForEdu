@@ -2,6 +2,7 @@ const crypto = require('node:crypto');
 const User = require('../models/User');
 const Conversation = require('../models/Conversation');
 const Message = require('../models/Message');
+const Notification = require('../models/Notification');
 const asyncHandler = require('../utils/asyncHandler');
 const ApiError = require('../utils/apiError');
 const { successResponse } = require('../utils/apiResponse');
@@ -246,6 +247,32 @@ const updateUserStatus = asyncHandler(async (req, res) => {
         user.tokenVersion += 1;
         await user.save();
       }
+
+      // Tạo notification persistent + emit vào chuông thông báo
+      try {
+        const io = req.app.get('io');
+        const notifTitle = currentWarnings >= 3
+          ? '⛔ Tài khoản bị khóa'
+          : `⚠️ Cảnh báo từ Quản trị viên (${currentWarnings}/3)`;
+        const notifBody = currentWarnings >= 3
+          ? 'Tài khoản của bạn đã bị khóa tự động do nhận 3 cảnh cáo từ Quản trị viên.'
+          : `Tài khoản của bạn vừa nhận cảnh cáo từ Quản trị viên (${currentWarnings}/3). Vui lòng tuân thủ nội quy cộng đồng.${
+              currentWarnings >= 2 ? ' Cảnh cáo tiếp theo sẽ khóa tài khoản!' : ''
+            }`;
+        const notif = await Notification.create({
+          userId: user._id,
+          type: 'admin_warning',
+          title: notifTitle,
+          body: notifBody,
+          data: { warningCount: currentWarnings, isBanned: user.isActive === false },
+        });
+        if (io) {
+          io.to(`user:${targetUserId}`).emit('new_notification', notif.toObject());
+        }
+      } catch (err) {
+        console.error('Failed to create admin warning notification:', err.message);
+      }
+
       return successResponse(res, { userId: user._id, warningCount: currentWarnings, isActive: user.isActive }, 'Gửi cảnh cáo thành công');
     }
     throw new ApiError(500, 'SERVER_ERROR', 'Redis không khả dụng, không thể gửi cảnh cáo.');

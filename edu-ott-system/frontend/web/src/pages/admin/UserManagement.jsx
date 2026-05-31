@@ -1,6 +1,6 @@
 import toast from "react-hot-toast";
-import React, { useState, useEffect } from 'react';
-import { Search, ShieldAlert, Loader2, ChevronLeft, ChevronRight, UserX, UserCheck, Trash2, Shield, Users, Activity, Eye, AlertCircle, AlertTriangle, X } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Search, ShieldAlert, Loader2, ChevronLeft, ChevronRight, UserX, UserCheck, Trash2, Shield, Users, Activity, AlertCircle, AlertTriangle, X, RefreshCw } from 'lucide-react';
 import { userService } from '../../services/userService';
 import { DEFAULT_AVATAR } from '../../utils/constants';
 
@@ -22,9 +22,13 @@ export default function UserManagement() {
   const [isProcessing, setIsProcessing] = useState(false);
 
   // LẤY DỮ LIỆU TỪ BACKEND
-  const fetchUsers = async () => {
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const intervalRef = useRef(null);
+
+  const fetchUsers = async (silent = false) => {
     try {
-      setIsLoading(true);
+      if (!silent) setIsLoading(true);
+      else setIsRefreshing(true);
       const res = await userService.getAllUsers();
       const usersArray = res?.data?.users || res?.data?.data?.users || res?.users || [];
       setUsers(usersArray);
@@ -32,11 +36,15 @@ export default function UserManagement() {
       console.error('Lỗi khi lấy danh sách users:', error);
     } finally {
       setIsLoading(false);
+      setIsRefreshing(false);
     }
   };
 
   useEffect(() => {
     fetchUsers();
+    // Auto-refresh mỗi 30 giây để cập nhật reportCount mới nhất từ Redis
+    intervalRef.current = setInterval(() => fetchUsers(true), 30000);
+    return () => clearInterval(intervalRef.current);
   }, []);
 
   // 2. CÁC HÀM XỬ LÝ KHI BẤM NÚT TRÊN BẢNG (MỞ MODAL)
@@ -102,6 +110,7 @@ export default function UserManagement() {
         }
         return u;
       }));
+      toast.success(isNowBanned ? `⚠️ Tài khoản đã bị khóa tự động sau ${newWarningCount} cảnh cáo!` : `Đã ghi nhận vi phạm (${newWarningCount}/3)`);
       closeModal();
     } catch (error) {
       toast.error(error.response?.data?.message || 'Ghi nhận vi phạm thất bại!');
@@ -169,16 +178,28 @@ export default function UserManagement() {
         <div style={{ padding: "20px 24px", borderBottom: "1px solid #f1f5f9" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "20px" }}>
 
-            <div style={{ display: "flex", backgroundColor: "#f8fafc", padding: "4px", borderRadius: "12px" }}>
-              {['All', 'Active', 'Banned'].map(t => (
-                <button
-                  key={t}
-                  onClick={() => { setActiveTab(t); setCurrentPage(1); }}
-                  style={{ padding: "8px 16px", borderRadius: "10px", border: "none", cursor: "pointer", fontSize: "14px", fontWeight: 600, backgroundColor: activeTab === t ? "#fff" : "transparent", color: activeTab === t ? "#3b82f6" : "#64748b", boxShadow: activeTab === t ? "0 2px 4px rgba(0,0,0,0.05)" : "none", transition: "0.2s" }}
-                >
-                  {t === 'All' ? 'Tất cả' : t === 'Active' ? 'Hoạt động' : 'Bị khóa'}
-                </button>
-              ))}
+            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+              <div style={{ display: "flex", backgroundColor: "#f8fafc", padding: "4px", borderRadius: "12px" }}>
+                {['All', 'Active', 'Banned'].map(t => (
+                  <button
+                    key={t}
+                    onClick={() => { setActiveTab(t); setCurrentPage(1); }}
+                    style={{ padding: "8px 16px", borderRadius: "10px", border: "none", cursor: "pointer", fontSize: "14px", fontWeight: 600, backgroundColor: activeTab === t ? "#fff" : "transparent", color: activeTab === t ? "#3b82f6" : "#334155", boxShadow: activeTab === t ? "0 2px 4px rgba(0,0,0,0.05)" : "none", transition: "0.2s" }}
+                  >
+                    {t === 'All' ? 'Tất cả' : t === 'Active' ? 'Hoạt động' : 'Bị khóa'}
+                  </button>
+                ))}
+              </div>
+              {/* Nút refresh thủ công */}
+              <button
+                onClick={() => fetchUsers(true)}
+                disabled={isRefreshing}
+                title="Làm mới dữ liệu (Cập nhật số báo cáo từ cộng đồng)"
+                style={{ display: "flex", alignItems: "center", gap: "6px", padding: "8px 14px", borderRadius: "10px", border: "1px solid #e2e8f0", backgroundColor: "#fff", color: "#475569", fontWeight: 600, fontSize: "13px", cursor: isRefreshing ? "not-allowed" : "pointer", opacity: isRefreshing ? 0.7 : 1 }}
+              >
+                <RefreshCw size={14} style={{ animation: isRefreshing ? "spin 1s linear infinite" : "none" }} />
+                {isRefreshing ? 'Đang cập nhật...' : 'Làm mới'}
+              </button>
             </div>
 
             <div style={{ display: "flex", gap: "12px", flex: 1, justifyContent: "flex-end", minWidth: "300px" }}>
@@ -187,12 +208,12 @@ export default function UserManagement() {
                 <input
                   type="text" placeholder="Tìm tên, email..."
                   value={searchTerm} onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
-                  style={{ width: "100%", padding: "10px 16px 10px 42px", borderRadius: "12px", border: "1px solid #e2e8f0", fontSize: "14px", outline: "none" }}
+                  style={{ width: "100%", padding: "10px 16px 10px 42px", borderRadius: "12px", border: "1px solid #e2e8f0", fontSize: "14px", outline: "none", color: "#0f172a" }}
                 />
               </div>
               <select
                 value={filterRole} onChange={(e) => setFilterRole(e.target.value)}
-                style={{ padding: "10px 16px", borderRadius: "12px", border: "1px solid #e2e8f0", backgroundColor: "#fff", fontSize: "14px", fontWeight: 600, cursor: "pointer" }}
+                style={{ padding: "10px 16px", borderRadius: "12px", border: "1px solid #e2e8f0", backgroundColor: "#fff", fontSize: "14px", fontWeight: 600, cursor: "pointer", color: "#334155" }}
               >
                 <option value="All">Mọi vai trò</option>
                 <option value="User">Người dùng</option>
@@ -215,13 +236,13 @@ export default function UserManagement() {
           ) : (
             <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left" }}>
               <thead>
-                <tr style={{ backgroundColor: "#fafbfc", borderBottom: "1px solid #f1f5f9" }}>
-                  <th style={{ padding: "16px 24px", fontSize: "12px", fontWeight: 700, color: "#64748b", textTransform: "uppercase" }}>Thành viên</th>
-                  <th style={{ padding: "16px 24px", fontSize: "12px", fontWeight: 700, color: "#64748b", textTransform: "uppercase" }}>Vai trò</th>
-                  <th style={{ padding: "16px 24px", fontSize: "12px", fontWeight: 700, color: "#64748b", textTransform: "uppercase" }}>Cảnh cáo</th>
-                  <th style={{ padding: "16px 24px", fontSize: "12px", fontWeight: 700, color: "#64748b", textTransform: "uppercase" }}>Báo cáo CĐ</th>
-                  <th style={{ padding: "16px 24px", fontSize: "12px", fontWeight: 700, color: "#64748b", textTransform: "uppercase" }}>Trạng thái</th>
-                  <th style={{ padding: "16px 24px", fontSize: "12px", fontWeight: 700, color: "#64748b", textTransform: "uppercase", textAlign: "right" }}>Thao tác</th>
+                <tr style={{ backgroundColor: "#f1f5f9", borderBottom: "2px solid #e2e8f0" }}>
+                  <th style={{ padding: "14px 24px", fontSize: "11px", fontWeight: 800, color: "#334155", textTransform: "uppercase", letterSpacing: "0.06em" }}>Thành viên</th>
+                  <th style={{ padding: "14px 24px", fontSize: "11px", fontWeight: 800, color: "#334155", textTransform: "uppercase", letterSpacing: "0.06em" }}>Vai trò</th>
+                  <th style={{ padding: "14px 24px", fontSize: "11px", fontWeight: 800, color: "#334155", textTransform: "uppercase", letterSpacing: "0.06em" }}>Cảnh cáo</th>
+                  <th style={{ padding: "14px 24px", fontSize: "11px", fontWeight: 800, color: "#334155", textTransform: "uppercase", letterSpacing: "0.06em" }}>Báo cáo CĐ</th>
+                  <th style={{ padding: "14px 24px", fontSize: "11px", fontWeight: 800, color: "#334155", textTransform: "uppercase", letterSpacing: "0.06em" }}>Trạng thái</th>
+                  <th style={{ padding: "14px 24px", fontSize: "11px", fontWeight: 800, color: "#334155", textTransform: "uppercase", letterSpacing: "0.06em", textAlign: "right" }}>Thao tác</th>
                 </tr>
               </thead>
               <tbody>
@@ -237,10 +258,10 @@ export default function UserManagement() {
 
                       <td style={{ padding: "16px 24px" }}>
                         <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-                          <img src={user.avatarUrl || DEFAULT_AVATAR} alt="Ava" style={{ width: "40px", height: "40px", borderRadius: "12px", objectFit: "cover" }} />
+                          <img src={user.avatarUrl || DEFAULT_AVATAR} alt="Ava" style={{ width: "40px", height: "40px", borderRadius: "12px", objectFit: "cover", border: "2px solid #e2e8f0" }} />
                           <div>
-                            <p style={{ margin: 0, fontWeight: 700, fontSize: "14px", color: isBanned ? "#94a3b8" : "#0f172a" }}>{user.fullName || user.username || 'Ẩn danh'}</p>
-                            <p style={{ margin: 0, fontSize: "12px", color: "#64748b" }}>{user.email || user.phone || 'Chưa cập nhật'}</p>
+                            <p style={{ margin: 0, fontWeight: 700, fontSize: "14px", color: isBanned ? "#64748b" : "#0f172a" }}>{user.fullName || user.username || 'Ẩn danh'}</p>
+                            <p style={{ margin: 0, fontSize: "12px", color: "#475569", marginTop: "2px" }}>{user.email || user.phone || 'Chưa cập nhật'}</p>
                           </div>
                         </div>
                       </td>
@@ -291,18 +312,20 @@ export default function UserManagement() {
                       </td>
 
                       <td style={{ padding: "16px 24px", textAlign: "right" }}>
-                        <div className="action-buttons" style={{ display: "flex", justifyContent: "flex-end", gap: "8px" }}>
+                        <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px" }}>
 
-                          <button onClick={() => openModal('warn', user)} disabled={isBanned} style={{ padding: "8px", borderRadius: "10px", border: "none", backgroundColor: isBanned ? "#f1f5f9" : "#fffbeb", color: isBanned ? "#cbd5e1" : "#d97706", cursor: isBanned ? "not-allowed" : "pointer" }} title="Ghi nhận vi phạm">
-                            <AlertTriangle size={16} />
+                          <button onClick={() => openModal('warn', user)} disabled={isBanned} style={{ padding: "8px 10px", borderRadius: "10px", border: "1px solid #fde68a", backgroundColor: isBanned ? "#f8fafc" : "#fffbeb", color: isBanned ? "#cbd5e1" : "#d97706", cursor: isBanned ? "not-allowed" : "pointer", display: "flex", alignItems: "center", gap: "4px", fontSize: "12px", fontWeight: 600 }} title="Ghi nhận vi phạm">
+                            <AlertTriangle size={14} />
+                            Cảnh cáo
                           </button>
 
-                          <button onClick={() => openModal(isBanned ? 'unban' : 'ban', user)} style={{ padding: "8px", borderRadius: "10px", border: "none", backgroundColor: isBanned ? "#ecfdf5" : "#fff1f2", color: isBanned ? "#10b981" : "#ef4444", cursor: "pointer" }} title={isBanned ? "Mở khóa" : "Khóa tài khoản"}>
-                            {isBanned ? <UserCheck size={16} /> : <UserX size={16} />}
+                          <button onClick={() => openModal(isBanned ? 'unban' : 'ban', user)} style={{ padding: "8px 10px", borderRadius: "10px", border: `1px solid ${isBanned ? "#a7f3d0" : "#fecaca"}`, backgroundColor: isBanned ? "#ecfdf5" : "#fff1f2", color: isBanned ? "#059669" : "#ef4444", cursor: "pointer", display: "flex", alignItems: "center", gap: "4px", fontSize: "12px", fontWeight: 600 }} title={isBanned ? "Mở khóa" : "Khóa tài khoản"}>
+                            {isBanned ? <><UserCheck size={14} /> Mở khóa</> : <><UserX size={14} /> Khóa</>}
                           </button>
 
-                          <button onClick={() => openModal('delete', user)} style={{ padding: "8px", borderRadius: "10px", backgroundColor: "#fff", color: "#94a3b8", cursor: "pointer", border: "1px solid #e2e8f0" }} title="Xóa dữ liệu">
-                            <Trash2 size={16} />
+                          <button onClick={() => openModal('delete', user)} style={{ padding: "8px 10px", borderRadius: "10px", backgroundColor: "#fff", color: "#64748b", cursor: "pointer", border: "1px solid #e2e8f0", display: "flex", alignItems: "center", gap: "4px", fontSize: "12px", fontWeight: 600 }} title="Xóa dữ liệu">
+                            <Trash2 size={14} />
+                            Xóa
                           </button>
 
                         </div>
@@ -447,8 +470,6 @@ export default function UserManagement() {
 
       <style>{`
         .user-row:hover { background-color: #f8fafc; }
-        .user-row .action-buttons { opacity: 0; transition: opacity 0.2s; }
-        .user-row:hover .action-buttons { opacity: 1; }
         .spin { animation: spin 1s linear infinite; }
         @keyframes spin { 100% { transform: rotate(360deg); } }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }

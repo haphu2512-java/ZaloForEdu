@@ -324,20 +324,29 @@ export default function ProfilePage() {
     if (!passwordForm.oldPassword || !passwordForm.newPassword || !passwordForm.confirmPassword) {
       return toast.error("Vui lòng điền đầy đủ thông tin mật khẩu!");
     }
+    if (passwordForm.newPassword.length < 6) {
+      return toast.error("Mật khẩu mới phải có ít nhất 6 ký tự!");
+    }
     if (passwordForm.newPassword !== passwordForm.confirmPassword) {
       return toast.error("Mật khẩu xác nhận không khớp!");
     }
     
     try {
-      // Đã gỡ bỏ lệnh chặn độ dài thủ công ở Frontend để API thực hiện trọn vẹn luồng
       await authService.changePassword({ 
         currentPassword: passwordForm.oldPassword, 
         newPassword: passwordForm.newPassword 
       });
       
-      toast.success('Đổi mật khẩu thành công!');
+      toast.success('Đổi mật khẩu thành công! Vui lòng đăng nhập lại.');
       setPasswordForm({ oldPassword: '', newPassword: '', confirmPassword: '' });
-      setActiveTab('view_profile'); 
+      // Tự động đăng xuất sau 1.5s để bảo mật
+      setTimeout(() => {
+        localStorage.removeItem('token');
+        localStorage.removeItem('refreshToken');
+        sessionStorage.clear();
+        window.dispatchEvent(new Event('user-logout'));
+        navigate('/login');
+      }, 1500);
     } catch (error) {
       console.error('Lỗi đổi mật khẩu:', error);
       toast.error(error.response?.data?.message || 'Đổi mật khẩu thất bại! Vui lòng kiểm tra lại mật khẩu hiện tại.');
@@ -403,12 +412,22 @@ export default function ProfilePage() {
   // Khởi tạo các giá trị cho thanh đo độ mạnh mật khẩu
   const strength = getStrength(passwordForm.newPassword);
   const getStrengthColor = () => {
-    if (strength === 'weak') return '#EF4444'; // Đỏ
-    if (strength === 'medium') return '#F59E0B'; // Vàng cam
-    if (strength === 'strong') return '#10B981'; // Xanh lá
-    return '#E2E8F0'; // Xám mặc định
+    if (strength === 'weak') return '#EF4444';
+    if (strength === 'medium') return '#F59E0B';
+    if (strength === 'strong') return '#10B981';
+    return '#E2E8F0';
   };
   const activeBars = { weak: 1, medium: 2, strong: 3 }[strength] || 0;
+
+  // Checklist yêu cầu mật khẩu
+  const pw = passwordForm.newPassword;
+  const pwChecks = [
+    { label: 'Ít nhất 6 ký tự', pass: pw.length >= 6 },
+    { label: 'Có chữ hoa (A-Z)', pass: /[A-Z]/.test(pw) },
+    { label: 'Có chữ thường (a-z)', pass: /[a-z]/.test(pw) },
+    { label: 'Có chữ số (0-9)', pass: /[0-9]/.test(pw) },
+    { label: 'Có ký tự đặc biệt (!@#$...)', pass: /[^A-Za-z0-9]/.test(pw) },
+  ];
 
   // --- UI STYLES ---
   const styles = {
@@ -628,16 +647,28 @@ export default function ProfilePage() {
                   <div style={styles.eyeIconWrap} onClick={() => togglePasswordVisibility('new')}>{showPassword.new ? <EyeOff size={20} /> : <Eye size={20} />}</div>
                 </div>
                 
-                {/* THANH ĐO ĐỘ MẠNH CHUẨN XÁC THEO SỐ LƯỢNG VẠCH */}
+                {/* THANH ĐO ĐỘ MẠNH + CHECKLIST YÊU CẦU */}
                 {passwordForm.newPassword && (
-                  <div style={styles.strengthContainer}>
-                    {[1, 2, 3].map((num) => (
-                      <div key={num} style={styles.strengthBar(num <= activeBars)} />
-                    ))}
-                    <span style={styles.strengthLabel}>
-                      {strength === "weak" ? "Yếu" : strength === "medium" ? "Trung bình" : "Mạnh"}
-                    </span>
-                  </div>
+                  <>
+                    <div style={styles.strengthContainer}>
+                      {[1, 2, 3].map((num) => (
+                        <div key={num} style={styles.strengthBar(num <= activeBars)} />
+                      ))}
+                      <span style={styles.strengthLabel}>
+                        {strength === "weak" ? "Yếu" : strength === "medium" ? "Trung bình" : "Mạnh"}
+                      </span>
+                    </div>
+                    <div style={{ marginTop: 10, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px 16px' }}>
+                      {pwChecks.map((c) => (
+                        <div key={c.label} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: c.pass ? '#16a34a' : '#94a3b8', fontWeight: c.pass ? 600 : 400 }}>
+                          <span style={{ width: 16, height: 16, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, backgroundColor: c.pass ? '#dcfce7' : '#f1f5f9', color: c.pass ? '#16a34a' : '#94a3b8', flexShrink: 0 }}>
+                            {c.pass ? '✓' : '○'}
+                          </span>
+                          {c.label}
+                        </div>
+                      ))}
+                    </div>
+                  </>
                 )}
               </div>
 
@@ -693,9 +724,54 @@ export default function ProfilePage() {
           )}
 
           {activeTab === 'privacy' && (
-            <div style={styles.comingSoon}>
-              <h2>Đang xây dựng...</h2>
-              <p>Tính năng này sẽ sớm ra mắt.</p>
+            <div>
+              <h3 style={styles.sectionTitle}><Shield size={22} color="#4F46E5" /> Chính sách Quyền riêng tư</h3>
+              <p style={{ fontSize: 14, color: 'var(--text-secondary)', marginBottom: 24, lineHeight: 1.7 }}>
+                Chúng tôi cam kết bảo vệ quyền riêng tư và dữ liệu cá nhân của bạn. Dưới đây là các nguyên tắc cơ bản về cách chúng tôi thu thập, sử dụng và bảo vệ thông tin của bạn.
+              </p>
+              {[
+                {
+                  icon: '🔐',
+                  title: 'Thu thập dữ liệu',
+                  body: 'Chúng tôi chỉ thu thập thông tin cần thiết như tên hiển thị, email, số điện thoại và ảnh đại diện. Dữ liệu được mã hóa và lưu trữ an toàn trên hệ thống đám mây.'
+                },
+                {
+                  icon: '💬',
+                  title: 'Tin nhắn & Nội dung',
+                  body: 'Tin nhắn của bạn được truyền tải qua kết nối bảo mật. Chúng tôi không đọc nội dung tin nhắn riêng tư. Nội dung bạn chia sẻ thuộc quyền sở hữu của bạn.'
+                },
+                {
+                  icon: '🚫',
+                  title: 'Không bán dữ liệu',
+                  body: 'Chúng tôi cam kết không bán, cho thuê hay chia sẻ thông tin cá nhân của bạn với bất kỳ bên thứ ba nào vì mục đích thương mại.'
+                },
+                {
+                  icon: '🗑️',
+                  title: 'Quyền xóa dữ liệu',
+                  body: 'Bạn có quyền yêu cầu xóa toàn bộ dữ liệu cá nhân khỏi hệ thống bất cứ lúc nào thông qua tùy chọn "Xóa tài khoản" trong menu bên trái.'
+                },
+                {
+                  icon: '🍪',
+                  title: 'Cookie & Phiên đăng nhập',
+                  body: 'Chúng tôi sử dụng token xác thực (JWT) để duy trì phiên đăng nhập. Bạn có thể đăng xuất hoặc xóa cookie trình duyệt bất cứ lúc nào.'
+                },
+                {
+                  icon: '📧',
+                  title: 'Liên hệ',
+                  body: 'Nếu bạn có câu hỏi về chính sách quyền riêng tư, vui lòng liên hệ đội ngũ hỗ trợ qua email: support@zaloop.edu.vn'
+                },
+              ].map((item) => (
+                <div key={item.title} style={{ display: 'flex', gap: 16, padding: '18px 20px', backgroundColor: 'var(--input-bg)', borderRadius: 14, border: '1px solid var(--border-color)', marginBottom: 14 }}>
+                  <span style={{ fontSize: 28, flexShrink: 0, marginTop: 2 }}>{item.icon}</span>
+                  <div>
+                    <p style={{ margin: '0 0 6px', fontWeight: 700, fontSize: 15, color: 'var(--text-primary)' }}>{item.title}</p>
+                    <p style={{ margin: 0, fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.65 }}>{item.body}</p>
+                  </div>
+                </div>
+              ))}
+              <p style={{ marginTop: 20, fontSize: 12, color: 'var(--text-tertiary)', textAlign: 'center' }}>
+                Cập nhật lần cuối: 31/05/2026 · Phiên bản 1.0
+              </p>
             </div>
           )}
         </div>
@@ -723,14 +799,6 @@ export default function ProfilePage() {
 
           <div style={styles.menuGroup}>
             <div style={styles.menuTitle}>{t('menuOther')}</div>
-            <div style={styles.menuItem(activeTab === 'friends')} onClick={() => setActiveTab('friends')}>
-              <Users size={22} style={styles.menuIcon(activeTab === 'friends')} />
-              <div style={{fontSize: '15px'}}>{t('friendList')}</div>
-            </div>
-            <div style={styles.menuItem(activeTab === 'notifications')} onClick={() => setActiveTab('notifications')}>
-              <Bell size={22} style={styles.menuIcon(activeTab === 'notifications')} />
-              <div style={{fontSize: '15px'}}>{t('menuNotifications')}</div>
-            </div>
             <div style={styles.menuItem(activeTab === 'privacy')} onClick={() => setActiveTab('privacy')}>
               <Shield size={22} style={styles.menuIcon(activeTab === 'privacy')} />
               <div style={{fontSize: '15px'}}>{t('menuPrivacy')}</div>

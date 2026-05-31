@@ -11,6 +11,7 @@ import api from "../../services/authService";
 import { useNavigate } from "react-router-dom";
 import { useConfirm } from "../../contexts/ConfirmContext";
 import toast from "react-hot-toast";
+import ReportUserModal from "../../pages/chat/Modals/ReportUserModal";
 import "./UserProfileModal.css";
 import { DEFAULT_AVATAR } from '../../utils/constants';
 
@@ -35,6 +36,7 @@ export default function UserProfileModal({ isOpen, onClose, user, status: initia
   const [chatLoading, setChatLoading] = useState(false);
   const [outgoingReqId, setOutgoingReqId] = useState(null);
   const [incomingReqId, setIncomingReqId] = useState(null);
+  const [showReportModal, setShowReportModal] = useState(false);
 
   const isBlockedByMe = useMemo(() => {
     if (!user) return false;
@@ -255,6 +257,7 @@ export default function UserProfileModal({ isOpen, onClose, user, status: initia
   const isFriend = status === "friend";
 
   return (
+    <>
     <div className="upm-overlay" onClick={onClose}>
       <div className="upm-modal" onClick={e => e.stopPropagation()}>
         {/* Cover + Avatar */}
@@ -422,7 +425,7 @@ export default function UserProfileModal({ isOpen, onClose, user, status: initia
               </button>
             )}
 
-            <button className="upm-list-item">
+            <button className="upm-list-item" onClick={() => setShowReportModal(true)}>
               <FaFlag size={15} className="upm-list-icon" />
               <span>Báo xấu</span>
               <FaChevronRight size={12} className="upm-list-chevron" />
@@ -438,5 +441,15 @@ export default function UserProfileModal({ isOpen, onClose, user, status: initia
         </div>
       </div>
     </div>
+
+    {/* Report Modal */}
+    {showReportModal && (
+      <ReportUserModal
+        targetUserId={uid}
+        targetUserName={user.username || "Người dùng"}
+        onClose={() => setShowReportModal(false)}
+      />
+    )}
+    </>
   );
 }

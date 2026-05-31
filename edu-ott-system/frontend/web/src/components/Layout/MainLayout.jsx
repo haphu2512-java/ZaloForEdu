@@ -73,7 +73,7 @@ function SettingsModal({ onClose }) {
   useEffect(() => {
     const userId = user?._id || user?.id;
     if (!userId) return;
-    userService.updateProfile(userId, {}).then?.(() => {}).catch?.(() => {});
+    userService.updateProfile(userId, {}).then?.(() => { }).catch?.(() => { });
     // Lấy giá trị thật từ backend
     const token = localStorage.getItem("token");
     if (!token) return;
@@ -85,7 +85,7 @@ function SettingsModal({ onClose }) {
         const p = res?.data?.messagePrivacy || res?.messagePrivacy;
         if (p) { setMessagePrivacyState(p); localStorage.setItem("messagePrivacy", p); }
       })
-      .catch(() => {});
+      .catch(() => { });
   }, [user?._id]);
 
   const handleSavePrivacy = useCallback(async (value) => {
@@ -105,12 +105,12 @@ function SettingsModal({ onClose }) {
   }, [user?._id]);
 
   const SETTING_TABS = [
-    { id: "general",  label: t("tabGeneral"),  icon: FaCog },
-    { id: "messaging", label: "Tin nhắn",      icon: FaCommentSlash },
+    { id: "general", label: t("tabGeneral"), icon: FaCog },
+    { id: "messaging", label: "Tin nhắn", icon: FaCommentSlash },
     { id: "security", label: t("tabSecurity"), icon: FaShieldAlt },
-    { id: "data",     label: t("tabData"),     icon: FaDatabase },
+    { id: "data", label: t("tabData"), icon: FaDatabase },
     { id: "language", label: t("tabLanguage"), icon: FaGlobe },
-    { id: "support",  label: t("tabSupport"),  icon: FaQuestionCircle },
+    { id: "support", label: t("tabSupport"), icon: FaQuestionCircle },
   ];
 
   return (
@@ -382,7 +382,7 @@ function SettingsModal({ onClose }) {
                   <p className="sm-desc">{t("supportDesc")}</p>
                   <button className="sm-action-btn">{t("sendFeedback")}</button>
                 </div>
-                
+
                 <div className="sm-section">
                   <h3>Về hệ thống</h3>
                   <div className="sm-row">
@@ -402,7 +402,7 @@ function SettingsModal({ onClose }) {
                 <div className="sm-section">
                   <h3>Quản lý phiên đăng nhập</h3>
                   <p className="sm-desc">Đăng xuất khỏi tất cả thiết bị đang đăng nhập</p>
-                  <button 
+                  <button
                     className="sm-action-btn danger"
                     onClick={async () => {
                       if (!window.confirm('Bạn có chắc chắn muốn đăng xuất trên tất cả thiết bị?')) return;
@@ -490,7 +490,7 @@ export default function MainLayout() {
 
       const senderName = senderIdObj?.username || senderIdObj?.fullName || "Ai đó";
       const contentStr = message?.content || (message?.mediaIds?.length ? "Đã gửi tệp đính kèm" : "Có tin nhắn mới");
-            const avatarSrc = senderIdObj?.avatarUrl || senderIdObj?.avatar || DEFAULT_AVATAR;
+      const avatarSrc = senderIdObj?.avatarUrl || senderIdObj?.avatar || DEFAULT_AVATAR;
 
       toast.custom((t) => (
         <div
@@ -534,7 +534,7 @@ export default function MainLayout() {
       window.dispatchEvent(new Event('user-logout'));
       navigate('/login', { replace: true });
     };
-    
+
     socketService.on("force_logout", handleForceLogout);
 
     return () => {
@@ -548,11 +548,11 @@ export default function MainLayout() {
 
   // Nav items dùng t() để đa ngôn ngữ
   const NAV_ITEMS = [
-    { to: "/chat",     icon: FaComments,    label: t("messages"),    badge: 0 },
-    { to: "/contacts", icon: FaAddressBook, label: t("contacts"),    badge: 0 },
-    { to: "/chatbot",  icon: FaRobot,       label: t("aiBot"),       badge: 0 },
-    { to: "/cloud",    icon: FaCloud,       label: t("myDocuments"), badge: 0 },
-    { to: "/profile",  icon: FaUser,        label: t("profile"),     badge: 0 },
+    { to: "/chat", icon: FaComments, label: t("messages"), badge: 0 },
+    { to: "/contacts", icon: FaAddressBook, label: t("contacts"), badge: 0 },
+    { to: "/chatbot", icon: FaRobot, label: t("aiBot"), badge: 0 },
+    { to: "/cloud", icon: FaCloud, label: t("myDocuments"), badge: 0 },
+    { to: "/profile", icon: FaUser, label: t("profile"), badge: 0 },
   ];
 
   // Click outside to close menu
@@ -620,8 +620,8 @@ export default function MainLayout() {
               {missingPhone && missingEmail
                 ? 'Tài khoản chưa có email lẫn số điện thoại. Bạn bè sẽ không tìm thấy bạn và bạn không thể khôi phục mật khẩu.'
                 : missingPhone
-                ? 'Thêm số điện thoại để bạn bè có thể tìm thấy bạn và đăng nhập bằng SĐT.'
-                : 'Thêm email để bảo mật tài khoản và dễ dàng khôi phục mật khẩu.'}
+                  ? 'Thêm số điện thoại để bạn bè có thể tìm thấy bạn và đăng nhập bằng SĐT.'
+                  : 'Thêm email để bảo mật tài khoản và dễ dàng khôi phục mật khẩu.'}
             </p>
 
             {/* Buttons */}
@@ -650,119 +650,119 @@ export default function MainLayout() {
       )}
       {/* ── SIDEBAR ── */}
       <div className="main-layout-body">
-      <aside className="sidebar">
-        {/* Logo */}
-        <div className="sidebar-logo">
-          <div className="sidebar-logo-icon">
-            <FaCommentDots size={26} color="white" style={{ transform: "scaleX(-1)" }} />
+        <aside className="sidebar">
+          {/* Logo */}
+          <div className="sidebar-logo">
+            <div className="sidebar-logo-icon">
+              <FaCommentDots size={26} color="white" style={{ transform: "scaleX(-1)" }} />
+            </div>
           </div>
-        </div>
 
-        {/* Nav */}
-        <nav className="sidebar-nav">
-          {NAV_ITEMS.map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              title={item.label}
-              className={({ isActive }) =>
-                `sidebar-nav-item ${isActive ? "active" : ""}`
-              }
-            >
-              <div className="sidebar-nav-icon-wrap">
-                <item.icon size={22} />
-                {item.badge > 0 && (
-                  <span className="sidebar-badge">{item.badge}</span>
+          {/* Nav */}
+          <nav className="sidebar-nav">
+            {NAV_ITEMS.map((item) => (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                title={item.label}
+                className={({ isActive }) =>
+                  `sidebar-nav-item ${isActive ? "active" : ""}`
+                }
+              >
+                <div className="sidebar-nav-icon-wrap">
+                  <item.icon size={22} />
+                  {item.badge > 0 && (
+                    <span className="sidebar-badge">{item.badge}</span>
+                  )}
+                </div>
+              </NavLink>
+            ))}
+          </nav>
+
+          {/* Bottom */}
+          <div className="sidebar-bottom">
+            {/* Notification bell */}
+            <div className="sidebar-notif-wrap">
+              <button
+                className={`sidebar-icon-btn ${showNotifications ? "active" : ""}`}
+                title={t("notifications")}
+                onClick={() => setShowNotifications(!showNotifications)}
+              >
+                <FaBell size={17} />
+                {unreadCount > 0 && (
+                  <span className="sidebar-notif-badge">{unreadCount > 99 ? "99+" : unreadCount}</span>
                 )}
-              </div>
-            </NavLink>
-          ))}
-        </nav>
-
-        {/* Bottom */}
-        <div className="sidebar-bottom">
-          {/* Notification bell */}
-          <div className="sidebar-notif-wrap">
-            <button
-              className={`sidebar-icon-btn ${showNotifications ? "active" : ""}`}
-              title={t("notifications")}
-              onClick={() => setShowNotifications(!showNotifications)}
-            >
-              <FaBell size={17} />
-              {unreadCount > 0 && (
-                <span className="sidebar-notif-badge">{unreadCount > 99 ? "99+" : unreadCount}</span>
+              </button>
+              {showNotifications && (
+                <NotificationsPanel onClose={() => setShowNotifications(false)} />
               )}
-            </button>
-            {showNotifications && (
-              <NotificationsPanel onClose={() => setShowNotifications(false)} />
-            )}
-          </div>
+            </div>
 
-          {/* Avatar + user menu */}
-          <div className="sidebar-avatar-wrap" ref={menuRef}>
-            <button
-              className="sidebar-avatar-btn"
-              onClick={() => setShowUserMenu(!showUserMenu)}
-              title={displayName}
-            >
-              {(user?.avatarUrl || user?.avatar) ? (
-                <img
-                  src={user.avatarUrl || user.avatar}
-                  alt={displayName}
-                  className="sidebar-avatar-img"
-                />
-              ) : (
-                <div
-                  className="sidebar-avatar-placeholder"
-                  style={{ background: getAvatarColor(displayName) }}
-                >
-                  {getInitials(displayName)}
+            {/* Avatar + user menu */}
+            <div className="sidebar-avatar-wrap" ref={menuRef}>
+              <button
+                className="sidebar-avatar-btn"
+                onClick={() => setShowUserMenu(!showUserMenu)}
+                title={displayName}
+              >
+                {(user?.avatarUrl || user?.avatar) ? (
+                  <img
+                    src={user.avatarUrl || user.avatar}
+                    alt={displayName}
+                    className="sidebar-avatar-img"
+                  />
+                ) : (
+                  <div
+                    className="sidebar-avatar-placeholder"
+                    style={{ background: getAvatarColor(displayName) }}
+                  >
+                    {getInitials(displayName)}
+                  </div>
+                )}
+                <span className="sidebar-online-dot" />
+              </button>
+
+              {/* Dropdown menu */}
+              {showUserMenu && (
+                <div className="sidebar-user-menu">
+                  <div className="sidebar-user-info">
+                    <p className="sidebar-user-email">{displayEmail}</p>
+                    <span className="sidebar-user-status">{t("online")}</span>
+                  </div>
+                  <div className="sidebar-menu-divider" />
+
+                  <button
+                    className="sidebar-menu-item"
+                    onClick={() => { navigate("/profile"); setShowUserMenu(false); }}
+                  >
+                    <FaUser size={14} /> {t("accountInfo")}
+                  </button>
+
+                  <button
+                    className="sidebar-menu-item"
+                    onClick={() => { setShowSettings(true); setShowUserMenu(false); }}
+                  >
+                    <FaCog size={14} /> {t("settings")}
+                  </button>
+
+                  <div className="sidebar-menu-divider" />
+
+                  <button className="sidebar-menu-item danger" onClick={handleLogout}>
+                    <FaSignOutAlt size={14} /> {t("logout")}
+                  </button>
                 </div>
               )}
-              <span className="sidebar-online-dot" />
-            </button>
-
-            {/* Dropdown menu */}
-            {showUserMenu && (
-              <div className="sidebar-user-menu">
-                <div className="sidebar-user-info">
-                  <p className="sidebar-user-email">{displayEmail}</p>
-                  <span className="sidebar-user-status">{t("online")}</span>
-                </div>
-                <div className="sidebar-menu-divider" />
-
-                <button
-                  className="sidebar-menu-item"
-                  onClick={() => { navigate("/profile"); setShowUserMenu(false); }}
-                >
-                  <FaUser size={14} /> {t("accountInfo")}
-                </button>
-
-                <button
-                  className="sidebar-menu-item"
-                  onClick={() => { setShowSettings(true); setShowUserMenu(false); }}
-                >
-                  <FaCog size={14} /> {t("settings")}
-                </button>
-
-                <div className="sidebar-menu-divider" />
-
-                <button className="sidebar-menu-item danger" onClick={handleLogout}>
-                  <FaSignOutAlt size={14} /> {t("logout")}
-                </button>
-              </div>
-            )}
+            </div>
           </div>
-        </div>
-      </aside>
+        </aside>
 
-      {/* ── MAIN CONTENT ── */}
-      <main className="main-content">
-        <Outlet />
-      </main>
+        {/* ── MAIN CONTENT ── */}
+        <main className="main-content">
+          <Outlet />
+        </main>
 
-      {/* ── SETTINGS MODAL ── */}
-      {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}
+        {/* ── SETTINGS MODAL ── */}
+        {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}
         <IncomingCallModal />
       </div>{/* end main-layout-body */}
 
