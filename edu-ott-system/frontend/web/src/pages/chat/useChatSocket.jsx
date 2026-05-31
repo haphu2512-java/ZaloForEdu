@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { socketService } from '../../services/socketService';
 import { DEFAULT_AVATAR } from '../../utils/constants';
+import { BOT_NAME, BOT_USERNAME, BOT_ID, BOT_AVATAR } from '../../config/bot';
 import { useFriendStore } from '../../store/friendStore';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api/v1";
@@ -111,7 +112,12 @@ export const useChatSocket = ({
         const senderObj = latestMessage?.senderId;
         const senderName = senderObj?.username || senderObj?.fullName || 'Ai đó';
         const shortContent = latestMessage?.content || '[Hình ảnh/File đính kèm]';
-        const avatarSrc = senderObj?.avatarUrl || senderObj?.avatar || DEFAULT_AVATAR;
+        let avatarSrc = senderObj?.avatarUrl || senderObj?.avatar || DEFAULT_AVATAR;
+        if ((!senderObj || !avatarSrc || avatarSrc === DEFAULT_AVATAR) && (
+          senderObj?.username === BOT_USERNAME || senderObj?.username === BOT_NAME || String(senderObj?._id || senderObj) === BOT_ID
+        )) {
+          avatarSrc = BOT_AVATAR;
+        }
 
         toast.custom((t) => (
           <div className={`push-notif-card ${t.visible ? 'entering' : 'leaving'} ${isMentioned ? 'mentioned' : ''}`} onClick={() => toast.dismiss(t.id)}>

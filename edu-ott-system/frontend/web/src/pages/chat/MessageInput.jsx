@@ -3,6 +3,7 @@ import { FaSpinner, FaPaperPlane, FaThumbsUp, FaSmile, FaMicrophone, FaPoll } fr
 import { VoiceRecorder } from '../../components/shared/VoiceRecorder';
 import { StickerSuggest } from './StickerSuggest';
 import { socketService } from '../../services/socketService';
+import { BOT_NAME, BOT_USERNAME, BOT_ID, BOT_AVATAR } from '../../config/bot';
 
 export const MessageInput = ({
   theme,
@@ -40,14 +41,25 @@ export const MessageInput = ({
   const emojiRef = useRef(null);
 
   // Filter members based on mentionQuery
-  // Chat 1-1: không hiện mention list
-  // Chat nhóm: hiện @all + các thành viên, trừ bản thân
-  const filteredMembers = mentionQuery === null || !isGroup ? [] :
-    [{ _id: 'all', username: 'all', fullName: 'Tất cả mọi người' }, ...members.filter(m => String(m._id || m.id) !== String(userId))]
-      .filter(m =>
-        m.username?.toLowerCase().includes(mentionQuery.toLowerCase()) ||
-        m.fullName?.toLowerCase().includes(mentionQuery.toLowerCase())
-      ).slice(0, 8);
+  // Show mention suggestions in both direct and group chats.
+  // Group: show @all + members (except self). Direct: show the other participant(s).
+  const baseList = (() => {
+    if (isGroup) {
+      return [{ _id: 'all', username: 'all', fullName: 'Tất cả mọi người' }, ...members.filter(m => String(m._id || m.id) !== String(userId))];
+    }
+    return members.filter(m => String(m._id || m.id) !== String(userId));
+  })();
+
+  // Bot entry
+  const botEntry = { _id: BOT_ID, username: BOT_NAME, fullName: BOT_NAME, isBot: true, avatarUrl: BOT_AVATAR };
+
+  const allCandidates = [botEntry, ...baseList];
+
+  const filteredMembers = mentionQuery === null ? [] :
+    allCandidates.filter(m =>
+      (m.username && m.username.toLowerCase().includes(mentionQuery.toLowerCase())) ||
+      (m.fullName && m.fullName.toLowerCase().includes(mentionQuery.toLowerCase()))
+    ).slice(0, 8);
 
   const handleTextChange = (e) => {
     const val = e.target.value;
@@ -100,6 +112,10 @@ export const MessageInput = ({
 
     const words = textBeforeCursor.split(/\s/);
     words[words.length - 1] = `@${member.username || 'all'} `;
+
+    // Note: we deliberately do not send extra metadata in the message payload because
+    // backend currently infers mentions from the content. The inserted `@ZaloBot` text
+    // is sufficient for backend detection.
 
     const newText = words.join(' ') + textAfterCursor;
     setText(newText);

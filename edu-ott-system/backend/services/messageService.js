@@ -2,6 +2,7 @@ const Conversation = require('../models/Conversation');
 const Message = require('../models/Message');
 const User = require('../models/User');
 const ApiError = require('../utils/apiError');
+const botConfig = require('../config/bot');
 
 const toStr = (id) => id?.toString();
 
@@ -29,10 +30,10 @@ const ensureConversationMember = async (conversationId, userId, allowPast = fals
 /**
  * Parse @mentions từ nội dung tin nhắn.
  * Hỗ trợ: @all (tag tất cả) và @username (tag cá nhân)
- * Trả về { mentions: [userId...], mentionAll: boolean }
+ * Trả về { mentions: [userId...], mentionAll: boolean, mentionBot: boolean }
  */
 const parseMentions = async (content, conversation) => {
-  if (!content || !conversation) return { mentions: [], mentionAll: false };
+  if (!content || !conversation) return { mentions: [], mentionAll: false, mentionBot: false };
 
   const mentionAll = /@all\b/i.test(content);
 
@@ -40,10 +41,20 @@ const parseMentions = async (content, conversation) => {
   const mentionPattern = /@(\S+)/g;
   const mentionedUsernames = [];
   let match;
+  let mentionBot = false;
   while ((match = mentionPattern.exec(content)) !== null) {
-    const name = match[1].toLowerCase();
-    if (name !== 'all') {
-      mentionedUsernames.push(name);
+    const name = match[1];
+    // Detect bot mention strictly by configured BOT_NAME or BOT_USERNAME (case-insensitive)
+    const lowerName = name.toLowerCase();
+    if (
+      lowerName === (botConfig.BOT_NAME || 'ZaloBot').toLowerCase() ||
+      lowerName === (botConfig.BOT_USERNAME || '').toLowerCase()
+    ) {
+      mentionBot = true;
+      continue;
+    }
+    if (name.toLowerCase() !== 'all') {
+      mentionedUsernames.push(name.toLowerCase());
     }
   }
 
@@ -57,7 +68,7 @@ const parseMentions = async (content, conversation) => {
     mentions = users.map((u) => u._id);
   }
 
-  return { mentions, mentionAll };
+  return { mentions, mentionAll, mentionBot };
 };
 
 const createMessage = async ({
@@ -74,7 +85,7 @@ const createMessage = async ({
   const conversation = await ensureConversationMember(conversationId, senderId);
 
   // Parse @mentions
-  const { mentions, mentionAll } = await parseMentions(content, conversation);
+  const { mentions, mentionAll, mentionBot } = await parseMentions(content, conversation);
 
   const message = await Message.create({
     conversationId,
@@ -106,9 +117,19 @@ const createMessage = async ({
     await Message.deleteMany({ _id: { $in: staleIds.map((m) => m._id) } });
   }
 
-  return await Message.findById(message._id)
+  const populated = await Message.findById(message._id)
     .populate('mediaIds', 'fileName url size mimeType providerResourceType duration')
     .populate('senderId', 'username avatarUrl');
+
+  // Fire-and-forget bot trigger — không block việc trả message về client
+  if (mentionBot) {
+    const botService = require('./botService');
+    botService.tryTriggerBot(populated, conversation).catch((err) =>
+      console.error('botService.tryTriggerBot error:', err)
+    );
+  }
+
+  return populated;
 };
 
 module.exports = {
