@@ -10,6 +10,7 @@ import PollMessage from './PollMessage';
 import { conversationService } from '../../services/conversationService';
 import toast from 'react-hot-toast';
 import { DEFAULT_AVATAR } from '../../utils/constants';
+import { BOT_NAME, BOT_USERNAME, BOT_ID, BOT_AVATAR } from '../../config/bot';
 
 
 const API_ORIGIN = (import.meta.env.VITE_API_URL || 'http://localhost:5000/api/v1').replace(/\/api\/v1\/?$/, '');
@@ -106,7 +107,12 @@ export const MessageBubble = ({
     .filter(att => att && (att._id || att.id));
 
   const timeString = new Date(createdAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
-  const avatar = toAbsoluteUrl(sender?.avatarUrl || sender?.avatar) || DEFAULT_AVATAR;
+  let avatar = toAbsoluteUrl(sender?.avatarUrl || sender?.avatar) || DEFAULT_AVATAR;
+  if ((!avatar || avatar === DEFAULT_AVATAR) && (
+    sender?.username === BOT_USERNAME || sender?.username === BOT_NAME || String(sender?._id || sender?.id || sender) === BOT_ID
+  )) {
+    avatar = BOT_AVATAR;
+  }
   const senderIdStr = String(sender?._id || sender?.id || sender || '');
   const nickname = activeConversation?.nicknames?.[senderIdStr];
   const name = nickname || sender?.fullName || sender?.username || 'Người dùng';

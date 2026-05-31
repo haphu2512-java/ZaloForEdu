@@ -51,8 +51,19 @@ module.exports = {
   chatbotSystemPrompt: process.env.CHATBOT_SYSTEM_PROMPT || 'You are a helpful AI assistant for a messaging app used in education.',
   chatbotTemperature: Number(process.env.CHATBOT_TEMPERATURE || 0.7),
   chatbotMaxOutputTokens: Number(process.env.CHATBOT_MAX_OUTPUT_TOKENS || 1024),
+  // GROQ AI (Groq/LLama)
+  groqApiKey: process.env.GROQ_API_KEY || '',
+  groqModel: process.env.GROQ_MODEL || '',
+  groqTemperature: Number(process.env.GROQ_TEMPERATURE || 0.7),
+  groqMaxOutputTokens: Number(process.env.GROQ_MAX_OUTPUT_TOKENS || 1024),
 
   // ZegoCloud (Video/Audio Call) — kept server-side, never sent to client
   zegoAppId: Number(process.env.ZEGO_APP_ID || 0),
   zegoServerSecret: process.env.ZEGO_SERVER_SECRET || '',
+
+  // AWS S3
+  awsAccessKeyId: process.env.AWS_ACCESS_KEY_ID || '',
+  awsSecretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || '',
+  awsRegion: process.env.AWS_REGION || '',
+  awsS3Bucket: process.env.AWS_S3_BUCKET || '',
 };

@@ -34,7 +34,7 @@ import {
   checkBlockConflict,
 } from '../../utils/messageService';
 import { API_BASE_URL } from '../../utils/api';
-import { getPinnedMessages, pinMessage, unpinMessage } from '../../utils/groupFeatureService';
+import { getPinnedMessages, pinMessage, unpinMessage, joinReminder as apiJoinReminder, declineReminder as apiDeclineReminder } from '../../utils/groupFeatureService';
 import { getMediaById, uploadMediaForm } from '../../utils/mediaService';
 import { getBlockedUsers, blockOrUnblockUser, getMyCloudStorage } from '@/utils/userService';
 import { toAbsoluteUrl } from '@/utils/url';
@@ -49,6 +49,12 @@ import {
 import type { Message, Conversation, MediaItem } from '../../types/chat';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
+
+// Bot config (mirror web frontend)
+const BOT_NAME = 'ZaloBot';
+const BOT_USERNAME = 'zalobot';
+const BOT_ID = 'zalobot';
+const BOT_AVATAR = 'https://res.cloudinary.com/da99vmfxr/image/upload/v1780185665/chatbot_e2zcuy.png';
 
 import PinnedBar from '@/components/chat/PinnedBar';
 import PollBubble from '@/components/chat/PollBubble';
@@ -79,7 +85,7 @@ function getConversationTitle(conv: Conversation, currentUserId: string) {
   if (conv.type === 'group') return conv.name || 'Nhóm chat';
   if (conv.type === 'direct' && conv.participants?.every(p => (typeof p === 'string' ? p : (p._id || p.id || '')) === currentUserId)) return 'My Documents';
   const otherUser = conv.participants?.find((p) => (p._id || p.id) !== currentUserId);
-  return otherUser?.username || otherUser?.fullName || 'Cuộc trò chuyện';
+  return otherUser?.username || (otherUser as any)?.fullName || 'Cuộc trò chuyện';
 }
 
 function isImageMimeType(mimeType?: string): boolean {
@@ -460,11 +466,20 @@ export default function ChatScreen() {
   const filteredMembers = useMemo(() => {
     if (mentionQuery === null || !conversation?.participants) return [];
     const q = mentionQuery.toLowerCase();
-    const membersList = conversation.participants.filter(p => (p._id || p.id) !== currentUserId);
-    const mentions = membersList.filter(p => p.username?.toLowerCase().includes(q));
-    if ('all'.includes(q)) {
-      mentions.unshift({ _id: 'all', id: 'all', username: 'all', avatarUrl: '' } as any);
-    }
+    // Base list: for group include @all and members except self; for direct include other participant(s)
+    const membersList = conversation.type === 'group'
+      ? [{ _id: 'all', id: 'all', username: 'all', avatarUrl: '' } as any, ...conversation.participants.filter((p: any) => (p._id || p.id) !== currentUserId)]
+      : conversation.participants.filter((p: any) => (p._id || p.id) !== currentUserId);
+
+    const botEntry = { _id: BOT_ID, id: BOT_ID, username: BOT_NAME, fullName: BOT_NAME, avatarUrl: BOT_AVATAR } as any;
+    const allCandidates = [botEntry, ...membersList];
+
+    const mentions = allCandidates.filter((p: any) => {
+      const uname = (p.username || '').toString().toLowerCase();
+      const fname = (p.fullName || '').toString().toLowerCase();
+      return uname.includes(q) || fname.includes(q);
+    });
+
     return mentions;
   }, [mentionQuery, conversation?.participants, currentUserId]);
 
@@ -497,7 +512,8 @@ export default function ChatScreen() {
 
     // Mention logic
     const lastWordMatch = text.match(/@([\w\._]*)$/);
-    if (lastWordMatch && conversation?.type === 'group') {
+    // Enable mention trigger in both group and direct chats (mirror web)
+    if (lastWordMatch) {
       setMentionQuery(lastWordMatch[1]);
     } else {
       setMentionQuery(null);
@@ -1440,7 +1456,12 @@ export default function ChatScreen() {
     const isMine = senderId === currentUserId;
     const senderObj = typeof item.senderId === 'string' ? null : item.senderId;
     const senderName = senderObj?.username || '';
-    const senderAvatarUrl = toAbsoluteUrl(senderObj?.avatarUrl || (senderObj as any)?.avatar);
+    let senderAvatarUrl = toAbsoluteUrl(senderObj?.avatarUrl || (senderObj as any)?.avatar);
+    if ((!senderAvatarUrl || senderAvatarUrl === '') && (
+      senderObj?.username === BOT_USERNAME || senderObj?.username === BOT_NAME || String(getMessageSenderId(item)) === BOT_ID
+    )) {
+      senderAvatarUrl = BOT_AVATAR;
+    }
     const isSendingMsg = (item.status as any) === 'sending';
 
     // Cần kiểm tra xem senderId có nằm trong adminIds hoặc ownerId của conversation không
@@ -1466,7 +1487,150 @@ export default function ChatScreen() {
         </View>
       );
     }
+// Render reminder card for system_reminder messages
+    if (item.type === 'system_reminder' || (item as any).reminderId) {
+      const rem = (item as any).reminderId as any || null;
+      if (!rem) {
+        // Fallback to simple system text if reminder details not present
+        return (
+          <View style={{ alignItems: 'center', marginVertical: 8, paddingHorizontal: 20 }}>
+            <View style={{ backgroundColor: colorScheme === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)', paddingHorizontal: 12, paddingVertical: 4, borderRadius: 12 }}>
+              <Text style={{ fontSize: 12, color: colors.muted, fontStyle: 'italic', textAlign: 'center' }}>{item.content}</Text>
+            </View>
+          </View>
+        );
+      }
 
+      const remDate = new Date(rem.remindAt);
+      const dayName = remDate.toLocaleDateString('vi-VN', { weekday: 'long' }).toUpperCase();
+      const dayNum = remDate.getDate();
+      const month = remDate.getMonth() + 1;
+      const timeStr = remDate.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+      const participantsCount = (rem.participants || []).length || 0;
+      const hasJoined = (rem.participants || []).some((p: any) => String(p._id || p) === String(currentUserId));
+      const hasDeclined = (rem.declinedBy || []).some((p: any) => String(p._id || p) === String(currentUserId));
+      const remId = (rem as any)._id;
+
+      const handleJoin = async (reminderId: string) => {
+        try {
+          const res = await apiJoinReminder(reminderId);
+          setMessages(prev => prev.map(m => {
+            if ((m as any).reminderId && String(((m as any).reminderId as any)._id || (m as any).reminderId) === String(reminderId)) {
+              return { ...m, reminderId: res } as any;
+            }
+            return m;
+          }));
+        } catch (e: any) {
+          Alert.alert('Lỗi', e?.message || 'Không thể tham gia nhắc hẹn');
+        }
+      };
+
+      const handleDecline = async (reminderId: string) => {
+        try {
+          const res = await apiDeclineReminder(reminderId);
+          setMessages(prev => prev.map(m => {
+            if ((m as any).reminderId && String(((m as any).reminderId as any)._id || (m as any).reminderId) === String(reminderId)) {
+              return { ...m, reminderId: res } as any;
+            }
+            return m;
+          }));
+        } catch (e: any) {
+          Alert.alert('Lỗi', e?.message || 'Không thể từ chối nhắc hẹn');
+        }
+      };
+
+      return (
+        <View style={{ paddingHorizontal: 12, paddingVertical: 8, alignItems: 'center' }}>
+          <Text style={{ fontSize: 12, color: colors.muted, marginBottom: 6 }}>
+            zalobot đã tạo nhắc hẹn mới
+          </Text>
+
+          <TouchableOpacity
+            activeOpacity={0.95}
+            style={{
+              width: '96%',
+              borderRadius: 12,
+              backgroundColor: colorScheme === 'dark' ? '#0b1220' : '#fff',
+              borderColor: colorScheme === 'dark' ? '#172033' : '#E5E7EB',
+              borderWidth: 0.5,
+              overflow: 'hidden',
+            }}
+            onPress={() => {}}
+          >
+            <View style={{ flexDirection: 'row', padding: 12, alignItems: 'center', gap: 12 }}>
+
+              {/* Badge ngày */}
+              <View style={{ alignItems: 'center' }}>
+                <View style={{
+                  backgroundColor: '#0068FF',
+                  width: 56,
+                  height: 64,
+                  borderRadius: 8,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}>
+                  <Text style={{ color: '#fff', fontSize: 9, fontWeight: '700', letterSpacing: 0.4 }}>
+                    {dayName}
+                  </Text>
+                  <Text style={{ color: '#fff', fontSize: 22, fontWeight: '700', lineHeight: 26 }}>
+                    {dayNum}
+                  </Text>
+                  <Text style={{ color: 'rgba(255,255,255,0.8)', fontSize: 10, fontWeight: '500' }}>
+                    {`Tháng ${month}`}
+                  </Text>
+                </View>
+              </View>
+
+              {/* Nội dung */}
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 15, fontWeight: '500', color: colors.text }}>
+                  {rem.title}
+                </Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 4 }}>
+                  <Text style={{ color: colors.muted, fontSize: 13 }}>🕒 {timeStr}</Text>
+                  <Text style={{ color: colors.muted, fontSize: 13 }}>{participantsCount} người tham gia</Text>
+                </View>
+
+                <View style={{ marginTop: 10 }} onTouchStart={(e) => e.stopPropagation()}>
+                  {hasJoined ? (
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <Text style={{ color: '#0068FF', fontWeight: '500', fontSize: 14 }}>✓ Bạn đã tham gia</Text>
+                      <TouchableOpacity onPress={() => handleDecline(remId)}>
+                        <Text style={{ color: colors.muted, textDecorationLine: 'underline', fontSize: 13 }}>Thay đổi</Text>
+                      </TouchableOpacity>
+                    </View>
+                  ) : hasDeclined ? (
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <Text style={{ color: '#ef4444', fontWeight: '500', fontSize: 14 }}>✗ Bạn đã từ chối</Text>
+                      <TouchableOpacity onPress={() => handleJoin(remId)}>
+                        <Text style={{ color: colors.muted, textDecorationLine: 'underline', fontSize: 13 }}>Thay đổi</Text>
+                      </TouchableOpacity>
+                    </View>
+                  ) : (
+                    <View style={{ flexDirection: 'row', gap: 8 }}>
+                      <TouchableOpacity
+                        onPress={() => handleJoin(remId)}
+                        style={{ flex: 1, backgroundColor: '#0068FF', paddingVertical: 10, borderRadius: 8, alignItems: 'center' }}
+                      >
+                        <Text style={{ color: '#fff', fontWeight: '500', fontSize: 14 }}>Tham gia</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        onPress={() => handleDecline(remId)}
+                        style={{ flex: 1, paddingVertical: 10, borderRadius: 8, borderWidth: 0.5, borderColor: '#E5E7EB', alignItems: 'center' }}
+                      >
+                        <Text style={{ color: colors.muted, fontWeight: '500', fontSize: 14 }}>Từ chối</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                </View>
+              </View>
+
+            </View>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+    
     if (item.isRecalled) {
       return (
         <View style={[styles.bubbleWrapper, isMine ? styles.myWrapper : styles.theirWrapper]}>
@@ -1798,7 +1962,7 @@ export default function ChatScreen() {
         </View>
       )}
 
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding" keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding" keyboardVerticalOffset={90}>
         <FlatList
           data={filteredMessages}
           keyExtractor={(item) => getMessageId(item)}
@@ -2087,8 +2251,8 @@ export default function ChatScreen() {
                   ))}
                   keyExtractor={(item: any, index) => `${typeof item?.userId === 'string' ? item.userId : item?.userId?._id || item?.userId?.id || index}-${item?.emoji || ''}-${index}`}
                   renderItem={({ item }) => {
-                    const info = getReactionUserInfo(item);
-                    const isMyReaction = String(info._id || info.id) === String(currentUserId);
+                      const info = getReactionUserInfo(item);
+                      const isMyReaction = String(info.userId) === String(currentUserId);
                     return (
                       <View style={styles.reactionUserRow}>
                         <Image source={{ uri: toAbsoluteUrl(info.avatarUrl) }} style={styles.reactionAvatar} />
@@ -2097,8 +2261,8 @@ export default function ChatScreen() {
                           {isMyReaction ? (
                             <TouchableOpacity onPress={async () => {
                               try {
-                                const newReactions = await reactToMessage(getMessageId(reactionModal.message), undefined);
-                                setMessages(prev => prev.map(m => getMessageId(m) === getMessageId(reactionModal.message) ? { ...m, reactions: newReactions || [] } : m));
+                                const newReactions = await reactToMessage(getMessageId(reactionModal.message!), undefined);
+                                setMessages(prev => prev.map(m => getMessageId(m) === getMessageId(reactionModal.message!) ? { ...m, reactions: newReactions || [] } : m));
                                 setReactionModal(prev => ({ ...prev, message: { ...prev.message, reactions: newReactions || [] } as any }));
                               } catch {
                                 Alert.alert("Lỗi", "Không thể gỡ cảm xúc");
@@ -2153,7 +2317,7 @@ export default function ChatScreen() {
               </Text>
             </View>
 
-            {messageDetailsModal.message?.mediaIds && messageDetailsModal.message.mediaIds.length > 0 && (
+                        {messageDetailsModal.message?.mediaIds && messageDetailsModal.message.mediaIds.length > 0 && (
               <View style={{ marginBottom: 16 }}>
                 <Text style={{ color: colors.muted, marginBottom: 8 }}>
                   Tệp đính kèm ({messageDetailsModal.message.mediaIds.length}):
@@ -2169,7 +2333,7 @@ export default function ChatScreen() {
                       </Text>
                       <View style={{ flex: 1 }}>
                         <Text style={{ color: colors.text, fontWeight: '600' }} numberOfLines={1}>{media.fileName || 'Tệp đính kèm'}</Text>
-                        <Text style={{ color: colors.muted, fontSize: 13 }}>{formatBytes(media.fileSize || 0)}</Text>
+                        <Text style={{ color: colors.muted, fontSize: 13 }}>{formatBytes((media as any).size || 0)}</Text>
                       </View>
                     </View>
                   );

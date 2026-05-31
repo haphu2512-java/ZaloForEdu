@@ -19,6 +19,7 @@ const asyncHandler = require('../utils/asyncHandler');
 const ApiError = require('../utils/apiError');
 const { successResponse } = require('../utils/apiResponse');
 const cloudinaryService = require('../services/cloudinaryService');
+const s3Service = require('../services/s3Service');
 
 const uploadsFolder = path.join(__dirname, '..', 'uploads');
 
@@ -114,6 +115,39 @@ const uploadMediaForm = asyncHandler(async (req, res) => {
     }
   }
 
+  // S3 integration
+  if (s3Service.isConfigured()) {
+    const localFilePath = path.join(uploadsFolder, finalFilename);
+    try {
+      const fileBuffer = await fs.readFile(localFilePath);
+      const s3Url = await s3Service.uploadToS3(fileBuffer, req.file.originalname, finalMimeType);
+      
+      // Clean up temporary local file
+      await fs.unlink(localFilePath).catch(() => null);
+
+      const media = await Media.create({
+        uploaderId: req.user._id,
+        fileName: req.file.originalname,
+        mimeType: finalMimeType,
+        size: finalSize,
+        storage: 's3',
+        url: s3Url,
+        duration: req.body.duration ? parseInt(req.body.duration) : null,
+      });
+
+      console.log('[Media Upload S3] Created media:', {
+        fileName: media.fileName,
+        mimeType: media.mimeType,
+        url: media.url,
+      });
+
+      return successResponse(res, media, 'Media uploaded to S3', 201);
+    } catch (err) {
+      console.error('[Media Upload S3] Failed to upload to S3, falling back to local storage:', err.message);
+    }
+  }
+
+  // Fallback to local storage
   const media = await Media.create({
     uploaderId: req.user._id,
     fileName: req.file.originalname,
@@ -124,23 +158,47 @@ const uploadMediaForm = asyncHandler(async (req, res) => {
     duration: req.body.duration ? parseInt(req.body.duration) : null,
   });
 
-  console.log('[Media Upload] Created media:', {
+  console.log('[Media Upload Local] Created media:', {
     fileName: media.fileName,
     mimeType: media.mimeType,
     duration: media.duration,
     receivedDuration: req.body.duration,
   });
 
-  return successResponse(res, media, 'Media uploaded', 201);
+  return successResponse(res, media, 'Media uploaded locally', 201);
 });
 
 const uploadMedia = asyncHandler(async (req, res) => {
   const { fileName, mimeType, contentBase64 } = req.body;
+  const buffer = Buffer.from(contentBase64, 'base64');
 
+  if (s3Service.isConfigured()) {
+    try {
+      const s3Url = await s3Service.uploadToS3(buffer, fileName, mimeType);
+      const media = await Media.create({
+        uploaderId: req.user._id,
+        fileName,
+        mimeType,
+        size: buffer.byteLength,
+        storage: 's3',
+        url: s3Url,
+      });
+
+      console.log('[Media Base64 S3] Created media:', {
+        fileName: media.fileName,
+        url: media.url,
+      });
+
+      return successResponse(res, media, 'Media uploaded to S3', 201);
+    } catch (err) {
+      console.error('[Media Base64 S3] Failed to upload, falling back to local storage:', err.message);
+    }
+  }
+
+  // Fallback to local storage
   const extension = path.extname(fileName) || '.bin';
   const storedName = `${Date.now()}-${crypto.randomUUID()}${extension}`;
   const filePath = path.join(uploadsFolder, storedName);
-  const buffer = Buffer.from(contentBase64, 'base64');
 
   await fs.mkdir(uploadsFolder, { recursive: true });
   await fs.writeFile(filePath, buffer);
@@ -154,7 +212,12 @@ const uploadMedia = asyncHandler(async (req, res) => {
     url: `/uploads/${storedName}`,
   });
 
-  return successResponse(res, media, 'Media uploaded', 201);
+  console.log('[Media Base64 Local] Created media:', {
+    fileName: media.fileName,
+    url: media.url,
+  });
+
+  return successResponse(res, media, 'Media uploaded locally', 201);
 });
 
 const getCloudinarySignature = asyncHandler(async (req, res) => {
@@ -215,6 +278,10 @@ const deleteMediaById = asyncHandler(async (req, res) => {
     await cloudinaryService.destroyAsset({
       publicId: media.providerPublicId,
       resourceType: media.providerResourceType || 'image',
+    });
+  } else if (media.storage === 's3') {
+    await s3Service.deleteFromS3(media.url).catch((err) => {
+      console.error('[Media Delete S3] Failed to delete from S3:', err.message);
     });
   } else {
     const relativePath = media.url.replace(/^[\\/]/, '');
