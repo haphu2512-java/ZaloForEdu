@@ -57,7 +57,7 @@ export default function RegisterPage() {
     } else {
       const isEmail = idVal.includes("@") || /[a-zA-Z]/.test(idVal);
       if (isEmail) {
-        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(idVal)) {
+        if (!/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(idVal)) {
           errs.identifier = "Email không đúng định dạng (VD: abc@gmail.com)";
         } else if (!/@gmail\.com$/.test(idVal)) {
           errs.identifier = "Chỉ hỗ trợ tài khoản @gmail.com";
