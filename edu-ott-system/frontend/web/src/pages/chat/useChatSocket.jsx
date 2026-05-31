@@ -32,7 +32,6 @@ export const useChatSocket = ({
   setTypingUsers,
   setBlockedUsersRealtime,
   onBlockStatusChanged,
-  setDeletedFriendIds,
 }) => {
   useEffect(() => {
     if (!token) return;
@@ -72,10 +71,14 @@ export const useChatSocket = ({
 
         const resolveReply = (msg, existingMsgs) => {
           if (!msg || !msg.replyTo) return msg;
-          if (typeof msg.replyTo === 'object' && msg.replyTo.content) return msg;
-          const replyId = String(msg.replyTo._id || msg.replyTo);
+          // Nếu replyTo đã là object đầy đủ (có senderId populate) thì dùng luôn
+          if (typeof msg.replyTo === 'object' && msg.replyTo !== null && msg.replyTo.senderId) return msg;
+          // replyTo là string ID hoặc object chưa đầy đủ → tìm trong messages đã có để merge
+          const replyId = String(msg.replyTo._id || msg.replyTo.id || msg.replyTo);
           const originalMsg = existingMsgs.find(m => String(m._id || m.id) === replyId);
-          if (originalMsg) return { ...msg, replyTo: originalMsg };
+          if (originalMsg) return { ...msg, replyTo: { ...(typeof msg.replyTo === 'object' ? msg.replyTo : {}), ...originalMsg } };
+          // Nếu không tìm thấy trong local nhưng replyTo là object từ backend → vẫn dùng
+          if (typeof msg.replyTo === 'object' && msg.replyTo !== null) return msg;
           return msg;
         };
 
@@ -141,22 +144,6 @@ export const useChatSocket = ({
         if (index === -1) {
           const mockId = `mock_${String(latestMessage?.senderId?._id || latestMessage?.senderId || '')}`;
           const hasMock = prevConvs.some(c => c._id === mockId);
-          if (!isMyMessage) {
-            const senderId = String(latestMessage?.senderId?._id || latestMessage?.senderId || '');
-            if (senderId && setDeletedFriendIds) {
-              // Xóa friendId rồi fetch — dùng Promise để đảm bảo thứ tự
-              setDeletedFriendIds(prev => {
-                const next = new Set(prev);
-                next.delete(senderId);
-                try { sessionStorage.setItem('deletedFriendIds', JSON.stringify([...next])); } catch {}
-                // Fetch sau khi state update xong
-                setTimeout(() => fetchConversationsData(), 50);
-                return next;
-              });
-            } else {
-              setTimeout(() => fetchConversationsData(), 50);
-            }
-          }
           if (hasMock) return prevConvs.filter(c => c._id !== mockId);
           return prevConvs;
         }

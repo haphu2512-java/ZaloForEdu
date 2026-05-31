@@ -332,7 +332,9 @@ export const ChatRightPanel = ({
                       <div className="crp-action-icon" style={{ background: 'var(--z-bg-main)', width: 36, height: 36, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><FaThumbtack size={16} /></div>
                       <span style={{ fontSize: 12 }}>{t('pin')}</span>
                     </div>
-                    <div className="crp-action-btn" style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, cursor: 'pointer', color: 'var(--z-text-primary)' }} onClick={() => setShowCreateGroupModal(true)}>
+                    {/* FIX 3 — gọi setShowCreateGroupModal() không tham số,
+                        ChatPage wrapper tự lấy otherParticipant để pre-select */}
+                    <div className="crp-action-btn" style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, cursor: 'pointer', color: 'var(--z-text-primary)' }} onClick={() => setShowCreateGroupModal()}>
                       <div className="crp-action-icon" style={{ background: 'var(--z-bg-main)', width: 36, height: 36, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><FaUserPlus size={16} /></div>
                       <span style={{ fontSize: 12 }}>{t('createGroup')}</span>
                     </div>
