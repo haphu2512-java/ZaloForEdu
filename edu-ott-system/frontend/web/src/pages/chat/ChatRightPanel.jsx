@@ -174,6 +174,17 @@ export const ChatRightPanel = ({
   const isGroup = activeConversation?.type === 'group' || activeConversation?.roomModel === 'Group';
 
   const mutedUntil = activeConversation?.preference?.mutedUntil;
+
+  // Tự động cập nhật UI khi hết thời gian mute (không cần reload)
+  const [, forceUpdate] = useState(0);
+  useEffect(() => {
+    if (!mutedUntil) return;
+    const remaining = new Date(mutedUntil).getTime() - Date.now();
+    if (remaining <= 0) return; // Đã hết hạn rồi
+    const timer = setTimeout(() => forceUpdate(n => n + 1), remaining);
+    return () => clearTimeout(timer);
+  }, [mutedUntil]);
+
   const isMuted = mutedUntil && new Date(mutedUntil) > new Date();
 
   const openMuteModal = () => {

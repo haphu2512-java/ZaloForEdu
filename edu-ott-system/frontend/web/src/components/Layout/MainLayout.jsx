@@ -488,8 +488,26 @@ export default function MainLayout() {
       // 2. ChatPage tự xử lý notification riêng → không hiện trùng ở đây
       if (window.location.pathname.startsWith('/chat')) return;
 
+      // 3. Lấy thông tin cuộc hội thoại để kiểm tra Mute và Group format
+      const payloadConvId = message?.conversationId?._id || message?.conversationId;
+      const convIdStr = String(payloadConvId);
+      const conv = window.globalConversations?.find(c => String(c._id) === convIdStr);
+      
+      const isMuted = conv?.preference?.mutedUntil && new Date(conv.preference.mutedUntil) > new Date();
+      if (isMuted) return; // Không hiển thị Toast nếu cuộc hội thoại đang bị tắt thông báo
+
       const senderName = senderIdObj?.username || senderIdObj?.fullName || "Ai đó";
-      const contentStr = message?.content || (message?.mediaIds?.length ? "Đã gửi tệp đính kèm" : "Có tin nhắn mới");
+      const rawContent = message?.content || '';
+      const mediaPreview = message?.mediaIds?.length ? "Đã gửi tệp đính kèm" : "Có tin nhắn mới";
+
+      let subTitle = '';
+      let contentStr = rawContent || mediaPreview;
+
+      if (conv?.type === 'group' || conv?.roomModel === 'Group') {
+        const groupName = conv.name || 'nhóm';
+        subTitle = `đã gửi tin nhắn đến nhóm ${groupName}`;
+      }
+
       const avatarSrc = senderIdObj?.avatarUrl || senderIdObj?.avatar || DEFAULT_AVATAR;
 
       toast.custom((t) => (
@@ -511,13 +529,16 @@ export default function MainLayout() {
             cursor: 'pointer',
             minWidth: '280px',
             maxWidth: '350px',
-            animation: t.visible ? 'animate-enter 0.3s ease' : 'animate-leave 0.3s ease forwards' // using hot-toast internal anim state
+            animation: t.visible ? 'animate-enter 0.3s ease' : 'animate-leave 0.3s ease forwards'
           }}
         >
           <img src={avatarSrc} alt="" style={{ width: 40, height: 40, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 13, fontWeight: 'bold', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{senderName}</div>
-            <div style={{ fontSize: 12, color: 'var(--z-text-secondary)', marginTop: 4, display: '-webkit-box', WebkitLineClamp: 1, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{contentStr}</div>
+            {subTitle && (
+              <div style={{ fontSize: 11, color: 'var(--z-primary)', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{subTitle}</div>
+            )}
+            <div style={{ fontSize: 12, color: 'var(--z-text-secondary)', marginTop: 2, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>{contentStr}</div>
           </div>
         </div>
       ), { position: 'bottom-right', duration: 4000, id: `msg_${message?._id}` });

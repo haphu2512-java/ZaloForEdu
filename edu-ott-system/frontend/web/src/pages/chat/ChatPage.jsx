@@ -534,7 +534,10 @@ export default function ChatPage() {
   }, [roomId, mergedConversations, selfConversation]);
 
   useEffect(() => { activeConvIdRef.current = activeConversation?._id; activeConversationRef.current = activeConversation; }, [activeConversation]);
-  useEffect(() => { conversationsRef.current = conversations; }, [conversations]);
+  useEffect(() => { 
+    conversationsRef.current = conversations; 
+    window.globalConversations = conversations;
+  }, [conversations]);
 
   useEffect(() => {
     if (!activeConversation) return;

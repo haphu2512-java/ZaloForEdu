@@ -15,6 +15,7 @@ export const useChatSocket = ({
   userId,
   activeConvIdRef,
   activeConversationRef,
+  conversationsRef,
   setMessages,
   setConversations,
   setActiveConversation,
@@ -41,7 +42,9 @@ export const useChatSocket = ({
     // ── conversation_updated ──
     const handleConversationUpdated = (payload) => {
       const { conversationId, latestMessage } = payload;
-      const convIdStr = String(conversationId);
+      // Safe ID extraction: conversationId có thể là String hoặc MongoDB ObjectId
+      const payloadConvId = conversationId?._id || conversationId;
+      const convIdStr = String(payloadConvId);
       let activeIdStr = String(activeConvIdRef.current);
       const isMyMessage = String(latestMessage?.senderId?._id || latestMessage?.senderId) === String(userId);
 
@@ -106,32 +109,56 @@ export const useChatSocket = ({
           });
         }
       } else if (!isMyMessage && latestMessage?.type !== 'system' && latestMessage?.type !== 'system_reminder') {
-        const isMentioned = latestMessage?.mentionAll ||
-          (latestMessage?.mentions || []).some(m => String(m._id || m) === String(userId));
-
-        const senderObj = latestMessage?.senderId;
-        const senderName = senderObj?.username || senderObj?.fullName || 'Ai đó';
-        const shortContent = latestMessage?.content || '[Hình ảnh/File đính kèm]';
-        let avatarSrc = senderObj?.avatarUrl || senderObj?.avatar || DEFAULT_AVATAR;
-        if ((!senderObj || !avatarSrc || avatarSrc === DEFAULT_AVATAR) && (
-          senderObj?.username === BOT_USERNAME || senderObj?.username === BOT_NAME || String(senderObj?._id || senderObj) === BOT_ID
-        )) {
-          avatarSrc = BOT_AVATAR;
+        // convIdStr đã được khai báo ở trên (an toàn với cả String lẫn ObjectId)
+        let conv = conversationsRef?.current?.find(c => String(c._id) === convIdStr);
+        if (!conv && window.globalConversations) {
+          conv = window.globalConversations.find(c => String(c._id) === convIdStr);
         }
 
-        toast.custom((t) => (
-          <div className={`push-notif-card ${t.visible ? 'entering' : 'leaving'} ${isMentioned ? 'mentioned' : ''}`} onClick={() => toast.dismiss(t.id)}>
-            <img src={avatarSrc} alt="" className="push-notif-avatar" />
-            <div className="push-notif-body">
-              <div className="push-notif-sender">
-                {senderName}
-                {isMentioned && <span className="mention-badge">@ Nhắc đến bạn</span>}
+        const isMuted = conv?.preference?.mutedUntil && new Date(conv.preference.mutedUntil) > new Date();
+
+        if (!isMuted) {
+          const isMentioned = latestMessage?.mentionAll ||
+            (latestMessage?.mentions || []).some(m => String(m._id || m) === String(userId));
+
+          const senderObj = latestMessage?.senderId;
+          const senderName = senderObj?.username || senderObj?.fullName || 'Ai đó';
+          const rawContent = latestMessage?.content || '';
+          const mediaPreview = latestMessage?.mediaIds?.length ? '[Hình ảnh/File đính kèm]' : 'Có tin nhắn mới';
+
+          // Subtitle: mô tả hành động, preview: nội dung tin nhắn thực tế
+          let subTitle = '';
+          let previewContent = rawContent || mediaPreview;
+
+          if (conv?.type === 'group' || conv?.roomModel === 'Group') {
+            const groupName = conv.name || 'nhóm';
+            subTitle = `đã gửi tin nhắn đến nhóm ${groupName}`;
+          }
+
+          let avatarSrc = senderObj?.avatarUrl || senderObj?.avatar || DEFAULT_AVATAR;
+          if ((!senderObj || !avatarSrc || avatarSrc === DEFAULT_AVATAR) && (
+            senderObj?.username === BOT_USERNAME || senderObj?.username === BOT_NAME || String(senderObj?._id || senderObj) === BOT_ID
+          )) {
+            avatarSrc = BOT_AVATAR;
+          }
+
+          toast.custom((t) => (
+            <div className={`push-notif-card ${t.visible ? 'entering' : 'leaving'} ${isMentioned ? 'mentioned' : ''}`} onClick={() => toast.dismiss(t.id)}>
+              <img src={avatarSrc} alt="" className="push-notif-avatar" />
+              <div className="push-notif-body">
+                <div className="push-notif-sender">
+                  {senderName}
+                  {isMentioned && <span className="mention-badge">@ Nhắc đến bạn</span>}
+                </div>
+                {subTitle && (
+                  <div className="push-notif-subtitle">{subTitle}</div>
+                )}
+                <div className="push-notif-content">{previewContent}</div>
               </div>
-              <div className="push-notif-content">{shortContent}</div>
+              <span className="push-notif-close">✕</span>
             </div>
-            <span className="push-notif-close">✕</span>
-          </div>
-        ), { position: 'bottom-right', duration: 4500, id: `notif_${latestMessage?._id}` });
+          ), { position: 'bottom-right', duration: 4500, id: `notif_${latestMessage?._id}` });
+        }
       }
 
       setSelfConversation(prev => {
