@@ -816,6 +816,113 @@ export default function ChatScreen() {
     }
   };
 
+  const handleSendQuickHello = async () => {
+    if (isSending) return;
+    const text = '👋';
+    const tempId = `temp-${Date.now()}`;
+    const tempMsg: Message = {
+      _id: tempId,
+      id: tempId,
+      content: text,
+      senderId: user as any,
+      conversationId,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      status: 'sending',
+      replyTo: null,
+      mediaIds: [],
+      attachments: [],
+      deliveredTo: [],
+      seenBy: [],
+      reactions: [],
+    };
+
+    setIsSending(true);
+    setMessages((prev) => [tempMsg, ...prev]);
+
+    try {
+      const newMsg = await sendMessage({ conversationId, content: text });
+      setMessages((prev) => prev.map((m) => getMessageId(m) === tempId ? newMsg : m));
+      if (newMsg.mediaIds?.length) harvestMediaFromMessages([newMsg]);
+    } catch (error: any) {
+      console.warn('Failed to send quick hello:', error?.errorCode || error?.message);
+      setMessages((prev) => prev.filter((m) => getMessageId(m) !== tempId));
+      Alert.alert('Lỗi', 'Không thể gửi tin nhắn vẫy tay. Vui lòng thử lại sau.');
+    } finally {
+      setIsSending(false);
+    }
+  };
+
+  const renderEmptyState = () => {
+    const isGroup = conversation?.type === 'group';
+    let avatarUri = '';
+    if (headerAvatarUrl === 'cloud') {
+      avatarUri = 'https://res.cloudinary.com/da99vmfxr/image/upload/v1780185665/chatbot_e2zcuy.png';
+    } else {
+      avatarUri = headerAvatarUrl;
+    }
+
+    return (
+      <ScrollView
+        contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center', padding: 24 }}
+        keyboardShouldPersistTaps="handled"
+      >
+        <View style={[
+          styles.emptyCard,
+          {
+            backgroundColor: colors.surface,
+            borderColor: colors.border,
+            shadowColor: colorScheme === 'dark' ? '#000' : '#4F46E5',
+          }
+        ]}>
+          <View style={[styles.emptyAvatarRing, { borderColor: colors.tint }]}>
+            {headerAvatarUrl === 'cloud' ? (
+              <View style={[styles.emptyCloudIconContainer, { backgroundColor: colors.tint + '15' }]}>
+                <Ionicons name="cloud-done" size={48} color={colors.tint} />
+              </View>
+            ) : (
+              <Image
+                source={{ uri: avatarUri }}
+                style={styles.emptyAvatarImage}
+              />
+            )}
+            <View style={[styles.emptyAvatarBadge, { backgroundColor: colors.tint, borderColor: colors.surface }]}>
+              <Text style={{ fontSize: 14 }}>👋</Text>
+            </View>
+          </View>
+
+          <Text style={[styles.emptyTitle, { color: colors.text }]}>
+            {isSelfConv
+              ? 'Lưu trữ cá nhân của bạn'
+              : isGroup
+                ? `Chào mừng bạn đến với ${conversationTitle}`
+                : `Vẫy tay chào ${conversationTitle}!`}
+          </Text>
+
+          <Text style={[styles.emptySubtitle, { color: colors.muted }]}>
+            {isSelfConv
+              ? 'Nơi an toàn để lưu trữ tài liệu, hình ảnh, liên kết hoặc viết các ghi chú cá nhân.'
+              : isGroup
+                ? 'Bắt đầu gửi tin nhắn, tạo bình chọn hoặc lên lịch nhắc hẹn cho cả nhóm ngay.'
+                : 'Hai bạn đã là bạn bè trên ZaloForEdu. Hãy gửi lời chào đầu tiên hoặc một nhãn dán thú vị.'}
+          </Text>
+
+          {!isSelfConv && (
+            <TouchableOpacity
+              style={[styles.emptyWaveBtn, { backgroundColor: colors.tint }]}
+              onPress={handleSendQuickHello}
+              disabled={isSending}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="hand-right" size={18} color="#fff" style={{ marginRight: 6 }} />
+              <Text style={styles.emptyWaveBtnText}>Vẫy tay chào</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      </ScrollView>
+    );
+  };
+
   // ==================== GỬI TIN NHẮN (OPTIMISTIC UI) ====================
   const handleSendText = async () => {
     const text = inputText.trim();
@@ -1847,7 +1954,14 @@ export default function ChatScreen() {
                   <Ionicons name="cloud" size={20} color="#fff" style={{ marginTop: 2 }} />
                 </View>
               ) : (
-                <Image source={{ uri: headerAvatarUrl }} style={{ width: 34, height: 34, borderRadius: 17 }} />
+                <Pressable onPress={() => {
+                  const userId = otherParticipant?._id || otherParticipant?.id;
+                  if (userId && !isSelfConv) {
+                    router.push({ pathname: '/(social)/user-profile', params: { userId } } as any);
+                  }
+                }}>
+                  <Image source={{ uri: headerAvatarUrl }} style={{ width: 34, height: 34, borderRadius: 17 }} />
+                </Pressable>
               )}
               <Text style={{ fontSize: 17, fontWeight: '600', color: colors.text }} numberOfLines={1}>
                 {conversationTitle}
@@ -1963,17 +2077,21 @@ export default function ChatScreen() {
       )}
 
       <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding" keyboardVerticalOffset={90}>
-        <FlatList
-          data={filteredMessages}
-          keyExtractor={(item) => getMessageId(item)}
-          renderItem={renderMessage}
-          keyboardShouldPersistTaps="handled"
-          inverted
-          onEndReached={loadMoreMessages}
-          onEndReachedThreshold={0.5}
-          ListFooterComponent={isFetchingMore ? <ActivityIndicator style={{ margin: 16 }} /> : null}
-          contentContainerStyle={{ paddingVertical: 8 }}
-        />
+        {filteredMessages.length === 0 ? (
+          renderEmptyState()
+        ) : (
+          <FlatList
+            data={filteredMessages}
+            keyExtractor={(item) => getMessageId(item)}
+            renderItem={renderMessage}
+            keyboardShouldPersistTaps="handled"
+            inverted
+            onEndReached={loadMoreMessages}
+            onEndReachedThreshold={0.5}
+            ListFooterComponent={isFetchingMore ? <ActivityIndicator style={{ margin: 16 }} /> : null}
+            contentContainerStyle={{ paddingVertical: 8 }}
+          />
+        )}
         <TypingIndicator isVisible={typingParticipants.length > 0} text={typingText} />
 
         {showEmojiPanel && (
@@ -2491,6 +2609,81 @@ const styles = StyleSheet.create({
   reactionAvatar: { width: 44, height: 44, borderRadius: 22 },
   reactionPickerOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
   reactionPickerBox: { width: '85%', borderRadius: 24, padding: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 5 },
+  emptyCard: {
+    width: '90%',
+    borderRadius: 24,
+    paddingVertical: 32,
+    paddingHorizontal: 20,
+    alignItems: 'center',
+    borderWidth: 1,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.08,
+    shadowRadius: 16,
+    elevation: 4,
+    alignSelf: 'center',
+  },
+  emptyAvatarRing: {
+    width: 108,
+    height: 108,
+    borderRadius: 54,
+    borderWidth: 3,
+    justifyContent: 'center',
+    alignItems: 'center',
+    position: 'relative',
+    marginBottom: 20,
+  },
+  emptyAvatarImage: {
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+  },
+  emptyCloudIconContainer: {
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyAvatarBadge: {
+    position: 'absolute',
+    bottom: -2,
+    right: -2,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    borderWidth: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  emptySubtitle: {
+    fontSize: 13,
+    lineHeight: 18,
+    textAlign: 'center',
+    marginBottom: 24,
+    paddingHorizontal: 12,
+  },
+  emptyWaveBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 24,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  emptyWaveBtnText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '700',
+  },
 });
 
 

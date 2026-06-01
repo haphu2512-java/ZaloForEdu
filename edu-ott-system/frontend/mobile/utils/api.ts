@@ -152,9 +152,20 @@ export const fetchAPI = async (endpoint: string, options: RequestInit = {}): Pro
         throw err;
       }
 
-      // Backend error format: { success: false, error: { code, message } }
+      // Backend error format: { success: false, error: { code, message, details } }
       const errorInfo = data.error || {};
-      const err: any = new Error(errorInfo.message || data.message || 'Error executing request');
+      let errMsg = errorInfo.message || data.message || 'Error executing request';
+      
+      // Parse detailed Zod field validation errors if message is "Invalid payload"
+      if (errorInfo.message?.toLowerCase() === "invalid payload" && errorInfo.details?.fieldErrors) {
+        const fieldErrs = errorInfo.details.fieldErrors;
+        const firstField = Object.keys(fieldErrs)[0];
+        if (firstField && fieldErrs[firstField].length > 0) {
+          errMsg = fieldErrs[firstField][0];
+        }
+      }
+
+      const err: any = new Error(errMsg);
       if (errorInfo.code) err.errorCode = errorInfo.code;
       err.statusCode = response.status;
       throw err;
