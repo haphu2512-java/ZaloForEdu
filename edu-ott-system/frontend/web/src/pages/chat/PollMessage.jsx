@@ -97,14 +97,21 @@ export default function PollMessage({ poll, userId, onPollVoted }) {
                 <div style={{ ...styles.progressFill, width: `${percent}%` }} />
               </div>
 
-              {/* Hiển thị tên người đã bình chọn */}
-              {voterObjects.length > 0 && (
+              {/* Hiển thị tên người đã bình chọn — ẩn nếu bình chọn ẩn danh */}
+              {!poll.isAnonymous && voterObjects.length > 0 && (
                 <div style={styles.voterNameList}>
                   {voterObjects.map((voter, vi) => (
                     <span key={vi} style={styles.voterName}>
                       {voter.username || voter.fullName}
                     </span>
                   ))}
+                </div>
+              )}
+              {poll.isAnonymous && voteCount > 0 && (
+                <div style={styles.voterNameList}>
+                  <span style={{ ...styles.voterName, color: '#9CA3AF', fontStyle: 'italic' }}>
+                    🔒 {voteCount} phiếu ẩn danh
+                  </span>
                 </div>
               )}
             </div>
