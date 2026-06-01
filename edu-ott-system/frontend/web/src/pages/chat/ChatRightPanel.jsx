@@ -599,11 +599,7 @@ export const ChatRightPanel = ({
                           </div>
                           <div style={{ fontSize: 11, color: 'var(--z-text-secondary)', marginTop: 2 }}>
                             {poll.options?.length} lựa chọn • {(() => {
-                              const uniqueVoters = new Set();
-                              poll.options?.forEach(opt => {
-                                opt.votes?.forEach(vId => uniqueVoters.add(String(vId._id || vId)));
-                              });
-                              return uniqueVoters.size;
+                              return poll.options?.reduce((sum, opt) => sum + (opt.votes?.length || 0), 0) || 0;
                             })()} lượt bình chọn
                           </div>
                         </div>

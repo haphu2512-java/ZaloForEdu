@@ -254,7 +254,18 @@ const listPolls = asyncHandler(async (req, res) => {
     .limit(Math.min(Number(limit), 50))
     .populate('createdBy', 'username avatarUrl');
 
-  return successResponse(res, { items: polls }, 'Polls fetched');
+  const safePolls = polls.map((poll) => {
+    const safePoll = poll.toObject();
+    if (safePoll.isAnonymous) {
+      safePoll.options = safePoll.options.map((opt) => ({
+        ...opt,
+        votes: opt.votes.map(() => null), // Giữ số lượng nhưng xóa id
+      }));
+    }
+    return safePoll;
+  });
+
+  return successResponse(res, { items: safePolls }, 'Polls fetched');
 });
 
 module.exports = { createPoll, getPoll, votePoll, closePoll, listPolls };

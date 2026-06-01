@@ -266,16 +266,42 @@ export const useChatSocket = ({
     // ── Poll updated ──
     const handlePollUpdated = (updatedPoll) => {
       if (!updatedPoll) return;
+      
+      const mergeAnonymousVotes = (existingPoll) => {
+        if (!updatedPoll.isAnonymous || !existingPoll) return updatedPoll;
+        // Merge giữ lại vote của chính mình nếu poll là ẩn danh
+        const finalPoll = { ...updatedPoll };
+        finalPoll.options = updatedPoll.options.map((opt, i) => {
+          const oldOpt = existingPoll.options?.[i] || {};
+          const oldMyVotes = (oldOpt.votes || []).filter(v => String(v._id || v) === String(userId));
+          const newVotes = [...opt.votes];
+          if (oldMyVotes.length > 0) {
+            const nullIdx = newVotes.findIndex(v => v === null);
+            if (nullIdx !== -1) newVotes[nullIdx] = oldMyVotes[0];
+            else newVotes.push(oldMyVotes[0]); // Fallback
+          }
+          return { ...opt, votes: newVotes };
+        });
+        return finalPoll;
+      };
+
       setMessages(prev => prev.map(m => {
         const mPollId = String(m.pollId?._id || m.pollId || '');
         if (m.type === 'poll' && mPollId === String(updatedPoll._id)) {
-          return { ...m, pollId: updatedPoll };
+          return { ...m, pollId: mergeAnonymousVotes(m.pollId) };
         }
         return m;
       }));
+      
       if (setPolls) {
-        setPolls(prev => prev.map(p => String(p._id) === String(updatedPoll._id) ? updatedPoll : p));
+        setPolls(prev => prev.map(p => {
+          if (String(p._id) === String(updatedPoll._id)) {
+            return mergeAnonymousVotes(p);
+          }
+          return p;
+        }));
       }
+
       toast.success(`Có người vừa bình chọn: ${updatedPoll.question}`, {
         icon: '📊',
         id: `poll_${updatedPoll._id}`,
