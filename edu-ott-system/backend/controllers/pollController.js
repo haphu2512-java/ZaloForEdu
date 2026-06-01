@@ -80,10 +80,14 @@ const createPoll = asyncHandler(async (req, res) => {
 
   // Thông báo hệ thống tạo bình chọn
   const senderName = req.user.fullName || req.user.username;
+  const sysMsgContent = isAnonymous
+    ? `Ai đó đã tạo cuộc bình chọn ẩn danh: "${question}"`
+    : `${senderName} đã tạo cuộc bình chọn: "${question}"`;
+
   const sysMsg2 = await Message.create({
     conversationId,
     senderId: req.user._id,
-    content: `${senderName} đã tạo cuộc bình chọn: "${question}"`,
+    content: sysMsgContent,
     type: 'system',
     pollId: poll._id
   });
