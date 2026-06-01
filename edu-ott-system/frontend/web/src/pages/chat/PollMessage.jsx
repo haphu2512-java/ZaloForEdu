@@ -11,7 +11,7 @@ export default function PollMessage({ poll, userId, onPollVoted }) {
     if (poll?.options) {
       const myVotes = poll.options
         .map((opt, index) => {
-          const voteIds = opt.votes.map(v => String(v._id || v));
+          const voteIds = (opt.votes || []).filter(v => v !== null).map(v => String(v._id || v));
           return voteIds.includes(String(userId)) ? index : -1;
         })
         .filter(index => index !== -1);
