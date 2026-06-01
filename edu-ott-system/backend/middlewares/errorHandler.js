@@ -31,11 +31,23 @@ const errorHandler = (err, _req, res, _next) => {
     'Invalid payload': 'Dữ liệu không hợp lệ',
     'Validation failed': 'Xác thực dữ liệu thất bại',
     'Internal server error': 'Lỗi máy chủ',
-    'File too large': 'Kích thước tệp quá lớn',
-    'Invalid file type': 'Loại tệp không hợp lệ'
+    'File too large': 'File đính kèm vượt quá giới hạn 50MB',
+    'Invalid file type': 'Loại tệp không hợp lệ',
   };
 
   message = MESSAGE_MAP[message] || message;
+
+  // Multer file size error (thrown before controller)
+  if (err.code === 'LIMIT_FILE_SIZE') {
+    return res.status(413).json({
+      success: false,
+      error: {
+        code: 'FILE_TOO_LARGE',
+        message: 'File đính kèm vượt quá giới hạn 50MB. Vui lòng chọn file nhỏ hơn.',
+        details: null,
+      },
+    });
+  }
 
   if (err.name === 'ValidationError') {
     message = 'Xác thực dữ liệu thất bại';
@@ -54,10 +66,21 @@ const errorHandler = (err, _req, res, _next) => {
     details = err.keyValue;
   }
 
+  // Zod validation error — extract field-level messages (e.g. content max 5000)
   if (err instanceof ZodError || err.details?.name === 'ZodError') {
     const zodErr = err instanceof ZodError ? err : err.details;
-    message = 'Invalid payload';
-    details = zodErr.flatten();
+    const flattened = zodErr.flatten();
+
+    // Ưu tiên lấy message của từng field thay vì message chung "Invalid payload"
+    const fieldErrors = flattened.fieldErrors;
+    const firstFieldWithError = Object.keys(fieldErrors)[0];
+    if (firstFieldWithError && fieldErrors[firstFieldWithError]?.length > 0) {
+      message = fieldErrors[firstFieldWithError][0];
+    } else {
+      message = 'Dữ liệu không hợp lệ';
+    }
+
+    details = flattened;
   }
 
   if (statusCode >= 500) {
