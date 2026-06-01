@@ -117,7 +117,7 @@ const sendMessage = asyncHandler(async (req, res) => {
       message,
     );
   }
-  await socketService.emitConversationUpdated(conversationId, {
+  socketService.emitConversationUpdated(conversationId, {
     conversationId,
     latestMessage: message,
   });

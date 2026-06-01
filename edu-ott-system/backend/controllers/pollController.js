@@ -73,7 +73,7 @@ const createPoll = asyncHandler(async (req, res) => {
 
   // Phát socket sự kiện
   socketService.emitToConversation(conversationId, 'new_message', message);
-  await socketService.emitConversationUpdated(conversationId, {
+  socketService.emitConversationUpdated(conversationId, {
     conversationId,
     latestMessage: message,
   });
@@ -89,7 +89,7 @@ const createPoll = asyncHandler(async (req, res) => {
   });
   await sysMsg2.populate('senderId', 'username avatarUrl fullName');
   socketService.emitToConversation(conversationId, 'new_message', sysMsg2);
-  await socketService.emitConversationUpdated(conversationId, {
+  socketService.emitConversationUpdated(conversationId, {
     conversationId,
     latestMessage: sysMsg2
   });
@@ -178,7 +178,7 @@ const votePoll = asyncHandler(async (req, res) => {
   });
   await sysMsg.populate('senderId', 'username avatarUrl fullName');
   socketService.emitToConversation(poll.conversationId.toString(), 'new_message', sysMsg);
-  await socketService.emitConversationUpdated(poll.conversationId.toString(), {
+  socketService.emitConversationUpdated(poll.conversationId.toString(), {
     conversationId: poll.conversationId,
     latestMessage: sysMsg
   });
@@ -214,7 +214,7 @@ const closePoll = asyncHandler(async (req, res) => {
   });
   await sysMsg.populate('senderId', 'username avatarUrl fullName');
   socketService.emitToConversation(poll.conversationId.toString(), 'new_message', sysMsg);
-  await socketService.emitConversationUpdated(poll.conversationId.toString(), {
+  socketService.emitConversationUpdated(poll.conversationId.toString(), {
     conversationId: poll.conversationId,
     latestMessage: sysMsg,
   });

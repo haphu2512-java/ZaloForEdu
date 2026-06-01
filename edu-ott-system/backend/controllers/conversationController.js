@@ -62,7 +62,7 @@ const emitGroupSystemMessage = async ({ conversationId, senderId, content }) => 
   });
   await sysMsg.populate('senderId', 'username avatarUrl fullName');
   socketService.emitToConversation(conversationId.toString(), 'new_message', sysMsg);
-  await socketService.emitConversationUpdated(conversationId.toString(), {
+  socketService.emitConversationUpdated(conversationId.toString(), {
     conversationId,
     latestMessage: sysMsg,
   });
