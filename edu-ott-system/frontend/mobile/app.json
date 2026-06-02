@@ -47,6 +47,10 @@
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "EXPO_PUBLIC_SOCKET_URL": "https://glorifier-recoup-patronize.ngrok-free.dev",
+      "EXPO_PUBLIC_API_URL": "https://glorifier-recoup-patronize.ngrok-free.dev/api/v1"
     }
   }
 }

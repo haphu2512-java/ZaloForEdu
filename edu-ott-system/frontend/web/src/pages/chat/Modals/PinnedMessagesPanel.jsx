@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { FaThumbtack, FaTimes, FaTrash, FaExternalLinkAlt } from 'react-icons/fa';
-import axios from 'axios';
+import axios from "../../../services/authService";
 import { toAbsoluteUrl } from '../chatUtils';
 import toast from 'react-hot-toast';
 

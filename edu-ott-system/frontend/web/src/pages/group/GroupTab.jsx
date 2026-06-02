@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import axios from "axios";
+import axios from "../../services/authService";
 import { FaUsers, FaPlus, FaCommentDots, FaSpinner, FaUserFriends } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 import CreateGroupPage from "./CreateGroupPage";

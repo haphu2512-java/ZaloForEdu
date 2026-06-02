@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import axios from "axios";
+import axios from "../../services/authService";
 import {
   FaTimes, FaSearch, FaCheck, FaCamera, FaUsers, FaSpinner, FaArrowLeft,
 } from "react-icons/fa";

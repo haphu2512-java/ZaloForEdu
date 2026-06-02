@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import axios from 'axios';
+import axios from '../../../services/authService';
 import toast from 'react-hot-toast';
 import { uploadFile } from '../../../services/mediaService';
 import { socketService } from '../../../services/socketService';

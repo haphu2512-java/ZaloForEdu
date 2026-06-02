@@ -17,7 +17,7 @@ import { socketService } from "../../services/socketService";
 import { useConfirm } from "../../contexts/ConfirmContext";
 import toast from "react-hot-toast";
 import { useAuthStore } from "../../store/authStore";
-import axios from "axios";
+import axios from "../../services/authService";
 import { friendService } from "../../services/friendService";
 import "./ContactsPage.css";
 
