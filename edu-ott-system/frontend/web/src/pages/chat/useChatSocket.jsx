@@ -336,7 +336,10 @@ export const useChatSocket = ({
           const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api/v1";
           const token = localStorage.getItem('token');
           const response = await fetch(`${API_BASE_URL}/conversations`, {
-            headers: { Authorization: `Bearer ${token}` }
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "ngrok-skip-browser-warning": "true",
+            }
           });
           const data = await response.json();
           const conversations = data.data?.items || data.items || [];

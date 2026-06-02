@@ -9,6 +9,7 @@ const { createMessage } = require('./messageService');
 const presenceService = require('./presenceService');
 const { verifyAccessToken, getDeviceTokenVersion } = require('./tokenService');
 const { isTokenBlacklisted } = require('./tokenStore');
+const { createCorsOriginHandler } = require('../utils/corsOrigin');
 const logger = require('../utils/logger');
 
 let io = null;
@@ -84,23 +85,11 @@ const closeSocket = async () => {
 };
 
 const initSocket = (server) => {
-  const corsAllowAll = env.corsOrigins.includes('*');
   io = new Server(server, {
     cors: {
-      origin: (origin, callback) => {
-        if (!origin) {
-          callback(null, true);
-          return;
-        }
-
-        if (corsAllowAll || env.corsOrigins.includes(origin)) {
-          callback(null, true);
-          return;
-        }
-
-        callback(null, false);
-      },
+      origin: createCorsOriginHandler(env.corsOrigins),
       credentials: true,
+      methods: ['GET', 'POST'],
     },
   });
 

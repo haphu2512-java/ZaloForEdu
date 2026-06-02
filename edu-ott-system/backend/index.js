@@ -17,29 +17,20 @@ const { closeRedis, initRedis } = require('./services/redisClient');
 const initSocket = require('./services/socketService');
 const { closeSocket } = initSocket;
 const { startReminderScheduler } = require('./services/reminderScheduler');
+const { createCorsOriginHandler } = require('./utils/corsOrigin');
 const logger = require('./utils/logger');
 
 const createApp = () => {
   const app = express();
-  const corsAllowAll = env.corsOrigins.includes('*');
 
   app.use(helmet({ crossOriginResourcePolicy: false, crossOriginEmbedderPolicy: false, frameguard: false, contentSecurityPolicy: false }));
   app.use(
     cors({
-      origin: (origin, callback) => {
-        if (!origin) {
-          callback(null, true);
-          return;
-        }
-
-        if (corsAllowAll || env.corsOrigins.includes(origin)) {
-          callback(null, true);
-          return;
-        }
-
-        callback(null, false);
-      },
+      origin: createCorsOriginHandler(env.corsOrigins),
       credentials: true,
+      methods: ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+      allowedHeaders: ['Content-Type', 'Authorization', 'ngrok-skip-browser-warning', 'x-client-platform', 'x-device-id'],
+      optionsSuccessStatus: 204,
     }),
   );
   app.use(clientContext);
