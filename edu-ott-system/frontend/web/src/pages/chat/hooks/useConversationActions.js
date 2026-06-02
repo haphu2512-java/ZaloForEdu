@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import axios from 'axios';
+import axios from '../../../services/authService';
 import toast from 'react-hot-toast';
 import { conversationService } from '../../../services/conversationService';
 

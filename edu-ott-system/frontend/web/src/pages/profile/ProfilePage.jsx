@@ -7,7 +7,7 @@ import { userService } from '../../services/userService';
 import { authService } from '../../services/authService';
 import { useAuthStore } from '../../store/authStore';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
+import axios from "../../services/authService";
 import { toAbsoluteUrl } from '../chat/chatUtils';
 import { DEFAULT_AVATAR } from '../../utils/constants';
 import { useConfirm } from "../../contexts/ConfirmContext";

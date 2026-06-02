@@ -6,6 +6,9 @@ const api = axios.create({
   baseURL: API_URL,
   withCredentials: true,
   timeout: 10000,
+  headers: {
+    "ngrok-skip-browser-warning": "69420"
+  }
 });
 
 // Auto attach access token
