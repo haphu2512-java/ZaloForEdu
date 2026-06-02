@@ -110,7 +110,7 @@ function AttachmentList({
         if (att.type?.startsWith('audio/')) {
           return (
             <View key={`${att.url}-${index}`} className="mt-1 max-w-[260px]">
-              <AudioBubbleMobile url={att.url} isMe={false} />
+              <AudioBubbleMobile url={att.url} isMe={false} duration={att.duration} />
             </View>
           );
         }
@@ -180,6 +180,13 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
   onImagePress,
 }) => {
   const { content, type, sender, attachments, isEdited, isDeleted, replyTo, readBy, reactions, createdAt, status } = message;
+  const senderInfo = (sender || {}) as {
+    avatar?: string;
+    avatarUrl?: string;
+    fullName?: string;
+    username?: string;
+    isActive?: boolean;
+  };
 
   // Deleted message
   if (isDeleted) {
@@ -211,11 +218,11 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
       {!isMe && (
         <View className="relative">
           <Image
-            source={{ uri: sender?.avatar || sender?.avatarUrl || 'https://i.pravatar.cc/150' }}
-            className={`w-8 h-8 rounded-full mr-2 mt-1 ${sender?.isActive === false ? 'opacity-40' : ''}`}
-            style={sender?.isActive === false ? { tintColor: 'gray' as any } : undefined}
+            source={{ uri: senderInfo.avatar || senderInfo.avatarUrl || 'https://i.pravatar.cc/150' }}
+            className={`w-8 h-8 rounded-full mr-2 mt-1 ${senderInfo.isActive === false ? 'opacity-40' : ''}`}
+            style={senderInfo.isActive === false ? { tintColor: 'gray' as any } : undefined}
           />
-          {sender?.isActive === false && (
+          {senderInfo.isActive === false && (
             <View className="absolute bottom-0 right-1 w-2.5 h-2.5 bg-gray-400 rounded-full border border-white" />
           )}
         </View>
@@ -229,9 +236,9 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
         {!isMe && sender && (
           <View className="flex-row items-center ml-1 mb-0.5">
             <Text className="text-[11px] text-gray-500 font-medium">
-              {sender.fullName || sender.username}
+              {senderInfo.fullName || senderInfo.username}
             </Text>
-            {sender.isActive === false && (
+            {senderInfo.isActive === false && (
               <Text className="text-[9px] text-red-400 font-bold ml-1.5 uppercase">
                 (Vô hiệu hóa)
               </Text>

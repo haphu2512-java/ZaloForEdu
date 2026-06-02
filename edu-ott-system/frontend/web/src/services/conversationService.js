@@ -1,6 +1,6 @@
 import axios from "axios";
 
-const API_URL = 'http://localhost:5000/api/v1';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api/v1';
 
 const getAuthHeaders = () => {
   const token = localStorage.getItem('token');
@@ -283,6 +283,19 @@ export const conversationService = {
   },
   updateNickname: async (id, memberId, nickname) => {
     const res = await axios.put(`${API_URL}/conversations/${id}/nicknames/${memberId}`, { nickname }, getAuthHeaders());
+    return res.data;
+  },
+  searchMessagesInConversation: async (conversationId, q, cursor = null, limit = 20) => {
+    const params = new URLSearchParams({ q, limit });
+    if (cursor) params.append('cursor', cursor);
+    const res = await axios.get(
+      `${API_URL}/conversations/${conversationId}/messages/search?${params}`,
+      getAuthHeaders()
+    );
+    return res.data;
+  },
+  checkBlockConflict: async (conversationId) => {
+    const res = await axios.get(`${API_URL}/conversations/${conversationId}/check-block-conflict`, getAuthHeaders());
     return res.data;
   },
 };

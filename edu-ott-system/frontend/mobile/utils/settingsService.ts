@@ -15,7 +15,15 @@ export interface UserSettings {
   };
 }
 
-const THEME_STORAGE_KEY = 'userThemeMode';
+let currentUserIdForTheme: string | null = null;
+export function setCurrentUserIdForTheme(userId: string | null) {
+  currentUserIdForTheme = userId;
+}
+
+function getThemeStorageKey() {
+  return currentUserIdForTheme ? `userThemeMode_${currentUserIdForTheme}` : 'userThemeMode';
+}
+
 type ThemeListener = (theme: ThemeMode | null) => void;
 const themeListeners = new Set<ThemeListener>();
 
@@ -29,16 +37,23 @@ export function subscribeThemeMode(listener: ThemeListener): () => void {
 }
 
 export async function cacheThemeMode(theme: ThemeMode): Promise<void> {
-  await AsyncStorage.setItem(THEME_STORAGE_KEY, theme);
+  const key = getThemeStorageKey();
+  await AsyncStorage.setItem(key, theme);
   notifyThemeListeners(theme);
 }
 
 export async function getCachedThemeMode(): Promise<ThemeMode | null> {
-  const value = await AsyncStorage.getItem(THEME_STORAGE_KEY);
+  const key = getThemeStorageKey();
+  const value = await AsyncStorage.getItem(key);
   if (value === 'light' || value === 'dark' || value === 'system') {
     return value;
   }
   return null;
+}
+
+export async function reloadThemeMode(): Promise<void> {
+  const mode = await getCachedThemeMode();
+  notifyThemeListeners(mode);
 }
 
 export async function getMySettings(): Promise<UserSettings> {

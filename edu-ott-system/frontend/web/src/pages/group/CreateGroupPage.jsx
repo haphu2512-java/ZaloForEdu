@@ -8,7 +8,7 @@ import toast from "react-hot-toast";
 import { useNavigate } from "react-router-dom"; // Thêm dòng này
 import "./CreateGroupPage.css";
 
-const API_BASE_URL = "http://localhost:5000/api/v1";
+const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api/v1";
 
 function Avatar({ user, size = 40 }) {
   const name = user?.username || "?";

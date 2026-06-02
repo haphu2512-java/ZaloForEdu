@@ -6,25 +6,34 @@ const { promisify } = require('node:util');
 
 const execFileAsync = promisify(execFile);
 
+// Use bundled ffmpeg-static binary (no system install required)
+let ffmpegBin;
+try {
+  ffmpegBin = require('ffmpeg-static');
+} catch (_) {
+  ffmpegBin = process.env.FFMPEG_PATH || 'ffmpeg';
+}
+
 const Media = require('../models/Media');
 const asyncHandler = require('../utils/asyncHandler');
 const ApiError = require('../utils/apiError');
 const { successResponse } = require('../utils/apiResponse');
 const cloudinaryService = require('../services/cloudinaryService');
+const s3Service = require('../services/s3Service');
 
 const uploadsFolder = path.join(__dirname, '..', 'uploads');
 
-// Convert audio to AAC/M4A using ffmpeg for iOS compatibility
+// Convert audio to AAC/M4A using ffmpeg for browser compatibility
 const convertToM4A = async (inputPath, outputPath) => {
-  const ffmpegPath = process.env.FFMPEG_PATH || 'ffmpeg';
+  const ffmpegPath = ffmpegBin || process.env.FFMPEG_PATH || 'ffmpeg';
   try {
     await execFileAsync(ffmpegPath, [
       '-i', inputPath,
       '-vn',                    // No video
-      '-acodec', 'aac',         // AAC codec - iOS compatible
+      '-acodec', 'aac',         // AAC codec
       '-ar', '44100',           // Sample rate
       '-ab', '128k',            // Bitrate
-      '-movflags', '+faststart', // Optimize for streaming
+      '-movflags', '+faststart', // CRITICAL: put moov atom at front for Chrome streaming
       '-y',                     // Overwrite output
       outputPath
     ]);
@@ -38,6 +47,8 @@ const convertToM4A = async (inputPath, outputPath) => {
 // Determine if a file needs conversion for iOS compatibility
 const needsConversion = (mimeType, filename) => {
   const ext = path.extname(filename).toLowerCase();
+  // ALL m4a from mobile need faststart re-encoding for Chrome compatibility
+  if (ext === '.m4a') return true;
   // WebM and raw MP4 from browser MediaRecorder need conversion
   if (ext === '.webm') return true;
   if (mimeType?.includes('webm')) return true;
@@ -76,12 +87,12 @@ const uploadMediaForm = asyncHandler(async (req, res) => {
   if (isAudio && needsConversion(req.file.mimetype, req.file.originalname)) {
     const inputPath = path.join(uploadsFolder, req.file.filename);
     const baseName = req.file.filename.replace(/\.[^.]+$/, '');
+    const tmpFilename = `${baseName}.tmp_convert.m4a`;
     const m4aFilename = `${baseName}.m4a`;
-    const tmpFilename = `${baseName}.converted.m4a`;
     const tempOutputPath = path.join(uploadsFolder, tmpFilename);
     const outputPath = path.join(uploadsFolder, m4aFilename);
 
-    console.log(`Converting audio: ${req.file.filename} -> ${m4aFilename} (via temp file)`);
+    console.log(`[Audio] Re-encoding with faststart: ${req.file.filename} -> ${m4aFilename}`);
     const converted = await withTimeout(
       convertToM4A(inputPath, tempOutputPath),
       30000,
@@ -89,7 +100,7 @@ const uploadMediaForm = asyncHandler(async (req, res) => {
     );
 
     if (converted) {
-      // Delete original and move converted temp into final path
+      // Remove original (whether it's .m4a or other format), rename temp to final
       await fs.unlink(inputPath).catch(() => null);
       await fs.rename(tempOutputPath, outputPath);
       const stat = await fs.stat(outputPath).catch(() => null);
@@ -97,14 +108,46 @@ const uploadMediaForm = asyncHandler(async (req, res) => {
       finalMimeType = 'audio/mp4';
       finalSize = stat?.size || req.file.size;
       finalUrl = `/uploads/${m4aFilename}`;
-      console.log(`Audio converted successfully: ${m4aFilename}`);
+      console.log(`[Audio] Re-encoded successfully: ${m4aFilename}`);
     } else {
       await fs.unlink(tempOutputPath).catch(() => null);
-      // Fallback: giữ file gốc để không làm mất tin nhắn voice
-      console.warn(`Audio conversion failed, fallback to original file: ${req.file.filename}`);
+      console.warn(`[Audio] Re-encoding failed, serving original: ${req.file.filename}`);
     }
   }
 
+  // S3 integration
+  if (s3Service.isConfigured()) {
+    const localFilePath = path.join(uploadsFolder, finalFilename);
+    try {
+      const fileBuffer = await fs.readFile(localFilePath);
+      const s3Url = await s3Service.uploadToS3(fileBuffer, req.file.originalname, finalMimeType);
+      
+      // Clean up temporary local file
+      await fs.unlink(localFilePath).catch(() => null);
+
+      const media = await Media.create({
+        uploaderId: req.user._id,
+        fileName: req.file.originalname,
+        mimeType: finalMimeType,
+        size: finalSize,
+        storage: 's3',
+        url: s3Url,
+        duration: req.body.duration ? parseInt(req.body.duration) : null,
+      });
+
+      console.log('[Media Upload S3] Created media:', {
+        fileName: media.fileName,
+        mimeType: media.mimeType,
+        url: media.url,
+      });
+
+      return successResponse(res, media, 'Media uploaded to S3', 201);
+    } catch (err) {
+      console.error('[Media Upload S3] Failed to upload to S3, falling back to local storage:', err.message);
+    }
+  }
+
+  // Fallback to local storage
   const media = await Media.create({
     uploaderId: req.user._id,
     fileName: req.file.originalname,
@@ -112,18 +155,50 @@ const uploadMediaForm = asyncHandler(async (req, res) => {
     size: finalSize,
     storage: 'local',
     url: finalUrl,
+    duration: req.body.duration ? parseInt(req.body.duration) : null,
   });
 
-  return successResponse(res, media, 'Media uploaded', 201);
+  console.log('[Media Upload Local] Created media:', {
+    fileName: media.fileName,
+    mimeType: media.mimeType,
+    duration: media.duration,
+    receivedDuration: req.body.duration,
+  });
+
+  return successResponse(res, media, 'Media uploaded locally', 201);
 });
 
 const uploadMedia = asyncHandler(async (req, res) => {
   const { fileName, mimeType, contentBase64 } = req.body;
+  const buffer = Buffer.from(contentBase64, 'base64');
 
+  if (s3Service.isConfigured()) {
+    try {
+      const s3Url = await s3Service.uploadToS3(buffer, fileName, mimeType);
+      const media = await Media.create({
+        uploaderId: req.user._id,
+        fileName,
+        mimeType,
+        size: buffer.byteLength,
+        storage: 's3',
+        url: s3Url,
+      });
+
+      console.log('[Media Base64 S3] Created media:', {
+        fileName: media.fileName,
+        url: media.url,
+      });
+
+      return successResponse(res, media, 'Media uploaded to S3', 201);
+    } catch (err) {
+      console.error('[Media Base64 S3] Failed to upload, falling back to local storage:', err.message);
+    }
+  }
+
+  // Fallback to local storage
   const extension = path.extname(fileName) || '.bin';
   const storedName = `${Date.now()}-${crypto.randomUUID()}${extension}`;
   const filePath = path.join(uploadsFolder, storedName);
-  const buffer = Buffer.from(contentBase64, 'base64');
 
   await fs.mkdir(uploadsFolder, { recursive: true });
   await fs.writeFile(filePath, buffer);
@@ -137,7 +212,12 @@ const uploadMedia = asyncHandler(async (req, res) => {
     url: `/uploads/${storedName}`,
   });
 
-  return successResponse(res, media, 'Media uploaded', 201);
+  console.log('[Media Base64 Local] Created media:', {
+    fileName: media.fileName,
+    url: media.url,
+  });
+
+  return successResponse(res, media, 'Media uploaded locally', 201);
 });
 
 const getCloudinarySignature = asyncHandler(async (req, res) => {
@@ -198,6 +278,10 @@ const deleteMediaById = asyncHandler(async (req, res) => {
     await cloudinaryService.destroyAsset({
       publicId: media.providerPublicId,
       resourceType: media.providerResourceType || 'image',
+    });
+  } else if (media.storage === 's3') {
+    await s3Service.deleteFromS3(media.url).catch((err) => {
+      console.error('[Media Delete S3] Failed to delete from S3:', err.message);
     });
   } else {
     const relativePath = media.url.replace(/^[\\/]/, '');

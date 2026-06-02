@@ -1,18 +1,24 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { FaSpinner, FaPaperPlane, FaThumbsUp, FaSmile, FaMicrophone, FaPoll } from 'react-icons/fa';
 import { VoiceRecorder } from '../../components/shared/VoiceRecorder';
+import { StickerSuggest } from './StickerSuggest';
+import { socketService } from '../../services/socketService';
+import { BOT_NAME, BOT_USERNAME, BOT_ID, BOT_AVATAR } from '../../config/bot';
 
-export const MessageInput = ({ 
-  theme, 
-  placeholder, 
-  onSend, 
-  onSendLike, 
-  onUploadFiles, 
-  onShowPoll, 
-  members = [], 
-  replyTo = null, 
+export const MessageInput = ({
+  theme,
+  placeholder,
+  onSend,
+  onSendSticker,
+  onSendLike,
+  onUploadFiles,
+  onShowPoll,
+  members = [],
+  replyTo = null,
   onCancelReply,
-  isGroup = false
+  isGroup = false,
+  conversationId = null,
+  userId = null,
 }) => {
   const [text, setText] = useState('');
   const [showEmoji, setShowEmoji] = useState(false);
@@ -20,6 +26,12 @@ export const MessageInput = ({
   const [showRecorder, setShowRecorder] = useState(false);
   const [mentionQuery, setMentionQuery] = useState(null); // 'all' or partial name
   const [mentionIndex, setMentionIndex] = useState(0);
+  // Sticker suggest state
+  const [stickerQuery, setStickerQuery] = useState('');   // query đang search
+  const [showSticker, setShowSticker] = useState(false);  // đang hiện panel
+  const stickerTimerRef = useRef(null);
+  const typingTimerRef = useRef(null);
+  const isTypingRef = useRef(false);
   const inputRef = useRef(null);
 
   const imageRef = useRef(null);
@@ -29,16 +41,42 @@ export const MessageInput = ({
   const emojiRef = useRef(null);
 
   // Filter members based on mentionQuery
+  // Show mention suggestions in both direct and group chats.
+  // Group: show @all + members (except self). Direct: show the other participant(s).
+  const baseList = (() => {
+    if (isGroup) {
+      return [{ _id: 'all', username: 'all', fullName: 'Tất cả mọi người' }, ...members.filter(m => String(m._id || m.id) !== String(userId))];
+    }
+    return members.filter(m => String(m._id || m.id) !== String(userId));
+  })();
+
+  // Bot entry
+  const botEntry = { _id: BOT_ID, username: BOT_NAME, fullName: BOT_NAME, isBot: true, avatarUrl: BOT_AVATAR };
+
+  const allCandidates = [botEntry, ...baseList];
+
   const filteredMembers = mentionQuery === null ? [] :
-    [{ _id: 'all', username: 'all', fullName: 'Tất cả mọi người' }, ...members]
-      .filter(m =>
-        m.username?.toLowerCase().includes(mentionQuery.toLowerCase()) ||
-        m.fullName?.toLowerCase().includes(mentionQuery.toLowerCase())
-      ).slice(0, 8);
+    allCandidates.filter(m =>
+      (m.username && m.username.toLowerCase().includes(mentionQuery.toLowerCase())) ||
+      (m.fullName && m.fullName.toLowerCase().includes(mentionQuery.toLowerCase()))
+    ).slice(0, 8);
 
   const handleTextChange = (e) => {
     const val = e.target.value;
     setText(val);
+
+    // Emit typing event
+    if (conversationId) {
+      if (!isTypingRef.current) {
+        isTypingRef.current = true;
+        socketService.emitTyping(conversationId);
+      }
+      clearTimeout(typingTimerRef.current);
+      typingTimerRef.current = setTimeout(() => {
+        isTypingRef.current = false;
+        socketService.emitStopTyping(conversationId);
+      }, 2000);
+    }
 
     // Detect @ mention
     const cursorPos = e.target.selectionStart;
@@ -52,6 +90,19 @@ export const MessageInput = ({
     } else {
       setMentionQuery(null);
     }
+
+    // Sticker suggest: debounce 400ms, trigger khi gõ ≥ 2 ký tự
+    clearTimeout(stickerTimerRef.current);
+    const trimmed = val.trim();
+    if (trimmed.length >= 2) {
+      stickerTimerRef.current = setTimeout(() => {
+        setStickerQuery(trimmed);
+        setShowSticker(true);
+      }, 400);
+    } else {
+      setShowSticker(false);
+      setStickerQuery('');
+    }
   };
 
   const insertMention = (member) => {
@@ -61,6 +112,10 @@ export const MessageInput = ({
 
     const words = textBeforeCursor.split(/\s/);
     words[words.length - 1] = `@${member.username || 'all'} `;
+
+    // Note: we deliberately do not send extra metadata in the message payload because
+    // backend currently infers mentions from the content. The inserted `@ZaloBot` text
+    // is sufficient for backend detection.
 
     const newText = words.join(' ') + textAfterCursor;
     setText(newText);
@@ -97,6 +152,15 @@ export const MessageInput = ({
     }
   };
 
+  // Xử lý chọn sticker từ panel Tenor
+  const handleSelectSticker = useCallback((sticker) => {
+    setShowSticker(false);
+    setStickerQuery('');
+    if (onSendSticker) {
+      onSendSticker(sticker);
+    }
+  }, [onSendSticker]);
+
   const handleSend = async (e) => {
     if (e) e.preventDefault();
     if (!text.trim() || isSending) return;
@@ -104,8 +168,16 @@ export const MessageInput = ({
     setText('');
     if (inputRef.current) inputRef.current.value = '';
     setShowEmoji(false);
+    setShowSticker(false);
+    setStickerQuery('');
     setIsSending(true);
     setMentionQuery(null);
+    // Stop typing immediately when sending
+    if (conversationId && isTypingRef.current) {
+      clearTimeout(typingTimerRef.current);
+      isTypingRef.current = false;
+      socketService.emitStopTyping(conversationId);
+    }
     try {
       await onSend(textToSend);
       if (onCancelReply) onCancelReply();
@@ -154,6 +226,15 @@ export const MessageInput = ({
             ✕
           </button>
         </div>
+      )}
+
+      {/* Sticker Suggest (Tenor GIF) */}
+      {showSticker && (
+        <StickerSuggest
+          query={stickerQuery}
+          onSelect={handleSelectSticker}
+          onClose={() => setShowSticker(false)}
+        />
       )}
 
       {/* Mention Suggestions */}
@@ -209,7 +290,7 @@ export const MessageInput = ({
 
         {showEmoji && (
           <div ref={emojiRef} style={{ position: 'absolute', bottom: '100%', left: '10px', marginBottom: '10px', zIndex: 50, background: theme === 'dark' ? '#242526' : '#fff', border: '1px solid var(--border-color, #E5E7EB)', padding: '8px 12px', borderRadius: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', display: 'flex', gap: '12px' }}>
-            {['😀', '😂', '❤️', '👍', '😢', '🙏'].map(e => (
+            {['😀', '😂', '😍', '🥰', '👍', '❤️', '🔥', '😭', '🙏', '🎉'].map(e => (
               <span
                 key={e}
                 style={{ fontSize: '18px', cursor: 'pointer', transition: 'transform 0.1s' }}
@@ -227,8 +308,8 @@ export const MessageInput = ({
       {/* Voice Recorder hoặc Text Input */}
       {showRecorder ? (
         <div className="mdc-input-row" style={{ height: 60 }}>
-          <VoiceRecorder 
-            onCancel={() => setShowRecorder(false)} 
+          <VoiceRecorder
+            onCancel={() => setShowRecorder(false)}
             onSend={(blob, duration) => {
               // Universal extension mapping dựa trên mimeType
               let extension = '.webm';
@@ -249,6 +330,8 @@ export const MessageInput = ({
               }
 
               const file = new File([blob], `voice_${Date.now()}${extension}`, { type: blob.type });
+              // Pass duration as metadata
+              file.duration = duration;
               onUploadFiles([file]);
               setShowRecorder(false);
               if (onCancelReply) onCancelReply();

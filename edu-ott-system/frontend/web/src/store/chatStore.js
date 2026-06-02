@@ -148,6 +148,35 @@ export const useChatStore = create((set, get) => ({
 
   handleSocketTyping: ({ conversationId, userId }) => {
     // maybe handle typing state
+  },
+
+  handleGroupUpdated: ({ conversationId, ownerId, adminIds, action }) => {
+    set((state) => {
+      const updatedConversations = state.conversations.map(c => {
+        if (c._id === conversationId) {
+          return { 
+            ...c, 
+            ownerId: ownerId || c.ownerId,
+            adminIds: adminIds || c.adminIds
+          };
+        }
+        return c;
+      });
+
+      // Also update activeRoom if it's the same conversation
+      const updatedActiveRoom = state.activeRoom?._id === conversationId
+        ? { 
+            ...state.activeRoom, 
+            ownerId: ownerId || state.activeRoom.ownerId,
+            adminIds: adminIds || state.activeRoom.adminIds
+          }
+        : state.activeRoom;
+
+      return {
+        conversations: updatedConversations,
+        activeRoom: updatedActiveRoom
+      };
+    });
   }
 
 }));

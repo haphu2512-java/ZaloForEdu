@@ -15,14 +15,80 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-// Auto handle 401 errors
+// Flag to prevent multiple simultaneous refresh attempts
+let isRefreshing = false;
+let refreshPromise = null;
+
+// Refresh access token
+const refreshAccessToken = async () => {
+  if (isRefreshing && refreshPromise) {
+    return refreshPromise;
+  }
+
+  isRefreshing = true;
+  refreshPromise = (async () => {
+    try {
+      const refreshToken = localStorage.getItem("refreshToken");
+      if (!refreshToken) {
+        console.log('[Token] No refresh token available');
+        return null;
+      }
+
+      console.log('[Token] Refreshing access token...');
+      const response = await axios.post(`${API_URL}/auth/refresh-token`, { refreshToken });
+      
+      const newAccessToken = response.data.data?.accessToken || response.data.accessToken;
+      const newRefreshToken = response.data.data?.refreshToken || response.data.refreshToken;
+
+      if (newAccessToken) {
+        localStorage.setItem("token", newAccessToken);
+        if (newRefreshToken) {
+          localStorage.setItem("refreshToken", newRefreshToken);
+        }
+        console.log('[Token] Access token refreshed successfully');
+        return newAccessToken;
+      }
+
+      return null;
+    } catch (error) {
+      console.error('[Token] Refresh failed:', error);
+      return null;
+    } finally {
+      isRefreshing = false;
+      refreshPromise = null;
+    }
+  })();
+
+  return refreshPromise;
+};
+
+// Auto handle 401 errors with token refresh
 api.interceptors.response.use(
   (response) => response,
-  (error) => {
+  async (error) => {
+    const originalRequest = error.config;
     const isAuthError = error.response?.status === 401;
     const isSessionExpired = error.response?.data?.errorCode === "SESSION_EXPIRED";
+    const isForbiddenToken = error.response?.status === 403 && 
+                            error.response?.data?.error?.message?.toLowerCase().includes('token');
 
-    if (isAuthError || isSessionExpired) {
+    // Check if this is an auth error and we haven't retried yet
+    if ((isAuthError || isForbiddenToken) && !originalRequest._retry) {
+      originalRequest._retry = true;
+
+      console.log('[Token] Auth error detected, attempting refresh...');
+      const newToken = await refreshAccessToken();
+
+      if (newToken) {
+        // Update the authorization header and retry
+        originalRequest.headers.Authorization = `Bearer ${newToken}`;
+        console.log('[Token] Retrying request with new token...');
+        return api(originalRequest);
+      }
+    }
+
+    // If refresh failed or session expired, logout
+    if (isAuthError || isSessionExpired || isForbiddenToken) {
       localStorage.removeItem("token");
       localStorage.removeItem("refreshToken");
       localStorage.removeItem("user");
@@ -31,6 +97,7 @@ api.interceptors.response.use(
         window.location.href = "/login?reason=session_expired";
       }
     }
+    
     return Promise.reject(error);
   }
 );

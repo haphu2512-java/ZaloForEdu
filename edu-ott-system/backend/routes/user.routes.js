@@ -7,6 +7,9 @@ const { blockUserBodySchema, updateUserSchema, userIdParamSchema } = require('..
 
 const router = express.Router();
 router.get('/', userController.getAllUsers);
+
+router.get('/me/storage', auth, userController.getMyCloudStorage);
+
 /**
  * @openapi
  * /users/me/blocked:

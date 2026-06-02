@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { FaBan, FaSpinner, FaSearch, FaUnlock, FaUserSlash } from "react-icons/fa";
 import { blockService } from "../../services/blockService";
 import toast from "react-hot-toast";
+import { useConfirm } from "../../contexts/ConfirmContext";
 import "./BlockedUsersPage.css";
 
 export default function BlockedUsersPage() {
@@ -9,6 +10,7 @@ export default function BlockedUsersPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [unblockingId, setUnblockingId] = useState(null);
+  const confirm = useConfirm();
 
   useEffect(() => {
     loadBlockedUsers();
@@ -28,7 +30,7 @@ export default function BlockedUsersPage() {
   };
 
   const handleUnblock = async (userId, username) => {
-    if (!window.confirm(`Bỏ chặn ${username}? Người này có thể liên lạc lại với bạn.`)) return;
+    if (!await confirm(`Bỏ chặn ${username}? Người này có thể liên lạc lại với bạn.`, { isDanger: true })) return;
     setUnblockingId(userId);
     try {
       await blockService.unblockUser(userId);

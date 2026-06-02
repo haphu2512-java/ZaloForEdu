@@ -74,12 +74,12 @@ export async function updateGroupName(conversationId: string, name: string): Pro
   return normalizeConversation(res.data);
 }
 
-export async function addGroupMembers(conversationId: string, memberIds: string[]): Promise<Conversation> {
+export async function addGroupMembers(conversationId: string, memberIds: string[]): Promise<any> {
   const res = await fetchAPI(`${CONVERSATIONS_ENDPOINT}/${conversationId}/members`, {
     method: 'POST',
     body: JSON.stringify({ memberIds }),
   });
-  return normalizeConversation(res.data);
+  return res.data;
 }
 
 export async function removeGroupMember(conversationId: string, memberId: string): Promise<Conversation> {
@@ -299,4 +299,14 @@ export async function uploadMedia(payload: { fileName: string; mimeType: string;
     body: JSON.stringify(payload),
   });
   return res.data;
+}
+
+export async function checkBlockConflict(conversationId: string): Promise<{ hasConflict: boolean, details?: { iBlocked: string[], blockedMe: string[] } }> {
+  try {
+    const res = await fetchAPI(`${CONVERSATIONS_ENDPOINT}/${conversationId}/check-block-conflict`);
+    return res.data || { hasConflict: false };
+  } catch (error) {
+    console.log('Error checking block conflict:', error);
+    return { hasConflict: false };
+  }
 }

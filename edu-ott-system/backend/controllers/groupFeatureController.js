@@ -1,4 +1,5 @@
 const crypto = require('crypto');
+const mongoose = require('mongoose');
 const Conversation = require('../models/Conversation');
 const JoinRequest = require('../models/JoinRequest');
 const Message = require('../models/Message');
@@ -41,7 +42,7 @@ const emitGroupSystemMessage = async ({ conversationId, senderId, content }) => 
   });
   await sysMsg.populate('senderId', 'username avatarUrl fullName');
   socketService.emitToConversation(conversationId.toString(), 'new_message', sysMsg);
-  await socketService.emitConversationUpdated(conversationId.toString(), {
+  socketService.emitConversationUpdated(conversationId.toString(), {
     conversationId,
     latestMessage: sysMsg,
   });
@@ -110,7 +111,7 @@ const pinMessage = asyncHandler(async (req, res) => {
   });
   await pinSysMsg.populate('senderId', 'username avatarUrl fullName');
   socketService.emitToConversation(id, 'new_message', pinSysMsg);
-  await socketService.emitConversationUpdated(id, {
+  socketService.emitConversationUpdated(id, {
     conversationId: id,
     latestMessage: pinSysMsg
   });
@@ -168,7 +169,7 @@ const unpinMessage = asyncHandler(async (req, res) => {
   });
   await unpinSysMsg.populate('senderId', 'username avatarUrl fullName');
   socketService.emitToConversation(id, 'new_message', unpinSysMsg);
-  await socketService.emitConversationUpdated(id, {
+  socketService.emitConversationUpdated(id, {
     conversationId: id,
     latestMessage: unpinSysMsg
   });
@@ -211,19 +212,23 @@ const updateGroupSettings = asyncHandler(async (req, res) => {
   if (conversation.type !== 'group') throw new ApiError(400, 'INVALID_CONVERSATION_TYPE', 'Only for group conversations');
   ensureAdminOrOwner(conversation, req.user._id);
 
-  const updates = {};
-  if (typeof isApprovalRequired === 'boolean') updates.isApprovalRequired = isApprovalRequired;
-  if (typeof canMembersUpdateInfo === 'boolean') updates.canMembersUpdateInfo = canMembersUpdateInfo;
-  if (typeof canMembersPin === 'boolean') updates.canMembersPin = canMembersPin;
-  if (typeof canMembersCreateReminders === 'boolean') updates.canMembersCreateReminders = canMembersCreateReminders;
-  if (typeof canMembersCreatePolls === 'boolean') updates.canMembersCreatePolls = canMembersCreatePolls;
-  if (typeof canMembersSendMessages === 'boolean') updates.canMembersSendMessages = canMembersSendMessages;
-  if (typeof req.body.markAdminMessages === 'boolean') updates.markAdminMessages = req.body.markAdminMessages;
+  if (typeof isApprovalRequired === 'boolean') conversation.settings.isApprovalRequired = isApprovalRequired;
+  if (typeof canMembersUpdateInfo === 'boolean') conversation.settings.canMembersUpdateInfo = canMembersUpdateInfo;
+  if (typeof canMembersPin === 'boolean') conversation.settings.canMembersPin = canMembersPin;
+  if (typeof canMembersCreateReminders === 'boolean') conversation.settings.canMembersCreateReminders = canMembersCreateReminders;
+  if (typeof canMembersCreatePolls === 'boolean') conversation.settings.canMembersCreatePolls = canMembersCreatePolls;
+  if (typeof canMembersSendMessages === 'boolean') conversation.settings.canMembersSendMessages = canMembersSendMessages;
+  if (typeof req.body.markAdminMessages === 'boolean') conversation.settings.markAdminMessages = req.body.markAdminMessages;
+  if (typeof req.body.allowInviteLink === 'boolean') conversation.settings.allowInviteLink = req.body.allowInviteLink;
+  if (typeof req.body.allowNewMembersReadHistory === 'boolean') conversation.settings.allowNewMembersReadHistory = req.body.allowNewMembersReadHistory;
 
-  conversation.settings = { ...conversation.settings, ...updates };
+  conversation.markModified('settings');
   await conversation.save();
 
-  socketService.emitToConversation(id, 'conversation_settings_updated', conversation.settings);
+  socketService.emitToConversation(id, 'conversation_settings_updated', {
+    conversationId: id,
+    settings: conversation.settings
+  });
   const senderName = req.user.fullName || req.user.username;
   await emitGroupSystemMessage({
     conversationId: conversation._id,
@@ -323,8 +328,20 @@ const processJoinRequest = asyncHandler(async (req, res) => {
     joinRequest.status = 'approved';
     // Thêm user vào nhóm
     if (!conversation.participants.some((p) => toStr(p) === toStr(joinRequest.userId))) {
+      // Remove from pastParticipants if they were previously kicked
+      conversation.pastParticipants = (conversation.pastParticipants || []).filter(
+        (p) => toStr(p.userId) !== toStr(joinRequest.userId)
+      );
+
       conversation.participants.push(joinRequest.userId);
       await conversation.save();
+      await mongoose.model('ConversationPreference').findOneAndUpdate(
+        { conversationId: id, userId: joinRequest.userId },
+        { 
+          $set: { conversationId: id, userId: joinRequest.userId, createdAt: new Date() } 
+        },
+        { upsert: true }
+      );
     }
   } else if (action === 'reject') {
     joinRequest.status = 'rejected';
@@ -353,6 +370,14 @@ const processJoinRequest = asyncHandler(async (req, res) => {
       ? `${senderName} đã duyệt ${requesterName} vào nhóm`
       : `${senderName} đã từ chối yêu cầu tham gia của ${requesterName}`,
   });
+
+  if (action === 'approve') {
+    await socketService.emitGroupUpdated(conversation._id.toString(), {
+      conversationId: conversation._id.toString(),
+      action: 'member_joined',
+      userId: joinRequest.userId,
+    });
+  }
 
   return successResponse(res, joinRequest, `Join request ${action}d`);
 });
@@ -423,6 +448,9 @@ const previewGroupByInviteCode = asyncHandler(async (req, res) => {
     .populate('participants', 'username avatarUrl');
 
   if (!conversation) throw new ApiError(404, 'INVALID_INVITE_CODE', 'Invite link is invalid or expired');
+  if (conversation.settings?.allowInviteLink === false) {
+    throw new ApiError(403, 'FORBIDDEN', 'Tham gia bằng link đang bị tắt cho nhóm này');
+  }
 
   return successResponse(
     res,
@@ -446,6 +474,9 @@ const joinByInviteLink = asyncHandler(async (req, res) => {
 
   const conversation = await Conversation.findOne({ inviteCode: code });
   if (!conversation) throw new ApiError(404, 'INVALID_INVITE_CODE', 'Invite link is invalid or expired');
+  if (conversation.settings?.allowInviteLink === false) {
+    throw new ApiError(403, 'FORBIDDEN', 'Tham gia bằng link đang bị tắt cho nhóm này');
+  }
 
   // Kiểm tra đã là thành viên chưa
   const alreadyMember = conversation.participants.some((p) => toStr(p) === toStr(req.user._id));
@@ -464,18 +495,51 @@ const joinByInviteLink = asyncHandler(async (req, res) => {
       { returnDocument: 'after', upsert: true },
     );
 
+    await joinRequest.populate('userId', 'username avatarUrl email');
+
+    const adminIds = [
+      toStr(conversation.ownerId || conversation.createdBy),
+      ...(conversation.adminIds || []).map(toStr),
+    ].filter(Boolean);
+
+    adminIds.forEach((adminId) => {
+      socketService.emitToUser(adminId, 'join_request_received', {
+        conversationId: conversation._id,
+        conversationName: conversation.name,
+        joinRequest,
+      });
+    });
+
     return successResponse(res, { requiresApproval: true, joinRequest }, 'Join request sent, waiting for approval', 202);
   }
 
   // Tham gia trực tiếp
+  // Remove from pastParticipants if they were previously kicked
+  conversation.pastParticipants = (conversation.pastParticipants || []).filter(
+    (p) => toStr(p.userId) !== toStr(req.user._id)
+  );
+
   conversation.participants.push(req.user._id);
   await conversation.save();
+  await mongoose.model('ConversationPreference').findOneAndUpdate(
+    { conversationId: conversation._id, userId: req.user._id },
+    { 
+      $set: { conversationId: conversation._id, userId: req.user._id, createdAt: new Date() } 
+    },
+    { upsert: true }
+  );
 
   const senderName = req.user.fullName || req.user.username;
   await emitGroupSystemMessage({
     conversationId: conversation._id,
     senderId: req.user._id,
     content: `${senderName} đã tham gia nhóm qua link mời`,
+  });
+
+  await socketService.emitGroupUpdated(conversation._id.toString(), {
+    conversationId: conversation._id.toString(),
+    action: 'member_joined',
+    userId: req.user._id,
   });
 
   return successResponse(res, conversation, 'Joined group successfully');
@@ -495,6 +559,8 @@ const blockMember = asyncHandler(async (req, res) => {
   const ownerStr = toStr(conversation.ownerId || conversation.createdBy);
   if (targetStr === ownerStr) throw new ApiError(403, 'FORBIDDEN', 'Cannot block the group owner');
 
+  if (!conversation.pastParticipants) conversation.pastParticipants = [];
+  conversation.pastParticipants.push({ userId: memberId, leftAt: new Date() });
   conversation.participants = conversation.participants.filter(p => toStr(p) !== targetStr);
   if (!conversation.blockedMembers) conversation.blockedMembers = [];
   if (!conversation.blockedMembers.some(b => toStr(b) === targetStr)) {
@@ -504,6 +570,13 @@ const blockMember = asyncHandler(async (req, res) => {
 
   socketService.emitToUser(targetStr, 'removed_from_group', { conversationId: id, reason: 'blocked' });
   socketService.emitToConversation(id, 'member_blocked', { conversationId: id, memberId: targetStr });
+  
+  await socketService.emitGroupUpdated(conversation._id.toString(), {
+    conversationId: conversation._id.toString(),
+    action: 'member_blocked',
+    memberId: targetStr,
+  });
+
   const targetUser = await User.findById(memberId).select('fullName username');
   const targetName = targetUser?.fullName || targetUser?.username || 'một thành viên';
   const senderName = req.user.fullName || req.user.username;
@@ -525,6 +598,13 @@ const unblockMember = asyncHandler(async (req, res) => {
 
   conversation.blockedMembers = (conversation.blockedMembers || []).filter(b => toStr(b) !== toStr(memberId));
   await conversation.save();
+
+  await socketService.emitGroupUpdated(conversation._id.toString(), {
+    conversationId: conversation._id.toString(),
+    action: 'member_unblocked',
+    memberId: toStr(memberId),
+  });
+
   const targetUser = await User.findById(memberId).select('fullName username');
   const targetName = targetUser?.fullName || targetUser?.username || 'một thành viên';
   const senderName = req.user.fullName || req.user.username;

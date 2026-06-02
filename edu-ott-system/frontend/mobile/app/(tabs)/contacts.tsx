@@ -61,8 +61,31 @@ import SuggestionUserRow from '@/components/contacts/SuggestionUserRow';
 import PhoneFriendModal from '@/components/contacts/PhoneFriendModal';
 import ContactSyncModal from '@/components/contacts/ContactSyncModal';
 import QrFriendModal from '@/components/contacts/QrFriendModal';
+import { useCommunityStore } from '@/stores/communityStore';
+import type { Community } from '@/types/community';
 
-type ContactTab = 'friends' | 'groups' | 'oa';
+const getCommunityMessagePreview = (item: any): string => {
+  if (!item?.latestMessage) return 'Chưa có tin nhắn';
+  const msg = item.latestMessage;
+  if (msg.type === 'announcement') return '📢 Thông báo mới';
+  if (msg.content?.trim()) return msg.content.trim();
+  if (msg.type === 'image') return '🖼️ Hình ảnh';
+  if (msg.type === 'file') return '📎 Tệp đính kèm';
+  return 'Tin nhắn mới';
+};
+
+const getCommunityTimeAgo = (date?: string | null): string => {
+  if (!date) return '';
+  const diffMs = Date.now() - new Date(date).getTime();
+  const mins = Math.floor(diffMs / 60000);
+  if (mins < 1) return 'Vừa xong';
+  if (mins < 60) return `${mins} phút`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs} giờ`;
+  return `${Math.floor(hrs / 24)} ngày`;
+};
+
+type ContactTab = 'friends' | 'groups' | 'communities' | 'oa';
 type FilterTab = 'all' | 'recent';
 
 export default function ContactsScreen() {
@@ -116,15 +139,24 @@ export default function ContactsScreen() {
   const [editorSubmit, setEditorSubmit] = useState<null | ((value: string) => void)>(null);
 
   const getUserId = useCallback((u: UserInfo) => u._id || u.id || '', []);
+  const { communities, loadCommunities, unreadByCommunity, connectRealtime } = useCommunityStore();
 
   const loadContacts = useCallback(async () => {
+    // Don't fetch if user is not logged in
+    if (!user) {
+      console.log('[Contacts] User not logged in, skipping fetch');
+      return;
+    }
+    
     try {
       const [friendsRes, incomingRes, outgoingRes, conversationsRes] = await Promise.all([
         getFriendList(null, 100),
         getIncomingFriendRequests(null, 100),
         getOutgoingFriendRequests(null, 100),
         getConversations(null, 100),
+        loadCommunities(),
       ]);
+      connectRealtime();
       setFriends(friendsRes?.items || []);
       setIncomingRequests(incomingRes?.items || []);
       setOutgoingRequests(outgoingRes?.items || []);
@@ -141,13 +173,14 @@ export default function ContactsScreen() {
     } catch (error: any) {
       console.log('Failed to fetch contacts:', error.message);
     }
-  }, []);
+  }, [user]);
 
   useFocusEffect(
     useCallback(() => {
       let isActive = true;
       const init = async () => {
-        if (friends.length === 0 && groups.length === 0) setLoading(true); // Don't block UI if we already have data
+        // Only show loading if user is logged in
+        if (user && friends.length === 0 && groups.length === 0) setLoading(true);
         await loadContacts();
         if (isActive) setLoading(false);
       };
@@ -155,7 +188,7 @@ export default function ContactsScreen() {
       return () => {
         isActive = false;
       };
-    }, [loadContacts])
+    }, [loadContacts, user, friends.length, groups.length])
   );
 
   const onRefresh = useCallback(async () => {
@@ -652,6 +685,36 @@ export default function ContactsScreen() {
     );
   };
 
+  const renderCommunityItem = ({ item }: { item: any }) => {
+    const unread = unreadByCommunity[item._id] || item.unreadCount || 0;
+    const preview = getCommunityMessagePreview(item);
+    const timeStr = getCommunityTimeAgo(item.latestMessage?.createdAt || item.lastMessageAt);
+    const avatarUrl = item.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(item.name || 'C')}&background=1D67FF&color=fff&size=100&bold=true`;
+    
+    return (
+      <TouchableOpacity
+        style={[styles.userRow, { backgroundColor: colors.surface }]}
+        onPress={() => router.push({ pathname: '/community/[id]', params: { id: item._id } })}
+      >
+        <Image source={{ uri: avatarUrl }} style={styles.avatar} />
+        <View style={{ flex: 1, backgroundColor: 'transparent' }}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3 }}>
+            <Text style={[styles.userName, { color: colors.text, flex: 1, marginRight: 6 }]} numberOfLines={1}>{item.name}</Text>
+            {timeStr ? <Text style={{ fontSize: 11, color: colors.muted }}>{timeStr}</Text> : null}
+          </View>
+          <Text style={{ fontSize: 13, color: unread > 0 ? colors.text : colors.muted }} numberOfLines={1}>
+            {preview}
+          </Text>
+        </View>
+        {unread > 0 ? (
+          <View style={{ minWidth: 20, height: 20, borderRadius: 10, backgroundColor: '#1D67FF', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 5, marginLeft: 6 }}>
+            <Text style={{ color: '#fff', fontSize: 10, fontWeight: '800' }}>{unread > 99 ? '99+' : unread}</Text>
+          </View>
+        ) : null}
+      </TouchableOpacity>
+    );
+  };
+
   const renderSectionHeader = ({ section }: { section: { title: string } }) => (
     <View style={[styles.sectionHeader, { backgroundColor: colors.background }]}>
       <Text style={[styles.sectionHeaderText, { color: colors.text }]}>{section.title}</Text>
@@ -690,6 +753,7 @@ export default function ContactsScreen() {
         {[
           { key: 'friends', label: 'Bạn bè' },
           { key: 'groups', label: 'Nhóm' },
+          { key: 'communities', label: 'Cộng đồng' },
           { key: 'oa', label: 'OA' },
         ].map((tab) => (
           <TouchableOpacity
@@ -731,6 +795,32 @@ export default function ContactsScreen() {
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
               <Text style={{ color: colors.muted }}>Bạn chưa có nhóm nào</Text>
+            </View>
+          }
+        />
+      ) : activeTab === 'communities' ? (
+        <FlatList
+          data={communities}
+          keyExtractor={(item) => item._id}
+          renderItem={renderCommunityItem}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={brand} />}
+          ListHeaderComponent={
+            <View style={{ backgroundColor: colors.surface }}>
+              <TouchableOpacity style={styles.featureRow} onPress={() => router.push('/community/create')}>
+                <View style={[styles.featureIcon, { backgroundColor: brand }]}>
+                  <Ionicons name="add" size={20} color="#fff" />
+                </View>
+                <Text style={[styles.featureText, { color: colors.text }]}>Tạo cộng đồng mới</Text>
+              </TouchableOpacity>
+              <View style={[styles.divider, { backgroundColor: colors.border }]} />
+            </View>
+          }
+          ListEmptyComponent={
+            <View style={styles.emptyContainer}>
+              <Text style={{ color: colors.muted }}>Bạn chưa tham gia cộng đồng nào</Text>
+              <TouchableOpacity style={{ marginTop: 12 }} onPress={() => router.push('/community')}>
+                <Text style={{ color: brand, fontWeight: '700' }}>Khám phá cộng đồng</Text>
+              </TouchableOpacity>
             </View>
           }
         />

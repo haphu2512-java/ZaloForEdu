@@ -52,6 +52,10 @@ export const useAuthStore = create((set, get) => ({
       }
       if (refreshToken) localStorage.setItem("refreshToken", refreshToken);
       set({ user, token: accessToken, isAuthenticated: true, isLoading: false });
+      
+      // Dispatch custom event to reload theme after login
+      window.dispatchEvent(new Event('user-login'));
+      
       return { success: true, role: user.role };
     } catch (err) {
       // Session expired on another device
@@ -157,10 +161,14 @@ export const useAuthStore = create((set, get) => ({
       await authService.logout(refreshToken);
     } catch (_) { /* ignore */ }
     finally {
+      // Dispatch custom event BEFORE clearing storage for immediate theme reset
+      window.dispatchEvent(new Event('user-logout'));
+      
       localStorage.removeItem("token");
       localStorage.removeItem("refreshToken");
       localStorage.removeItem("user");
       localStorage.removeItem("userId");
+      localStorage.removeItem("app-theme-mode"); // Clear theme cache on logout
       set({ user: null, token: null, isAuthenticated: false });
     }
   },

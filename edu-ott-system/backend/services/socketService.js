@@ -3,6 +3,7 @@ const { Server } = require('socket.io');
 const Conversation = require('../models/Conversation');
 const Message = require('../models/Message');
 const User = require('../models/User');
+const CallSession = require('../models/CallSession');
 const env = require('../config/env');
 const { createMessage } = require('./messageService');
 const presenceService = require('./presenceService');
@@ -13,9 +14,10 @@ const logger = require('../utils/logger');
 let io = null;
 
 const canJoinConversation = async (conversationId, userId) => {
-  const conversation = await Conversation.findById(conversationId).select('_id participants');
+  const conversation = await Conversation.findById(conversationId).select('participants').lean();
   if (!conversation) return false;
-  return conversation.participants.some((participantId) => participantId.equals(userId));
+  const userIdStr = userId.toString();
+  return conversation.participants.some((p) => p.toString() === userIdStr);
 };
 
 const emitToConversation = (conversationId, event, payload) => {
@@ -37,40 +39,40 @@ const emitToUser = (userId, event, payload) => {
   io.to(`user:${userId}`).emit(event, payload);
 };
 
-const emitConversationUpdated = async (conversationId, payload) => {
+// Emit tới từng participant qua user room (dùng khi cần đảm bảo
+// nhận được dù user chưa join conversation room — ví dụ: tab mới)
+const emitConversationUpdated = (conversationId, payload, participants) => {
   if (!io) return;
-  const conversation = await Conversation.findById(conversationId).select('participants');
-  if (!conversation) return;
-  conversation.participants.forEach((participantId) => {
-    io.to(`user:${participantId.toString()}`).emit('conversation_updated', payload);
-  });
+  // Nếu truyền participants vào thì emit nhanh qua user room (không cần query DB)
+  if (participants && participants.length > 0) {
+    participants.forEach((p) => {
+      const pid = p._id ? p._id.toString() : p.toString();
+      io.to(`user:${pid}`).emit('conversation_updated', payload);
+    });
+    return;
+  }
+  // Fallback: emit tới conversation room (user đã join)
+  io.to(`conversation:${conversationId}`).emit('conversation_updated', payload);
 };
 
-const emitMessageRecalled = async (conversationId, payload) => {
+const emitMessageRecalled = (conversationId, payload) => {
   if (!io) return;
-  const conversation = await Conversation.findById(conversationId).select('participants');
-  if (!conversation) return;
-  conversation.participants.forEach((participantId) => {
-    io.to(`user:${participantId.toString()}`).emit('message_recalled', payload);
-  });
+  io.to(`conversation:${conversationId}`).emit('message_recalled', payload);
 };
 
-const emitPinnedItemsUpdated = async (conversationId, payload) => {
+const emitPinnedItemsUpdated = (conversationId, payload) => {
   if (!io) return;
-  const conversation = await Conversation.findById(conversationId).select('participants');
-  if (!conversation) return;
-  conversation.participants.forEach((participantId) => {
-    io.to(`user:${participantId.toString()}`).emit('pinned_items_updated', payload);
-  });
+  io.to(`conversation:${conversationId}`).emit('pinned_items_updated', payload);
 };
 
-const emitPollUpdated = async (conversationId, payload) => {
+const emitPollUpdated = (conversationId, payload) => {
   if (!io) return;
-  const conversation = await Conversation.findById(conversationId).select('participants');
-  if (!conversation) return;
-  conversation.participants.forEach((participantId) => {
-    io.to(`user:${participantId.toString()}`).emit('poll_updated', payload);
-  });
+  io.to(`conversation:${conversationId}`).emit('poll_updated', payload);
+};
+
+const emitGroupUpdated = (conversationId, payload) => {
+  if (!io) return;
+  io.to(`conversation:${conversationId}`).emit('group_updated', payload);
 };
 
 const closeSocket = async () => {
@@ -148,7 +150,7 @@ const initSocket = (server) => {
       if (!conversationId) return;
       const allowed = await canJoinConversation(conversationId, socket.user._id);
       if (!allowed) {
-        socket.emit('socket_error', { message: 'Not allowed to join this room' });
+        socket.emit('socket_error', { message: 'Bạn không có quyền tham gia phòng này' });
         return;
       }
       socket.join(`conversation:${conversationId}`);
@@ -160,7 +162,7 @@ const initSocket = (server) => {
       if (!communityId || !channelId) return;
       const allowed = await canJoinConversation(communityId, socket.user._id);
       if (!allowed) {
-        socket.emit('socket_error', { message: 'Not allowed to join this channel room' });
+        socket.emit('socket_error', { message: 'Bạn không có quyền tham gia kênh này' });
         return;
       }
       socket.join(`community:${communityId}:channel:${channelId}`);
@@ -185,7 +187,7 @@ const initSocket = (server) => {
         } else {
           emitToCommunityChannel(payload.conversationId, payload.channelId || null, 'new_message', message);
         }
-        await emitConversationUpdated(payload.conversationId, {
+        emitConversationUpdated(payload.conversationId, {
           conversationId: payload.conversationId,
           latestMessage: message,
         });
@@ -240,50 +242,179 @@ const initSocket = (server) => {
       });
     });
 
-    socket.on('disconnect', async () => {
-      const lastSeen = await presenceService.setOffline(userId);
-      socket.broadcast.emit('user_offline', { userId, lastSeen: lastSeen.toISOString() });
-    });
+    // ═══════════════════════════════════════════════
+    // CALL EVENTS — full lifecycle with busy/timeout
+    // ═══════════════════════════════════════════════
+    const callService = require('./callService');
 
-    // --- XỬ LÝ GỌI ĐIỆN (VIDEO/AUDIO) ---
-    socket.on('call_user', ({ targetUserId, roomId, callerName, type }) => {
+    // --- 1-1 Call ---
+    socket.on('call_user', async ({ targetUserId, roomId, callerName, type, conversationId }) => {
       if (!targetUserId) return;
+
+      // Check if target user is already in a call (busy)
+      const targetBusy = await callService.isUserInCall(targetUserId);
+      if (targetBusy) {
+        socket.emit('call_busy', { targetUserId, roomId });
+        return;
+      }
+
+      // Create call session if conversationId is provided
+      if (conversationId) {
+        try {
+          // Deduplication: only block when an active/ringing session exists for this room.
+          // For 1-1 calls, ended sessions may reuse the same roomId and should still create new system messages.
+          const existingSession = await CallSession.findOne({ roomId, status: { $in: ['ringing', 'active'] } });
+          
+          if (!existingSession) {
+            await callService.startCallSession({
+              roomId,
+              conversationId,
+              callType: type || 'video',
+              isGroup: false,
+              initiatorId: userId,
+              targetUserIds: [targetUserId],
+            });
+
+            // Emit system message for call start
+            const sysMsg = await createMessage({
+              conversationId,
+              senderId: userId,
+              type: 'system',
+              content: `${callerName || 'Người dùng'} đã gọi ${type === 'video' ? 'video' : 'thoại'}`,
+            });
+            emitToConversation(conversationId, 'receive_message', sysMsg);
+          }
+        } catch (err) {
+          logger.error(`Failed to create call session: ${err.message}`);
+        }
+      }
+
       socket.to(`user:${targetUserId}`).emit('incoming_call', {
         roomId,
         callerName,
         type,
-        fromUserId: socket.user._id.toString(),
+        fromUserId: userId,
+        conversationId,
       });
+
+      // Auto-timeout after 30s if not answered
+      setTimeout(async () => {
+        try {
+          const session = await callService.timeoutCall(roomId);
+          if (session && session.endReason === 'timeout') {
+            io.to(`user:${userId}`).emit('call:timeout', { roomId });
+            io.to(`user:${targetUserId}`).emit('call:timeout', { roomId });
+
+            // Emit missed call notification
+            io.to(`user:${targetUserId}`).emit('missed_call', {
+              roomId,
+              callerName,
+              type,
+              fromUserId: userId,
+              conversationId,
+              timestamp: new Date().toISOString(),
+            });
+
+            // Add missed call system message
+            if (conversationId) {
+              const sysMsg = await createMessage({
+                conversationId,
+                senderId: userId,
+                type: 'system',
+                content: `Cuộc gọi nhỡ từ ${callerName || 'Người dùng'}`,
+              });
+              emitToConversation(conversationId, 'receive_message', sysMsg);
+            }
+          }
+        } catch (_) { /* session may already be ended */ }
+      }, callService.CALL_TIMEOUT_MS);
     });
 
-    socket.on('decline_call', ({ callerId, roomId }) => {
+    socket.on('call:accept', async ({ roomId, callerId }) => {
+      await callService.acceptCall(roomId, userId);
+      if (callerId) {
+        socket.to(`user:${callerId}`).emit('call:accepted', { roomId, userId });
+      }
+    });
+
+    socket.on('decline_call', async ({ callerId, roomId }) => {
       if (!callerId) return;
+      await callService.declineCall(roomId, userId);
       socket.to(`user:${callerId}`).emit('call_declined', {
         message: 'Người dùng đang bận',
         roomId,
+        userId,
       });
     });
-    // --------------------------------------
 
-    // ─────────────────────────────────────────────
-    // GROUP CALL – gọi nhóm
-    // payload: { conversationId, roomId, callerName, type, inviteLink }
-    // ─────────────────────────────────────────────
+    socket.on('call:end', async ({ roomId, reason }) => {
+      const session = await callService.endCallSession(roomId, reason || 'normal');
+      if (session) {
+        // Notify all participants
+        session.participants.forEach((p) => {
+          io.to(`user:${p.userId.toString()}`).emit('call:ended', {
+            roomId,
+            reason: session.endReason,
+            durationSeconds: session.durationSeconds,
+          });
+        });
+
+        // Add system message if we have conversationId
+        if (session.conversationId) {
+          const durationStr = session.durationSeconds ? ` (${Math.floor(session.durationSeconds / 60).toString().padStart(2, '0')}:${(session.durationSeconds % 60).toString().padStart(2, '0')})` : '';
+          const sysMsg = await createMessage({
+            conversationId: session.conversationId,
+            senderId: userId,
+            type: 'system',
+            content: `Cuộc gọi đã kết thúc${durationStr}`,
+          });
+          emitToConversation(session.conversationId.toString(), 'receive_message', sysMsg);
+        }
+      }
+    });
+
+    // --- Group Call ---
     socket.on('group_call_start', async ({ conversationId, roomId, callerName, type, inviteLink }) => {
       if (!conversationId || !roomId) return;
 
       try {
-        // Chỉ gọi những thành viên trong nhóm (trừ người gọi)
         const conversation = await Conversation.findById(conversationId).select('participants type');
         if (!conversation || conversation.type !== 'group') return;
 
-        // Kiểm tra người gọi có trong nhóm không
         const isMember = conversation.participants.some(p => p.toString() === userId);
         if (!isMember) return;
 
         const otherParticipants = conversation.participants.filter(p => p.toString() !== userId);
+        const targetUserIds = otherParticipants.map(p => p.toString());
 
-        // Gửi thông báo cuộc gọi tới từng thành viên đang online
+        // Create group call session
+        try {
+          // Deduplication: only block when an active/ringing session exists for this room.
+          const existingSession = await CallSession.findOne({ roomId, status: { $in: ['ringing', 'active'] } });
+          
+          if (!existingSession) {
+            await callService.startCallSession({
+              roomId,
+              conversationId,
+              callType: type || 'video',
+              isGroup: true,
+              initiatorId: userId,
+              targetUserIds,
+            });
+
+            // Emit system message for group call start
+            const sysMsg = await createMessage({
+              conversationId,
+              senderId: userId,
+              type: 'system',
+              content: `${callerName || 'Người dùng'} đã bắt đầu cuộc gọi nhóm`,
+            });
+            emitToConversation(conversationId, 'receive_message', sysMsg);
+          }
+        } catch (err) {
+          logger.error(`Failed to create group call session: ${err.message}`);
+        }
+
         otherParticipants.forEach((participantId) => {
           io.to(`user:${participantId.toString()}`).emit('incoming_group_call', {
             conversationId,
@@ -296,28 +427,55 @@ const initSocket = (server) => {
           });
         });
 
-        // Thông báo cho chính người gọi biết đã broadcast thành công
         socket.emit('group_call_started', { conversationId, roomId });
       } catch (err) {
         socket.emit('socket_error', { message: err.message });
       }
     });
 
-    // Thành viên từ chối group call
-    socket.on('group_call_decline', ({ conversationId, roomId }) => {
-      // Broadcast cho mọi người trong conversation biết ai đã từ chối
+    socket.on('group_call_decline', async ({ conversationId, roomId }) => {
+      await callService.declineCall(roomId, userId);
       io.to(`conversation:${conversationId}`).emit('group_call_member_declined', {
         userId,
         roomId,
       });
     });
 
+    socket.on('call:leave', async ({ roomId }) => {
+      const session = await callService.leaveCall(roomId, userId);
+      if (session && session.status === 'ended') {
+        // Notify all participants about end
+        session.participants.forEach((p) => {
+          io.to(`user:${p.userId.toString()}`).emit('call:ended', {
+            roomId,
+            reason: session.endReason,
+            durationSeconds: session.durationSeconds,
+          });
+        });
+
+        // Emit system message
+        if (session.conversationId) {
+          const durationStr = session.durationSeconds ? ` (${Math.floor(session.durationSeconds / 60).toString().padStart(2, '0')}:${(session.durationSeconds % 60).toString().padStart(2, '0')})` : '';
+          const sysMsg = await createMessage({
+            conversationId: session.conversationId,
+            senderId: userId,
+            type: 'system',
+            content: `Cuộc gọi đã kết thúc${durationStr}`,
+          });
+          emitToConversation(session.conversationId.toString(), 'receive_message', sysMsg);
+        }
+      }
+    });
+
     // ─────────────────────────────────────────────
-    // Disconnect
+    // Disconnect (single handler)
     // ─────────────────────────────────────────────
     socket.on('disconnect', async () => {
       const lastSeen = await presenceService.setOffline(userId);
       socket.broadcast.emit('user_offline', { userId, lastSeen: lastSeen.toISOString() });
+
+      // Clean up any active call state for this user
+      await callService.clearUserInCall(userId);
     });
   });
 
@@ -334,5 +492,6 @@ module.exports.emitConversationUpdated = emitConversationUpdated;
 module.exports.emitMessageRecalled = emitMessageRecalled;
 module.exports.emitPinnedItemsUpdated = emitPinnedItemsUpdated;
 module.exports.emitPollUpdated = emitPollUpdated;
+module.exports.emitGroupUpdated = emitGroupUpdated;
 module.exports.emitToUser = emitToUser;
 module.exports.closeSocket = closeSocket;

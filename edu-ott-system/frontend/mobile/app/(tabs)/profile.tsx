@@ -416,6 +416,7 @@ export default function ProfileScreen() {
           label="Bạn bè"
           value={`${user.friends?.length || 0} bạn bè`}
           colors={colors}
+          onPress={() => router.push('/friend-list' as any)}
         />
         <ProfileRow
           icon="time-outline"
@@ -715,14 +716,16 @@ function ProfileRow({
   value,
   colors,
   muted = false,
+  onPress,
 }: {
   icon: keyof typeof Ionicons.glyphMap;
   label: string;
   value: string;
   colors: any;
   muted?: boolean;
+  onPress?: () => void;
 }) {
-  return (
+  const content = (
     <View style={[styles.profileRow, { borderBottomColor: colors.border }]}>
       <View style={[styles.profileRowIcon, { backgroundColor: colors.tint + '10' }]}>
         <Ionicons name={icon} size={18} color={colors.tint} />
@@ -733,8 +736,19 @@ function ProfileRow({
           {value}
         </Text>
       </View>
+      {onPress && <FontAwesome name="chevron-right" size={12} color={colors.muted} />}
     </View>
   );
+
+  if (onPress) {
+    return (
+      <TouchableOpacity onPress={onPress} activeOpacity={0.6}>
+        {content}
+      </TouchableOpacity>
+    );
+  }
+
+  return content;
 }
 
 function PreferenceSwitchRow({

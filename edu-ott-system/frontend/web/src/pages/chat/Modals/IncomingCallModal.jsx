@@ -1,17 +1,40 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { socketService } from '../../../services/socketService';
 import { FaPhoneAlt, FaVideo, FaTimes, FaCheck, FaUsers } from 'react-icons/fa';
+
+const RING_TIMEOUT_SECONDS = 30;
 
 /**
  * IncomingCallModal
  * Xử lý cả 2 loại cuộc gọi:
  *  - incoming_call       → gọi 1-1
- *  - incoming_group_call → gọi nhóm (tất cả thành viên đều nhận)
+ *  - incoming_group_call → gọi nhóm
+ *
+ * Features:
+ *  - Countdown timer (30s)
+ *  - Auto-close on timeout
+ *  - Emit call:accept trước khi navigate
+ *  - Ringtone audio
  */
 export default function IncomingCallModal() {
   const [incomingCall, setIncomingCall] = useState(null);
+  const [countdown, setCountdown] = useState(RING_TIMEOUT_SECONDS);
   const navigate = useNavigate();
+  const timerRef = useRef(null);
+  const ringtoneRef = useRef(null);
+
+  // Cleanup timer + audio
+  const stopRinging = () => {
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+    if (ringtoneRef.current) {
+      ringtoneRef.current.pause();
+      ringtoneRef.current.currentTime = 0;
+    }
+  };
 
   useEffect(() => {
     const socket = socketService.socket;
@@ -20,33 +43,93 @@ export default function IncomingCallModal() {
     // ── 1-1 call ──
     const handleIncomingCall = (data) => {
       setIncomingCall({ ...data, isGroup: false });
+      setCountdown(RING_TIMEOUT_SECONDS);
     };
 
     // ── Group call ──
     const handleIncomingGroupCall = (data) => {
       setIncomingCall({ ...data, isGroup: true });
+      setCountdown(RING_TIMEOUT_SECONDS);
+    };
+
+    // ── Call ended/timeout externally ──
+    const handleCallTimeout = ({ roomId }) => {
+      if (incomingCall?.roomId === roomId) {
+        stopRinging();
+        setIncomingCall(null);
+      }
+    };
+
+    const handleCallEnded = ({ roomId }) => {
+      if (incomingCall?.roomId === roomId) {
+        stopRinging();
+        setIncomingCall(null);
+      }
+    };
+
+    // ── Caller cancelled ──
+    const handleCallDeclined = ({ roomId }) => {
+      if (incomingCall?.roomId === roomId) {
+        stopRinging();
+        setIncomingCall(null);
+      }
     };
 
     socket.on("incoming_call", handleIncomingCall);
     socket.on("incoming_group_call", handleIncomingGroupCall);
+    socket.on("call:timeout", handleCallTimeout);
+    socket.on("call:ended", handleCallEnded);
+    socket.on("call_declined", handleCallDeclined);
 
     return () => {
       socket.off("incoming_call", handleIncomingCall);
       socket.off("incoming_group_call", handleIncomingGroupCall);
+      socket.off("call:timeout", handleCallTimeout);
+      socket.off("call:ended", handleCallEnded);
+      socket.off("call_declined", handleCallDeclined);
     };
-  }, []);
+  }, [incomingCall]);
+
+  // Countdown timer
+  useEffect(() => {
+    if (!incomingCall) {
+      stopRinging();
+      return;
+    }
+
+    // Start countdown
+    timerRef.current = setInterval(() => {
+      setCountdown((prev) => {
+        if (prev <= 1) {
+          // Timeout — auto decline
+          declineCall();
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => stopRinging();
+  }, [incomingCall?.roomId]);
 
   const acceptCall = () => {
     if (!incomingCall) return;
+    stopRinging();
+
+    // Emit call:accept to server BEFORE navigating
+    if (socketService.socket?.connected) {
+      socketService.socket.emit('call:accept', {
+        roomId: incomingCall.roomId,
+        callerId: incomingCall.fromUserId,
+      });
+    }
 
     let url;
     if (incomingCall.isGroup) {
-      // Group call → /group-call/:roomId?type=voice (nếu audio)
       url = incomingCall.type === "audio"
         ? `/group-call/${incomingCall.roomId}?type=voice`
         : `/group-call/${incomingCall.roomId}`;
     } else {
-      // 1-1 call → /call/:roomId?type=voice
       url = incomingCall.type === "audio"
         ? `/call/${incomingCall.roomId}?type=voice`
         : `/call/${incomingCall.roomId}`;
@@ -58,6 +141,7 @@ export default function IncomingCallModal() {
 
   const declineCall = () => {
     if (!incomingCall) return;
+    stopRinging();
 
     if (incomingCall.isGroup) {
       socketService.declineGroupCall({
@@ -81,12 +165,17 @@ export default function IncomingCallModal() {
     ? `Cuộc gọi nhóm ${isAudio ? '(thoại)' : '(video)'}`
     : `Cuộc gọi ${isAudio ? 'thoại' : 'video'} đến`;
 
+  const progress = countdown / RING_TIMEOUT_SECONDS;
+
   return (
     <div style={styles.overlay}>
       <div style={styles.box}>
         {/* Icon + tiêu đề */}
         <div style={styles.iconWrap}>
-          <div style={{ ...styles.iconCircle, background: incomingCall.isGroup ? '#6366f1' : '#0084ff' }}>
+          <div style={{
+            ...styles.iconCircle,
+            background: incomingCall.isGroup ? '#6366f1' : '#0084ff',
+          }}>
             <Icon size={22} color="#fff" />
           </div>
         </div>
@@ -96,6 +185,16 @@ export default function IncomingCallModal() {
           <strong>{incomingCall.callerName || 'Một người bạn'}</strong>
           {incomingCall.isGroup ? ' đang khởi động cuộc gọi nhóm...' : ' đang gọi cho bạn...'}
         </p>
+
+        {/* Countdown progress bar */}
+        <div style={styles.progressBarOuter}>
+          <div style={{
+            ...styles.progressBarInner,
+            width: `${progress * 100}%`,
+            backgroundColor: countdown <= 10 ? '#ef4444' : '#0084ff',
+          }} />
+        </div>
+        <p style={styles.countdownText}>{countdown}s</p>
 
         {/* Invite link cho group call */}
         {incomingCall.isGroup && incomingCall.inviteLink && (
@@ -131,6 +230,7 @@ const styles = {
     backgroundColor: '#fff', padding: '28px 36px', borderRadius: '16px',
     textAlign: 'center', minWidth: '320px', maxWidth: '400px',
     boxShadow: '0 8px 32px rgba(0,0,0,0.2)',
+    animation: 'pulse-ring 2s infinite',
   },
   iconWrap: { display: 'flex', justifyContent: 'center', marginBottom: 16 },
   iconCircle: {
@@ -139,7 +239,18 @@ const styles = {
     boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
   },
   title: { margin: '0 0 6px', fontSize: 16, fontWeight: 700, color: '#111' },
-  caller: { margin: '0 0 16px', color: '#444', fontSize: 14 },
+  caller: { margin: '0 0 12px', color: '#444', fontSize: 14 },
+  progressBarOuter: {
+    width: '100%', height: 4, backgroundColor: '#e5e7eb',
+    borderRadius: 2, overflow: 'hidden', marginBottom: 4,
+  },
+  progressBarInner: {
+    height: '100%', borderRadius: 2,
+    transition: 'width 1s linear, background-color 0.3s',
+  },
+  countdownText: {
+    fontSize: 12, color: '#888', margin: '0 0 12px',
+  },
   inviteHint: { fontSize: 12, color: '#888', margin: '0 0 14px', wordBreak: 'break-all' },
   actions: { display: 'flex', justifyContent: 'space-around', marginTop: 8 },
   btn: {

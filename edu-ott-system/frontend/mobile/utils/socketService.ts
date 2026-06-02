@@ -12,9 +12,33 @@ import Constants from 'expo-constants';
 
 // Derive the base socket URL (same logic as api.ts)
 const hostUri = Constants.expoConfig?.hostUri;
-const localhost = hostUri ? hostUri.split(':')[0] : '10.126.202.133';
+const localhost = hostUri ? hostUri.split(':')[0] : '10.0.2.2';
+
+function resolveNativeDevHost(): string {
+  const host = hostUri ? hostUri.split(':')[0] : '';
+  if (host && host !== 'localhost' && host !== '127.0.0.1') return host;
+  return Platform.OS === 'android' ? '10.0.2.2' : 'localhost';
+}
+
+function normalizeLocalSocketUrl(url: string): string {
+  if (Platform.OS === 'web') return url;
+  const normalized = url.trim();
+  const localPattern = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?(\/.*)?$/i;
+  const match = normalized.match(localPattern);
+  if (!match) return normalized;
+
+  const protocol = normalized.toLowerCase().startsWith('https://') ? 'https' : 'http';
+  const port = match[2] || ':5000';
+  const path = match[3] || '';
+  return `${protocol}://${resolveNativeDevHost()}${port}${path}`;
+}
 
 function getSocketUrl(): string {
+  // Prefer explicit env var (staging / production)
+  const envUrl = Constants.expoConfig?.extra?.EXPO_PUBLIC_SOCKET_URL
+    || process.env.EXPO_PUBLIC_SOCKET_URL;
+  if (envUrl) return normalizeLocalSocketUrl(envUrl);
+
   if (Platform.OS === 'web') {
     if (typeof window !== 'undefined' && window.location) {
       return `http://${window.location.hostname}:5000`;
@@ -75,7 +99,7 @@ export async function connectSocket(freshToken?: string): Promise<Socket | null>
     });
 
     socket.on('socket_error', (data) => {
-      console.warn('[Socket] Server error:', data.message);
+      console.log('[Socket] Server error:', data.message);
     });
 
     return socket;
@@ -156,4 +180,52 @@ export function emitMessageDelivered(messageId: string): void {
  */
 export function emitMessageSeen(messageId: string): void {
   socket?.emit('message_seen', { messageId });
+}
+
+// ─── Call Events ───
+
+export function callUser(payload: {
+  targetUserId: string;
+  roomId: string;
+  callerName: string;
+  type: 'audio' | 'video';
+  conversationId?: string;
+}): boolean {
+  if (!socket?.connected) return false;
+  socket.emit('call_user', payload);
+  return true;
+}
+
+export function acceptCall(payload: { roomId: string; callerId?: string }): void {
+  socket?.emit('call:accept', payload);
+}
+
+export function declineCall(payload: { callerId: string; roomId: string }): void {
+  socket?.emit('decline_call', payload);
+}
+
+export function endCall(payload: { roomId: string; reason?: string }): void {
+  socket?.emit('call:end', { roomId: payload.roomId, reason: payload.reason || 'normal' });
+}
+
+export function leaveCall(payload: { roomId: string }): void {
+  socket?.emit('call:leave', payload);
+}
+
+export function startGroupCall(payload: {
+  conversationId: string;
+  roomId: string;
+  callerName: string;
+  type: 'audio' | 'video';
+}): boolean {
+  if (!socket?.connected) return false;
+  socket.emit('group_call_start', payload);
+  return true;
+}
+
+export function declineGroupCall(payload: {
+  conversationId: string;
+  roomId: string;
+}): void {
+  socket?.emit('group_call_decline', payload);
 }

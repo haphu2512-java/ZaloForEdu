@@ -1,8 +1,9 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { useRouter, useSegments } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as authService from '../utils/authService';
 import type { User, LoginPayload, RegisterPayload, UpdateProfilePayload } from '../types/auth';
-import { getMySettings } from '../utils/settingsService';
+import { getMySettings, setCurrentUserIdForTheme, reloadThemeMode } from '../utils/settingsService';
 import { getUserById } from '../utils/userService';
 import { connectSocket, disconnectSocket } from '../utils/socketService';
 
@@ -54,45 +55,156 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  // Khá»Ÿi cháº¡y App: Load cached user & try refresh token
+  // Listen for real-time settings changes from other devices
+  useEffect(() => {
+    if (!user) return;
+
+    const { getSocket } = require('../utils/socketService');
+    const socket = getSocket();
+    
+    if (!socket) return;
+
+    const handleSettingsChanged = async (data: { theme?: string; notifications?: any }) => {
+      console.log('[Auth] Real-time settings update:', data);
+      
+      // Reload settings to sync with server
+      try {
+        await getMySettings();
+      } catch (error) {
+        console.error('[Auth] Failed to reload settings:', error);
+      }
+    };
+
+    const handleYouBlockedUser = ({ targetId }: { targetId: string }) => {
+      setUser((prev: any) => {
+        if (!prev) return prev;
+        const currentBlocked = prev.blockedUsers || [];
+        if (currentBlocked.includes(targetId)) return prev;
+        return { ...prev, blockedUsers: [...currentBlocked, targetId] };
+      });
+    };
+
+    const handleYouUnblockedUser = ({ targetId }: { targetId: string }) => {
+      setUser((prev: any) => {
+        if (!prev) return prev;
+        const currentBlocked = prev.blockedUsers || [];
+        return { ...prev, blockedUsers: currentBlocked.filter((id: string) => id !== targetId) };
+      });
+    };
+
+    socket.on('settings_changed', handleSettingsChanged);
+    socket.on('you_blocked_user', handleYouBlockedUser);
+    socket.on('you_unblocked_user', handleYouUnblockedUser);
+
+    return () => {
+      socket.off('settings_changed', handleSettingsChanged);
+      socket.off('you_blocked_user', handleYouBlockedUser);
+      socket.off('you_unblocked_user', handleYouUnblockedUser);
+    };
+  }, [user]);
+
+  // Listen for force_logout event - ALWAYS active, not dependent on user
+  useEffect(() => {
+    const { getSocket } = require('../utils/socketService');
+    
+    const handleForceLogout = async () => {
+      console.log('[Auth] Force logout received from server');
+      
+      // Clear storage and disconnect
+      disconnectSocket();
+      await authService.removeToken();
+      setUser(null);
+      
+      // AuthProvider's useEffect will detect null user and redirect to login
+    };
+
+    // Setup listener
+    const socket = getSocket();
+    if (socket) {
+      socket.on('force_logout', handleForceLogout);
+    }
+
+    // Check every 500ms if socket is connected and setup listener
+    const interval = setInterval(() => {
+      const currentSocket = getSocket();
+      if (currentSocket && !currentSocket.hasListeners('force_logout')) {
+        currentSocket.on('force_logout', handleForceLogout);
+      }
+    }, 500);
+
+    return () => {
+      clearInterval(interval);
+      const socket = getSocket();
+      if (socket) {
+        socket.off('force_logout', handleForceLogout);
+      }
+    };
+  }, []); // No dependencies - always active
+
+  // Khởi chạy App: Load cached user & try refresh token
   useEffect(() => {
     const loadUser = async () => {
       try {
         const token = await authService.getToken();
-        if (token) {
-          // Load cached user info first for instant UX
-          const cachedUser = await authService.getCachedUserInfo();
-          if (cachedUser) {
-            setUser(cachedUser);
-          }
+        if (!token) {
+          // No token, user not logged in
+          setCurrentUserIdForTheme(null);
+          await reloadThemeMode();
+          setUser(null);
+          setIsLoading(false);
+          return;
+        }
 
-          // Try to refresh token to validate session is still active
-          const refreshResult = await authService.refreshAccessToken();
-          if (refreshResult?.success && refreshResult.user) {
-            setUser(refreshResult.user);
-            // Connect socket ngay với token tươi - tránh race condition AsyncStorage
-            if (refreshResult.accessToken) {
-              connectSocket(refreshResult.accessToken);
-            }
-            await syncThemeSettings();
-          } else {
-            // Check if authService has removed the token due to expiration
-            const tokenExists = await authService.getToken();
-            if (!tokenExists) {
-              setUser(null);
-            }
+        // Load cached user info first for instant UX
+        const cachedUser = await authService.getCachedUserInfo();
+        if (cachedUser) {
+          setCurrentUserIdForTheme(cachedUser._id || cachedUser.id);
+          await reloadThemeMode();
+          setUser(cachedUser);
+        }
+
+        // Try to refresh token to validate session is still active
+        const refreshResult = await authService.refreshAccessToken();
+        if (refreshResult?.success && refreshResult.user) {
+          setCurrentUserIdForTheme(refreshResult.user._id || refreshResult.user.id);
+          await reloadThemeMode();
+          setUser(refreshResult.user);
+          // Connect socket with fresh token
+          if (refreshResult.accessToken) {
+            connectSocket(refreshResult.accessToken);
           }
+          await syncThemeSettings();
+        } else {
+          setCurrentUserIdForTheme(null);
+          await reloadThemeMode();
+          setUser(null);
         }
       } catch (error) {
-        console.warn('Lỗi kiểm tra session:', error);
+        console.warn('[Auth] Error loading user:', error);
         await authService.removeToken();
+        setCurrentUserIdForTheme(null);
+        await reloadThemeMode();
         setUser(null);
       } finally {
         setIsLoading(false);
       }
     };
+    
     loadUser();
-  }, []);
+    
+    // Listen for auth errors from fetchAPI - IMMEDIATE logout
+    const { onAuthError } = require('../utils/api');
+    const unsubscribe = onAuthError(async () => {
+      console.log('[Auth] Auth error detected, logging out immediately...');
+      disconnectSocket();
+      await authService.removeToken();
+      setCurrentUserIdForTheme(null);
+      await reloadThemeMode();
+      setUser(null);
+    });
+    
+    return () => unsubscribe();
+  }, []); // Run ONCE on mount
 
   // Root Navigation Router Guard
   useEffect(() => {
@@ -112,17 +224,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [user, segments, isLoading]);
 
   const login = useCallback(async (payload: LoginPayload) => {
-    // Ngắt socket cũ triệt để trước
+    // Disconnect old socket
     disconnectSocket();
-    const res = await authService.login(payload);
-    if (!res.user) throw new Error('Đăng nhập thất bại');
-    // Kết nối socket ngay với token tươi trong bộ nhớ - không đợi AsyncStorage
-    if (res.accessToken) {
-      connectSocket(res.accessToken);
+    
+    try {
+      const res = await authService.login(payload);
+      if (!res.user) throw new Error('Đăng nhập thất bại');
+      
+      // Connect socket with fresh token
+      if (res.accessToken) {
+        connectSocket(res.accessToken);
+      }
+      setCurrentUserIdForTheme(res.user._id || res.user.id);
+      await reloadThemeMode();
+      setUser(res.user);
+      await syncThemeSettings();
+      return res.user;
+    } catch (error) {
+      throw error;
     }
-    setUser(res.user);
-    await syncThemeSettings();
-    return res.user;
   }, []);
 
   const register = useCallback(async (payload: RegisterPayload) => {
@@ -136,6 +256,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = useCallback(async () => {
     disconnectSocket();
     await authService.logout();
+    setCurrentUserIdForTheme(null);
+    await reloadThemeMode();
     setUser(null);
   }, []);
 
@@ -161,6 +283,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.warn('Failed to refresh user:', error);
     }
   }, [user?.id]);
+
+  // Listen for new_notification to update user (e.g. friend_accepted)
+  useEffect(() => {
+    if (!user) return;
+    const { getSocket } = require('../utils/socketService');
+    
+    const handleNewNotification = async (payload: any) => {
+      console.log('[Auth] New notification:', payload);
+      if (payload?.type === 'friend_accepted') {
+        await refreshUser();
+      }
+    };
+
+    const interval = setInterval(() => {
+      const currentSocket = getSocket();
+      if (currentSocket && !currentSocket.hasListeners('new_notification')) {
+        currentSocket.on('new_notification', handleNewNotification);
+      }
+    }, 500);
+
+    return () => {
+      clearInterval(interval);
+      const socket = getSocket();
+      if (socket) {
+        socket.off('new_notification', handleNewNotification);
+      }
+    };
+  }, [user, refreshUser]);
 
   const contextValue = React.useMemo(
     () => ({ user, isLoading, login, register, logout, updateUser, refreshUser, setUser }),

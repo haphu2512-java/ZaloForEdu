@@ -45,8 +45,12 @@ export default function AddMemberModal({ isOpen, onClose, activeConversation, fr
 
     setLoading(true);
     try {
-      await conversationService.addGroupMembers(conversationId, [...selected]);
-      toast.success("Đã thêm thành viên vào nhóm");
+      const res = await conversationService.addGroupMembers(conversationId, [...selected]);
+      if (res?.data?.requiresApproval) {
+        toast.success("Đã gửi yêu cầu tham gia để quản trị viên duyệt");
+      } else {
+        toast.success("Đã thêm thành viên vào nhóm");
+      }
       onAdded?.();
       onClose();
     } catch (err) {

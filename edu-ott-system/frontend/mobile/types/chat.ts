@@ -88,6 +88,7 @@ export interface Attachment {
   type: string;
   url: string;
   size: number;
+  duration?: number; // Duration in seconds for audio files
 }
 
 /** Backend Message model */
@@ -97,7 +98,7 @@ export interface Message {
   conversationId: string | { _id: string };
   senderId: SenderInfo | string;
   /** Legacy sender field for older UI components */
-  sender?: SenderInfo | { id?: string; _id?: string; username?: string; fullName?: string; avatar?: string };
+  sender?: SenderInfo | { id?: string; _id?: string; username?: string; fullName?: string; avatar?: string; avatarUrl?: string | null };
   content: string;
   mediaIds: string[];
   /** Legacy attachment field for older UI components */
@@ -200,6 +201,7 @@ export interface MediaItem {
   url: string;
   providerPublicId?: string | null;
   providerResourceType?: string | null;
+  duration?: number; // Duration in seconds for audio/video files
   createdAt: string;
   updatedAt: string;
 }

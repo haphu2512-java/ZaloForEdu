@@ -7,6 +7,7 @@ type ChatMediaMenuModalProps = {
   onClose: () => void;
   colors: any;
   isGroup: boolean;
+  canCreatePoll?: boolean;
   onTakeImage: () => void;
   onPickImage: () => void;
   onPickDocument: () => void;
@@ -18,6 +19,7 @@ export default function ChatMediaMenuModal({
   onClose,
   colors,
   isGroup,
+  canCreatePoll = true,
   onTakeImage,
   onPickImage,
   onPickDocument,
@@ -48,7 +50,7 @@ export default function ChatMediaMenuModal({
             <Text style={[styles.label, { color: colors.text }]}>Tệp tài liệu</Text>
           </TouchableOpacity>
 
-          {isGroup && onCreatePoll ? (
+          {isGroup && canCreatePoll && onCreatePoll ? (
             <TouchableOpacity style={styles.item} onPress={onCreatePoll}>
               <View style={[styles.iconWrap, { backgroundColor: '#FEF3C7' }]}>
                 <Ionicons name="stats-chart" size={26} color="#D97706" />

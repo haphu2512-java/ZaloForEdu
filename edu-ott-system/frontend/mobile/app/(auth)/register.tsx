@@ -156,6 +156,87 @@ export default function RegisterScreen() {
               </TouchableOpacity>
             </View>
 
+            {password.length > 0 && (
+              <View style={{ marginBottom: 16, marginTop: -8 }}>
+                {/* Strength Bar */}
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                  <View style={{ flexDirection: 'row', gap: 6, flex: 1 }}>
+                    {[1, 2, 3].map((level) => {
+                      const hasLen = password.length >= 6;
+                      const hasNum = /[0-9]/.test(password);
+                      const hasUpper = /[A-Z]/.test(password);
+                      
+                      let strength = 'weak';
+                      if (hasLen && hasNum && hasUpper) strength = 'strong';
+                      else if (hasLen) strength = 'medium';
+
+                      let barColor = '#E2E8F0'; // Default gray
+                      if (strength === 'weak' && level === 1) barColor = '#EF4444';
+                      else if (strength === 'medium' && level <= 2) barColor = '#F59E0B';
+                      else if (strength === 'strong') barColor = '#10B981';
+
+                      return (
+                        <View
+                          key={level}
+                          style={{
+                            flex: 1,
+                            height: 4,
+                            borderRadius: 2,
+                            backgroundColor: barColor,
+                          }}
+                        />
+                      );
+                    })}
+                  </View>
+                  <Text style={{
+                    fontSize: 13,
+                    fontWeight: '700',
+                    color: (() => {
+                      const hasLen = password.length >= 6;
+                      const hasNum = /[0-9]/.test(password);
+                      const hasUpper = /[A-Z]/.test(password);
+                      if (hasLen && hasNum && hasUpper) return '#10B981';
+                      if (hasLen) return '#F59E0B';
+                      return '#EF4444';
+                    })()
+                  }}>
+                    {(() => {
+                      const hasLen = password.length >= 6;
+                      const hasNum = /[0-9]/.test(password);
+                      const hasUpper = /[A-Z]/.test(password);
+                      if (hasLen && hasNum && hasUpper) return 'Mạnh';
+                      if (hasLen) return 'Vừa';
+                      return 'Yếu';
+                    })()}
+                  </Text>
+                </View>
+
+                {/* Checklist */}
+                <View style={{ gap: 6 }}>
+                  {[
+                    { label: 'Ít nhất 6 ký tự', valid: password.length >= 6 },
+                    { label: 'Chứa ít nhất một số', valid: /[0-9]/.test(password) },
+                    { label: 'Chứa chữ in hoa', valid: /[A-Z]/.test(password) },
+                  ].map((item, index) => (
+                    <View key={index} style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                      <Ionicons
+                        name={item.valid ? 'checkmark-circle' : 'ellipse-outline'}
+                        size={16}
+                        color={item.valid ? '#10B981' : '#94A3B8'}
+                      />
+                      <Text style={{
+                        fontSize: 13,
+                        color: item.valid ? '#0F172A' : '#64748B',
+                        fontWeight: item.valid ? '600' : '400'
+                      }}>
+                        {item.label}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              </View>
+            )}
+
             <View style={getFieldStyle('confirmPassword')}>
               <Ionicons
                 name="shield-checkmark-outline"
@@ -173,29 +254,7 @@ export default function RegisterScreen() {
                 onBlur={() => setFocusedField(null)}
               />
             </View>
-            
-            <View style={{ marginBottom: 8, marginTop: -8, height: 20 }}>
-              {password.length > 0 && (
-                <View>
-                  <View style={{ flexDirection: 'row', gap: 4, marginBottom: 4 }}>
-                    {[1, 2, 3, 4].map((level) => (
-                      <View
-                        key={level}
-                        style={{
-                          flex: 1, height: 3, borderRadius: 2,
-                          backgroundColor: password.length >= level * 3
-                            ? level <= 1 ? '#EF4444' : level <= 2 ? '#F59E0B' : level <= 3 ? '#3B82F6' : '#10B981'
-                            : '#E2E8F0',
-                        }}
-                      />
-                    ))}
-                  </View>
-                  <Text style={{ color: '#94A3B8', fontSize: 12 }}>
-                    {password.length < 6 ? 'Quá ngắn' : password.length < 8 ? 'Trung bình' : password.length < 12 ? 'Mạnh' : 'Rất mạnh'}
-                  </Text>
-                </View>
-              )}
-            </View>
+
 
             <TouchableOpacity
               onPress={handleRegister}

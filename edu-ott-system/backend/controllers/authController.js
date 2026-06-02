@@ -32,12 +32,31 @@ const sendEmailOtp = async (email, otp, subject = 'Mã OTP xác thực - ZaloApp
   console.log(`║  [OTP EMAIL] Gửi tới : ${email.padEnd(35)}║`);
   console.log(`║  Mã OTP      : ${otp.padEnd(38)}║`);
   console.log(`╚${'═'.repeat(50)}╝\n`);
-  await sendEmail({
+  const htmlContent = `
+    <div style="font-family: Arial, sans-serif; background-color: #f4f7f6; padding: 40px; text-align: center;">
+      <div style="max-width: 600px; margin: 0 auto; background: #ffffff; padding: 40px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05);">
+        <h2 style="color: #0068ff; margin-bottom: 10px; font-size: 28px;">ZaloApp</h2>
+        <h3 style="color: #333; margin-bottom: 20px; font-size: 20px;">Mã xác thực OTP</h3>
+        <p style="color: #555; font-size: 16px; margin-bottom: 30px; line-height: 1.5;">Bạn đang thực hiện thao tác yêu cầu mã xác thực. Vui lòng sử dụng mã dưới đây để tiếp tục:</p>
+        <div style="background: #f0f8ff; padding: 20px 40px; border-radius: 8px; font-size: 36px; letter-spacing: 8px; font-weight: bold; color: #0068ff; display: inline-block; margin-bottom: 30px; border: 2px dashed #0068ff;">
+          ${otp}
+        </div>
+        <p style="color: #777; font-size: 15px; margin-bottom: 5px;">Mã này sẽ hết hạn trong <strong>${OTP_EXPIRE_MINUTES} phút</strong>.</p>
+        <p style="color: #ff4d4f; font-size: 14px; margin-bottom: 30px;">Vui lòng không chia sẻ mã này cho bất kỳ ai.</p>
+        <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;" />
+        <p style="color: #999; font-size: 12px;">Nếu bạn không yêu cầu mã này, vui lòng bỏ qua email này hoặc liên hệ hỗ trợ.</p>
+        <p style="color: #bbb; font-size: 12px; margin-top: 10px;">&copy; ${new Date().getFullYear()} ZaloApp. All rights reserved.</p>
+      </div>
+    </div>
+  `;
+
+  const mailOptions = {
     to: email,
-    subject,
+    subject: subject,
     text: `Mã OTP của bạn là: ${otp}. Mã có hiệu lực trong ${OTP_EXPIRE_MINUTES} phút.`,
-    html: `<p>Mã OTP của bạn là: <strong>${otp}</strong></p><p>Mã có hiệu lực trong ${OTP_EXPIRE_MINUTES} phút.</p>`,
-  });
+    html: htmlContent,
+  };
+  await sendEmail(mailOptions);
 };
 
 // ─── Phone SMS mock (giả lập - bạn có thể tích hợp Twilio sau) ─
@@ -118,9 +137,10 @@ const register = asyncHandler(async (req, res) => {
 
   // Send OTP
   if (email) {
-    await sendEmailOtp(email, otp, 'Mã OTP xác thực tài khoản ZaloApp').catch((err) =>
-      console.error('Failed to send verification email', err),
-    );
+    await sendEmailOtp(email, otp, 'Mã OTP xác thực tài khoản ZaloApp').catch((err) => {
+      console.error('[REGISTER] ❌ Không thể gửi email OTP:', err.message);
+      // Không throw ở đây — tài khoản đã tạo xong, chỉ cần thông báo lỗi
+    });
   } else if (phone) {
     sendSmsOtp(phone, otp, 'verify');
   }
@@ -211,6 +231,11 @@ const resendOtp = asyncHandler(async (req, res) => {
     user.lastOtpSentAt = now;
     await user.save();
     sendSmsOtp(phone, otp, 'verify');
+    if (user.email) {
+      await sendEmailOtp(user.email, otp, 'Mã OTP xác thực số điện thoại ZaloApp').catch((err) =>
+        console.error('[RESEND OTP] ❌ Lỗi gửi email OTP thay thế SMS:', err.message)
+      );
+    }
   }
 
   return successResponse(res, {}, 'Đã gửi lại mã OTP');
@@ -334,6 +359,11 @@ const forgotPassword = asyncHandler(async (req, res) => {
     );
   } else if (phone) {
     sendSmsOtp(phone, otp, 'forgot_password');
+    if (user.email) {
+      await sendEmailOtp(user.email, otp, 'Mã OTP đặt lại mật khẩu ZaloApp').catch((err) =>
+        console.error('Failed to send reset email fallback', err),
+      );
+    }
   }
 
   return successResponse(res, {}, 'Nếu tài khoản tồn tại, mã OTP đã được gửi đi.');
@@ -411,7 +441,15 @@ const logout = asyncHandler(async (req, res) => {
 });
 
 const logoutAll = asyncHandler(async (req, res) => {
-  await revokeAllSessions(req.user._id);
+  const userId = req.user._id;
+  await revokeAllSessions(userId);
+  
+  // Emit force_logout event to all connected clients of this user
+  const socketService = require('../services/socketService');
+  socketService.emitToUser(userId, 'force_logout', { 
+    message: 'Bạn đã bị đăng xuất khỏi thiết bị này do đăng xuất tất cả thiết bị từ thiết bị khác' 
+  });
+  
   return successResponse(res, {}, 'Đã đăng xuất khỏi tất cả thiết bị');
 });
 

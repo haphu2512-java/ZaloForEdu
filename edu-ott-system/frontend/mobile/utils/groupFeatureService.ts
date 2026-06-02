@@ -1,17 +1,13 @@
-/**
- * groupFeatureService.ts
- * Features 2, 4, 5: Bảng tin, Duyệt thành viên, Invite Link - API service cho Mobile
- */
-import { fetchAPI } from './api';
-
-// ==================== TYPES ====================
+﻿import { API_BASE_URL, fetchAPI } from './api';
 
 export interface PinnedItem {
+  _id?: string;
   messageId: {
     _id: string;
     content: string;
     senderId: { _id: string; username: string; avatarUrl?: string };
     createdAt: string;
+    type?: string;
   };
   pinnedBy: { _id: string; username: string; avatarUrl?: string };
   pinnedAt: string;
@@ -47,9 +43,40 @@ export interface InviteLinkResponse {
   inviteLink: string;
 }
 
-// ==================== FEATURE 2: PINNED MESSAGES ====================
+export interface Reminder {
+  _id: string;
+  conversationId: string;
+  title: string;
+  remindAt: string;
+  status?: 'upcoming' | 'done';
+  participants?: Array<{ _id: string; username?: string; avatarUrl?: string } | string>;
+  declinedBy?: Array<{ _id: string; username?: string; avatarUrl?: string } | string>;
+  createdBy?: { _id: string; username?: string; avatarUrl?: string } | string;
+  createdAt?: string;
+  updatedAt?: string;
+}
 
-/** Ghim tin nhắn vào bảng tin nhóm */
+export interface GroupBlockedMember {
+  _id?: string;
+  id?: string;
+  username?: string;
+  avatarUrl?: string;
+  email?: string;
+  phone?: string;
+}
+
+export interface GroupSettingsPayload {
+  canMembersUpdateInfo?: boolean;
+  canMembersPin?: boolean;
+  canMembersCreateReminders?: boolean;
+  canMembersCreatePolls?: boolean;
+  canMembersSendMessages?: boolean;
+  isApprovalRequired?: boolean;
+  markAdminMessages?: boolean;
+  allowNewMembersReadHistory?: boolean;
+  allowInviteLink?: boolean;
+}
+
 export const pinMessage = async (conversationId: string, messageId: string): Promise<PinnedItem[]> => {
   const res = await fetchAPI(`/conversations/${conversationId}/pins`, {
     method: 'POST',
@@ -58,7 +85,6 @@ export const pinMessage = async (conversationId: string, messageId: string): Pro
   return res.data;
 };
 
-/** Bỏ ghim tin nhắn */
 export const unpinMessage = async (conversationId: string, messageId: string): Promise<PinnedItem[]> => {
   const res = await fetchAPI(`/conversations/${conversationId}/pins/${messageId}`, {
     method: 'DELETE',
@@ -66,23 +92,14 @@ export const unpinMessage = async (conversationId: string, messageId: string): P
   return res.data;
 };
 
-/** Lấy danh sách ghim (Bảng tin nhóm) */
 export const getPinnedMessages = async (conversationId: string): Promise<PinnedItem[]> => {
   const res = await fetchAPI(`/conversations/${conversationId}/pins`);
   return res.data;
 };
 
-// ==================== FEATURE 4: JOIN APPROVAL ====================
-
-/** Cập nhật cài đặt nhóm (bật/tắt duyệt thành viên) */
 export const updateGroupSettings = async (
   conversationId: string,
-  settings: {
-    isApprovalRequired?: boolean;
-    canMembersSendMessages?: boolean;
-    markAdminMessages?: boolean;
-    allowNewMembersReadHistory?: boolean;
-  },
+  settings: GroupSettingsPayload,
 ): Promise<any> => {
   const res = await fetchAPI(`/conversations/${conversationId}/settings`, {
     method: 'PUT',
@@ -91,7 +108,6 @@ export const updateGroupSettings = async (
   return res.data;
 };
 
-/** Gửi yêu cầu tham gia nhóm */
 export const requestToJoin = async (conversationId: string, reason?: string): Promise<JoinRequest> => {
   const res = await fetchAPI(`/conversations/${conversationId}/join-requests`, {
     method: 'POST',
@@ -100,7 +116,6 @@ export const requestToJoin = async (conversationId: string, reason?: string): Pr
   return res.data;
 };
 
-/** Admin lấy danh sách yêu cầu tham gia */
 export const listJoinRequests = async (
   conversationId: string,
   status: 'pending' | 'approved' | 'rejected' = 'pending',
@@ -110,7 +125,6 @@ export const listJoinRequests = async (
   return res.data.items;
 };
 
-/** Admin duyệt / từ chối yêu cầu tham gia */
 export const processJoinRequest = async (
   conversationId: string,
   requestId: string,
@@ -123,15 +137,80 @@ export const processJoinRequest = async (
   return res.data;
 };
 
-// ==================== FEATURE 5: INVITE LINKS ====================
+export const getReminders = async (conversationId: string): Promise<Reminder[]> => {
+  const res = await fetchAPI(`/reminders/conversation/${conversationId}`);
+  return res.data || [];
+};
 
-/** Lấy hoặc tạo invite link */
+export const createReminder = async (payload: {
+  conversationId: string;
+  title: string;
+  remindAt: string;
+}): Promise<Reminder> => {
+  const res = await fetchAPI('/reminders', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+  return res.data;
+};
+
+export const updateReminder = async (
+  reminderId: string,
+  payload: { title?: string; remindAt?: string },
+): Promise<Reminder> => {
+  const res = await fetchAPI(`/reminders/${reminderId}`, {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  });
+  return res.data;
+};
+
+export const deleteReminder = async (reminderId: string): Promise<Reminder> => {
+  const res = await fetchAPI(`/reminders/${reminderId}`, {
+    method: 'DELETE',
+  });
+  return res.data;
+};
+
+export const joinReminder = async (reminderId: string): Promise<Reminder> => {
+  const res = await fetchAPI(`/reminders/${reminderId}/join`, {
+    method: 'POST',
+  });
+  return res.data;
+};
+
+export const declineReminder = async (reminderId: string): Promise<Reminder> => {
+  const res = await fetchAPI(`/reminders/${reminderId}/decline`, {
+    method: 'POST',
+  });
+  return res.data;
+};
+
+export const blockMember = async (conversationId: string, memberId: string): Promise<any> => {
+  const res = await fetchAPI(`/conversations/${conversationId}/block`, {
+    method: 'POST',
+    body: JSON.stringify({ memberId }),
+  });
+  return res.data;
+};
+
+export const unblockMember = async (conversationId: string, memberId: string): Promise<any> => {
+  const res = await fetchAPI(`/conversations/${conversationId}/block/${memberId}`, {
+    method: 'DELETE',
+  });
+  return res.data;
+};
+
+export const listBlockedMembers = async (conversationId: string): Promise<GroupBlockedMember[]> => {
+  const res = await fetchAPI(`/conversations/${conversationId}/blocked`);
+  return res.data || [];
+};
+
 export const getInviteLink = async (conversationId: string): Promise<InviteLinkResponse> => {
   const res = await fetchAPI(`/conversations/${conversationId}/invite-link`);
   return res.data;
 };
 
-/** Reset invite link (vô hiệu hóa link cũ) */
 export const resetInviteLink = async (inviteCode: string): Promise<InviteLinkResponse> => {
   const res = await fetchAPI(`/conversations/invite/${inviteCode}/reset`, {
     method: 'POST',
@@ -139,16 +218,26 @@ export const resetInviteLink = async (inviteCode: string): Promise<InviteLinkRes
   return res.data;
 };
 
-/** Xem preview nhóm từ invite code (trước khi join) */
+export const buildGroupWebInviteLink = (inviteCode: string): string => {
+  const explicitWebOrigin = (process.env.EXPO_PUBLIC_WEB_URL || '').trim().replace(/\/+$/, '');
+  const origin = explicitWebOrigin || 'http://localhost:3000';
+  return `${origin}/join/${inviteCode}`;
+};
+
+export const buildGroupDeepInviteLink = (inviteCode: string, scheme = 'mobileapp'): string =>
+  `${scheme}://join/${inviteCode}`;
+
 export const previewGroupByCode = async (code: string): Promise<GroupPreview> => {
   const res = await fetchAPI(`/conversations/preview/${code}`);
   return res.data;
 };
 
-/** Tham gia nhóm qua invite link */
-export const joinGroupByCode = async (code: string): Promise<{ requiresApproval?: boolean; joinRequest?: JoinRequest; conversation?: any }> => {
+export const joinGroupByCode = async (
+  code: string,
+): Promise<{ requiresApproval?: boolean; joinRequest?: JoinRequest; conversation?: any }> => {
   const res = await fetchAPI(`/conversations/join/${code}`, {
     method: 'POST',
   });
   return res.data;
 };
+

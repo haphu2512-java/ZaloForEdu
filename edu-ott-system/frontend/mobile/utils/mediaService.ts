@@ -105,17 +105,38 @@ export async function uploadMediaForm(payload: {
   uri: string;
   fileName: string;
   mimeType: string;
+  duration?: number; // Optional duration in seconds for audio/video
 }): Promise<MediaItem> {
+  console.log('[Upload] uploadMediaForm called with:', {
+    fileName: payload.fileName,
+    mimeType: payload.mimeType,
+    duration: payload.duration,
+  });
+
   const formData = new FormData();
   formData.append('file', {
     uri: payload.uri,
     name: payload.fileName,
     type: payload.mimeType,
   } as any);
+  
+  // Add duration if provided
+  if (payload.duration) {
+    console.log('[Upload] Adding duration to FormData:', payload.duration);
+    formData.append('duration', payload.duration.toString());
+  } else {
+    console.warn('[Upload] No duration provided!');
+  }
 
   const res = await fetchAPI('/media/upload-form', {
     method: 'POST',
     body: formData,
   });
+  
+  console.log('[Upload] Response:', {
+    mediaId: res.data?._id || res.data?.id,
+    duration: res.data?.duration,
+  });
+  
   return normalizeMedia(res.data);
 }

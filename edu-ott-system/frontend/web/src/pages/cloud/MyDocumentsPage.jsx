@@ -5,6 +5,8 @@ import { chatService } from "../../services/chatService";
 import { useAuthStore } from "../../store/authStore";
 import { useFriendStore } from "../../store/friendStore";
 import { socketService } from "../../services/socketService";
+import { userService } from "../../services/userService";
+import { useConfirm } from "../../contexts/ConfirmContext";
 import toast from "react-hot-toast";
 import "./MyDocumentsPage.css";
 
@@ -31,12 +33,15 @@ const isPopulatedReply = (r) => r && typeof r === "object" && (r.content !== und
 import { CloudHeader } from "./CloudHeader";
 import { CloudInput } from "./CloudInput";
 import { CloudRightPanel } from "./CloudRightPanel";
-import { CloudMsgBubble, UploadBubble, ImagePreview } from "./CloudMsgBubble";
+import { CloudMsgBubble, MediaPreview, UploadBubble } from "./CloudMsgBubble";
 import { CleanupModal } from "./CleanupModal";
+import { DEFAULT_AVATAR } from '../../utils/constants';
+
 
 /* ===== MAIN PAGE ===== */
 export default function MyDocumentsPage(){
   const{user}=useAuthStore();
+  const confirm = useConfirm();
   const { friends, fetchFriends } = useFriendStore();
   const[convId,setConvId]=useState(null);
   const[messages,setMessages]=useState([]);
@@ -59,8 +64,22 @@ export default function MyDocumentsPage(){
   const[preview,setPreview]=useState(null);
   const[pinnedIds,setPinnedIds]=useState(new Set());
   const[showRightPanel, setShowRightPanel] = useState(true);
-  const[msgToDelete, setMsgToDelete] = useState(null);
+  const [msgToDelete,setMsgToDelete]=useState(null);
+
+  const [conversationsList, setConversationsList] = useState([]);
   const[removingId, setRemovingId] = useState(null);
+  const[storageData, setStorageData] = useState({ totalBytes: 0, imageCount: 0, docCount: 0, linkCount: 0 });
+
+  const fetchStorageUsage = useCallback(async () => {
+    try {
+      const res = await userService.getMyCloudStorage();
+      if (res?.data) {
+        setStorageData(res.data);
+      }
+    } catch (err) {
+      console.error("Storage load error:", err);
+    }
+  }, []);
 
   const pageRef=useRef(null);
   const messagesEndRef=useRef(null);
@@ -96,9 +115,20 @@ export default function MyDocumentsPage(){
 
   useEffect(()=>{
     let cancelled=false;
-    (async()=>{setLoading(true);const cid=await getOrCreateSelfConv();if(!cancelled){setConvId(cid);if(cid)await loadMessages(cid);setLoading(false);}})();
+    (async()=>{
+      setLoading(true);
+      const cid=await getOrCreateSelfConv();
+      if(!cancelled){
+        setConvId(cid);
+        if(cid){
+          await loadMessages(cid);
+          await fetchStorageUsage();
+        }
+        setLoading(false);
+      }
+    })();
     return()=>{cancelled=true;};
-  },[getOrCreateSelfConv,loadMessages]);
+  },[getOrCreateSelfConv,loadMessages,fetchStorageUsage]);
 
   // load friend list for forward modal
   useEffect(()=>{ fetchFriends(); },[fetchFriends]);
@@ -154,7 +184,7 @@ export default function MyDocumentsPage(){
     const onDrop=(e)=>{
       e.preventDefault();
       setIsDragging(false);
-      Array.from(e.dataTransfer.files).forEach(f => handleUploadFile(f, null));
+      handleUploadFiles(Array.from(e.dataTransfer.files), null);
     };
     zone.addEventListener("dragover",onDragOver);zone.addEventListener("dragleave",onDragLeave);zone.addEventListener("drop",onDrop);
     return()=>{zone.removeEventListener("dragover",onDragOver);zone.removeEventListener("dragleave",onDragLeave);zone.removeEventListener("drop",onDrop);};
@@ -193,12 +223,25 @@ export default function MyDocumentsPage(){
     }catch(err){setUploads(prev=>prev.filter(u=>u.id!==uid));toast.error(err.message||"Tải lên thất bại");}
   },[convId]);
 
-  const handleUploadFiles=(files, replyToId=null)=>{
-    // Get full object from state using the replyToId if we assume we just pass replyTo object
-    // Wait, the input gives us replyToId, let's just pass `replyTo` from state directly? No, CloudInput doesn't pass the object back, 
-    // it passes replyToId. Oh well, we can just grab `replyTo` state variable inside handleUploadFiles!
+  const handleUploadFiles = async (files, replyToId=null) => {
     const replySnapshot = replyTo;
-    files.forEach(f => handleUploadFile(f, replySnapshot));
+    const maxConcurrent = 3;
+    const queue = Array.from(files);
+    
+    const worker = async () => {
+      while (queue.length > 0) {
+        const file = queue.shift();
+        await handleUploadFile(file, replySnapshot);
+      }
+    };
+    
+    const workers = [];
+    for (let i = 0; i < Math.min(maxConcurrent, queue.length); i++) {
+      workers.push(worker());
+    }
+    
+    await Promise.all(workers);
+    fetchStorageUsage();
   };
 
   const handleSendText=async(text, replyToId=null)=>{
@@ -238,6 +281,7 @@ export default function MyDocumentsPage(){
       setTimeout(() => {
         setMessages(prev => prev.filter(m => m._id !== msgToDelete));
         setRemovingId(null);
+        fetchStorageUsage();
         toast.success("Đã xóa tin nhắn", {
           icon: '🗑️',
           style: {
@@ -255,10 +299,11 @@ export default function MyDocumentsPage(){
   };
 
   const handleBulkDelete = async (msgIds) => {
-    if(!window.confirm(`Xóa ${msgIds.length} tin nhắn đã chọn?`))return;
+    if(!await confirm(`Xóa ${msgIds.length} tin nhắn đã chọn?`, { isDanger: true }))return;
     try{
       await Promise.all(msgIds.map(id=>chatService.deleteMessage(id)));
       setMessages(prev=>prev.filter(m=>!msgIds.includes(m._id)));
+      fetchStorageUsage();
       toast.success(`Đã xóa ${msgIds.length} mục`);
     }catch(err){toast.error("Xóa thất bại");}
   };
@@ -300,35 +345,30 @@ export default function MyDocumentsPage(){
     }
   };
 
-  const openShareModal=(msg)=>{
+  const openShareModal = async (msg) => {
     setMsgToShare(msg);
     setFriendSearch("");
+    try {
+      const res = await chatService.getConversations(null, 100);
+      const convs = res.data?.data?.items || [];
+      setConversationsList(convs.filter(c => c._id !== convId));
+    } catch(err) {
+      console.error(err);
+    }
     setShareOpen(true);
   };
 
-  const executeForward=async(friend)=>{
-    if(!msgToShare)return;
-    try{
-      const targetId=friend._id||friend.id;
-      // Tìm hoặc tạo conversation với bạn
-      const res=await chatService.getConversations(null,100);
-      const convs=res.data?.data?.items||[];
-      let targetConvId=null;
-      const existing=convs.find(c=>c.type==="direct"&&c.participants?.some(p=>(p._id||p.id||p)===targetId));
-      if(existing){
-        targetConvId=existing._id;
-      }else{
-        const cr=await chatService.createConversation({type:"direct",participantIds:[targetId]});
-        targetConvId=cr.data?.data?._id||cr.data?.data?.id;
-      }
-      // Gửi nội dung tin nhắn đầu tiên
-      const content=msgToShare.content||""; 
-      const mediaIds=(msgToShare.mediaIds||msgToShare.media||msgToShare.attachments||[]).map(m=>m._id||m.id||m);
-      await chatService.sendMessage({conversationId:targetConvId,content,mediaIds});
-      toast.success(`Đã chuyển tiếp tới ${friend.fullName||friend.username}`);
+  const executeForward = async (conv) => {
+    if (!msgToShare) return;
+    try {
+      const targetConvId = conv._id || conv.id;
+      const content = msgToShare.content || ""; 
+      const mediaIds = (msgToShare.mediaIds || msgToShare.media || msgToShare.attachments || []).map(m => m._id || m.id || m);
+      await chatService.sendMessage({ conversationId: targetConvId, content, mediaIds, forwardFrom: msgToShare._id });
+      toast.success(`Đã chuyển tiếp tin nhắn`);
       setShareOpen(false);
-    }catch(err){
-      toast.error("Chuyển tiếp thất bại: "+(err.response?.data?.message||err.message));
+    } catch(err) {
+      toast.error("Chuyển tiếp thất bại: " + (err.response?.data?.message || err.message));
     }
   };
 
@@ -362,11 +402,10 @@ export default function MyDocumentsPage(){
     return acc;
   }, {});
 
-  const allMedia = messages.flatMap(m => m.mediaIds || m.media || []);
-  const totalBytes = allMedia.reduce((s, m) => s + (m.size || 0), 0);
-  const pctUsed = Math.min(100, (totalBytes / (1024 * 1024 * 1024)) * 100);
-  const imgFiles = allMedia.filter(m => ["image", "video"].includes(getCategory(m.fileName || "")));
-  const docFiles = allMedia.filter(m => !["image", "video"].includes(getCategory(m.fileName || "")));
+  const pctUsed = Math.min(100, ((storageData.totalBytes || 0) / (100 * 1024 * 1024 * 1024)) * 100);
+  
+  // We no longer filter imgFiles and docFiles from messages since they can be huge.
+  // Instead, we pass the counts from storageData to CloudRightPanel.
 
   return (
     <div className="mdc-page" ref={pageRef}>
@@ -420,7 +459,7 @@ export default function MyDocumentsPage(){
           {loading?(<div className="mdc-loading"><FaSpinner className="spin" size={28}/></div>):filtered.length===0&&uploads.length===0?(
             <div className="mdc-empty"><div className="mdc-empty-icon"><FaCloud size={52}/></div><h3>{searchQuery?"Không tìm thấy kết quả":"Chưa có nội dung nào"}</h3><p>{searchQuery?`Không có file nào chứa từ khóa "${searchQuery}"`:"Gửi ảnh, video, tài liệu hoặc ghi chú để lưu trữ cá nhân"}</p></div>
           ):(
-            <>{Object.entries(grouped).map(([dateLabel,items])=>(<div key={dateLabel}><div className="mdc-date-sep">{dateLabel}</div>{items.map(msg=>(<CloudMsgBubble key={String(msg._id || msg.id)} msg={msg} isRemoving={removingId===msg._id} onDelete={confirmDelete} onPreview={(url,name)=>setPreview({url,name})} onReaction={handleReaction} pinnedIds={pinnedIds} onPin={handlePin} onForward={openShareModal} onReply={(m)=>setReplyTo(m)} searchQuery={searchQuery}/>))}</div>))}{uploads.map(u=>(<UploadBubble key={String(u.id)} name={u.name} percent={u.percent}/>))}</>
+            <>{Object.entries(grouped).map(([dateLabel,items])=>(<div key={dateLabel}><div className="mdc-date-sep">{dateLabel}</div>{items.map(msg=>(<CloudMsgBubble key={String(msg._id || msg.id)} msg={msg} isRemoving={removingId===msg._id} onDelete={confirmDelete} onPreview={(url,name,type)=>setPreview({url,name,type})} onReaction={handleReaction} pinnedIds={pinnedIds} onPin={handlePin} onForward={openShareModal} onReply={(m)=>setReplyTo(m)} searchQuery={searchQuery}/>))}</div>))}{uploads.map(u=>(<UploadBubble key={String(u.id)} name={u.name} percent={u.percent}/>))}</>
 
           )}
           <div ref={messagesEndRef}/>
@@ -437,17 +476,14 @@ export default function MyDocumentsPage(){
 
       {showRightPanel && (
         <CloudRightPanel
-          totalBytes={totalBytes}
+          storageData={storageData}
           pctUsed={pctUsed}
           setShowCleanup={setShowCleanup}
-          imgFiles={imgFiles}
-          docFiles={docFiles}
           setFilterTab={setFilterTab}
-          setPreview={setPreview}
         />
       )}
 
-      {preview&&<ImagePreview url={preview.url} name={preview.name} onClose={()=>setPreview(null)}/>}
+      {preview&&<MediaPreview url={preview.url} name={preview.name} type={preview.type} onClose={()=>setPreview(null)}/>}
       {showCleanup&&<CleanupModal messages={messages} onDelete={handleBulkDelete} onClose={()=>setShowCleanup(false)}/>}
 
       {/* Share / Forward Modal */}
@@ -471,23 +507,34 @@ export default function MyDocumentsPage(){
               </div>
             </div>
             <div style={{flex:1,overflowY:'auto',padding:'8px 0'}}>
-              {friends.filter(f=>(f.fullName||f.username||"").toLowerCase().includes(friendSearch.toLowerCase())).length===0
-                ? <div style={{textAlign:'center',color:'#8A8D91',padding:24,fontSize:14}}>Không tìm thấy bạn bè nào</div>
-                : friends.filter(f=>(f.fullName||f.username||"").toLowerCase().includes(friendSearch.toLowerCase())).map((friend,i)=>(
-                  <div key={i} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'10px 20px',cursor:'pointer',transition:'background .12s'}} onMouseEnter={e=>e.currentTarget.style.background='#F0F2F5'} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
-                    <div style={{display:'flex',alignItems:'center',gap:12}}>
-                      <img src={friend.avatarUrl||friend.avatar||`https://i.pravatar.cc/150?u=${friend._id}`} alt="avt" style={{width:42,height:42,borderRadius:'50%',objectFit:'cover'}}/>
-                      <div>
-                        <div style={{fontSize:15,fontWeight:600,color:'#050505'}}>{friend.fullName||friend.username}</div>
-                        {friend.username&&friend.fullName&&<div style={{fontSize:12,color:'#8A8D91'}}>@{friend.username}</div>}
+              {(!conversationsList || conversationsList.length === 0)
+                ? <div style={{textAlign:'center',color:'#8A8D91',padding:24,fontSize:14}}>Không có cuộc trò chuyện nào</div>
+                : conversationsList.filter(c => {
+                    const isGroup = c.type === 'group';
+                    const otherUser = c.participants?.find(p => p._id !== (user?._id || user?.id));
+                    const displayName = isGroup ? c.name : (otherUser?.fullName || otherUser?.username || 'Trò chuyện');
+                    return displayName?.toLowerCase().includes(friendSearch.toLowerCase());
+                  }).map((conv, i) => {
+                    const isGroup = conv.type === 'group';
+                    const otherUser = conv.participants?.find(p => p._id !== (user?._id || user?.id));
+                    const displayName = isGroup ? conv.name : (otherUser?.fullName || otherUser?.username || 'Trò chuyện');
+                    const avatar = isGroup ? conv.avatarUrl : (otherUser?.avatarUrl || otherUser?.avatar);
+                    
+                    return (
+                      <div key={i} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'10px 20px',cursor:'pointer',transition:'background .12s'}} onMouseEnter={e=>e.currentTarget.style.background='#F0F2F5'} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+                        <div style={{display:'flex',alignItems:'center',gap:12}}>
+                          <img src={avatar || DEFAULT_AVATAR} alt="avt" style={{width:42,height:42,borderRadius:'50%',objectFit:'cover'}}/>
+                          <div>
+                            <div style={{fontSize:15,fontWeight:600,color:'#050505'}}>{displayName}</div>
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => executeForward(conv)}
+                          style={{padding:'7px 18px',borderRadius:6,border:'none',background:'#0068FF',color:'#fff',cursor:'pointer',fontWeight:600,fontSize:13,flexShrink:0}}
+                        >Gửi</button>
                       </div>
-                    </div>
-                    <button
-                      onClick={()=>executeForward(friend)}
-                      style={{padding:'7px 18px',borderRadius:6,border:'none',background:'#0068FF',color:'#fff',cursor:'pointer',fontWeight:600,fontSize:13,flexShrink:0}}
-                    >Gửi</button>
-                  </div>
-                ))
+                    );
+                  })
               }
             </div>
           </div>

@@ -6,7 +6,7 @@ import type { AudioRecorder } from 'expo-audio';
 
 interface VoiceRecorderMobileProps {
   onCancel: () => void;
-  onSend: (uri: string) => void;
+  onSend: (uri: string, duration: number) => void; // Add duration parameter
 }
 
 export const VoiceRecorderMobile: React.FC<VoiceRecorderMobileProps> = ({ onCancel, onSend }) => {
@@ -86,11 +86,15 @@ export const VoiceRecorderMobile: React.FC<VoiceRecorderMobileProps> = ({ onCanc
     try {
       stopTimer();
       if (visualizerRef.current) clearInterval(visualizerRef.current);
+      
+      // Capture final duration in seconds before stopping (min 1 second)
+      const finalDurationSeconds = Math.max(1, Math.ceil(duration / 1000));
+      
       await recordingRef.current.stop();
       const uri = recordingRef.current.uri;
       recordingRef.current = null;
       if (uri) {
-        onSend(uri);
+        onSend(uri, finalDurationSeconds); // Pass duration in seconds
       }
     } catch (error) {
       console.error('Failed to stop recording', error);

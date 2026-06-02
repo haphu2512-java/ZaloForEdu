@@ -13,7 +13,7 @@ import {
   ScrollView,
 } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { getConversations } from '@/utils/messageService';
+import { getConversations, createConversation } from '@/utils/messageService';
 import { connectSocket } from '@/utils/socketService';
 import { useAuth } from '@/context/auth';
 import Colors from '@/constants/Colors';
@@ -23,7 +23,9 @@ import { useRouter } from 'expo-router';
 import { Alert } from 'react-native';
 import { updateConversationPreference, pinConversation, muteConversation, reportConversation } from '@/utils/messageService';
 import { blockOrUnblockUser } from '@/utils/userService';
+import { toAbsoluteUrl } from '@/utils/url';
 import { ChatListItem } from '@/components/chat/ChatListItem';
+import { useBadge } from '@/context/badge';
 
 type FilterTab = 'all' | 'work' | 'family';
 
@@ -48,19 +50,23 @@ function formatTime(dateStr?: string | null): string {
 
 function getDisplayName(conv: Conversation, currentUserId: string): string {
   if (conv.type === 'group' && conv.name) return conv.name;
+  if (conv.type === 'direct' && conv.participants?.every(p => (typeof p === 'string' ? p : (p._id || p.id || '')) === currentUserId)) return 'Cloud của tôi';
   const otherUser = conv.participants?.find((p) => (p._id || p.id || '') !== currentUserId);
-  return otherUser?.username || 'Cuộc trò chuyện';
+  return otherUser?.username || otherUser?.fullName || 'Cuộc trò chuyện';
 }
 
 function getDisplayAvatar(conv: Conversation, currentUserId: string): string {
   if (conv.type === 'group') {
-    if (conv.avatarUrl) return conv.avatarUrl;
-    const name = conv.name || 'Group';
-    return `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=8B5CF6&color=fff&size=100&bold=true`;
+    const groupAvatar = toAbsoluteUrl(conv.avatarUrl || (conv as any).avatar);
+    if (groupAvatar) return groupAvatar;
+    return `https://ui-avatars.com/api/?name=${encodeURIComponent(conv.name || 'G')}&background=0EA5E9&color=fff&size=100&bold=true`;
+  }
+  if (conv.type === 'direct' && conv.participants?.every(p => (typeof p === 'string' ? p : (p._id || p.id || '')) === currentUserId)) {
+    return 'cloud';
   }
   const otherUser = conv.participants?.find((p) => (p._id || p.id || '') !== currentUserId);
   return (
-    otherUser?.avatarUrl ||
+    toAbsoluteUrl(otherUser?.avatarUrl || (otherUser as any)?.avatar) ||
     `https://ui-avatars.com/api/?name=${encodeURIComponent(otherUser?.username || 'U')}&background=6366F1&color=fff&size=100&bold=true`
   );
 }
@@ -89,7 +95,15 @@ export default function MessagesScreen() {
   const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null);
   const [activeTab, setActiveTab] = useState<FilterTab>('all');
 
+  const { markMessagesRead } = useBadge();
+
   const loadConversations = useCallback(async () => {
+    // Don't fetch if user is not logged in
+    if (!user) {
+      console.log('[Conversations] User not logged in, skipping fetch');
+      return;
+    }
+    
     try {
       const res = await getConversations(null, 50);
       if (res?.items) {
@@ -98,7 +112,7 @@ export default function MessagesScreen() {
     } catch (error: any) {
       console.log('Failed to fetch conversations:', error.message);
     }
-  }, []);
+  }, [user]);
 
   useEffect(() => {
     let mounted = true;
@@ -139,12 +153,20 @@ export default function MessagesScreen() {
         }));
       };
 
+      const onRemovedFromGroup = (payload: any) => {
+        const conversationId = payload?.conversationId;
+        if (!conversationId) return;
+        setConversations((prev) => prev.filter((conv) => conv._id !== conversationId && conv.id !== conversationId));
+      };
+
       socket.on('conversation_updated', onConversationUpdated);
       socket.on('message_seen', onMessageSeen);
+      socket.on('removed_from_group', onRemovedFromGroup);
 
       off = () => {
         socket.off('conversation_updated', onConversationUpdated);
         socket.off('message_seen', onMessageSeen);
+        socket.off('removed_from_group', onRemovedFromGroup);
       };
     };
 
@@ -159,13 +181,16 @@ export default function MessagesScreen() {
     useCallback(() => {
       let isActive = true;
       const init = async () => {
-        if (conversations.length === 0) setLoading(true);
+        // Only show loading if user is logged in
+        if (user && conversations.length === 0) setLoading(true);
         await loadConversations();
         if (isActive) setLoading(false);
       };
       init();
+      // Reset badge khi vào tab Tin nhắn
+      markMessagesRead();
       return () => { isActive = false; };
-    }, [loadConversations])
+    }, [loadConversations, user, conversations.length, markMessagesRead])
   );
 
   const onRefresh = useCallback(async () => {
@@ -174,7 +199,32 @@ export default function MessagesScreen() {
     setRefreshing(false);
   }, [loadConversations]);
 
-  const handlePress = (item: Conversation) => { router.push(`/chat/${item._id}`); };
+  const [creatingCloud, setCreatingCloud] = useState(false);
+
+  const handlePress = async (item: Conversation) => {
+    // Nếu là mock "Cloud của tôi", tạo conversation trước khi vào chat
+    if ((item as any).isMock) {
+      if (creatingCloud) return;
+      setCreatingCloud(true);
+      try {
+        const conv = await createConversation({ type: 'direct', participantIds: [user?.id || ''] });
+        const convId = conv?._id || conv?.id;
+        if (convId) {
+          await loadConversations();
+          router.push({ pathname: `/chat/${convId}`, params: { isSelf: 'true' } });
+        }
+      } catch (e: any) {
+        Alert.alert('Lỗi', e.message || 'Không thể mở Cloud của tôi');
+      } finally {
+        setCreatingCloud(false);
+      }
+      return;
+    }
+    // Các conversation bình thường (bao gồm cả self-conversation đã tạo)
+    const currentUserId = user?.id || (user as any)?._id || '';
+    const isSelf = item.type === 'direct' && item.participants?.every((p: any) => (typeof p === 'string' ? p : (p._id || p.id || '')) === currentUserId);
+    router.push({ pathname: `/chat/${item._id}`, params: { isSelf: isSelf ? 'true' : 'false' } });
+  };
   const handleLongPress = (item: Conversation) => { setSelectedConversation(item); };
   const closeActionSheet = () => { setSelectedConversation(null); };
 
@@ -198,8 +248,31 @@ export default function MessagesScreen() {
         await loadConversations();
         Alert.alert('Đã lưu trữ', 'Xem lại trong Cá nhân > Tin nhắn lưu trữ');
       } else if (actionType === 'delete') {
-        await updateConversationPreference(item._id, { isDeleted: true });
-        await loadConversations();
+        // Hiển thị confirmation alert trước khi xóa (không dùng window.alert)
+        Alert.alert(
+          'Xác nhận',
+          'Toàn bộ nội dung trò chuyện sẽ bị xóa vĩnh viễn.\nBạn có chắc chắn muốn xóa?',
+          [
+            { text: 'Không', style: 'cancel' },
+            {
+              text: 'Xóa',
+              style: 'destructive',
+              onPress: async () => {
+                try {
+                  await updateConversationPreference(item._id, {
+                    isDeleted: true,
+                    isHidden: false,
+                    deletedHistoryAt: new Date().toISOString(),
+                  });
+                  await loadConversations();
+                } catch (e: any) {
+                  Alert.alert('Lỗi', e.message || 'Không thể xóa cuộc trò chuyện');
+                }
+              },
+            },
+          ]
+        );
+        return; // không rơi vào catch bên ngoài
       } else if (actionType === 'details') {
         router.push({ pathname: '/conversation-details', params: { id: item._id } });
       } else if (actionType === 'pin') {
@@ -219,7 +292,8 @@ export default function MessagesScreen() {
         const currentUserId = user?.id || '';
         const otherUser = item.participants?.find((p) => (p._id || p.id || '') !== currentUserId);
         if (otherUser) {
-          await blockOrUnblockUser(otherUser._id || otherUser.id || '');
+          const targetId = otherUser._id || otherUser.id || '';
+          await blockOrUnblockUser(targetId, 'block');
           await loadConversations();
           Alert.alert('✅', 'Đã chặn người dùng');
         }
@@ -231,17 +305,39 @@ export default function MessagesScreen() {
 
   // Filter conversations based on active tab and sort them with pinned on top
   const filteredConversations = useMemo(() => {
-    return [...conversations.filter((conv) => {
+    const currentUserId = user?.id || '';
+    let convs = [...conversations];
+    
+    // Inject Cloud của tôi if missing
+    if (currentUserId && !convs.some(c => c.type === 'direct' && c.participants?.every(p => (typeof p === 'string' ? p : (p._id || p.id || '')) === currentUserId))) {
+      convs.push({
+        _id: `mock_self_${currentUserId}`,
+        id: `mock_self_${currentUserId}`,
+        type: 'direct',
+        participants: [user],
+        latestMessage: null,
+        unreadCount: 0,
+        isMock: true
+      } as any);
+    }
+
+    return convs.filter((conv) => {
       if (activeTab === 'all') return true;
       return conv.preference?.category === activeTab;
-    })].sort((a, b) => {
+    }).sort((a, b) => {
+      const isASelf = a.type === 'direct' && a.participants?.every(p => (typeof p === 'string' ? p : (p._id || p.id || '')) === currentUserId);
+      const isBSelf = b.type === 'direct' && b.participants?.every(p => (typeof p === 'string' ? p : (p._id || p.id || '')) === currentUserId);
+      if (isASelf && !isBSelf) return -1;
+      if (!isASelf && isBSelf) return 1;
+
       if (a.preference?.isPinned && !b.preference?.isPinned) return -1;
       if (!a.preference?.isPinned && b.preference?.isPinned) return 1;
+      
       const timeA = new Date(a.latestMessage?.createdAt || a.lastMessageAt || 0).getTime();
       const timeB = new Date(b.latestMessage?.createdAt || b.lastMessageAt || 0).getTime();
       return timeB - timeA;
     });
-  }, [conversations, activeTab]);
+  }, [conversations, activeTab, user]);
 
   // Calculate Strangers vs Normal
   const currentUserFriends = useMemo(() => (user?.friends || []).map((f: any) => typeof f === 'string' ? f : f._id || f.id), [user]);
@@ -461,12 +557,14 @@ export default function MessagesScreen() {
                       </TouchableOpacity>
                     )}
 
-                    <TouchableOpacity style={styles.actionOption} onPress={() => handleAction('report', selectedConversation)}>
-                      <View style={[styles.actionIconWrap, { backgroundColor: 'transparent' }]}>
-                        <Ionicons name="flag-outline" size={22} color={colors.text} />
-                      </View>
-                      <Text style={[styles.actionOptionText, { color: colors.text }]}>Báo cáo</Text>
-                    </TouchableOpacity>
+                    {selectedConversation.type !== 'group' && (
+                      <TouchableOpacity style={styles.actionOption} onPress={() => handleAction('report', selectedConversation)}>
+                        <View style={[styles.actionIconWrap, { backgroundColor: 'transparent' }]}>
+                          <Ionicons name="flag-outline" size={22} color={colors.text} />
+                        </View>
+                        <Text style={[styles.actionOptionText, { color: colors.text }]}>Báo cáo</Text>
+                      </TouchableOpacity>
+                    )}
 
                     <TouchableOpacity style={styles.actionOption} onPress={() => handleAction('delete', selectedConversation)}>
                       <View style={[styles.actionIconWrap, { backgroundColor: 'transparent' }]}>
