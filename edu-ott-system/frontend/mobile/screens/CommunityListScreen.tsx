@@ -23,8 +23,11 @@ const getMessagePreview = (item: any): string => {
   if (!item?.latestMessage) return 'Chưa có tin nhắn';
   const msg = item.latestMessage;
   if (msg.type === 'announcement') return '📢 Thông báo mới';
+  if (msg.content?.startsWith('[sticker]')) return '[Nhãn dán]';
   if (msg.content?.trim()) return msg.content.trim();
-  if (msg.type === 'image') return '🖼️ Hình ảnh';
+  if (msg.mediaIds && msg.mediaIds.length > 0) return '🖼️ Hình ảnh/Video';
+  if (msg.attachments && msg.attachments.length > 0) return '📎 Tệp đính kèm';
+  if (msg.type === 'image' || msg.type === 'video') return '🖼️ Hình ảnh/Video';
   if (msg.type === 'file') return '📎 Tệp đính kèm';
   return 'Tin nhắn mới';
 };

@@ -131,7 +131,21 @@ export default function ArchivedConversationsScreen() {
         const cid = item._id;
         const isUnarchiving = unarchivingId === cid;
         const latestMsg = (item as any).latestMessage;
-        const lastText = latestMsg?.content || 'Không có tin nhắn';
+        let lastText = latestMsg?.content || '';
+        if (lastText.startsWith('[sticker]')) {
+            lastText = '[Nhãn dán]';
+        } else if (!lastText && latestMsg) {
+            if (latestMsg.mediaIds && latestMsg.mediaIds.length > 0) {
+                lastText = '[Hình ảnh/Video]';
+            } else if (latestMsg.attachments && latestMsg.attachments.length > 0) {
+                lastText = '[Tệp đính kèm]';
+            } else if (latestMsg.type === 'image' || latestMsg.type === 'video') {
+                lastText = '[Hình ảnh/Video]';
+            } else if (latestMsg.type === 'file') {
+                lastText = '[Tệp đính kèm]';
+            }
+        }
+        if (!lastText) lastText = 'Không có tin nhắn';
         const lastTime = latestMsg?.createdAt || (item as any).lastMessageAt;
 
         return (

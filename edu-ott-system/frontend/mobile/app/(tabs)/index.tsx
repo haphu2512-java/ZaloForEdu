@@ -358,7 +358,21 @@ export default function MessagesScreen() {
     const displayAvatar = getDisplayAvatar(item, currentUserId);
     const isGroup = item.type === 'group';
     const latestMsg = item.latestMessage;
-    const lastMessageText = latestMsg?.content || 'Chưa có tin nhắn';
+    let lastMessageText = latestMsg?.content || '';
+    if (lastMessageText.startsWith('[sticker]')) {
+      lastMessageText = '[Nhãn dán]';
+    } else if (!lastMessageText && latestMsg) {
+      if (latestMsg.mediaIds && latestMsg.mediaIds.length > 0) {
+        lastMessageText = '[Hình ảnh/Video]';
+      } else if (latestMsg.attachments && latestMsg.attachments.length > 0) {
+        lastMessageText = '[Tệp đính kèm]';
+      } else if (latestMsg.type === 'image' || latestMsg.type === 'video') {
+        lastMessageText = '[Hình ảnh/Video]';
+      } else if (latestMsg.type === 'file') {
+        lastMessageText = '[Tệp đính kèm]';
+      }
+    }
+    if (!lastMessageText) lastMessageText = 'Chưa có tin nhắn';
     const lastMessageTime = latestMsg?.createdAt || item.lastMessageAt;
     const senderName = getSenderName(latestMsg?.senderId);
     const otherUser = !isGroup ? item.participants?.find((p) => (p._id || p.id || '') !== (user?.id || '')) : null;

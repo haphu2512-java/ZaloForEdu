@@ -210,6 +210,69 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
     );
   }
 
+  // Sticker/GIF message
+  const stickerUrl = (message as any).stickerUrl ||
+    (typeof content === 'string' && content.startsWith('[sticker]') ? content.slice(9) : null);
+
+  if (stickerUrl) {
+    return (
+      <View className={`flex-row ${isMe ? 'justify-end' : 'justify-start'} my-1 px-4`}>
+        {/* Avatar for other user */}
+        {!isMe && (
+          <View className="relative">
+            <Image
+              source={{ uri: senderInfo.avatar || senderInfo.avatarUrl || 'https://i.pravatar.cc/150' }}
+              className={`w-8 h-8 rounded-full mr-2 mt-1 ${senderInfo.isActive === false ? 'opacity-40' : ''}`}
+              style={senderInfo.isActive === false ? { tintColor: 'gray' as any } : undefined}
+            />
+            {senderInfo.isActive === false && (
+              <View className="absolute bottom-0 right-1 w-2.5 h-2.5 bg-gray-400 rounded-full border border-white" />
+            )}
+          </View>
+        )}
+
+        <Pressable
+          onLongPress={() => onLongPress?.(message)}
+          className="max-w-[75%]"
+        >
+          {/* Sender name (group chat) */}
+          {!isMe && sender && (
+            <View className="flex-row items-center ml-1 mb-0.5">
+              <Text className="text-[11px] text-gray-500 font-medium">
+                {senderInfo.fullName || senderInfo.username}
+              </Text>
+              {senderInfo.isActive === false && (
+                <Text className="text-[9px] text-red-400 font-bold ml-1.5 uppercase">
+                  (Vô hiệu hóa)
+                </Text>
+              )}
+            </View>
+          )}
+
+          {/* Sticker display */}
+          <View>
+            <Image
+              source={{ uri: stickerUrl }}
+              className="w-40 h-40 rounded-lg"
+              resizeMode="contain"
+              style={{ opacity: status === 'sending' ? 0.6 : 1 }}
+            />
+            
+            <View className="flex-row items-center justify-end mt-1 gap-1">
+              <Text className="text-[10px] text-gray-400">
+                {formatTime(createdAt)}
+              </Text>
+              {isMe && <StatusIcon status={status} />}
+            </View>
+          </View>
+
+          {/* Reactions */}
+          <ReactionBar reactions={reactions} />
+        </Pressable>
+      </View>
+    );
+  }
+
   const replyMessage = typeof replyTo === 'object' ? replyTo as Message : null;
 
   return (

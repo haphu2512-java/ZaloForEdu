@@ -41,6 +41,33 @@ export default function ChatBubble({
 
   const medias = (message.mediaIds || []).map(resolveMedia).filter(Boolean);
 
+  const stickerUrl = typeof message.content === 'string' && message.content.startsWith('[sticker]') ? message.content.slice(9) : null;
+
+  if (stickerUrl) {
+    return (
+      <View style={[styles.row, isMine ? styles.rowMine : styles.rowTheir]}>
+        {showAvatar && !isMine ? (
+          <Image
+            source={{
+              uri:
+                senderAvatar ||
+                `https://ui-avatars.com/api/?name=${encodeURIComponent(senderName || 'U')}&background=0EA5E9&color=fff`,
+            }}
+            style={styles.avatar}
+          />
+        ) : (
+          <View style={styles.avatarSpacer} />
+        )}
+
+        <View style={{ maxWidth: '82%', borderRadius: 16 }}>
+          {!isMine && !!senderName ? <Text style={styles.sender}>{senderName}</Text> : null}
+          <Image source={{ uri: stickerUrl }} style={{ width: 160, height: 160, borderRadius: 12 }} resizeMode="contain" />
+          <Text style={[styles.time, { alignSelf: isMine ? 'flex-end' : 'flex-start', marginTop: 4 }]}>{toTime(message.createdAt)}</Text>
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View style={[styles.row, isMine ? styles.rowMine : styles.rowTheir]}>
       {showAvatar && !isMine ? (

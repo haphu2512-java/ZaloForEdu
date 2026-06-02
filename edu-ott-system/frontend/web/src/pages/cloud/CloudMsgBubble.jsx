@@ -82,13 +82,24 @@ export function CloudMsgBubble({msg, onDelete, onPreview, onReaction, pinnedIds,
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const mediaList = msg.mediaIds || msg.media || msg.attachments || [];
+  const mediaList = (msg.mediaIds || msg.media || msg.attachments || []).map(att => {
+    if (typeof att === 'string') return { _id: att, url: '', fileName: 'Loading...', mimeType: 'image/jpeg' };
+    return att;
+  });
   const hasMedia = mediaList.length > 0;
-  const media = hasMedia ? mediaList[0] : null;
-  const isImage = hasMedia && ((media.mimeType && media.mimeType.startsWith('image/')) || getCategory(media.fileName || "") === "image");
-  const isVideo = hasMedia && ((media.mimeType && media.mimeType.startsWith('video/')) || getCategory(media.fileName || "") === "video");
-  const isAudio = hasMedia && ((media.mimeType && media.mimeType.startsWith('audio/')) || getCategory(media.fileName || "") === "audio");
-  const isDoc = hasMedia && !isImage && !isVideo && !isAudio;
+
+  const getMediaCategory = (att) => {
+    if ((att.mimeType && att.mimeType.startsWith('image/')) || getCategory(att.fileName || "") === "image") return "image";
+    if ((att.mimeType && att.mimeType.startsWith('video/')) || getCategory(att.fileName || "") === "video") return "video";
+    if ((att.mimeType && att.mimeType.startsWith('audio/')) || getCategory(att.fileName || "") === "audio") return "audio";
+    return "document";
+  };
+
+  const images = mediaList.filter(m => getMediaCategory(m) === "image");
+  const videos = mediaList.filter(m => getMediaCategory(m) === "video");
+  const audios = mediaList.filter(m => getMediaCategory(m) === "audio");
+  const docs = mediaList.filter(m => getMediaCategory(m) === "document");
+
   const reactions = msg.reactions || [];
   const isPinned = pinnedIds?.has(msg._id);
 
@@ -177,70 +188,69 @@ export function CloudMsgBubble({msg, onDelete, onPreview, onReaction, pinnedIds,
           </div>
         )}
 
-        {/* Image bubble — clean, no filename bar */}
-        {hasMedia && isImage && (
-          <div className="mdc-img-bubble" onClick={()=>onPreview(media.url, media.fileName, 'image')}>
-            <img src={media.url} alt={media.fileName} className="mdc-img-thumb"/>
-            {/* Floating download button on hover */}
-            <a
-              className="mdc-img-dl-btn"
-              href={media.url}
-              target="_blank"
-              rel="noreferrer"
-              onClick={e=>e.stopPropagation()}
-              title="Tải về"
-            >
-              <FaDownload size={11}/>
-            </a>
-          </div>
-        )}
-
-        {/* Video bubble */}
-        {hasMedia && isVideo && (
-          <div className="mdc-img-bubble" style={{position:'relative'}} onClick={()=>onPreview(media.url, media.fileName, 'video')}>
-            <video src={media.url} className="mdc-img-thumb" style={{objectFit:'cover'}} />
-            <div style={{position:'absolute',top:0,left:0,right:0,bottom:0,background:'rgba(0,0,0,0.3)',display:'flex',alignItems:'center',justifyContent:'center'}}>
-              <FaPlay size={24} color="white" />
-            </div>
-            <a className="mdc-img-dl-btn" href={media.url} target="_blank" rel="noreferrer" onClick={e=>e.stopPropagation()} title="Tải về"><FaDownload size={11}/></a>
-          </div>
-        )}
-
-        {/* File bubble */}
-        {hasMedia && isDoc && (
-          <div className="mdc-file-bubble">
-            <div className="mdc-fb-icon" style={{background:getFileColor(media.fileName)}}>
-              <span>{getExt(media.fileName).toUpperCase().slice(0,4) || 'FILE'}</span>
-            </div>
-            <div className="mdc-fb-info">
-              <span className="mdc-fb-name">{media.fileName}</span>
-              <div className="mdc-fb-meta">
-                <span>{formatBytes(media.size)}</span>
-                <span className="mdc-fb-cloud"><FaCloud size={9}/> Đã có trên Cloud</span>
-              </div>
-            </div>
-            <div style={{display:'flex',gap:6,alignItems:'center'}}>
-              {/* Preview PDF/docx qua Google Docs Viewer — chỉ với Cloudinary URL */}
-              {media.url && media.url.includes('cloudinary.com') && (
+        {/* Media List */}
+        {hasMedia && (
+          <div className="mdc-media-list" style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: msg.content ? '8px' : '0' }}>
+            {images.map((img, i) => (
+              <div key={`img-${i}`} className="mdc-img-bubble" onClick={()=>onPreview(img.url, img.fileName, 'image')}>
+                <img src={img.url} alt={img.fileName} className="mdc-img-thumb"/>
                 <a
-                  className="mdc-fb-btn"
-                  href={`https://docs.google.com/viewer?url=${encodeURIComponent(media.url)}&embedded=true`}
+                  className="mdc-img-dl-btn"
+                  href={img.url}
                   target="_blank"
                   rel="noreferrer"
-                  title="Xem trước"
-                  style={{fontSize:11,padding:'3px 8px',background:'#3B82F6',color:'#fff',borderRadius:6,textDecoration:'none'}}
+                  onClick={e=>e.stopPropagation()}
+                  title="Tải về"
                 >
-                  Xem
+                  <FaDownload size={11}/>
                 </a>
-              )}
-              <a className="mdc-fb-btn" href={media.url} target="_blank" rel="noreferrer" title="Tải về"><FaDownload size={13}/></a>
-            </div>
-          </div>
-        )}
+              </div>
+            ))}
 
-        {/* Audio Message */}
-        {hasMedia && isAudio && (
-          <AudioBubble url={media.url} />
+            {videos.map((vid, i) => (
+              <div key={`vid-${i}`} className="mdc-img-bubble" style={{position:'relative'}} onClick={()=>onPreview(vid.url, vid.fileName, 'video')}>
+                <video src={vid.url} className="mdc-img-thumb" style={{objectFit:'cover'}} />
+                <div style={{position:'absolute',top:0,left:0,right:0,bottom:0,background:'rgba(0,0,0,0.3)',display:'flex',alignItems:'center',justifyContent:'center'}}>
+                  <FaPlay size={24} color="white" />
+                </div>
+                <a className="mdc-img-dl-btn" href={vid.url} target="_blank" rel="noreferrer" onClick={e=>e.stopPropagation()} title="Tải về"><FaDownload size={11}/></a>
+              </div>
+            ))}
+
+            {docs.map((doc, i) => (
+              <div key={`doc-${i}`} className="mdc-file-bubble">
+                <div className="mdc-fb-icon" style={{background:getFileColor(doc.fileName)}}>
+                  <span>{getExt(doc.fileName).toUpperCase().slice(0,4) || 'FILE'}</span>
+                </div>
+                <div className="mdc-fb-info">
+                  <span className="mdc-fb-name">{doc.fileName}</span>
+                  <div className="mdc-fb-meta">
+                    <span>{formatBytes(doc.size)}</span>
+                    <span className="mdc-fb-cloud"><FaCloud size={9}/> Đã có trên Cloud</span>
+                  </div>
+                </div>
+                <div style={{display:'flex',gap:6,alignItems:'center'}}>
+                  {doc.url && doc.url.includes('cloudinary.com') && (
+                    <a
+                      className="mdc-fb-btn"
+                      href={`https://docs.google.com/viewer?url=${encodeURIComponent(doc.url)}&embedded=true`}
+                      target="_blank"
+                      rel="noreferrer"
+                      title="Xem trước"
+                      style={{fontSize:11,padding:'3px 8px',background:'#3B82F6',color:'#fff',borderRadius:6,textDecoration:'none'}}
+                    >
+                      Xem
+                    </a>
+                  )}
+                  <a className="mdc-fb-btn" href={doc.url} target="_blank" rel="noreferrer" title="Tải về"><FaDownload size={13}/></a>
+                </div>
+              </div>
+            ))}
+
+            {audios.map((aud, i) => (
+              <AudioBubble key={`aud-${i}`} url={aud.url} />
+            ))}
+          </div>
         )}
 
         {/* Reactions */}

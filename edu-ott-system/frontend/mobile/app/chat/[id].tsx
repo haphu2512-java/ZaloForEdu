@@ -1764,6 +1764,76 @@ export default function ChatScreen() {
 
     const replyMsg = item.replyTo && typeof item.replyTo === 'object' ? item.replyTo : null;
 
+    // Sticker/GIF message
+    const stickerUrl = (item as any).stickerUrl ||
+      (typeof item.content === 'string' && item.content.startsWith('[sticker]') ? item.content.slice(9) : null);
+
+    if (stickerUrl) {
+      return (
+        <Pressable
+          onLongPress={() => !isSendingMsg && handleMessageLongPress(item)}
+          style={[
+            styles.bubbleWrapper,
+            isMine ? styles.myWrapper : styles.theirWrapper,
+            isSendingMsg && { opacity: 0.7 },
+          ]}
+        >
+          {!isMine && (
+            <Image
+              source={{ uri: senderAvatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(senderName || 'U')}&background=0EA5E9&color=fff&size=60&bold=true` }}
+              style={styles.senderAvatar}
+            />
+          )}
+          <View style={{ flex: 1, alignItems: isMine ? 'flex-end' : 'flex-start', maxWidth: '80%' }}>
+            {!isMine && conversation?.type === 'group' && senderName ? (
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 2 }}>
+                <Text style={{ fontSize: 11, color: colors.tint, fontWeight: '600', marginLeft: 4 }}>{senderName}</Text>
+                {conversation?.settings?.markAdminMessages && isSenderAdmin && (
+                  <View style={{ backgroundColor: '#FCD34D', paddingHorizontal: 4, paddingVertical: 1, borderRadius: 4, marginLeft: 6 }}>
+                    <Text style={{ fontSize: 8, color: '#92400E', fontWeight: 'bold' }}>AD</Text>
+                  </View>
+                )}
+              </View>
+            ) : null}
+
+            <View style={[styles.bubbleContainer, reactionEntries.length > 0 && styles.bubbleContainerWithReaction]}>
+              <View style={{ padding: 4 }}>
+                <Image
+                  source={{ uri: stickerUrl }}
+                  style={{ width: 160, height: 160, borderRadius: 12 }}
+                  resizeMode="contain"
+                />
+                
+                <View style={[styles.msgMeta, { justifyContent: isMine ? 'flex-end' : 'flex-start', marginTop: 4 }]}>
+                  <Text style={{ color: colors.muted, fontSize: 10 }}>
+                    {new Date(item.createdAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
+                  </Text>
+                  {isMine && <View style={{ marginLeft: 4 }}>{renderMessageStatus(item)}</View>}
+                </View>
+              </View>
+
+              {!!reactionEntries.length && (
+                <View
+                  style={[
+                    styles.reactionOverlay,
+                    isMine ? styles.reactionOverlayMine : styles.reactionOverlayTheir,
+                    { backgroundColor: colorScheme === 'dark' ? '#111827' : '#FFFFFF', borderColor: colorScheme === 'dark' ? '#374151' : '#E2E8F0' },
+                  ]}
+                >
+                  {reactionEntries.map(([emoji, count]) => (
+                    <TouchableOpacity key={emoji} style={styles.reactionItem} onPress={() => openReactionDetails(item, emoji)}>
+                      <Text style={styles.reactionEmoji}>{emoji}</Text>
+                      {count > 1 ? <Text style={[styles.reactionCount, { color: colors.muted }]}>{count}</Text> : null}
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
+            </View>
+          </View>
+        </Pressable>
+      );
+    }
+
     return (
       <Pressable
         onLongPress={() => !isSendingMsg && handleMessageLongPress(item)}
