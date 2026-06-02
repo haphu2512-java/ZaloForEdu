@@ -21,6 +21,8 @@ import axios from "axios";
 import { friendService } from "../../services/friendService";
 import "./ContactsPage.css";
 
+const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api/v1";
+
 
 // ── Avatar helper (Đã sửa để dùng được cho cả Group) ────────
 function Avatar({ user, size = 48 }) {
@@ -176,7 +178,7 @@ export default function ContactsPage() {
     const fetchGroups = async () => {
       try {
         const token = localStorage.getItem("token");
-        const res = await axios.get("http://localhost:5000/api/v1/conversations", {
+        const res = await axios.get(`${API_BASE_URL}/conversations`, {
           headers: { Authorization: `Bearer ${token}` }
         });
         const allConvs = res.data.data?.items || res.data.items || [];
