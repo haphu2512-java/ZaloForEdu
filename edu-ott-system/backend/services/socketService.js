@@ -14,9 +14,10 @@ const logger = require('../utils/logger');
 let io = null;
 
 const canJoinConversation = async (conversationId, userId) => {
-  const conversation = await Conversation.findById(conversationId).select('_id participants');
+  const conversation = await Conversation.findById(conversationId).select('participants').lean();
   if (!conversation) return false;
-  return conversation.participants.some((participantId) => participantId.equals(userId));
+  const userIdStr = userId.toString();
+  return conversation.participants.some((p) => p.toString() === userIdStr);
 };
 
 const emitToConversation = (conversationId, event, payload) => {
@@ -38,49 +39,40 @@ const emitToUser = (userId, event, payload) => {
   io.to(`user:${userId}`).emit(event, payload);
 };
 
-const emitConversationUpdated = async (conversationId, payload) => {
+// Emit tới từng participant qua user room (dùng khi cần đảm bảo
+// nhận được dù user chưa join conversation room — ví dụ: tab mới)
+const emitConversationUpdated = (conversationId, payload, participants) => {
   if (!io) return;
-  const conversation = await Conversation.findById(conversationId).select('participants');
-  if (!conversation) return;
-  conversation.participants.forEach((participantId) => {
-    io.to(`user:${participantId.toString()}`).emit('conversation_updated', payload);
-  });
+  // Nếu truyền participants vào thì emit nhanh qua user room (không cần query DB)
+  if (participants && participants.length > 0) {
+    participants.forEach((p) => {
+      const pid = p._id ? p._id.toString() : p.toString();
+      io.to(`user:${pid}`).emit('conversation_updated', payload);
+    });
+    return;
+  }
+  // Fallback: emit tới conversation room (user đã join)
+  io.to(`conversation:${conversationId}`).emit('conversation_updated', payload);
 };
 
-const emitMessageRecalled = async (conversationId, payload) => {
+const emitMessageRecalled = (conversationId, payload) => {
   if (!io) return;
-  const conversation = await Conversation.findById(conversationId).select('participants');
-  if (!conversation) return;
-  conversation.participants.forEach((participantId) => {
-    io.to(`user:${participantId.toString()}`).emit('message_recalled', payload);
-  });
+  io.to(`conversation:${conversationId}`).emit('message_recalled', payload);
 };
 
-const emitPinnedItemsUpdated = async (conversationId, payload) => {
+const emitPinnedItemsUpdated = (conversationId, payload) => {
   if (!io) return;
-  const conversation = await Conversation.findById(conversationId).select('participants');
-  if (!conversation) return;
-  conversation.participants.forEach((participantId) => {
-    io.to(`user:${participantId.toString()}`).emit('pinned_items_updated', payload);
-  });
+  io.to(`conversation:${conversationId}`).emit('pinned_items_updated', payload);
 };
 
-const emitPollUpdated = async (conversationId, payload) => {
+const emitPollUpdated = (conversationId, payload) => {
   if (!io) return;
-  const conversation = await Conversation.findById(conversationId).select('participants');
-  if (!conversation) return;
-  conversation.participants.forEach((participantId) => {
-    io.to(`user:${participantId.toString()}`).emit('poll_updated', payload);
-  });
+  io.to(`conversation:${conversationId}`).emit('poll_updated', payload);
 };
 
-const emitGroupUpdated = async (conversationId, payload) => {
+const emitGroupUpdated = (conversationId, payload) => {
   if (!io) return;
-  const conversation = await Conversation.findById(conversationId).select('participants');
-  if (!conversation) return;
-  conversation.participants.forEach((participantId) => {
-    io.to(`user:${participantId.toString()}`).emit('group_updated', payload);
-  });
+  io.to(`conversation:${conversationId}`).emit('group_updated', payload);
 };
 
 const closeSocket = async () => {
@@ -195,7 +187,7 @@ const initSocket = (server) => {
         } else {
           emitToCommunityChannel(payload.conversationId, payload.channelId || null, 'new_message', message);
         }
-        await emitConversationUpdated(payload.conversationId, {
+        emitConversationUpdated(payload.conversationId, {
           conversationId: payload.conversationId,
           latestMessage: message,
         });

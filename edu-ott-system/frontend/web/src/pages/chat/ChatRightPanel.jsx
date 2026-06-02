@@ -174,6 +174,17 @@ export const ChatRightPanel = ({
   const isGroup = activeConversation?.type === 'group' || activeConversation?.roomModel === 'Group';
 
   const mutedUntil = activeConversation?.preference?.mutedUntil;
+
+  // Tự động cập nhật UI khi hết thời gian mute (không cần reload)
+  const [, forceUpdate] = useState(0);
+  useEffect(() => {
+    if (!mutedUntil) return;
+    const remaining = new Date(mutedUntil).getTime() - Date.now();
+    if (remaining <= 0) return; // Đã hết hạn rồi
+    const timer = setTimeout(() => forceUpdate(n => n + 1), remaining);
+    return () => clearTimeout(timer);
+  }, [mutedUntil]);
+
   const isMuted = mutedUntil && new Date(mutedUntil) > new Date();
 
   const openMuteModal = () => {
@@ -588,11 +599,7 @@ export const ChatRightPanel = ({
                           </div>
                           <div style={{ fontSize: 11, color: 'var(--z-text-secondary)', marginTop: 2 }}>
                             {poll.options?.length} lựa chọn • {(() => {
-                              const uniqueVoters = new Set();
-                              poll.options?.forEach(opt => {
-                                opt.votes?.forEach(vId => uniqueVoters.add(String(vId._id || vId)));
-                              });
-                              return uniqueVoters.size;
+                              return poll.options?.reduce((sum, opt) => sum + (opt.votes?.length || 0), 0) || 0;
                             })()} lượt bình chọn
                           </div>
                         </div>

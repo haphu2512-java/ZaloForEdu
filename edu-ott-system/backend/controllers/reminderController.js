@@ -9,7 +9,7 @@ const socketService = require('../services/socketService');
 const createSysReminderMsg = async (conversationId, senderId, content, reminderId, senderInfo) => {
   const msg = await Message.create({ conversationId, senderId, content, type: 'system_reminder', reminderId });
   await msg.populate('reminderId', 'title remindAt');
-  await socketService.emitConversationUpdated(conversationId.toString(), {
+  socketService.emitConversationUpdated(conversationId.toString(), {
     conversationId: conversationId.toString(),
     latestMessage: { ...msg.toObject(), senderId: senderInfo },
   });

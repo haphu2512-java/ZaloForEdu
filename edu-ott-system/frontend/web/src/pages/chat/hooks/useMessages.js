@@ -34,24 +34,27 @@ export function useMessages({ activeConversation, userId, token, getOtherPartici
   };
 
   // ── Send text ─────────────────────────────────────────────────────────────
-  const handleSendText = async (content) => {
+  const handleSendText = async (content, mentions = [], mentionAll = false) => {
     if (!activeConversation || !content.trim()) return;
 
     const tempId = `temp-${Date.now()}`;
-    setMessages(prev => [...prev, {
+    const tempMsg = {
       _id: tempId,
       content,
       senderId: { _id: userId },
       conversationId: activeConversation._id,
       createdAt: new Date().toISOString(),
       status: 'sending',
-    }]);
+    };
+    setMessages(prev => [...prev, tempMsg]);
 
     try {
       const currentConvId = await ensureRealConversation();
+
+      // Gửi qua HTTP để lưu DB và nhận real message từ server
       const res = await axios.post(
         `${API_BASE_URL}/messages/send`,
-        { content, conversationId: currentConvId, replyTo: replyToMessage?._id },
+        { content, conversationId: currentConvId, replyTo: replyToMessage?._id, mentions, mentionAll },
         { headers: { Authorization: `Bearer ${token}` } }
       );
       setReplyToMessage(null);
@@ -73,14 +76,12 @@ export function useMessages({ activeConversation, userId, token, getOtherPartici
         return [...filtered, normalizedMsg];
       });
     } catch (err) {
-      // BE trả về { success, error: { code, message, details } } hoặc { message }
       const errData = err?.response?.data;
       const serverMsg =
         (typeof errData?.error === 'object' ? errData?.error?.message : errData?.error) ||
         errData?.message ||
         'Lỗi gửi tin nhắn';
 
-      // Xử lý riêng cho lỗi bị chặn hoặc chặn người khác (HTTP 403)
       if (err?.response?.status === 403 && typeof serverMsg === 'string' && serverMsg.includes('chặn')) {
         toast(serverMsg, { icon: 'ℹ️', duration: 4000 });
       } else {

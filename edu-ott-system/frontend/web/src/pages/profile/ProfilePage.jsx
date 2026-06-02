@@ -3,8 +3,8 @@ import React, { useState, useEffect, useRef } from 'react';
 
 import { Camera, Save, Mail, Phone, Sparkles, User, Image as ImageIcon, Lock, Bell, Shield, Info, Edit3, Eye, EyeOff, Users, Circle, Trash2, AlertTriangle, X, CheckCircle, ShieldAlert, LogOut } from 'lucide-react';
 import { useLanguage } from '../../contexts/LanguageContext';
-import { userService } from '../../services/userService'; 
-import { authService } from '../../services/authService'; 
+import { userService } from '../../services/userService';
+import { authService } from '../../services/authService';
 import { useAuthStore } from '../../store/authStore';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
@@ -19,7 +19,7 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api/
 // Thuật toán kiểm tra độ mạnh mật khẩu chuẩn Regex (Hoa, thường, số, ký tự đặc biệt)
 const getStrength = (pw) => {
   if (!pw) return null;
-  
+
   let score = 0;
   if (/[A-Z]/.test(pw)) score += 1; // Có chữ hoa
   if (/[a-z]/.test(pw)) score += 1; // Có chữ thường
@@ -29,10 +29,22 @@ const getStrength = (pw) => {
 
   // Theo chuẩn Backend, mật khẩu phải >= 6 ký tự
   if (pw.length < 6) return "weak";
-  
+
   if (score >= 4) return "strong";
   if (score >= 2) return "medium";
   return "weak";
+};
+
+// Kiểm tra số điện thoại Việt Nam hợp lệ (đầu số 03x, 05x, 07x, 08x, 09x — 10 số)
+const isValidVNPhone = (phone) => {
+  if (!phone || phone.trim() === '') return true; // Cho phép để trống nếu chưa có
+  return /^(0[3|5|7|8|9])[0-9]{8}$/.test(phone.trim());
+};
+
+// Kiểm tra email phải đúng định dạng @gmail.com
+const isValidGmail = (email) => {
+  if (!email || email.trim() === '') return true; // Cho phép để trống nếu chưa có
+  return /^[a-zA-Z0-9._%+-]+@gmail\.com$/.test(email.trim());
 };
 
 export default function ProfilePage() {
@@ -40,7 +52,7 @@ export default function ProfilePage() {
   const { user, setUser } = useAuthStore();
   const confirm = useConfirm();
   const navigate = useNavigate();
-  
+
   const [profile, setProfile] = useState({
     id: '',
     username: '',
@@ -52,12 +64,14 @@ export default function ProfilePage() {
     isOnline: true
   });
 
+  const [fieldErrors, setFieldErrors] = useState({ phone: '', email: '' });
+
   const [passwordForm, setPasswordForm] = useState({ oldPassword: '', newPassword: '', confirmPassword: '' });
   const [showPassword, setShowPassword] = useState({ old: false, new: false, confirm: false });
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
-  const fileInputRef = useRef(null); 
-  const [activeTab, setActiveTab] = useState('view_profile'); 
+  const fileInputRef = useRef(null);
+  const [activeTab, setActiveTab] = useState('view_profile');
   const [avatarFile, setAvatarFile] = useState(null);
   const [originalProfile, setOriginalProfile] = useState(null);
 
@@ -67,7 +81,7 @@ export default function ProfilePage() {
 
   // OTP verification modal state
   const [otpModal, setOtpModal] = useState(null); // { type: 'phone'|'email', contact: string }
-  const [otpDigits, setOtpDigits] = useState(['','','','','','']);
+  const [otpDigits, setOtpDigits] = useState(['', '', '', '', '', '']);
   const [otpError, setOtpError] = useState('');
   const [otpVerifying, setOtpVerifying] = useState(false);
   const [verifiedContacts, setVerifiedContacts] = useState({ email: true, phone: true });
@@ -89,19 +103,19 @@ export default function ProfilePage() {
       try {
         setIsLoading(true);
         const response = await userService.getProfile();
-        
+
         const userData = response?.data?.data?.user || response?.data?.user || response?.user || response?.data || response;
 
         if (userData) {
           let joinDate = '01/2024';
           if (userData.createdAt) {
-             const createdObj = new Date(userData.createdAt);
-             if (!isNaN(createdObj)) joinDate = `${createdObj.getMonth() + 1}/${createdObj.getFullYear()}`;
+            const createdObj = new Date(userData.createdAt);
+            if (!isNaN(createdObj)) joinDate = `${createdObj.getMonth() + 1}/${createdObj.getFullYear()}`;
           }
 
           const newProfile = {
             id: userData._id || userData.id || '',
-            username: userData.username || userData.fullName || '', 
+            username: userData.username || userData.fullName || '',
             email: userData.email || '',
             phone: userData.phone || userData.phoneNumber || '',
             avatarUrl: toAbsoluteUrl(userData.avatarUrl || userData.avatar) || DEFAULT_AVATAR,
@@ -125,7 +139,30 @@ export default function ProfilePage() {
     fetchUserProfile();
   }, []);
 
-  const handleChange = (e) => setProfile({ ...profile, [e.target.name]: e.target.value });
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setProfile({ ...profile, [name]: value });
+
+    if (name === 'phone') {
+      if (value.trim() === '' && originalProfile?.phone) {
+        setFieldErrors(prev => ({ ...prev, phone: 'Không được xóa số điện thoại đã có. Nếu muốn thay đổi, hãy nhập SĐT mới.' }));
+      } else if (value.trim() !== '' && !isValidVNPhone(value)) {
+        setFieldErrors(prev => ({ ...prev, phone: 'Số điện thoại không hợp lệ. Vui lòng nhập đúng định dạng SĐT Việt Nam (VD: 0901234567).' }));
+      } else {
+        setFieldErrors(prev => ({ ...prev, phone: '' }));
+      }
+    }
+
+    if (name === 'email') {
+      if (value.trim() === '' && originalProfile?.email) {
+        setFieldErrors(prev => ({ ...prev, email: 'Không được xóa email đã có. Nếu muốn thay đổi, hãy nhập email mới.' }));
+      } else if (value.trim() !== '' && !isValidGmail(value)) {
+        setFieldErrors(prev => ({ ...prev, email: 'Email phải có định dạng @gmail.com (VD: ten@gmail.com).' }));
+      } else {
+        setFieldErrors(prev => ({ ...prev, email: '' }));
+      }
+    }
+  };
   const handlePasswordChange = (e) => setPasswordForm({ ...passwordForm, [e.target.name]: e.target.value });
 
   const handleAvatarChange = (e) => {
@@ -137,9 +174,36 @@ export default function ProfilePage() {
   };
 
   const handleSaveProfile = async () => {
+    // ── Validate trước khi lưu ──
+    const newErrors = { phone: '', email: '' };
+    let hasError = false;
+
+    // Không cho xoá sạch SĐT/email đã có
+    if (profile.phone.trim() === '' && originalProfile?.phone) {
+      newErrors.phone = 'Không được xóa số điện thoại đã có. Nếu muốn thay đổi, hãy nhập SĐT mới.';
+      hasError = true;
+    } else if (profile.phone.trim() !== '' && !isValidVNPhone(profile.phone)) {
+      newErrors.phone = 'Số điện thoại không hợp lệ. Vui lòng nhập đúng định dạng SĐT Việt Nam (VD: 0901234567).';
+      hasError = true;
+    }
+
+    if (profile.email.trim() === '' && originalProfile?.email) {
+      newErrors.email = 'Không được xóa email đã có. Nếu muốn thay đổi, hãy nhập email mới.';
+      hasError = true;
+    } else if (profile.email.trim() !== '' && !isValidGmail(profile.email)) {
+      newErrors.email = 'Email phải có định dạng @gmail.com (VD: ten@gmail.com).';
+      hasError = true;
+    }
+
+    setFieldErrors(newErrors);
+    if (hasError) {
+      toast.error('Vui lòng kiểm tra lại thông tin trước khi lưu!');
+      return;
+    }
+
     try {
       setIsSaving(true);
-      
+
       const userId = profile.id;
       if (!userId) {
         toast.error("Lỗi: Không tìm thấy ID User. Vui lòng F5 lại trang!");
@@ -157,8 +221,8 @@ export default function ProfilePage() {
         } catch (err) {
           console.error("Lỗi upload ảnh:", err);
           toast.error("Tải ảnh lên thất bại. Hệ thống hủy cập nhật để tránh lỗi dữ liệu!");
-          setIsSaving(false); 
-          return; 
+          setIsSaving(false);
+          return;
         }
       }
 
@@ -179,7 +243,7 @@ export default function ProfilePage() {
       updateData.avatarUrl = finalAvatarUrl || null;
 
       const response = await userService.updateProfile(userId, updateData);
-      
+
       const resData = response?.data?.data || response?.data || response;
       const updatedUser = resData?.user || resData;
       const requiresPhoneVerification = resData?.requiresPhoneVerification;
@@ -187,8 +251,8 @@ export default function ProfilePage() {
 
       if (updatedUser) {
         setProfile((prev) => {
-          const updated = { 
-            ...prev, 
+          const updated = {
+            ...prev,
             avatarUrl: updatedUser.avatarUrl || prev.avatarUrl,
             username: updatedUser.username || prev.username,
             phone: updatedUser.phone !== undefined ? updatedUser.phone : prev.phone,
@@ -197,7 +261,7 @@ export default function ProfilePage() {
           setOriginalProfile(updated);
           return updated;
         });
-        
+
         // Cập nhật global state và localStorage để đồng bộ avatar/tên trên toàn ứng dụng web
         localStorage.setItem("user", JSON.stringify(updatedUser));
         useAuthStore.setState({ user: updatedUser });
@@ -207,18 +271,18 @@ export default function ProfilePage() {
           phone: updatedUser.isPhoneVerified !== false,
         });
       }
-      
+
       setAvatarFile(null);
       setActiveTab('view_profile');
 
       // Mở modal OTP nếu cần xác thực contact mới
       if (requiresPhoneVerification && updateData.phone) {
-        setOtpDigits(['','','','','','']);
+        setOtpDigits(['', '', '', '', '', '']);
         setOtpError('');
         setOtpModal({ type: 'phone', contact: updateData.phone });
         setResendCooldown(60);
       } else if (requiresEmailVerification && updateData.email) {
-        setOtpDigits(['','','','','','']);
+        setOtpDigits(['', '', '', '', '', '']);
         setOtpError('');
         setOtpModal({ type: 'email', contact: updateData.email });
         setResendCooldown(60);
@@ -277,7 +341,7 @@ export default function ProfilePage() {
       toast.success(`Xác thực ${otpModal.type === 'phone' ? 'số điện thoại' : 'email'} thành công! Bạn có thể đăng nhập bằng ${otpModal.type === 'phone' ? 'SĐT' : 'email'} này.`);
     } catch (err) {
       setOtpError(err.response?.data?.message || 'Mã OTP không đúng hoặc đã hết hạn');
-      setOtpDigits(['','','','','','']);
+      setOtpDigits(['', '', '', '', '', '']);
       otpInputRefs.current[0]?.focus();
     } finally {
       setOtpVerifying(false);
@@ -286,7 +350,7 @@ export default function ProfilePage() {
 
   // Mở modal + tự gửi OTP mới (dùng khi click "Xác thực ngay" từ view)
   const openOtpModal = async (type, contact) => {
-    setOtpDigits(['','','','','','']);
+    setOtpDigits(['', '', '', '', '', '']);
     setOtpError('');
     setOtpModal({ type, contact });
     setResendCooldown(60);
@@ -301,8 +365,8 @@ export default function ProfilePage() {
       const msg = err.response?.data?.message || '';
       if (msg) setOtpError(msg);
       if (err.response?.status === 429) {
-         const match = msg.match(/\d+/);
-         if (match) setResendCooldown(parseInt(match[0], 10));
+        const match = msg.match(/\d+/);
+        if (match) setResendCooldown(parseInt(match[0], 10));
       }
     }
   };
@@ -322,8 +386,8 @@ export default function ProfilePage() {
       const msg = err.response?.data?.message || 'Lỗi gửi lại mã OTP';
       setOtpError(msg);
       if (err.response?.status === 429) {
-         const match = msg.match(/\d+/);
-         if (match) setResendCooldown(parseInt(match[0], 10));
+        const match = msg.match(/\d+/);
+        if (match) setResendCooldown(parseInt(match[0], 10));
       }
     }
   };
@@ -338,13 +402,13 @@ export default function ProfilePage() {
     if (passwordForm.newPassword !== passwordForm.confirmPassword) {
       return toast.error("Mật khẩu xác nhận không khớp!");
     }
-    
+
     try {
-      await authService.changePassword({ 
-        currentPassword: passwordForm.oldPassword, 
-        newPassword: passwordForm.newPassword 
+      await authService.changePassword({
+        currentPassword: passwordForm.oldPassword,
+        newPassword: passwordForm.newPassword
       });
-      
+
       toast.success('Đổi mật khẩu thành công! Vui lòng đăng nhập lại.');
       setPasswordForm({ oldPassword: '', newPassword: '', confirmPassword: '' });
       // Tự động đăng xuất sau 1.5s để bảo mật
@@ -370,7 +434,7 @@ export default function ProfilePage() {
     try {
       setIsDeleting(true);
       await userService.deleteUser(profile.id, { password: deletePassword });
-      
+
       toast.success("Tài khoản của bạn đã được xóa thành công.");
       localStorage.clear();
       window.location.href = '/login';
@@ -399,7 +463,7 @@ export default function ProfilePage() {
     if (!await confirm('Bạn có chắc chắn muốn đăng xuất trên tất cả thiết bị?', { isDanger: true })) {
       return;
     }
-    
+
     try {
       await authService.logoutAll();
       toast.success('Đã đăng xuất trên tất cả thiết bị thành công!');
@@ -443,14 +507,14 @@ export default function ProfilePage() {
     pageLayout: { display: 'flex', flexWrap: 'wrap', maxWidth: '1600px', margin: '0 auto', padding: '40px 40px 100px 40px', gap: '30px', alignItems: 'flex-start' },
     mainContent: { flex: '1 1 600px', minWidth: 0, backgroundColor: 'var(--bg-primary)', borderRadius: '24px', boxShadow: '0 4px 20px rgba(0,0,0,0.03)', padding: '50px' },
     sidebar: { flexShrink: 0, width: '320px', backgroundColor: 'var(--bg-primary)', borderRadius: '24px', padding: '24px', boxShadow: '0 4px 20px rgba(0,0,0,0.03)', position: 'sticky', top: '40px' },
-    
+
     menuGroup: { marginBottom: '24px' },
     menuTitle: { fontSize: '13px', fontWeight: '700', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '12px', paddingLeft: '12px' },
-    menuItem: (isActive, isDanger = false) => ({ 
-      display: 'flex', alignItems: 'center', gap: '14px', padding: '14px 16px', borderRadius: '12px', cursor: 'pointer', 
-      backgroundColor: isActive ? (isDanger ? '#FEE2E2' : 'var(--primary-light)') : 'transparent', 
-      color: isDanger ? '#DC2626' : (isActive ? 'var(--primary-color)' : 'var(--text-primary)'), 
-      fontWeight: isActive ? '700' : '600', transition: 'all 0.2s ease', marginBottom: '4px' 
+    menuItem: (isActive, isDanger = false) => ({
+      display: 'flex', alignItems: 'center', gap: '14px', padding: '14px 16px', borderRadius: '12px', cursor: 'pointer',
+      backgroundColor: isActive ? (isDanger ? '#FEE2E2' : 'var(--primary-light)') : 'transparent',
+      color: isDanger ? '#DC2626' : (isActive ? 'var(--primary-color)' : 'var(--text-primary)'),
+      fontWeight: isActive ? '700' : '600', transition: 'all 0.2s ease', marginBottom: '4px'
     }),
     menuIcon: (isActive, isDanger = false) => ({ color: isDanger ? '#DC2626' : (isActive ? 'var(--primary-color)' : 'var(--text-tertiary)') }),
 
@@ -458,12 +522,12 @@ export default function ProfilePage() {
     avatarWrapper: { flexShrink: 0, width: '160px', height: '160px', position: 'relative', cursor: activeTab === 'edit_profile' ? 'pointer' : 'default' },
     avatarImg: { width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover', border: '4px solid var(--border-color)', boxShadow: '0 4px 14px rgba(0,0,0,0.08)' },
     avatarOverlay: { position: 'absolute', inset: 0, backgroundColor: 'rgba(0,0,0,0.4)', borderRadius: '50%', display: 'flex', justifyContent: 'center', alignItems: 'center', opacity: activeTab === 'edit_profile' ? 1 : 0, transition: '0.2s', color: 'white' },
-    
+
     infoWrapper: { flex: 1, display: 'flex', flexDirection: 'column', paddingTop: '15px' },
     usernameRow: { display: 'flex', alignItems: 'center', gap: '15px', marginBottom: '15px' },
     username: { fontSize: '28px', fontWeight: '700', margin: 0, color: 'var(--text-primary)' },
     statusBadge: { display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 12px', borderRadius: '20px', fontSize: '13px', fontWeight: '600', backgroundColor: '#DCFCE7', color: '#16A34A' },
-    
+
     statsRow: { display: 'flex', gap: '40px', marginBottom: '24px', fontSize: '16px', color: 'var(--text-primary)' },
     statNumber: { fontWeight: '700', fontSize: '18px' },
 
@@ -477,14 +541,14 @@ export default function ProfilePage() {
     editGroup: { display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '24px' },
     editLabel: { fontSize: '14px', fontWeight: '600', color: 'var(--text-secondary)' },
     editInput: { padding: '16px 20px', borderRadius: '12px', border: '1px solid var(--border-color)', backgroundColor: 'var(--input-bg)', fontSize: '15px', outline: 'none', width: '100%', boxSizing: 'border-box', color: 'var(--text-primary)', transition: 'border 0.2s' },
-    
+
     actionRow: { display: 'flex', justifyContent: 'flex-end', gap: '16px', marginTop: '30px', paddingTop: '30px', borderTop: '2px solid var(--border-color)' },
     btnPrimary: { backgroundColor: 'var(--primary-color)', color: 'white', border: 'none', borderRadius: '12px', padding: '14px 28px', fontSize: '15px', fontWeight: '600', cursor: 'pointer', transition: '0.2s', display: 'flex', alignItems: 'center', gap: '8px', boxShadow: '0 4px 12px rgba(79, 70, 229, 0.3)', opacity: isSaving ? 0.7 : 1 },
     btnSecondary: { backgroundColor: 'var(--bg-secondary)', color: 'var(--text-primary)', border: 'none', borderRadius: '12px', padding: '14px 28px', fontSize: '15px', fontWeight: '600', cursor: 'pointer', transition: '0.2s' },
     btnDanger: { backgroundColor: '#DC2626', color: 'white', border: 'none', borderRadius: '12px', padding: '14px 28px', fontSize: '15px', fontWeight: '600', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', opacity: isDeleting ? 0.7 : 1 },
     comingSoon: { height: '300px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary)', gap: '16px' },
     eyeIconWrap: { position: 'absolute', right: '16px', top: '50%', transform: 'translateY(-50%)', cursor: 'pointer', color: 'var(--text-tertiary)', display: 'flex', alignItems: 'center', justifyContent: 'center' },
-    
+
     friendGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '20px' },
     friendCard: { backgroundColor: 'var(--input-bg)', border: '1px solid var(--border-color)', borderRadius: '16px', padding: '20px', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', transition: 'transform 0.2s', cursor: 'pointer' },
 
@@ -498,14 +562,14 @@ export default function ProfilePage() {
     modalText: { color: 'var(--text-secondary)', fontSize: '15px', lineHeight: '22px', marginBottom: '24px' }
   };
 
-  if (isLoading) return <div style={{...styles.scrollWrapper, display: 'flex', justifyContent: 'center', alignItems: 'center', color: '#4F46E5', fontWeight: 'bold', fontSize: '18px'}}>Đang tải dữ liệu hồ sơ...</div>;
+  if (isLoading) return <div style={{ ...styles.scrollWrapper, display: 'flex', justifyContent: 'center', alignItems: 'center', color: '#4F46E5', fontWeight: 'bold', fontSize: '18px' }}>Đang tải dữ liệu hồ sơ...</div>;
 
   return (
     <div style={styles.scrollWrapper}>
       <div style={styles.pageLayout}>
-        
+
         <div style={styles.mainContent}>
-          
+
           {(activeTab === 'view_profile' || activeTab === 'edit_profile') && (
             <>
               <div style={styles.headerSection}>
@@ -548,8 +612,8 @@ export default function ProfilePage() {
                             <p style={{ ...styles.viewValue, margin: 0 }}>{profile.phone || 'Chưa cập nhật'}</p>
                             {profile.phone && (
                               verifiedContacts.phone
-                                ? <span style={{ display:'flex', alignItems:'center', gap:3, fontSize:11, color:'#16a34a', fontWeight:600 }}><CheckCircle size={13}/> Đã xác thực</span>
-                                : <button onClick={() => openOtpModal('phone', profile.phone)} style={{ display:'flex', alignItems:'center', gap:3, fontSize:11, color:'#f59e0b', fontWeight:700, background:'#fef3c7', border:'1px solid #fde68a', borderRadius:6, padding:'2px 8px', cursor:'pointer' }}><ShieldAlert size={13}/> Xác thực ngay</button>
+                                ? <span style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 11, color: '#16a34a', fontWeight: 600 }}><CheckCircle size={13} /> Đã xác thực</span>
+                                : <button onClick={() => openOtpModal('phone', profile.phone)} style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 11, color: '#f59e0b', fontWeight: 700, background: '#fef3c7', border: '1px solid #fde68a', borderRadius: 6, padding: '2px 8px', cursor: 'pointer' }}><ShieldAlert size={13} /> Xác thực ngay</button>
                             )}
                           </div>
                         </div>
@@ -562,8 +626,8 @@ export default function ProfilePage() {
                             <p style={{ ...styles.viewValue, margin: 0 }}>{profile.email || 'Chưa cập nhật'}</p>
                             {profile.email && (
                               verifiedContacts.email
-                                ? <span style={{ display:'flex', alignItems:'center', gap:3, fontSize:11, color:'#16a34a', fontWeight:600 }}><CheckCircle size={13}/> Đã xác thực</span>
-                                : <button onClick={() => openOtpModal('email', profile.email)} style={{ display:'flex', alignItems:'center', gap:3, fontSize:11, color:'#f59e0b', fontWeight:700, background:'#fef3c7', border:'1px solid #fde68a', borderRadius:6, padding:'2px 8px', cursor:'pointer' }}><ShieldAlert size={13}/> Xác thực ngay</button>
+                                ? <span style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 11, color: '#16a34a', fontWeight: 600 }}><CheckCircle size={13} /> Đã xác thực</span>
+                                : <button onClick={() => openOtpModal('email', profile.email)} style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 11, color: '#f59e0b', fontWeight: 700, background: '#fef3c7', border: '1px solid #fde68a', borderRadius: 6, padding: '2px 8px', cursor: 'pointer' }}><ShieldAlert size={13} /> Xác thực ngay</button>
                             )}
                           </div>
                         </div>
@@ -580,25 +644,42 @@ export default function ProfilePage() {
                       </div>
                       <div style={styles.editGroup}>
                         <label style={styles.editLabel}>Số điện thoại</label>
-                        <input type="text" name="phone" value={profile.phone} onChange={handleChange} style={styles.editInput} placeholder="Nhập số điện thoại..." />
+                        <input
+                          type="text"
+                          name="phone"
+                          value={profile.phone}
+                          onChange={handleChange}
+                          style={{ ...styles.editInput, borderColor: fieldErrors.phone ? '#EF4444' : 'var(--border-color)' }}
+                          placeholder="Nhập số điện thoại VN (VD: 0901234567)..."
+                        />
+                        {fieldErrors.phone && (
+                          <span style={{ fontSize: 12, color: '#EF4444', marginTop: 2, display: 'flex', alignItems: 'center', gap: 4 }}>
+                            <AlertTriangle size={13} /> {fieldErrors.phone}
+                          </span>
+                        )}
                       </div>
                       <div style={styles.editGroup}>
-                      <label style={styles.editLabel}>Email</label>
-                      <input 
-                        type="email" 
-                        name="email" 
-                        value={profile.email} 
-                        onChange={handleChange} 
-                        style={styles.editInput} 
-                        placeholder="Nhập email..." 
-                      />
-                    </div>
+                        <label style={styles.editLabel}>Email</label>
+                        <input
+                          type="email"
+                          name="email"
+                          value={profile.email}
+                          onChange={handleChange}
+                          style={{ ...styles.editInput, borderColor: fieldErrors.email ? '#EF4444' : 'var(--border-color)' }}
+                          placeholder="Nhập email @gmail.com..."
+                        />
+                        {fieldErrors.email && (
+                          <span style={{ fontSize: 12, color: '#EF4444', marginTop: 2, display: 'flex', alignItems: 'center', gap: 4 }}>
+                            <AlertTriangle size={13} /> {fieldErrors.email}
+                          </span>
+                        )}
+                      </div>
 
                       <div style={styles.actionRow}>
-                        <button onClick={() => { 
+                        <button onClick={() => {
                           if (originalProfile) setProfile(originalProfile);
-                          setAvatarFile(null); 
-                          setActiveTab('view_profile'); 
+                          setAvatarFile(null);
+                          setActiveTab('view_profile');
                         }} style={styles.btnSecondary} disabled={isSaving}>Hủy bỏ</button>
                         <button onClick={handleSaveProfile} style={styles.btnPrimary} disabled={isSaving}>
                           <Save size={18} /> {isSaving ? 'Đang lưu...' : 'Lưu thay đổi'}
@@ -620,7 +701,7 @@ export default function ProfilePage() {
                     const isObj = typeof friend === 'object' && friend !== null;
                     const fName = isObj ? (friend.username || friend.fullName || 'Người dùng Zalo') : 'Người dùng ẩn danh';
                     const fAva = isObj ? (friend.avatarUrl || friend.avatar || DEFAULT_AVATAR) : DEFAULT_AVATAR;
-                    
+
                     return (
                       <div key={idx} style={styles.friendCard}>
                         <img src={fAva} alt="friend" style={{ width: '70px', height: '70px', borderRadius: '50%', objectFit: 'cover', marginBottom: '12px', border: '2px solid var(--border-color)' }} />
@@ -641,9 +722,9 @@ export default function ProfilePage() {
           )}
 
           {activeTab === 'password' && (
-             <div style={{ maxWidth: '600px', margin: '0 auto', paddingTop: '20px' }}>
-              <h3 style={{...styles.sectionTitle, fontSize: '24px', marginBottom: '32px'}}><Lock size={28} color="#4F46E5" /> Đổi mật khẩu</h3>
-              
+            <div style={{ maxWidth: '600px', margin: '0 auto', paddingTop: '20px' }}>
+              <h3 style={{ ...styles.sectionTitle, fontSize: '24px', marginBottom: '32px' }}><Lock size={28} color="#4F46E5" /> Đổi mật khẩu</h3>
+
               <div style={styles.editGroup}>
                 <label style={styles.editLabel}>Mật khẩu hiện tại</label>
                 <div style={{ position: 'relative' }}>
@@ -658,7 +739,7 @@ export default function ProfilePage() {
                   <input type={showPassword.new ? "text" : "password"} name="newPassword" value={passwordForm.newPassword} onChange={handlePasswordChange} style={styles.editInput} placeholder="Tối thiểu 6 ký tự" />
                   <div style={styles.eyeIconWrap} onClick={() => togglePasswordVisibility('new')}>{showPassword.new ? <EyeOff size={20} /> : <Eye size={20} />}</div>
                 </div>
-                
+
                 {/* THANH ĐO ĐỘ MẠNH + CHECKLIST YÊU CẦU */}
                 {passwordForm.newPassword && (
                   <>
@@ -691,9 +772,9 @@ export default function ProfilePage() {
                   <div style={styles.eyeIconWrap} onClick={() => togglePasswordVisibility('confirm')}>{showPassword.confirm ? <EyeOff size={20} /> : <Eye size={20} />}</div>
                 </div>
               </div>
-              
+
               <div style={styles.actionRow}>
-                <button onClick={submitPasswordChange} style={styles.btnPrimary}><Shield size={20} style={{marginRight:'8px'}}/> Xác nhận đổi mật khẩu</button>
+                <button onClick={submitPasswordChange} style={styles.btnPrimary}><Shield size={20} style={{ marginRight: '8px' }} /> Xác nhận đổi mật khẩu</button>
               </div>
             </div>
           )}
@@ -793,19 +874,19 @@ export default function ProfilePage() {
             <div style={styles.menuTitle}>{t('menuAccount')}</div>
             <div style={styles.menuItem(activeTab === 'view_profile')} onClick={() => setActiveTab('view_profile')}>
               <User size={22} style={styles.menuIcon(activeTab === 'view_profile')} />
-              <div style={{fontSize: '15px'}}>{t('menuMyProfile')}</div>
+              <div style={{ fontSize: '15px' }}>{t('menuMyProfile')}</div>
             </div>
             <div style={styles.menuItem(activeTab === 'edit_profile')} onClick={() => setActiveTab('edit_profile')}>
               <Edit3 size={22} style={styles.menuIcon(activeTab === 'edit_profile')} />
-              <div style={{fontSize: '15px'}}>{t('menuEditProfile')}</div>
+              <div style={{ fontSize: '15px' }}>{t('menuEditProfile')}</div>
             </div>
             <div style={styles.menuItem(false)} onClick={() => { setActiveTab('edit_profile'); setTimeout(() => fileInputRef.current?.click(), 100); }}>
               <ImageIcon size={22} style={styles.menuIcon(false)} />
-              <div style={{fontSize: '15px'}}>{t('menuChangeAvatar')}</div>
+              <div style={{ fontSize: '15px' }}>{t('menuChangeAvatar')}</div>
             </div>
             <div style={styles.menuItem(activeTab === 'password')} onClick={() => setActiveTab('password')}>
               <Lock size={22} style={styles.menuIcon(activeTab === 'password')} />
-              <div style={{fontSize: '15px'}}>{t('menuChangePassword')}</div>
+              <div style={{ fontSize: '15px' }}>{t('menuChangePassword')}</div>
             </div>
           </div>
 
@@ -813,25 +894,25 @@ export default function ProfilePage() {
             <div style={styles.menuTitle}>{t('menuOther')}</div>
             <div style={styles.menuItem(activeTab === 'privacy')} onClick={() => setActiveTab('privacy')}>
               <Shield size={22} style={styles.menuIcon(activeTab === 'privacy')} />
-              <div style={{fontSize: '15px'}}>{t('menuPrivacy')}</div>
+              <div style={{ fontSize: '15px' }}>{t('menuPrivacy')}</div>
             </div>
             <div style={styles.menuItem(activeTab === 'about')} onClick={() => setActiveTab('about')}>
               <Info size={22} style={styles.menuIcon(activeTab === 'about')} />
-              <div style={{fontSize: '15px'}}>{t('menuAbout')}</div>
+              <div style={{ fontSize: '15px' }}>{t('menuAbout')}</div>
             </div>
-            
+
             <div style={{ marginTop: '20px', paddingTop: '20px', borderTop: '1px solid var(--border-color)' }}>
               <div style={styles.menuItem(false)} onClick={handleLogout}>
                 <LogOut size={22} style={styles.menuIcon(false)} />
-                <div style={{fontSize: '15px'}}>{t('logout')}</div>
+                <div style={{ fontSize: '15px' }}>{t('logout')}</div>
               </div>
               <div style={styles.menuItem(false)} onClick={handleLogoutAll}>
                 <LogOut size={22} style={styles.menuIcon(false)} />
-                <div style={{fontSize: '15px'}}>Đăng xuất tất cả thiết bị</div>
+                <div style={{ fontSize: '15px' }}>Đăng xuất tất cả thiết bị</div>
               </div>
               <div style={styles.menuItem(false, true)} onClick={() => setShowDeleteModal(true)}>
                 <Trash2 size={22} style={styles.menuIcon(false, true)} />
-                <div style={{fontSize: '15px'}}>Xóa tài khoản</div>
+                <div style={{ fontSize: '15px' }}>Xóa tài khoản</div>
               </div>
             </div>
           </div>
@@ -848,19 +929,19 @@ export default function ProfilePage() {
                 <X size={20} />
               </button>
             </div>
-            
+
             <p style={styles.modalText}>
               Hành động này không thể hoàn tác. Mọi dữ liệu của bạn bao gồm bạn bè, tin nhắn sẽ bị xóa vĩnh viễn. Vui lòng nhập mật khẩu để xác nhận.
             </p>
 
-            <div style={{...styles.editGroup, marginBottom: '24px'}}>
+            <div style={{ ...styles.editGroup, marginBottom: '24px' }}>
               <div style={{ position: 'relative' }}>
-                <input 
-                  type={showPassword.confirm ? "text" : "password"} 
-                  value={deletePassword} 
-                  onChange={(e) => setDeletePassword(e.target.value)} 
-                  style={{...styles.editInput, borderColor: '#DC2626'}} 
-                  placeholder="Nhập mật khẩu của bạn" 
+                <input
+                  type={showPassword.confirm ? "text" : "password"}
+                  value={deletePassword}
+                  onChange={(e) => setDeletePassword(e.target.value)}
+                  style={{ ...styles.editInput, borderColor: '#DC2626' }}
+                  placeholder="Nhập mật khẩu của bạn"
                 />
                 <div style={styles.eyeIconWrap} onClick={() => togglePasswordVisibility('confirm')}>
                   {showPassword.confirm ? <EyeOff size={20} /> : <Eye size={20} />}

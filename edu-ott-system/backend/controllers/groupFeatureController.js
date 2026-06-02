@@ -42,7 +42,7 @@ const emitGroupSystemMessage = async ({ conversationId, senderId, content }) => 
   });
   await sysMsg.populate('senderId', 'username avatarUrl fullName');
   socketService.emitToConversation(conversationId.toString(), 'new_message', sysMsg);
-  await socketService.emitConversationUpdated(conversationId.toString(), {
+  socketService.emitConversationUpdated(conversationId.toString(), {
     conversationId,
     latestMessage: sysMsg,
   });
@@ -111,7 +111,7 @@ const pinMessage = asyncHandler(async (req, res) => {
   });
   await pinSysMsg.populate('senderId', 'username avatarUrl fullName');
   socketService.emitToConversation(id, 'new_message', pinSysMsg);
-  await socketService.emitConversationUpdated(id, {
+  socketService.emitConversationUpdated(id, {
     conversationId: id,
     latestMessage: pinSysMsg
   });
@@ -169,7 +169,7 @@ const unpinMessage = asyncHandler(async (req, res) => {
   });
   await unpinSysMsg.populate('senderId', 'username avatarUrl fullName');
   socketService.emitToConversation(id, 'new_message', unpinSysMsg);
-  await socketService.emitConversationUpdated(id, {
+  socketService.emitConversationUpdated(id, {
     conversationId: id,
     latestMessage: unpinSysMsg
   });

@@ -166,8 +166,8 @@ export default function UserManagement() {
           <div key={i} style={{ backgroundColor: "#fff", padding: "20px", borderRadius: "16px", border: "1px solid #f1f5f9", boxShadow: "0 2px 4px rgba(0,0,0,0.02)", display: "flex", alignItems: "center", gap: "16px" }}>
             <div style={{ backgroundColor: s.bg, color: s.color, padding: "12px", borderRadius: "12px" }}>{s.icon}</div>
             <div>
-              <p style={{ margin: 0, fontSize: "12px", fontWeight: 700, color: "#64748b", textTransform: "uppercase" }}>{s.label}</p>
-              <h3 style={{ margin: 0, fontSize: "22px", fontWeight: 800 }}>{s.value}</h3>
+              <p style={{ margin: 0, fontSize: "12px", fontWeight: 700, color: "#475569", textTransform: "uppercase" }}>{s.label}</p>
+              <h3 style={{ margin: 0, fontSize: "22px", fontWeight: 800, color: "#0f172a" }}>{s.value}</h3>
             </div>
           </div>
         ))}
@@ -321,11 +321,6 @@ export default function UserManagement() {
 
                           <button onClick={() => openModal(isBanned ? 'unban' : 'ban', user)} style={{ padding: "8px 10px", borderRadius: "10px", border: `1px solid ${isBanned ? "#a7f3d0" : "#fecaca"}`, backgroundColor: isBanned ? "#ecfdf5" : "#fff1f2", color: isBanned ? "#059669" : "#ef4444", cursor: "pointer", display: "flex", alignItems: "center", gap: "4px", fontSize: "12px", fontWeight: 600 }} title={isBanned ? "Mở khóa" : "Khóa tài khoản"}>
                             {isBanned ? <><UserCheck size={14} /> Mở khóa</> : <><UserX size={14} /> Khóa</>}
-                          </button>
-
-                          <button onClick={() => openModal('delete', user)} style={{ padding: "8px 10px", borderRadius: "10px", backgroundColor: "#fff", color: "#64748b", cursor: "pointer", border: "1px solid #e2e8f0", display: "flex", alignItems: "center", gap: "4px", fontSize: "12px", fontWeight: 600 }} title="Xóa dữ liệu">
-                            <Trash2 size={14} />
-                            Xóa
                           </button>
 
                         </div>
