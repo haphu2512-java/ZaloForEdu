@@ -7,6 +7,11 @@ export const userService = {
     const response = await api.get('/auth/me');
     return response.data;
   },
+  
+  getMyCloudStorage: async () => {
+    const response = await api.get('/users/me/storage');
+    return response.data;
+  },
 
   // ── UPDATE TEXT PROFILE ──
   updateProfile: async (userId, data) => {

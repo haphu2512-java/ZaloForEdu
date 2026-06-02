@@ -2,7 +2,9 @@ const { z } = require('zod');
 
 const sendMessageSchema = z.object({
   conversationId: z.string().trim().min(24).max(24),
-  content: z.string().trim().max(5000).default(''),
+  content: z.string().trim().max(5000, {
+  message: 'Tin nhắn vượt quá giới hạn 5000 ký tự'
+}).default(''),
   mediaIds: z.array(z.string().trim().min(24).max(24)).default([]),
   replyTo: z.string().trim().min(24).max(24).optional(),
   forwardFrom: z.string().trim().min(24).max(24).optional(),

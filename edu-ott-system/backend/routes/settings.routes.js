@@ -44,4 +44,11 @@ router.get('/me', auth, settingsController.getMySettings);
  */
 router.put('/me', auth, validate({ body: updateSettingsSchema }), settingsController.updateMySettings);
 
+// ── Hidden-conversation PIN ─────────────────────────────────────────────────
+router.put('/hidden-pin', auth, settingsController.setHiddenPin);
+router.post('/hidden-pin/verify', auth, settingsController.verifyHiddenPin);
+router.delete('/hidden-pin', auth, settingsController.removeHiddenPin);
+// Reset PIN using account password (forgot PIN flow)
+router.post('/hidden-pin/reset', auth, settingsController.resetHiddenPin);
+
 module.exports = router;

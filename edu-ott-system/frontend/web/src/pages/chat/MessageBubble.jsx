@@ -1,17 +1,24 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import {
   FaDownload, FaCheckDouble, FaCheck, FaClock, FaSmile,
-  FaShare, FaReply, FaEllipsisH, FaUndo, FaTrash, FaCopy, FaThumbtack, FaCrown, FaStar
+  FaShare, FaReply, FaEllipsisH, FaUndo, FaTrash, FaCopy, FaThumbtack, FaCrown, FaStar, FaPlayCircle, FaInfoCircle
 } from 'react-icons/fa';
-import { getExt, getCategory, getFileColor, formatBytes, toAbsoluteUrl } from './chatUtils';
+import { getExt, getCategory, getFileColor, formatBytes, toAbsoluteUrl, forceDownload, openDocument } from './chatUtils';
 import { AudioBubble } from '../../components/shared/AudioBubble';
 import PollMessage from './PollMessage';
 import { conversationService } from '../../services/conversationService';
 import toast from 'react-hot-toast';
+import { DEFAULT_AVATAR } from '../../utils/constants';
+import { BOT_NAME, BOT_USERNAME, BOT_ID, BOT_AVATAR } from '../../config/bot';
+
 
 const API_ORIGIN = (import.meta.env.VITE_API_URL || 'http://localhost:5000/api/v1').replace(/\/api\/v1\/?$/, '');
 
-const EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '😡'];
+const EMOJIS = ['😀', '😂', '😍', '🥰', '👍', '❤️', '🔥', '😭', '🙏', '🎉'];
+
+// Fallback SVG avatar
+const DEFAULT_AVATAR_SVG = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' rx='20' fill='%23d8dadf'/%3E%3Ccircle cx='20' cy='15' r='7' fill='%23bcc0c4'/%3E%3Cpath d='M6 35 Q6 26 20 26 Q34 26 34 35' fill='%23bcc0c4'/%3E%3C/svg%3E";
 
 // Render URLs as clickable links
 const renderContent = (text) => {
@@ -55,12 +62,24 @@ export const MessageBubble = ({
   const isPrivilegedSender = isOwner || isAdmin;
   const shouldShowAdminBadge = isPrivilegedSender && activeConversation?.settings?.markAdminMessages !== false;
 
+  const editHistory = message.editHistory || [];
+
+  // Check if message is soft-deleted for this user (deletedBy contains userId)
+  const deletedByMe = Array.isArray(message.deletedBy)
+    ? message.deletedBy.some(id => String(id?._id || id) === String(userId))
+    : false;
+
+  if (deletedByMe) return null;
+
   // Highlight mentions function
   const renderContentWithMentions = (text) => {
     if (!text) return '';
-    // Tách văn bản dựa trên @username hoặc @all
-    const parts = text.split(/(@\S+)/g);
+    // Tách văn bản dựa trên URL hoặc @username
+    const parts = text.split(/(https?:\/\/[^\s]+|@\S+)/g);
     return parts.map((part, i) => {
+      if (part.startsWith('http')) {
+        return <a key={i} href={part} target="_blank" rel="noopener noreferrer" style={{ color: isMe ? '#E0F2FE' : '#0084FF', textDecoration: 'underline' }} onClick={e => e.stopPropagation()}>{part}</a>;
+      }
       if (part.startsWith('@')) {
         return <span key={i} style={{ color: isMe ? '#E0F2FE' : '#0084FF', fontWeight: 600 }}>{part}</span>;
       }
@@ -72,7 +91,11 @@ export const MessageBubble = ({
   // ... (rest of state and hooks)
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
+  const [menuDirection, setMenuDirection] = useState('bottom');
   const [pinLoading, setPinLoading] = useState(false);
+  const [viewingMedia, setViewingMedia] = useState(null);
+  const [showMediaInfo, setShowMediaInfo] = useState(false);
+  const [showDetailsModal, setShowDetailsModal] = useState(false);
   const menuRef = useRef(null);
 
   const rawMediaList = isRecalled ? [] : (message.attachments || message.mediaIds || message.media || []);
@@ -84,8 +107,15 @@ export const MessageBubble = ({
     .filter(att => att && (att._id || att.id));
 
   const timeString = new Date(createdAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
-  const avatar = toAbsoluteUrl(sender?.avatarUrl || sender?.avatar) || 'https://i.pravatar.cc/150';
-  const name = sender?.fullName || sender?.username || 'Người dùng';
+  let avatar = toAbsoluteUrl(sender?.avatarUrl || sender?.avatar) || DEFAULT_AVATAR;
+  if ((!avatar || avatar === DEFAULT_AVATAR) && (
+    sender?.username === BOT_USERNAME || sender?.username === BOT_NAME || String(sender?._id || sender?.id || sender) === BOT_ID
+  )) {
+    avatar = BOT_AVATAR;
+  }
+  const senderIdStr = String(sender?._id || sender?.id || sender || '');
+  const nickname = activeConversation?.nicknames?.[senderIdStr];
+  const name = nickname || sender?.fullName || sender?.username || 'Người dùng';
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -104,7 +134,7 @@ export const MessageBubble = ({
   if (stickerUrl) {
     return (
       <div id={`msg-${_id}`} className={`mdc-msg-wrap ${isMe ? 'me' : 'them'}`}>
-        {!isMe && <img src={avatar} alt="avatar" className="mdc-msg-avatar" />}
+        {!isMe && <img src={avatar} alt="avatar" className="mdc-msg-avatar" onError={e => { e.currentTarget.src = DEFAULT_AVATAR_SVG; }} />}
         <div className="mdc-msg-body">
           {!isMe && sender && <div className="mdc-msg-sender-name">{name}</div>}
           <img
@@ -144,7 +174,7 @@ export const MessageBubble = ({
     if (pollData) {
       return (
         <div id={`msg-${_id}`} className={`mdc-msg-wrap ${isMe ? 'me' : 'them'}`}>
-          {!isMe && <img src={avatar} alt="avatar" className="mdc-msg-avatar" />}
+          {!isMe && <img src={avatar} alt="avatar" className="mdc-msg-avatar" onError={e => { e.currentTarget.src = DEFAULT_AVATAR_SVG; }} />}
           <div className="mdc-msg-body">
             {!isMe && sender && <div className="mdc-msg-sender-name">{name}</div>}
             {isPinned && (
@@ -204,6 +234,16 @@ export const MessageBubble = ({
     }
   };
 
+  const handleToggleMoreMenu = (e) => {
+    if (!showMoreMenu) {
+      const rect = e.currentTarget.getBoundingClientRect();
+      const distanceToBottom = window.innerHeight - rect.bottom;
+      setMenuDirection(distanceToBottom < 220 ? 'top' : 'bottom');
+    }
+    setShowMoreMenu(!showMoreMenu);
+    setShowEmojiPicker(false);
+  };
+
   return (
     <div
       id={`msg-${_id}`}
@@ -212,7 +252,7 @@ export const MessageBubble = ({
       onMouseLeave={() => { setIsHovered(false); if (!showMoreMenu && !showEmojiPicker) setShowMoreMenu(false); }}
       style={{ position: 'relative' }}
     >
-      {!isMe && <img src={avatar} alt="avatar" className="mdc-msg-avatar" />}
+      {!isMe && <img src={avatar} alt="avatar" className="mdc-msg-avatar" onError={e => { e.currentTarget.src = DEFAULT_AVATAR_SVG; }} />}
 
       <div className="mdc-msg-body">
 
@@ -281,11 +321,16 @@ export const MessageBubble = ({
                                 backgroundColor: '#f0f2f5', margin: 0, borderRadius: 0
                               }}>
                               {isVideo ? (
-                                <video src={att.url} controls style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                                <div style={{ width: '100%', height: '100%', position: 'relative', cursor: 'pointer' }} onClick={() => setViewingMedia({ url: toAbsoluteUrl(att.url), isVideo: true, isDoc: false, name: att.fileName || att.name || 'Video', size: formatBytes(att.size || 0), sender: name, time: timeString, date: new Date(createdAt).toLocaleDateString('vi-VN') })}>
+                                  <video src={toAbsoluteUrl(att.url)} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                                  <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.2)' }}>
+                                    <FaPlayCircle size={32} color="#fff" style={{ opacity: 0.8 }} />
+                                  </div>
+                                </div>
                               ) : (
-                                <img src={att.url} alt="attachment" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                                <img src={toAbsoluteUrl(att.url)} alt="attachment" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', cursor: 'pointer' }} onClick={() => setViewingMedia({ url: toAbsoluteUrl(att.url), isVideo: false, isDoc: false, name: att.fileName || att.name || 'Image', size: formatBytes(att.size || 0), sender: name, time: timeString, date: new Date(createdAt).toLocaleDateString('vi-VN') })} />
                               )}
-                              <a className="mdc-img-dl-btn" href={att.url} target="_blank" rel="noreferrer" title="Tải về" onClick={e => e.stopPropagation()}><FaDownload size={11} /></a>
+                              <a className="mdc-img-dl-btn" title="Tải về" onClick={e => { e.preventDefault(); e.stopPropagation(); forceDownload(att.url, att.fileName || att.name || 'image'); }}><FaDownload size={11} /></a>
                               {isLast && remain > 0 && (
                                 <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.5)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '24px', fontWeight: 'bold' }}>
                                   +{remain}
@@ -299,9 +344,9 @@ export const MessageBubble = ({
 
                     {docs.length > 0 && docs.map((att, i) => {
                       const fileName = att.name || att.fileName || `Tệp ${i + 1}`;
-                      const downloadUrl = att.url;
+                      const downloadUrl = toAbsoluteUrl(att.url);
                       return (
-                        <div key={`doc-${i}`} className="mdc-file-bubble">
+                        <div key={`doc-${i}`} className="mdc-file-bubble" style={{ cursor: 'pointer' }} onClick={(e) => { e.stopPropagation(); openDocument(downloadUrl, fileName); }}>
                           <div className="mdc-fb-icon" style={{ background: getFileColor(fileName) }}>
                             {getExt(fileName).toUpperCase().slice(0, 4)}
                           </div>
@@ -309,13 +354,13 @@ export const MessageBubble = ({
                             <span className="mdc-fb-name">{fileName}</span>
                             <div className="mdc-fb-meta">{formatBytes(att.size)}</div>
                           </div>
-                          <a href={downloadUrl} onClick={e => e.stopPropagation()} download={fileName} className="mdc-fb-btn"><FaDownload size={13} /></a>
+                          <a onClick={e => { e.preventDefault(); e.stopPropagation(); forceDownload(att.url, fileName); }} className="mdc-fb-btn"><FaDownload size={13} /></a>
                         </div>
                       );
                     })}
 
                     {audios.length > 0 && audios.map((att, i) => (
-                      <AudioBubble key={`audio-${i}`} url={att.url} duration={att.duration} />
+                      <AudioBubble key={`audio-${i}`} url={toAbsoluteUrl(att.url)} duration={att.duration} />
                     ))}
                   </div>
                 )}
@@ -329,7 +374,13 @@ export const MessageBubble = ({
             )}
 
             {!isRecalled && reactions?.length > 0 && (
-              <div style={{
+              <div
+                title={reactions.some(r => String(r.userId) === String(userId) || String(r.userId?._id) === String(userId)) ? "Nhấn để gỡ cảm xúc của bạn" : ""}
+                onClick={() => {
+                  const hasReacted = reactions.some(r => String(r.userId) === String(userId) || String(r.userId?._id) === String(userId));
+                  if (hasReacted) onReaction(_id, null);
+                }}
+                style={{
                 position: 'absolute',
                 bottom: '-14px',
                 right: isMe ? '4px' : 'auto',
@@ -344,7 +395,8 @@ export const MessageBubble = ({
                 zIndex: 10,
                 border: '1px solid var(--z-border)',
                 color: 'var(--z-text-primary)',
-                fontSize: '11px'
+                fontSize: '11px',
+                cursor: reactions.some(r => String(r.userId) === String(userId) || String(r.userId?._id) === String(userId)) ? 'pointer' : 'default'
               }}>
                 {reactions.slice(0, 3).map((r, i) => (
                   <div key={i} style={{ display: 'flex', alignItems: 'center' }}>
@@ -365,11 +417,16 @@ export const MessageBubble = ({
               <div className="mdc-msg-menu-pill">
                 <button className="mdc-pill-btn" title="Thả cảm xúc" onClick={() => { setShowEmojiPicker(!showEmojiPicker); setShowMoreMenu(false); }}><FaSmile size={12} /></button>
                 <button className="mdc-pill-btn" title="Trả lời" onClick={() => onReply?.(message)}><FaReply size={12} /></button>
-                <button className="mdc-pill-btn" title="Thêm" onClick={() => { setShowMoreMenu(!showMoreMenu); setShowEmojiPicker(false); }}><FaEllipsisH size={12} /></button>
+                <button className="mdc-pill-btn" title="Thêm" onClick={handleToggleMoreMenu}><FaEllipsisH size={12} /></button>
               </div>
 
               {showMoreMenu && (
-                <div className="mdc-msg-menu" style={{ right: isMe ? 0 : 'auto', left: isMe ? 'auto' : 0 }}>
+                <div className="mdc-msg-menu" style={{ 
+                  right: isMe ? 0 : 'auto', 
+                  left: isMe ? 'auto' : 0,
+                  top: menuDirection === 'bottom' ? 'calc(100% - 20px)' : 'auto',
+                  bottom: menuDirection === 'top' ? 'calc(100% - 20px)' : 'auto',
+                }}>
                   {content && (
                     <div className="mdc-mm-item" onClick={() => { navigator.clipboard.writeText(content); setShowMoreMenu(false); }}>
                       <FaCopy size={13} color="#65676B" /> Sao chép
@@ -392,6 +449,12 @@ export const MessageBubble = ({
                     </div>
                   )}
 
+                  {mediaList.length > 0 && (
+                    <div className="mdc-mm-item" onClick={() => { setShowDetailsModal(true); setShowMoreMenu(false); }}>
+                      <FaInfoCircle size={13} color="#65676B" /> Xem chi tiết
+                    </div>
+                  )}
+
                   {isMe && (
                     <div className="mdc-mm-item" onClick={() => { onRecall?.(_id); setShowMoreMenu(false); }}>
                       <FaUndo size={13} color="#65676B" /> Thu hồi
@@ -406,23 +469,114 @@ export const MessageBubble = ({
 
               {showEmojiPicker && (
                 <div className="mdc-msg-emoji-tray" style={{ right: isMe ? '0' : 'auto', left: isMe ? 'auto' : '0' }}>
-                  {EMOJIS.map(e => (
-                    <span
-                      key={e}
-                      onClick={() => { onReaction(_id, e); setShowEmojiPicker(false); }}
-                      style={{ fontSize: '18px', cursor: 'pointer', transition: 'transform 0.1s' }}
-                      onMouseEnter={(ev) => ev.currentTarget.style.transform = 'scale(1.2)'}
-                      onMouseLeave={(ev) => ev.currentTarget.style.transform = 'scale(1)'}
-                    >
-                      {e}
-                    </span>
-                  ))}
+                  {EMOJIS.map(e => {
+                    const isSelected = reactions?.some(r => r.emoji === e && (String(r.userId) === String(userId) || String(r.userId?._id) === String(userId)));
+                    return (
+                      <span
+                        key={e}
+                        onClick={() => { onReaction(_id, isSelected ? null : e); setShowEmojiPicker(false); }}
+                        style={{ fontSize: '18px', cursor: 'pointer', transition: 'transform 0.1s', background: isSelected ? 'var(--z-primary-light)' : 'transparent', borderRadius: '50%', padding: '0 2px' }}
+                        onMouseEnter={(ev) => ev.currentTarget.style.transform = 'scale(1.2)'}
+                        onMouseLeave={(ev) => ev.currentTarget.style.transform = 'scale(1)'}
+                      >
+                        {e}
+                      </span>
+                    );
+                  })}
                 </div>
               )}
             </div>
           )}
         </div>
       </div>
+
+      {showDetailsModal && createPortal(
+        <div style={{ position: 'fixed', inset: 0, zIndex: 99999, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setShowDetailsModal(false)}>
+          <div style={{ background: 'var(--z-bg-main)', width: 340, borderRadius: 12, padding: 20, boxShadow: '0 4px 20px rgba(0,0,0,0.15)' }} onClick={e => e.stopPropagation()}>
+            <h3 style={{ margin: '0 0 16px 0', fontSize: 18, color: 'var(--z-text-primary)' }}>Chi tiết tin nhắn</h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, fontSize: 14 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: 'var(--z-text-secondary)' }}>Người gửi:</span>
+                <span style={{ fontWeight: 500, color: 'var(--z-text-primary)' }}>{name}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: 'var(--z-text-secondary)' }}>Thời gian:</span>
+                <span style={{ fontWeight: 500, color: 'var(--z-text-primary)' }}>{timeString} - {new Date(createdAt).toLocaleDateString('vi-VN')}</span>
+              </div>
+              
+              {mediaList.length > 0 && (
+                <div style={{ marginTop: 8 }}>
+                  <div style={{ color: 'var(--z-text-secondary)', marginBottom: 8, fontSize: 13 }}>Tệp đính kèm ({mediaList.length}):</div>
+                  <div style={{ maxHeight: 160, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {mediaList.map((m, i) => (
+                      <div key={i} style={{ background: 'var(--z-bg-sidebar)', padding: '10px 12px', borderRadius: 8, display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <div style={{ width: 36, height: 36, borderRadius: 6, background: 'var(--z-primary-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--z-primary)', fontWeight: 'bold', fontSize: 12 }}>
+                          {getExt(m.name || m.fileName || '').toUpperCase().slice(0,3) || 'FILE'}
+                        </div>
+                        <div style={{ flex: 1, overflow: 'hidden' }}>
+                          <div style={{ fontWeight: 500, color: 'var(--z-text-primary)', fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{m.name || m.fileName || `Tệp ${i+1}`}</div>
+                          <div style={{ color: 'var(--z-text-secondary)', fontSize: 12, marginTop: 2 }}>{formatBytes(m.size || 0)}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+            <button onClick={() => setShowDetailsModal(false)} style={{ width: '100%', padding: '10px 0', marginTop: 20, background: 'var(--z-primary)', color: '#fff', border: 'none', borderRadius: 8, fontWeight: 600, cursor: 'pointer', transition: 'background 0.2s' }} onMouseEnter={e => e.currentTarget.style.background = 'var(--z-primary-dark)'} onMouseLeave={e => e.currentTarget.style.background = 'var(--z-primary)'}>Đóng</button>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {viewingMedia && createPortal(
+        <div style={{ position: 'fixed', inset: 0, zIndex: 99999, background: 'rgba(0,0,0,0.9)', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => { setViewingMedia(null); setShowMediaInfo(false); }}>
+          {showMediaInfo && (
+            <div style={{ position: 'absolute', top: 80, left: 24, color: '#fff', fontSize: 14, background: 'rgba(20,20,20,0.85)', backdropFilter: 'blur(10px)', border: '1px solid rgba(255,255,255,0.1)', padding: '20px 24px', borderRadius: 16, width: 300, boxShadow: '0 8px 32px rgba(0,0,0,0.3)', transition: 'all 0.3s ease', transform: showMediaInfo ? 'translateX(0)' : 'translateX(-20px)', opacity: showMediaInfo ? 1 : 0 }} onClick={e => e.stopPropagation()}>
+              <div style={{ fontWeight: '600', fontSize: 18, marginBottom: 16, paddingBottom: 12, borderBottom: '1px solid rgba(255,255,255,0.1)', wordBreak: 'break-word' }}>{viewingMedia.name}</div>
+              
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: 13 }}>Dung lượng</span>
+                  <span style={{ fontWeight: '500' }}>{viewingMedia.size}</span>
+                </div>
+                
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: 13 }}>Người gửi</span>
+                  <span style={{ fontWeight: '500' }}>{viewingMedia.sender}</span>
+                </div>
+                
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: 13 }}>Thời gian</span>
+                  <span style={{ fontWeight: '500' }}>{viewingMedia.time}</span>
+                </div>
+                
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: 13 }}>Ngày gửi</span>
+                  <span style={{ fontWeight: '500' }}>{viewingMedia.date}</span>
+                </div>
+              </div>
+            </div>
+          )}
+          
+          <a style={{ position: 'absolute', top: 20, right: 120, background: 'none', border: 'none', color: '#fff', fontSize: 24, cursor: 'pointer', display: 'flex', alignItems: 'center' }} onClick={(e) => { e.stopPropagation(); setShowMediaInfo(!showMediaInfo); }} title="Thông tin chi tiết">
+            <FaInfoCircle size={24} />
+          </a>
+          <a style={{ position: 'absolute', top: 20, right: 70, background: 'none', border: 'none', color: '#fff', fontSize: 24, cursor: 'pointer', display: 'flex', alignItems: 'center' }} onClick={(e) => { e.stopPropagation(); forceDownload(viewingMedia.url, viewingMedia.name || 'download'); }} title="Tải xuống">
+            <FaDownload size={24} />
+          </a>
+          <button style={{ position: 'absolute', top: 12, right: 20, background: 'none', border: 'none', color: '#fff', fontSize: 36, cursor: 'pointer' }} onClick={() => { setViewingMedia(null); setShowMediaInfo(false); }}>&times;</button>
+          
+          {viewingMedia.isDoc ? (
+            <iframe src={['doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx'].includes(getExt(viewingMedia.name)) && !viewingMedia.url.includes('localhost') ? `https://docs.google.com/viewer?url=${encodeURIComponent(viewingMedia.url)}&embedded=true` : viewingMedia.url} style={{ width: '80%', height: '80%', background: '#fff', border: 'none', borderRadius: 8 }} onClick={e => e.stopPropagation()} />
+          ) : viewingMedia.isVideo ? (
+             <video src={viewingMedia.url} controls autoPlay style={{ maxWidth: '90%', maxHeight: '90%' }} onClick={e => e.stopPropagation()} />
+          ) : (
+             <img src={viewingMedia.url} alt="Full view" style={{ maxWidth: '90%', maxHeight: '90%', objectFit: 'contain' }} onClick={e => e.stopPropagation()} />
+          )}
+        </div>,
+        document.body
+      )}
     </div>
   );
 };

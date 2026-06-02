@@ -4,11 +4,14 @@ import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { FaSearch, FaUsers, FaCloud, FaSpinner, FaUserSecret, FaArrowLeft, FaUserPlus, FaCheck, FaTimes, FaLock, FaGlobe, FaUserFriends, FaInbox, FaShieldAlt } from "react-icons/fa";
 import toast from "react-hot-toast";
 
+import { useConfirm } from "../../contexts/ConfirmContext";
+
 import { uploadFile } from "../../services/mediaService";
 import { useFriendStore } from "../../store/friendStore";
 import { socketService } from "../../services/socketService";
 import { useChatSocket } from "./useChatSocket";
 import { MessageBubble } from "./MessageBubble";
+import { SearchInConversation } from "./SearchInConversation";
 import { ShareMessageModal } from "./Modals/ShareMessageModal";
 import AddFriendModal from "./Modals/AddFriendModal";
 import CreateGroupModal from "./Modals/CreateGroupModal";
@@ -21,16 +24,18 @@ import { MessageInput } from "./MessageInput";
 import { ChatRightPanel } from "./ChatRightPanel";
 import { ChatSidebar } from "./ChatSidebar";
 import { PinnedBar } from "./PinnedBar";
+import { TypingIndicator } from "./TypingIndicator";
 import { ReminderListPage } from "./ReminderListPage";
 import MyDocumentsPage from "../cloud/MyDocumentsPage";
 import { useTheme } from '../../contexts/ThemeContext';
 import { useLanguage } from '../../contexts/LanguageContext';
-import { getCategory } from './chatUtils';
+import { getCategory, toAbsoluteUrl } from './chatUtils';
 import "./ChatPage.css";
 import { conversationService } from "../../services/conversationService";
 import ConversationContextMenu from "./Modals/ConversationContextMenu";
 import ReportUserModal from "./Modals/ReportUserModal";
 import AddMemberModal from "./Modals/AddMemberModal";
+import DeleteConversationModal from "./Modals/DeleteConversationModal";
 
 // ── Custom hooks ──────────────────────────────────────────────────────────────
 import { useMessages } from "./hooks/useMessages";
@@ -38,11 +43,12 @@ import { useReminders } from "./hooks/useReminders";
 import { usePinnedMessages } from "./hooks/usePinnedMessages";
 import { useConversationActions } from "./hooks/useConversationActions";
 import { useHiddenConversations } from "./hooks/useHiddenConversations";
+import { DEFAULT_AVATAR } from '../../utils/constants';
+
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api/v1";
 const API_ORIGIN = API_BASE_URL.replace(/\/api\/v1\/?$/, "");
 
-const DEFAULT_AVATAR = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' rx='20' fill='%23d8dadf'/%3E%3Ccircle cx='20' cy='15' r='7' fill='%23bcc0c4'/%3E%3Cpath d='M6 35 Q6 26 20 26 Q34 26 34 35' fill='%23bcc0c4'/%3E%3C/svg%3E";
 const CLOUD_AVATAR = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' rx='20' fill='%230068FF'/%3E%3Cpath d='M28 22a5 5 0 0 0-4.9-5 7 7 0 0 0-13.1 3A4 4 0 0 0 12 28h16a4 4 0 0 0 0-6z' fill='white'/%3E%3C/svg%3E";
 
 const formatChatTimestamp = (dateString) => {
@@ -66,17 +72,20 @@ const shouldShowDateDivider = (curr, prev) => {
   return c - p >= DIVIDER_GAP_MS;
 };
 
+// FIX 2 — chỉ hiện nhãn ngữ nghĩa, không có timeStr
 const formatDateDivider = (dateString) => {
   const d = new Date(dateString);
   const now = new Date();
-  const diffDays = Math.round((new Date(now.getFullYear(), now.getMonth(), now.getDate()) - new Date(d.getFullYear(), d.getMonth(), d.getDate())) / 86400000);
+  const diffDays = Math.round(
+    (new Date(now.getFullYear(), now.getMonth(), now.getDate()) -
+      new Date(d.getFullYear(), d.getMonth(), d.getDate())) / 86400000
+  );
   const timeStr = d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', hour12: false });
-  let label;
-  if (diffDays === 0) label = 'Hôm nay';
-  else if (diffDays === 1) label = 'Hôm qua';
-  else if (diffDays < 7) label = ['Chủ nhật', 'Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7'][d.getDay()];
-  else label = d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' });
-  return `${timeStr} ${label}`;
+  if (diffDays === 0) return `Hôm nay ${timeStr}`;
+  if (diffDays === 1) return `Hôm qua ${timeStr}`;
+  const dayNames = ['Chủ nhật', 'Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7'];
+  const dateStr = d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  return `${dayNames[d.getDay()]}, ${dateStr} ${timeStr}`;
 };
 
 function UploadBubble({ name, percent }) {
@@ -101,6 +110,7 @@ function UploadBubble({ name, percent }) {
 // ── ReminderDetailModal (tách ra khỏi ChatPage render) ────────────────────────
 function ReminderDetailModal({ reminderId, reminders, userId, onClose, onEdit, onDelete, onJoin, onDecline }) {
   const rem = reminders.find(r => r._id === reminderId);
+  const confirm = useConfirm();
   if (!rem) return null;
   const remDate = new Date(rem.remindAt);
   const dayNames = ['Chủ Nhật', 'Thứ Hai', 'Thứ Ba', 'Thứ Tư', 'Thứ Năm', 'Thứ Sáu', 'Thứ Bảy'];
@@ -137,7 +147,7 @@ function ReminderDetailModal({ reminderId, reminders, userId, onClose, onEdit, o
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
               {(rem.participants || []).map((p, i) => (
                 <div key={String(p._id || p.id || i)} title={p.username || ''} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
-                  <img src={p.avatarUrl || DEFAULT_AVATAR} onError={e => { e.currentTarget.src = DEFAULT_AVATAR }} style={{ width: 36, height: 36, borderRadius: '50%', objectFit: 'cover' }} alt="" />
+                  <img src={toAbsoluteUrl(p.avatarUrl || p.avatar) || DEFAULT_AVATAR} onError={e => { e.currentTarget.src = DEFAULT_AVATAR }} style={{ width: 36, height: 36, borderRadius: '50%', objectFit: 'cover' }} alt="" />
                   <span style={{ fontSize: 10, color: 'var(--z-text-muted)', maxWidth: 44, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.username}</span>
                 </div>
               ))}
@@ -158,7 +168,7 @@ function ReminderDetailModal({ reminderId, reminders, userId, onClose, onEdit, o
         </div>
         <div style={{ padding: '12px 20px', borderTop: '1px solid var(--z-border)', display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
           <button onClick={() => { onEdit(rem); onClose(); }} style={{ padding: '8px 20px', borderRadius: 8, border: '1px solid var(--z-border)', background: 'transparent', color: 'var(--z-text-primary)', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>Chỉnh sửa</button>
-          <button onClick={() => { if (window.confirm(`Hủy nhắc hẹn "${rem.title}"?`)) { onDelete(rem._id); onClose(); } }} style={{ padding: '8px 20px', borderRadius: 8, border: 'none', background: '#ffe4e6', color: '#e11d48', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>Hủy nhắc hẹn</button>
+          <button onClick={async () => { if (await confirm(`Hủy nhắc hẹn "${rem.title}"?`)) { onDelete(rem._id); onClose(); } }} style={{ padding: '8px 20px', borderRadius: 8, border: 'none', background: '#ffe4e6', color: '#e11d48', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>Hủy nhắc hẹn</button>
           <button onClick={onClose} style={{ padding: '8px 20px', borderRadius: 8, border: 'none', background: 'var(--z-primary)', color: 'white', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>Đóng</button>
         </div>
       </div>
@@ -173,6 +183,7 @@ export default function ChatPage() {
   const { roomId } = useParams();
   const { appliedTheme } = useTheme();
   const { t } = useLanguage();
+  const confirm = useConfirm();
 
   // ── Core state ────────────────────────────────────────────────────────────
   const [conversations, setConversations] = useState([]);
@@ -187,17 +198,62 @@ export default function ChatPage() {
   const [reportTarget, setReportTarget] = useState(null);
   const [showAddFriendModal, setShowAddFriendModal] = useState(false);
   const [showCreateGroupModal, setShowCreateGroupModal] = useState(false);
+  const [createGroupInitialSelected, setCreateGroupInitialSelected] = useState([]);
   const [showCreatePollModal, setShowCreatePollModal] = useState(false);
   const [showAddMemberModal, setShowAddMemberModal] = useState(false);
   const [reminderDetailId, setReminderDetailId] = useState(null);
   const [pendingEditReminder, setPendingEditReminder] = useState(null);
   const [showReminderListPage, setShowReminderListPage] = useState(false);
+  const [showSearchInConv, setShowSearchInConv] = useState(false);
+  const [typingUsers, setTypingUsers] = useState({}); // { conversationId: [{userId, username}] }
+  const [unblockLoading, setUnblockLoading] = useState(false);
+  const [isBlockedByThem, setIsBlockedByThem] = useState(false);
+  const { blockedUsers, unblockUser: unblockUserStore, fetchBlockedUsers, previouslyBlockedIds } = useFriendStore();
+
+  const [showBlockWarningModal, setShowBlockWarningModal] = useState(false);
+  const [blockConflictDetails, setBlockConflictDetails] = useState(null);
+  const [acceptedBlockWarnings, setAcceptedBlockWarnings] = useState({});
+
+  // ── Pagination state ──────────────────────────────────────────────────────
+  const [msgCursor, setMsgCursor] = useState(null);
+  const [hasMoreMessages, setHasMoreMessages] = useState(false);
+  const [loadingMoreMessages, setLoadingMoreMessages] = useState(false);
+  const messagesContainerRef = useRef(null);
 
   const pageRef = useRef(null);
   const messagesEndRef = useRef(null);
   const activeConvIdRef = useRef(null);
   const activeConversationRef = useRef(null);
   const conversationsRef = useRef([]);
+  const setBlockedUsersRealtime = useFriendStore(state => state.setBlockedUsersRealtime);
+
+  const handleBlockStatusChanged = useCallback(() => {
+    // Xóa tất cả các cảnh báo đã chấp nhận vì trạng thái chặn vừa thay đổi
+    setAcceptedBlockWarnings({});
+
+    const activeId = activeConvIdRef.current;
+    if (!activeId) return;
+    const isGroup = activeConversationRef.current?.type === 'group' || activeConversationRef.current?.roomModel === 'Group';
+
+    conversationService.checkBlockConflict(activeId).then(res => {
+      const hasConflict = res.data?.hasConflict || res.hasConflict;
+      const details = res.data?.details || res.details;
+      if (isGroup) {
+        if (hasConflict) {
+          setBlockConflictDetails(details);
+          setShowBlockWarningModal(true);
+        } else {
+          setShowBlockWarningModal(false);
+        }
+      } else {
+        if (details?.blockedMe?.length > 0) {
+          setIsBlockedByThem(true);
+        } else {
+          setIsBlockedByThem(false);
+        }
+      }
+    }).catch(console.error);
+  }, []);
 
   // ── Auth ──────────────────────────────────────────────────────────────────
   const userId = useMemo(() => {
@@ -218,7 +274,12 @@ export default function ChatPage() {
   useEffect(() => {
     if (hasFetchedRef.current) return;
     hasFetchedRef.current = true;
-    setTimeout(() => { fetchFriends(); fetchOutgoingRequests(1, true); fetchIncomingRequests(); }, 100);
+    setTimeout(() => { 
+      fetchFriends(); 
+      fetchOutgoingRequests(1, true); 
+      fetchIncomingRequests(); 
+      fetchBlockedUsers(); // Tải danh sách chặn
+    }, 100);
   }, []);
 
   const friendIds = useMemo(() => new Set(friends.map(f => String(f._id || f.id))), [friends]);
@@ -244,12 +305,21 @@ export default function ChatPage() {
     return null;
   }, [getOtherParticipant]);
 
+  // Memoize isBlockedByMe based on store and active conversation
+  const isBlockedByMe = useMemo(() => {
+    if (!activeConversation || activeConversation.type === "group") return false;
+    const other = getOtherParticipant(activeConversation);
+    if (!other) return false;
+    const otherId = String(other._id || other.id || "");
+    return blockedUsers.some(u => String(u._id || u.id || "") === otherId);
+  }, [activeConversation, blockedUsers, getOtherParticipant]);
+
   const getConversationAvatar = useCallback((conv) => {
     if (!conv) return DEFAULT_AVATAR;
     if (conv.type === 'direct' && conv.participants?.length === 1) return CLOUD_AVATAR;
-    if (conv.type === 'group' || conv.roomModel === 'Group') return conv.avatarUrl || conv.avatar || DEFAULT_AVATAR;
+    if (conv.type === 'group' || conv.roomModel === 'Group') return toAbsoluteUrl(conv.avatarUrl || conv.avatar) || DEFAULT_AVATAR;
     const other = getOtherParticipant(conv);
-    if (other && typeof other === 'object') return other.avatarUrl || other.avatar || DEFAULT_AVATAR;
+    if (other && typeof other === 'object') return toAbsoluteUrl(other.avatarUrl || other.avatar) || DEFAULT_AVATAR;
     return DEFAULT_AVATAR;
   }, [getOtherParticipant]);
 
@@ -264,6 +334,30 @@ export default function ChatPage() {
     } catch (err) { console.error("Lỗi lấy danh sách:", err); }
   }, [token]);
 
+  // ── Sync activeConversation ───────────────────────────────────────────────
+  useEffect(() => {
+    if (activeConversation && !activeConversation.isMock) {
+      const updatedConv = conversations.find(c => String(c._id) === String(activeConversation._id));
+      if (updatedConv) {
+        setActiveConversation(prev => {
+          if (!prev) return prev;
+          const prevParticipantsStr = JSON.stringify(prev.participants || []);
+          const updatedParticipantsStr = JSON.stringify(updatedConv.participants || []);
+          
+          if (
+            prevParticipantsStr !== updatedParticipantsStr ||
+            prev.name !== updatedConv.name ||
+            prev.avatarUrl !== updatedConv.avatarUrl ||
+            prev.avatar !== updatedConv.avatar
+          ) {
+            return { ...prev, ...updatedConv, settings: prev.settings }; // keep optimistic settings
+          }
+          return prev;
+        });
+      }
+    }
+  }, [conversations]);
+
   // ── Custom hooks ──────────────────────────────────────────────────────────
   const {
     messages, setMessages,
@@ -273,6 +367,7 @@ export default function ChatPage() {
     handleSendText, handleSendSticker, handleSendLike,
     handleUploadFile, handleUploadFilesFromInput,
     handleReaction, handleRecall, handleDelete,
+    // handleEdit, // TODO: uncomment khi BE sẵn sàng
   } = useMessages({ activeConversation, userId, token, getOtherParticipant, navigate, setConversations });
 
   const {
@@ -304,7 +399,10 @@ export default function ChatPage() {
     handlePinConversation, handleClassifyConversation,
     handleMuteConversation, handleMute,
     handleHideConversation, handleDeleteConversationCtx, handleLeaveGroupCtx,
-    handleDeleteConversation, handleUpdateGroupSettings,
+    handleDeleteConversation, confirmDeleteConversation,
+    deleteConfirmTarget, setDeleteConfirmTarget,
+    deletedFriendIds, setDeletedFriendIds,
+    handleUpdateGroupSettings,
     handleGroupAction, handleDisbandGroup, handleLeaveGroup, handleTransferOwnerAndLeave,
     openShareModal, executeForward, saveMessagePrivacy,
   } = useConversationActions({
@@ -318,10 +416,12 @@ export default function ChatPage() {
     showPinModal, setShowPinModal,
     pinModalMode, setPinModalMode,
     pinInput, setPinInput, pinConfirm, setPinConfirm,
+    pinCurrentInput, setPinCurrentInput,
     pinError, setPinError, pinStep, setPinStep,
-    getSavedPin,
+    hasPin,
     handlePinButtonClick, handlePinSubmit, handleUnhideConversation,
-  } = useHiddenConversations({ token, userId, fetchConversationsData });
+    handleEnterChangeMode, handleEnterForgotMode, resetPinModal,
+  } = useHiddenConversations({ token, fetchConversationsData });
 
   // ── Socket ────────────────────────────────────────────────────────────────
   useChatSocket({
@@ -332,6 +432,10 @@ export default function ChatPage() {
     setTriggeredReminder,
     fetchConversationsData, fetchIncomingRequests, fetchFriends, fetchOutgoingRequests,
     toast,
+    setTypingUsers,
+    setBlockedUsersRealtime,
+    onBlockStatusChanged: handleBlockStatusChanged,
+    setDeletedFriendIds,
   });
 
   // ── Merged conversation list ───────────────────────────────────────────────
@@ -350,9 +454,16 @@ export default function ChatPage() {
         if (other) directMap.add(String(typeof other === 'string' ? other : (other._id || other.id)));
       }
     });
+    // Build set of participant IDs who have a hidden OR deleted conversation — skip mock for them
+    const excludedParticipantIds = new Set([
+      ...hiddenConvs.flatMap(c =>
+        (c.participants || []).map(p => String(p._id || p.id || p)).filter(id => id !== String(userId))
+      ),
+      ...[...deletedFriendIds],
+    ]);
     friends.forEach(friend => {
       const fId = String(friend._id || friend.id);
-      if (!directMap.has(fId)) {
+      if (!directMap.has(fId) && !excludedParticipantIds.has(fId)) {
         convs.push({ _id: `mock_${fId}`, isMock: true, type: 'direct', participants: [{ _id: userId }, friend], latestMessage: null, unreadCount: 0 });
       }
     });
@@ -373,7 +484,7 @@ export default function ChatPage() {
     const filtered = categoryFilter !== 'all' ? deduped.filter(c => (c.preference?.category || 'primary') === categoryFilter) : deduped;
     if (!searchQuery.trim()) return filtered;
     return filtered.filter(c => getConversationName(c).toLowerCase().includes(searchQuery.toLowerCase()));
-  }, [conversations, friends, searchQuery, categoryFilter, userId, getConversationName, getOtherParticipant]);
+  }, [conversations, friends, hiddenConvs, deletedFriendIds, searchQuery, categoryFilter, userId, getConversationName, getOtherParticipant]);
 
   const activeIdStr = String(activeConversation?._id || '');
   const { friendConvs, strangerConvs } = useMemo(() => {
@@ -387,7 +498,13 @@ export default function ChatPage() {
       if (!conv.latestMessage) { if (String(conv._id) === activeIdStr) friendConvs.push(conv); return; }
       const firstSenderId = String(conv.firstSenderId?._id || conv.firstSenderId || '');
       const myId = String(userId || '');
-      if (!firstSenderId || firstSenderId === myId) friendConvs.push(conv);
+      // Nếu mình nhắn trước, đã reply, hoặc đã từng chặn → không phải người lạ
+      const iHaveInteracted = !firstSenderId || firstSenderId === myId;
+      const hadBlockRelation = !!otherId && (
+        blockedUsers.some(u => String(u._id || u.id) === otherId) ||
+        previouslyBlockedIds?.has(otherId)
+      );
+      if (iHaveInteracted || hadBlockRelation) friendConvs.push(conv);
       else strangerConvs.push(conv);
     });
     return { friendConvs, strangerConvs };
@@ -417,18 +534,45 @@ export default function ChatPage() {
   }, [roomId, mergedConversations, selfConversation]);
 
   useEffect(() => { activeConvIdRef.current = activeConversation?._id; activeConversationRef.current = activeConversation; }, [activeConversation]);
-  useEffect(() => { conversationsRef.current = conversations; }, [conversations]);
+  useEffect(() => { 
+    conversationsRef.current = conversations; 
+    window.globalConversations = conversations;
+  }, [conversations]);
 
   useEffect(() => {
     if (!activeConversation) return;
     setMessages([]);
     setJustSentRequestTo(null);
+    // ── Reset pagination on conversation change ──
+    setMsgCursor(null);
+    setHasMoreMessages(false);
+    setLoadingMoreMessages(false);
     if (activeConversation.isMock) return;
+
+    const isGroup = activeConversation.type === 'group' || activeConversation.roomModel === 'Group';
+    setIsBlockedByThem(false); // Reset on conv change
+    if (isGroup && !acceptedBlockWarnings[activeConversation._id]) {
+      conversationService.checkBlockConflict(activeConversation._id).then(res => {
+        const hasConflict = res.data?.hasConflict || res.hasConflict;
+        if (hasConflict) {
+          setBlockConflictDetails(res.data?.details || res.details);
+          setShowBlockWarningModal(true);
+        }
+      }).catch(console.error);
+    } else if (!isGroup) {
+      conversationService.checkBlockConflict(activeConversation._id).then(res => {
+        const details = res.data?.details || res.details;
+        if (details?.blockedMe?.length > 0) {
+          setIsBlockedByThem(true);
+        }
+      }).catch(console.error);
+    }
 
     const fetchMessages = async () => {
       try {
-        const res = await axios.get(`${API_BASE_URL}/messages/conversation/${activeConversation._id}?limit=50`, { headers: { Authorization: `Bearer ${token}` } });
+        const res = await axios.get(`${API_BASE_URL}/messages/conversation/${activeConversation._id}?limit=30`, { headers: { Authorization: `Bearer ${token}` } });
         const fetched = res.data.data?.items || res.data.items || [];
+        const nextCursor = res.data.data?.nextCursor || res.data.nextCursor || null;
         const normalized = fetched.map(m => ({
           ...m,
           mediaIds: (m.mediaIds || []).map(media => typeof media === 'object' && media.url && !/^https?:\/\//i.test(media.url) ? { ...media, url: `${API_ORIGIN}${media.url}` } : media)
@@ -439,6 +583,8 @@ export default function ChatPage() {
           return merged.filter(m => { const id = String(m._id); if (seen.has(id)) return false; seen.add(id); return true; })
             .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
         });
+        setMsgCursor(nextCursor);
+        setHasMoreMessages(!!nextCursor);
         setConversations(prev => prev.map(c => String(c._id) === String(activeConversation._id) ? { ...c, unreadCount: 0 } : c));
       } catch { setMessages([]); }
     };
@@ -448,7 +594,66 @@ export default function ChatPage() {
       .then(res => setPinnedMessages(res.data?.items || res.data || []))
       .catch(() => setPinnedMessages([]));
     socketService.socket?.emit("join_conversation", { conversationId: activeConversation._id });
+
   }, [activeConversation?._id, token]);
+
+  // ── Load more messages (pagination) ──────────────────────────────────────
+  const loadMoreMessages = useCallback(async () => {
+    if (!activeConversation || !msgCursor || loadingMoreMessages || !hasMoreMessages) return;
+    setLoadingMoreMessages(true);
+
+    const container = messagesContainerRef.current;
+    const prevScrollHeight = container?.scrollHeight || 0;
+
+    try {
+      const res = await axios.get(
+        `${API_BASE_URL}/messages/conversation/${activeConversation._id}?limit=30&cursor=${msgCursor}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      const fetched = res.data.data?.items || res.data.items || [];
+      const nextCursor = res.data.data?.nextCursor || res.data.nextCursor || null;
+      const normalized = fetched.map(m => ({
+        ...m,
+        mediaIds: (m.mediaIds || []).map(media =>
+          typeof media === 'object' && media.url && !/^https?:\/\//i.test(media.url)
+            ? { ...media, url: `${API_ORIGIN}${media.url}` }
+            : media
+        )
+      }));
+
+      // FIX 1 — snapshot scrollHeight trước setState, restore sau double rAF
+      setMessages(prev => {
+        const merged = [...normalized, ...prev];
+        const seen = new Set();
+        return merged
+          .filter(m => { const id = String(m._id); if (seen.has(id)) return false; seen.add(id); return true; })
+          .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+      });
+      setMsgCursor(nextCursor);
+      setHasMoreMessages(!!nextCursor);
+
+      // Double rAF: lần 1 chờ React schedule, lần 2 chờ DOM paint xong thật sự
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          if (container) {
+            container.scrollTop = container.scrollHeight - prevScrollHeight;
+          }
+        });
+      });
+    } catch (err) {
+      console.error("Lỗi tải thêm tin nhắn:", err);
+    } finally {
+      setLoadingMoreMessages(false);
+    }
+  }, [activeConversation, msgCursor, loadingMoreMessages, hasMoreMessages, token]);
+
+  // ── Scroll handler for infinite load ─────────────────────────────────────
+  const handleMessagesScroll = useCallback((e) => {
+    const container = e.currentTarget;
+    if (container.scrollTop < 80 && hasMoreMessages && !loadingMoreMessages) {
+      loadMoreMessages();
+    }
+  }, [hasMoreMessages, loadingMoreMessages, loadMoreMessages]);
 
   useEffect(() => {
     if (!activeConversation || activeConversation.isMock) return;
@@ -494,11 +699,19 @@ export default function ChatPage() {
   const linkItems = [];
   messages.forEach(m => { if (m.content) { const urls = m.content.match(linkRegex); if (urls) urls.forEach(u => linkItems.push(u)); } });
 
+  const openCreateGroupModal = useCallback(() => {
+    const other = getOtherParticipant(activeConversation);
+    // Truyền object đầy đủ để CreateGroupModal có thể hiển thị badge + so sánh ID
+    const initialSelected = other && typeof other === 'object' ? [other] : [];
+    setCreateGroupInitialSelected(initialSelected);
+    setShowCreateGroupModal(true);
+  }, [activeConversation, getOtherParticipant]);
+
   // ─────────────────────────────────────────────────────────────────────────
   return (
     <div className={`chat-page ${appliedTheme === 'dark' ? 'dark-mode' : ''}`} ref={pageRef}>
 
-      <ShareMessageModal isOpen={shareModalOpen} onClose={() => setShareModalOpen(false)} friends={friends} onForward={f => executeForward(f, { conversations })} />
+      <ShareMessageModal isOpen={shareModalOpen} onClose={() => setShareModalOpen(false)} conversations={conversations.filter(c => c._id !== activeConversation?._id)} currentUserId={userId} onForward={c => executeForward(c)} />
 
       {reminderDetailId && (
         <ReminderDetailModal
@@ -514,10 +727,63 @@ export default function ChatPage() {
       )}
 
       <AddFriendModal isOpen={showAddFriendModal} onClose={() => setShowAddFriendModal(false)} outgoingRequestIds={outgoingRequestIds} friends={friends} />
-      <CreateGroupModal isOpen={showCreateGroupModal} onClose={() => setShowCreateGroupModal(false)} friends={friends} onCreated={newConv => { fetchConversationsData(); setActiveConversation(newConv); }} />
+      <CreateGroupModal
+        isOpen={showCreateGroupModal}
+        onClose={() => {
+          setShowCreateGroupModal(false);
+          setCreateGroupInitialSelected([]);
+        }}
+        friends={friends}
+        initialSelected={createGroupInitialSelected}
+        onCreated={newConv => {
+          fetchConversationsData();
+          setActiveConversation(newConv);
+          navigate('/chat/' + newConv._id);
+          socketService.socket?.emit("join_conversation", { conversationId: newConv._id });
+        }}
+      />
       <TransferOwnerModal isOpen={showTransferOwnerModal} onClose={() => setShowTransferOwnerModal(false)}
         members={(activeConversation?.participants || []).filter(p => String(p._id || p) !== String(userId)).map(p => p._id ? p : { _id: p })}
         adminIds={activeConversation?.adminIds || []} loading={transferOwnerLoading} onConfirm={handleTransferOwnerAndLeave} />
+
+      {showBlockWarningModal && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 3000, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.5)' }}>
+          <div style={{ background: 'var(--z-bg-sidebar)', padding: '24px', borderRadius: '12px', width: '400px', maxWidth: '90%', textAlign: 'center' }}>
+            <h3 style={{ margin: '0 0 16px', color: '#E11D48' }}>Cảnh báo chặn</h3>
+            <p style={{ margin: '0 0 24px', color: 'var(--z-text-secondary)', fontSize: '15px' }}>
+              {blockConflictDetails?.iBlocked?.length > 0 && blockConflictDetails?.blockedMe?.length > 0 ? (
+                <>Bạn đã chặn <b>{blockConflictDetails.iBlocked.join(', ')}</b> và bị <b>{blockConflictDetails.blockedMe.join(', ')}</b> chặn. Bạn có muốn tiếp tục cuộc trò chuyện?</>
+              ) : blockConflictDetails?.iBlocked?.length > 0 ? (
+                <>Bạn đã chặn <b>{blockConflictDetails.iBlocked.join(', ')}</b>. Bạn có muốn tiếp tục cuộc trò chuyện?</>
+              ) : blockConflictDetails?.blockedMe?.length > 0 ? (
+                <>Bạn đã bị <b>{blockConflictDetails.blockedMe.join(', ')}</b> chặn. Bạn có muốn tiếp tục cuộc trò chuyện?</>
+              ) : (
+                'Trong nhóm có thành viên đang có xung đột chặn với bạn (bạn chặn họ hoặc họ chặn bạn). Bạn có muốn tiếp tục cuộc trò chuyện?'
+              )}
+            </p>
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
+              <button
+                onClick={() => {
+                  setShowBlockWarningModal(false);
+                  setActiveConversation(null); // Quay lại / rời khỏi chat
+                }}
+                style={{ padding: '8px 24px', borderRadius: '8px', border: '1px solid var(--z-border)', background: 'transparent', color: 'var(--z-text-secondary)', cursor: 'pointer', fontWeight: 600 }}
+              >
+                Không
+              </button>
+              <button
+                onClick={() => {
+                  setShowBlockWarningModal(false);
+                  setAcceptedBlockWarnings(prev => ({ ...prev, [activeConversation._id]: true }));
+                }}
+                style={{ padding: '8px 24px', borderRadius: '8px', border: 'none', background: 'var(--z-primary)', color: 'white', cursor: 'pointer', fontWeight: 600 }}
+              >
+                Có
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {isDragging && <div className="mdc-drag-overlay"><div className="mdc-drag-inner"><FaCloud size={52} /><p>Thả file vào đây để gửi</p></div></div>}
 
@@ -528,7 +794,7 @@ export default function ChatPage() {
         friendConvs={friendConvs} strangerConvs={strangerConvs}
         activeConversation={activeConversation} setActiveConversation={setActiveConversation}
         navigate={navigate} getConversationName={getConversationName} getConversationAvatar={getConversationAvatar} getOtherParticipant={getOtherParticipant}
-        setShowAddFriendModal={setShowAddFriendModal} setShowCreateGroupModal={setShowCreateGroupModal} setShowStrangerPanel={setShowStrangerPanel}
+        setShowAddFriendModal={setShowAddFriendModal} setShowCreateGroupModal={openCreateGroupModal} setShowStrangerPanel={setShowStrangerPanel}
         userId={userId} friendIds={friendIds}
         handlePinConversation={handlePinConversation} handleClassifyConversation={handleClassifyConversation}
         handleHideConversation={handleHideConversation} handleMuteConversation={handleMuteConversation}
@@ -537,8 +803,10 @@ export default function ChatPage() {
         showHidden={showHidden} hiddenConvs={hiddenConvs} handlePinButtonClick={handlePinButtonClick} handleUnhideConversation={handleUnhideConversation}
         showPinModal={showPinModal} setShowPinModal={setShowPinModal} pinModalMode={pinModalMode} setPinModalMode={setPinModalMode}
         pinInput={pinInput} setPinInput={setPinInput} pinConfirm={pinConfirm} setPinConfirm={setPinConfirm}
+        pinCurrentInput={pinCurrentInput} setPinCurrentInput={setPinCurrentInput}
         pinError={pinError} setPinError={setPinError} pinStep={pinStep} setPinStep={setPinStep}
-        handlePinSubmit={handlePinSubmit} getSavedPin={getSavedPin}
+        hasPin={hasPin} handlePinSubmit={handlePinSubmit}
+        handleEnterChangeMode={handleEnterChangeMode} handleEnterForgotMode={handleEnterForgotMode} resetPinModal={resetPinModal}
       />
 
       {/* ── MAIN CHAT AREA ── */}
@@ -552,15 +820,50 @@ export default function ChatPage() {
               name: getConversationName(activeConversation),
               avatar: getConversationAvatar(activeConversation),
               targetUserId: getOtherParticipant(activeConversation)?._id || getOtherParticipant(activeConversation)?.id,
-              isOnline: true,
-              isStranger: (() => { const o = getOtherParticipant(activeConversation); const id = o && typeof o === 'object' ? String(o._id || o.id) : null; return id ? !friendIds.has(id) : false; })(),
+              isOnline: (() => {
+                const other = getOtherParticipant(activeConversation);
+                return other && typeof other === 'object' ? !!other.isOnline : false;
+              })(),
+              lastSeen: (() => {
+                const other = getOtherParticipant(activeConversation);
+                return other && typeof other === 'object' ? other.lastSeen : null;
+              })(),
+              isStranger: (() => { const o = getOtherParticipant(activeConversation); const id = o && typeof o === 'object' ? String(o._id || o.id) : null; if (!id || friends.length === 0) return false; if (blockedUsers.some(u => String(u._id || u.id) === id)) return false; if (previouslyBlockedIds?.has(id)) return false; const firstSenderId = String(activeConversation.firstSenderId?._id || activeConversation.firstSenderId || ''); return !friendIds.has(id) && !!firstSenderId && firstSenderId !== String(userId); })(),
               strangerId: getOtherParticipant(activeConversation)?._id || getOtherParticipant(activeConversation)?.id,
             }}
             onInfo={() => setShowRightPanel(!showRightPanel)}
+            onSearchInConv={() => setShowSearchInConv(prev => !prev)}
           />
           <PinnedBar pinnedMessages={pinnedMessages} jumpToMessage={jumpToMessage} setShowRightPanel={setShowRightPanel} setUnpinTargetId={setUnpinTargetId} setShowUnpinConfirmModal={setShowUnpinConfirmModal} />
 
-          <div className="chat-messages">
+          <div
+            className="chat-messages"
+            style={{ position: 'relative' }}
+            ref={messagesContainerRef}
+            onScroll={handleMessagesScroll}
+          >
+            {showSearchInConv && (
+              <SearchInConversation
+                conversationId={activeConversation._id}
+                onClose={() => setShowSearchInConv(false)}
+                onJumpToMessage={(msg) => {
+                  const el = document.getElementById(`msg-${msg._id}`);
+                  if (el) {
+                    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    el.classList.add('highlight-msg');
+                    setTimeout(() => el.classList.remove('highlight-msg'), 1800);
+                  }
+                }}
+              />
+            )}
+
+            {/* ── Load more spinner ── */}
+            {loadingMoreMessages && (
+              <div style={{ display: 'flex', justifyContent: 'center', padding: '12px 0' }}>
+                <FaSpinner className="spin" size={18} color="var(--z-primary)" />
+              </div>
+            )}
+
             {/* Friend request banner */}
             {(() => {
               if (!activeConversation || activeConversation.type === 'group' || activeConversation.roomModel === 'Group') return null;
@@ -568,15 +871,42 @@ export default function ChatPage() {
               const otherId = other && typeof other === 'object' ? String(other._id || other.id) : null;
               const otherName = other && typeof other === 'object' ? (other.username || other.fullName || 'Người dùng') : 'Người dùng';
               if (!otherId || friendIds.has(otherId)) return null;
+              // Ẩn banner khi đang chặn hoặc đã từng chặn người này
+              if (blockedUsers.some(u => String(u._id || u.id) === otherId) || previouslyBlockedIds?.has(otherId)) return null;
               const hasOutgoing = outgoingRequestIds.has(otherId) || justSentRequestTo === otherId;
-              const incomingReq = incomingRequests.find(r => { const fromId = r.fromUserId?._id ? String(r.fromUserId._id) : r.fromUserId?.id ? String(r.fromUserId.id) : String(r.fromUserId || ''); return fromId === otherId; });
+              const incomingReq = incomingRequests.find(r => {
+                const fromId = String(r.fromUserId?._id || r.fromUserId?.id || r.fromUserId || r.from?._id || r.from?.id || r.from || '');
+                return fromId === otherId;
+              });
               if (hasOutgoing) {
-                const outReq = outgoingRequests.find(r => String(r.toUserId?._id || r.toUserId || '') === otherId);
+                const outReq = outgoingRequests.find(r => String(r.toUserId?._id || r.toUserId?.id || r.toUserId || r.to?._id || r.to?.id || r.to || '') === otherId);
                 return (
                   <div style={{ position: 'sticky', top: 0, zIndex: 10, padding: '12px 20px', background: 'rgba(0,104,255,0.06)', borderBottom: '1px solid var(--z-border)', display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, backdropFilter: 'blur(8px)' }}>
                     <FaUserPlus size={14} color="var(--z-primary)" style={{ flexShrink: 0 }} />
                     <span style={{ flex: 1, color: 'var(--z-text-secondary)' }}>Đã gửi lời mời kết bạn tới <strong style={{ color: 'var(--z-text-primary)' }}>{otherName}</strong></span>
-                    <button onClick={async () => { try { const { friendService } = await import('../../services/friendService'); const reqId = outReq ? String(outReq._id || outReq.id) : null; if (reqId) await friendService.cancelFriendRequest(reqId); setJustSentRequestTo(null); fetchOutgoingRequests(); } catch { toast.error('Không thể hủy lời mời'); } }}
+                    <button onClick={async () => {
+                      try {
+                        const { friendService } = await import('../../services/friendService');
+                        // FIX: Tìm reqId từ outReq trước
+                        let reqId = outReq ? String(outReq._id || outReq.id) : null;
+                        // Nếu không tìm được (race condition), refresh store và thử lại
+                        if (!reqId) {
+                          await fetchOutgoingRequests();
+                          const freshOut = useFriendStore.getState().outgoingRequests;
+                          const freshReq = freshOut.find(r => String(r.toUserId?._id || r.toUserId || '') === otherId);
+                          reqId = freshReq ? String(freshReq._id || freshReq.id) : null;
+                        }
+                        if (reqId) {
+                          await friendService.cancelFriendRequest(reqId);
+                          // Xóa khỏi store ngay lập tức để UI cập nhật tức thì
+                          useFriendStore.setState(prev => ({
+                            outgoingRequests: prev.outgoingRequests.filter(r => String(r.toUserId?._id || r.toUserId || '') !== otherId)
+                          }));
+                        }
+                        setJustSentRequestTo(null);
+                        fetchOutgoingRequests();
+                      } catch { toast.error('Không thể hủy lời mời'); }
+                    }}
                       style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 14px', borderRadius: 8, border: '1px solid var(--z-border)', background: 'transparent', color: 'var(--z-text-secondary)', cursor: 'pointer', fontWeight: 600, fontSize: 13, flexShrink: 0 }}>
                       <FaTimes size={11} />Hủy lời mời
                     </button>
@@ -588,9 +918,9 @@ export default function ChatPage() {
                   <FaUserPlus size={14} color="var(--z-primary)" style={{ flexShrink: 0 }} />
                   <span style={{ flex: 1, fontSize: 13, color: 'var(--z-text-secondary)' }}><strong style={{ color: 'var(--z-text-primary)' }}>{otherName}</strong> đã gửi lời mời kết bạn</span>
                   <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
-                    <button onClick={async () => { try { await acceptRequest(String(incomingReq._id || incomingReq.id)); await Promise.all([fetchIncomingRequests(), fetchFriends()]); } catch { alert('Không thể chấp nhận'); } }}
+                    <button onClick={async () => { try { await acceptRequest(String(incomingReq._id || incomingReq.id)); await Promise.all([fetchIncomingRequests(), fetchFriends()]); } catch { toast.error('Không thể chấp nhận'); } }}
                       style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 14px', borderRadius: 8, border: 'none', background: 'var(--z-primary)', color: '#fff', cursor: 'pointer', fontWeight: 600, fontSize: 13 }}><FaCheck size={11} />Đồng ý</button>
-                    <button onClick={async () => { try { await rejectRequest(String(incomingReq._id || incomingReq.id)); await fetchIncomingRequests(); } catch { alert('Không thể từ chối'); } }}
+                    <button onClick={async () => { try { await rejectRequest(String(incomingReq._id || incomingReq.id)); await fetchIncomingRequests(); } catch { toast.error('Không thể từ chối'); } }}
                       style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 14px', borderRadius: 8, border: '1px solid var(--z-border)', background: 'transparent', color: 'var(--z-text-secondary)', cursor: 'pointer', fontWeight: 600, fontSize: 13 }}><FaTimes size={11} />Từ chối</button>
                   </div>
                 </div>
@@ -692,6 +1022,7 @@ export default function ChatPage() {
                           <MessageBubble
                             message={item} isMe={isMe}
                             onReaction={handleReaction} onRecall={handleRecall} onDelete={handleDelete}
+                            // onEdit={handleEdit} // TODO: uncomment khi BE sẵn sàng
                             onForward={openShareModal} onReply={setReplyToMessage}
                             onPin={handlePinMessage} onUnpin={handleUnpinMessage}
                             isPinned={pinnedMsgIds.has(String(item._id || item.id))}
@@ -704,6 +1035,21 @@ export default function ChatPage() {
                   });
                 })()}
                 {uploads.map(u => <UploadBubble key={u.id} name={u.name} percent={u.percent} />)}
+                {/* Typing indicator */}
+                {(() => {
+                  const convId = String(activeConversation._id || '');
+                  const typers = typingUsers[convId] || [];
+                  if (typers.length === 0) return null;
+                  const participants = activeConversation.participants || [];
+                  const resolvedNames = typers.map(t => {
+                    const p = participants.find(p => String(p._id || p.id) === String(t.userId));
+                    return p?.username || p?.fullName || t.username || 'Ai đó';
+                  });
+                  const label = resolvedNames.length === 1
+                    ? `${resolvedNames[0]} đang nhập...`
+                    : `${resolvedNames[0]} và ${resolvedNames.length - 1} người khác đang nhập...`;
+                  return <TypingIndicator userName={label} />;
+                })()}
                 <div ref={messagesEndRef} />
               </>
             )}
@@ -712,19 +1058,112 @@ export default function ChatPage() {
           {/* Input area */}
           {(() => {
             const isGroupConv = activeConversation?.type === 'group' || activeConversation?.roomModel === 'Group';
+            const isParticipant = activeConversation?.participants?.some(p => String(p._id || p) === String(userId));
             const isOwnerStr = activeConversation?.ownerId?._id || activeConversation?.ownerId;
             const isOwner = isOwnerStr && String(isOwnerStr) === String(userId);
             const isAdmin = activeConversation?.adminIds?.some(aid => String(aid._id || aid) === String(userId)) || isOwner;
-            const cannotSend = isGroupConv && !(isOwner || isAdmin) && activeConversation?.settings?.canMembersSendMessages === false;
+            const cannotSend = isGroupConv && isParticipant && !(isOwner || isAdmin) && activeConversation?.settings?.canMembersSendMessages === false;
+
+            if (isGroupConv && !isParticipant) {
+              return (
+                <div style={{ padding: '16px 20px', background: 'var(--z-bg-sidebar)', borderTop: '1px solid var(--z-border)', display: 'flex', alignItems: 'center', gap: 14 }}>
+                  <div style={{ width: 40, height: 40, borderRadius: '50%', background: 'rgba(239,68,68,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><line x1="4.93" y1="4.93" x2="19.07" y2="19.07" /></svg>
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: '#ef4444', marginBottom: 2 }}>Bạn không còn là thành viên của nhóm này</div>
+                    <div style={{ fontSize: 12, color: 'var(--z-text-secondary)', lineHeight: 1.4 }}>Bạn chỉ có thể xem lịch sử trò chuyện.</div>
+                  </div>
+                </div>
+              );
+            }
+
             if (cannotSend) return (
               <div style={{ padding: '16px', background: 'var(--z-bg-main)', borderTop: '1px solid var(--z-border)', display: 'flex', alignItems: 'flex-start', color: 'var(--z-text-secondary)', fontSize: 13, gap: 12 }}>
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, color: 'var(--z-primary)' }}><circle cx="12" cy="12" r="10" /><line x1="12" y1="16" x2="12" y2="12" /><line x1="12" y1="8" x2="12.01" y2="8" /></svg>
                 <span>Chỉ trưởng/phó cộng đồng được gửi tin nhắn.</span>
               </div>
             );
+
+            // ── Block banner (thay input khi đã chặn người này) ─────────────
+            if (!isGroupConv && isBlockedByMe) {
+              const otherPBlocked = getOtherParticipant(activeConversation);
+              const otherNameBlocked = otherPBlocked && typeof otherPBlocked === 'object'
+                ? (otherPBlocked.username || otherPBlocked.fullName || 'người này')
+                : 'người này';
+              return (
+                <div style={{
+                  padding: '16px 20px',
+                  background: 'var(--z-bg-sidebar)',
+                  borderTop: '1px solid var(--z-border)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 14,
+                }}>
+                  {/* Shield icon */}
+                  <div style={{
+                    width: 40, height: 40, borderRadius: '50%',
+                    background: 'rgba(239,68,68,0.1)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    flexShrink: 0,
+                  }}>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <circle cx="12" cy="12" r="10" />
+                      <line x1="4.93" y1="4.93" x2="19.07" y2="19.07" />
+                    </svg>
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--z-text-primary)', marginBottom: 2 }}>
+                      Bạn đã chặn <span style={{ color: '#ef4444' }}>{otherNameBlocked}</span>
+                    </div>
+                    <div style={{ fontSize: 12, color: 'var(--z-text-secondary)', lineHeight: 1.4 }}>
+                      Bỏ chặn để có thể gửi và nhận tin nhắn.
+                    </div>
+                  </div>
+                  <button
+                    disabled={unblockLoading}
+                    onClick={async () => {
+                      if (!otherPBlocked) return;
+                      const tid = String(otherPBlocked._id || otherPBlocked.id || '');
+                      if (!tid) return;
+                      setUnblockLoading(true);
+                      try {
+                        const res = await unblockUserStore(tid);
+                        if (res.success) {
+                          toast.success(`Đã bỏ chặn ${otherNameBlocked}`);
+                        } else {
+                          toast.error(res.error || 'Bỏ chặn thất bại');
+                        }
+                      } catch {
+                        toast.error('Không thể bỏ chặn. Thử lại sau.');
+                      } finally {
+                        setUnblockLoading(false);
+                      }
+                    }}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 6,
+                      padding: '8px 18px', borderRadius: 20,
+                      border: '1.5px solid #ef4444',
+                      background: unblockLoading ? 'rgba(239,68,68,0.07)' : 'transparent',
+                      color: '#ef4444', cursor: unblockLoading ? 'not-allowed' : 'pointer',
+                      fontWeight: 700, fontSize: 13, flexShrink: 0,
+                      transition: 'background 0.15s',
+                    }}
+                  >
+                    {unblockLoading
+                      ? <FaSpinner className="spin" size={13} />
+                      : <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8h1a4 4 0 0 1 0 8h-1" /><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z" /><line x1="6" y1="1" x2="6" y2="4" /><line x1="10" y1="1" x2="10" y2="4" /><line x1="14" y1="1" x2="14" y2="4" /></svg>
+                    }
+                    {unblockLoading ? 'Đang xử lý...' : 'Bỏ chặn'}
+                  </button>
+                </div>
+              );
+            }
+
+
             const otherP = !isGroupConv ? getOtherParticipant(activeConversation) : null;
             const otherIdP = otherP ? typeof otherP === 'object' ? String(otherP._id || otherP.id || '') : String(otherP) : null;
-            const isStrangerChat = !!otherIdP && !friendIds.has(otherIdP);
+            const isStrangerChat = !!otherIdP && !friendIds.has(otherIdP) && !blockedUsers.some(u => String(u._id || u.id) === otherIdP) && !previouslyBlockedIds?.has(otherIdP);
             const otherName = otherP && typeof otherP === 'object' ? (otherP.username || otherP.fullName || 'Người này') : 'Người này';
             const otherPrivacy = otherP && typeof otherP === 'object' ? otherP.messagePrivacy : undefined;
             if (isStrangerChat && otherPrivacy === 'friends') return (
@@ -741,6 +1180,8 @@ export default function ChatPage() {
                 key={String(activeConversation._id)}
                 theme={appliedTheme}
                 placeholder={`Nhập @, tin nhắn tới ${convName}`}
+                conversationId={activeConversation._id}
+                userId={userId}
                 onSend={handleSendText} onSendSticker={handleSendSticker} onSendLike={handleSendLike}
                 onUploadFiles={handleUploadFilesFromInput} onShowPoll={() => setShowCreatePollModal(true)}
                 members={activeConversation.participants || []}
@@ -770,11 +1211,12 @@ export default function ChatPage() {
           fetchConversations={fetchConversationsData}
           imgFiles={imgFiles} docFiles={docFiles} linkItems={linkItems}
           handleDeleteConversation={handleDeleteConversation} handleLeaveGroup={handleLeaveGroup}
-          handleDisbandGroup={handleDisbandGroup} setShowCreateGroupModal={setShowCreateGroupModal}
+          handleDisbandGroup={handleDisbandGroup}
+          setShowCreateGroupModal={openCreateGroupModal}
           handleUpdateGroupSettings={handleUpdateGroupSettings} handleMute={handleMute} handleGroupAction={handleGroupAction}
           reminders={reminders} polls={polls} loadingPolls={loadingPolls}
           handleCreateReminder={handleCreateReminder} handleUpdateReminder={handleUpdateReminder} handleDeleteReminder={handleDeleteReminder}
-          joinRequests={[]} handleProcessJoinRequest={(id, action) => handleProcessJoinRequest(id, action, { activeConversation, fetchConversationsData })}
+          joinRequests={joinRequests} handleProcessJoinRequest={(id, action) => handleProcessJoinRequest(id, action, { activeConversation, fetchConversationsData })}
           pendingEditReminder={pendingEditReminder} onPendingEditConsumed={() => setPendingEditReminder(null)}
           onShowReminderList={() => setShowReminderListPage(true)} onShowAddMember={() => setShowAddMemberModal(true)}
           onShowPoll={() => setShowCreatePollModal(true)}
@@ -892,6 +1334,11 @@ export default function ChatPage() {
 
       {ctxMenu && <ConversationContextMenu conv={ctxMenu.conv} position={{ x: ctxMenu.x, y: ctxMenu.y }} onClose={() => setCtxMenu(null)} onPin={handlePinConversation} onClassify={handleClassifyConversation} onHide={handleHideConversation} onDelete={handleDeleteConversationCtx} onReport={conv => { const other = getOtherParticipant(conv); if (other) setReportTarget({ id: String(other._id || other.id), name: other.username || other.fullName || 'người dùng' }); setCtxMenu(null); }} myId={userId} />}
       {reportTarget && <ReportUserModal targetUserId={reportTarget.id} targetUserName={reportTarget.name} onClose={() => setReportTarget(null)} />}
+      <DeleteConversationModal
+        isOpen={!!deleteConfirmTarget}
+        onClose={() => setDeleteConfirmTarget(null)}
+        onConfirm={confirmDeleteConversation}
+      />
     </div>
   );
 }

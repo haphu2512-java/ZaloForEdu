@@ -39,3 +39,8 @@ export async function reportUser(userId: string, reason: string): Promise<any> {
   });
   return res.data;
 }
+
+export async function getMyCloudStorage(): Promise<{ totalBytes: number; imageCount: number; docCount: number; linkCount: number }> {
+  const res = await fetchAPI(`${USERS_ENDPOINT}/me/storage`);
+  return res.data;
+}

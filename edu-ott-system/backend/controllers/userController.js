@@ -1,10 +1,14 @@
 const crypto = require('node:crypto');
 const User = require('../models/User');
+const Conversation = require('../models/Conversation');
+const Message = require('../models/Message');
+const Notification = require('../models/Notification');
 const asyncHandler = require('../utils/asyncHandler');
 const ApiError = require('../utils/apiError');
 const { successResponse } = require('../utils/apiResponse');
 const { sendEmail } = require('../utils/email');
 const { getRedis, isRedisAvailable, keyWithPrefix } = require('../services/redisClient');
+const { emitToUser } = require('../services/socketService');
 
 const OTP_EXPIRE_MINUTES = 10;
 const createEmailOtp = () => String(Math.floor(100000 + Math.random() * 900000));
@@ -14,11 +18,27 @@ const sendVerificationOtp = async ({ email, otp }) => {
   console.log(`║  [OTP EMAIL - Profile] Gửi tới : ${email.padEnd(21)}║`);
   console.log(`║  Mã OTP                : ${otp.padEnd(26)}║`);
   console.log(`╚${'═'.repeat(50)}╝\n`);
+  
+  const htmlContent = `
+    <div style="font-family: Arial, sans-serif; background-color: #f4f7f6; padding: 40px; text-align: center;">
+      <div style="max-width: 600px; margin: 0 auto; background: #ffffff; padding: 40px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05);">
+        <h2 style="color: #0068ff; margin-bottom: 10px; font-size: 28px;">ZaloApp</h2>
+        <h3 style="color: #333; margin-bottom: 20px; font-size: 20px;">Mã xác thực OTP</h3>
+        <p style="color: #555; font-size: 16px; margin-bottom: 30px; line-height: 1.5;">Bạn đang yêu cầu xác thực tài khoản. Vui lòng sử dụng mã dưới đây để tiếp tục:</p>
+        <div style="background: #f0f8ff; padding: 20px 40px; border-radius: 8px; font-size: 36px; letter-spacing: 8px; font-weight: bold; color: #0068ff; display: inline-block; margin-bottom: 30px; border: 2px dashed #0068ff;">
+          ${otp}
+        </div>
+        <p style="color: #777; font-size: 15px; margin-bottom: 5px;">Mã này sẽ hết hạn trong <strong>${OTP_EXPIRE_MINUTES} phút</strong>.</p>
+        <p style="color: #ff4d4f; font-size: 14px; margin-bottom: 30px;">Vui lòng không chia sẻ mã này cho bất kỳ ai.</p>
+      </div>
+    </div>
+  `;
+  
   await sendEmail({
     to: email,
     subject: 'Mã OTP xác thực email - Zalo Clone',
     text: `Mã OTP xác thực email của bạn là: ${otp}. Mã có hiệu lực trong ${OTP_EXPIRE_MINUTES} phút.`,
-    html: `<p>Mã OTP xác thực email của bạn là: <strong>${otp}</strong></p><p>Mã có hiệu lực trong ${OTP_EXPIRE_MINUTES} phút.</p>`,
+    html: htmlContent,
   });
 };
 
@@ -49,7 +69,6 @@ const updateUserById = asyncHandler(async (req, res) => {
 
   const updates = req.body || {};
   if (typeof updates.username === 'string') user.username = updates.username.trim();
-  if (typeof updates.phone !== 'undefined') user.phone = updates.phone || null;
   if (typeof updates.avatarUrl !== 'undefined') user.avatarUrl = updates.avatarUrl || null;
   if (updates.messagePrivacy) user.messagePrivacy = updates.messagePrivacy;
 
@@ -65,20 +84,45 @@ const updateUserById = asyncHandler(async (req, res) => {
       const duplicated = await User.findOne({
         _id: { $ne: user._id },
         phone: nextPhone,
-        deletedAt: null,
       });
       if (duplicated) {
         throw new ApiError(409, 'PHONE_EXISTS', 'Số điện thoại đã được sử dụng bởi tài khoản khác');
       }
       user.phone = nextPhone;
       user.isPhoneVerified = false;
-      // Tạo OTP và gửi SMS
+      if (!user.email) {
+        throw new ApiError(400, 'NO_EMAIL', 'Tài khoản của bạn chưa liên kết Email nên không thể nhận mã OTP để thay đổi Số điện thoại. Vui lòng cập nhật Email trước.');
+      }
+      
+      // Tạo OTP và gửi qua Email
       const otp = createEmailOtp();
       user.otpCode = otp;
       user.otpExpires = new Date(Date.now() + OTP_EXPIRE_MINUTES * 60 * 1000);
       user.otpType = 'phone_verify';
       user.lastOtpSentAt = new Date();
-      sendSmsOtpProfile(nextPhone, otp);
+      
+      const htmlContent = `
+        <div style="font-family: Arial, sans-serif; background-color: #f4f7f6; padding: 40px; text-align: center;">
+          <div style="max-width: 600px; margin: 0 auto; background: #ffffff; padding: 40px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05);">
+            <h2 style="color: #0068ff; margin-bottom: 10px; font-size: 28px;">ZaloApp</h2>
+            <h3 style="color: #333; margin-bottom: 20px; font-size: 20px;">Xác thực Số điện thoại</h3>
+            <p style="color: #555; font-size: 16px; margin-bottom: 30px; line-height: 1.5;">Bạn đang yêu cầu thay đổi Số điện thoại. Vui lòng sử dụng mã dưới đây để tiếp tục:</p>
+            <div style="background: #f0f8ff; padding: 20px 40px; border-radius: 8px; font-size: 36px; letter-spacing: 8px; font-weight: bold; color: #0068ff; display: inline-block; margin-bottom: 30px; border: 2px dashed #0068ff;">
+              ${otp}
+            </div>
+            <p style="color: #777; font-size: 15px; margin-bottom: 5px;">Mã này sẽ hết hạn trong <strong>${OTP_EXPIRE_MINUTES} phút</strong>.</p>
+            <p style="color: #ff4d4f; font-size: 14px; margin-bottom: 30px;">Vui lòng không chia sẻ mã này cho bất kỳ ai.</p>
+          </div>
+        </div>
+      `;
+      
+      await sendEmail({
+        to: user.email,
+        subject: 'Mã OTP xác thực thay đổi Số điện thoại - ZaloApp',
+        text: `Mã OTP của bạn là: ${otp}`,
+        html: htmlContent
+      });
+      
       requiresPhoneVerification = true;
     } else if (!nextPhone) {
       user.phone = null;
@@ -92,7 +136,7 @@ const updateUserById = asyncHandler(async (req, res) => {
     const currentEmail = user.email ? String(user.email).trim().toLowerCase() : null;
 
     if (nextEmail && nextEmail !== currentEmail) {
-      const duplicated = await User.findOne({ _id: { $ne: user._id }, email: nextEmail, deletedAt: null });
+      const duplicated = await User.findOne({ _id: { $ne: user._id }, email: nextEmail });
       if (duplicated) throw new ApiError(409, 'EMAIL_EXISTS', 'Email already exists');
 
       user.email = nextEmail;
@@ -151,6 +195,19 @@ const blockOrUnblockUser = asyncHandler(async (req, res) => {
   else if (action === 'unblock' && hasBlocked) currentUser.blockedUsers = currentUser.blockedUsers.filter((item) => !item.equals(targetId));
 
   await currentUser.save();
+
+  // Emit realtime cho cả 2 phía
+  const blockerId = req.user._id.toString();
+  if (action === 'block') {
+    // Thông báo người bị chặn biết họ bị chặn
+    emitToUser(targetId, 'user_blocked', { blockerId });
+    // Thông báo người chặn để đồng bộ tab/thiết bị khác
+    emitToUser(blockerId, 'you_blocked_user', { targetId });
+  } else {
+    emitToUser(targetId, 'user_unblocked', { blockerId });
+    emitToUser(blockerId, 'you_unblocked_user', { targetId });
+  }
+
   return successResponse(res, { blockedUsers: currentUser.blockedUsers, action }, `User ${action === 'block' ? 'blocked' : 'unblocked'} successfully`);
 });
 
@@ -190,6 +247,32 @@ const updateUserStatus = asyncHandler(async (req, res) => {
         user.tokenVersion += 1;
         await user.save();
       }
+
+      // Tạo notification persistent + emit vào chuông thông báo
+      try {
+        const io = req.app.get('io');
+        const notifTitle = currentWarnings >= 3
+          ? '⛔ Tài khoản bị khóa'
+          : `⚠️ Cảnh báo từ Quản trị viên (${currentWarnings}/3)`;
+        const notifBody = currentWarnings >= 3
+          ? 'Tài khoản của bạn đã bị khóa tự động do nhận 3 cảnh cáo từ Quản trị viên.'
+          : `Tài khoản của bạn vừa nhận cảnh cáo từ Quản trị viên (${currentWarnings}/3). Vui lòng tuân thủ nội quy cộng đồng.${
+              currentWarnings >= 2 ? ' Cảnh cáo tiếp theo sẽ khóa tài khoản!' : ''
+            }`;
+        const notif = await Notification.create({
+          userId: user._id,
+          type: 'admin_warning',
+          title: notifTitle,
+          body: notifBody,
+          data: { warningCount: currentWarnings, isBanned: user.isActive === false },
+        });
+        if (io) {
+          io.to(`user:${targetUserId}`).emit('new_notification', notif.toObject());
+        }
+      } catch (err) {
+        console.error('Failed to create admin warning notification:', err.message);
+      }
+
       return successResponse(res, { userId: user._id, warningCount: currentWarnings, isActive: user.isActive }, 'Gửi cảnh cáo thành công');
     }
     throw new ApiError(500, 'SERVER_ERROR', 'Redis không khả dụng, không thể gửi cảnh cáo.');
@@ -283,6 +366,52 @@ const getAllUsers = asyncHandler(async (req, res) => {
   return successResponse(res, { users: usersWithWarnings }, 'Lấy danh sách người dùng thành công');
 });
 
+const getMyCloudStorage = asyncHandler(async (req, res) => {
+  const userId = req.user._id;
+  
+  // Find self conversation (My Documents)
+  const selfConv = await Conversation.findOne({
+    type: 'direct',
+    participants: { $size: 1, $all: [userId] }
+  });
+
+  let totalBytes = 0;
+  let imageCount = 0;
+  let docCount = 0;
+  let linkCount = 0;
+
+  if (selfConv) {
+    const messages = await Message.find({ 
+      conversationId: selfConv._id, 
+      'mediaIds.0': { $exists: true } 
+    }).populate('mediaIds');
+
+    for (const msg of messages) {
+      if (!msg.mediaIds) continue;
+      for (const media of msg.mediaIds) {
+        if (!media) continue;
+        totalBytes += media.size || 0;
+        const mime = media.mimeType || '';
+        if (mime.startsWith('image/') || mime.startsWith('video/') || media.providerResourceType === 'image' || media.providerResourceType === 'video') {
+          imageCount++;
+        } else {
+          docCount++;
+        }
+      }
+    }
+    
+    // Đếm số lượng link nếu cần (tin nhắn text có chứa http/https)
+    // Tạm thời để 0 vì chức năng cũ không yêu cầu.
+  }
+
+  return successResponse(res, {
+    totalBytes,
+    imageCount,
+    docCount,
+    linkCount
+  }, 'Lấy thông tin dung lượng thành công');
+});
+
 module.exports = {
   getUserById,
   updateUserById,
@@ -292,4 +421,5 @@ module.exports = {
   updateUserStatus,
   getAllUsers,
   reportUser,
+  getMyCloudStorage,
 };

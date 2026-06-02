@@ -32,7 +32,7 @@ const updateGroupAvatarSchema = z.object({
 });
 
 const updateNicknameSchema = z.object({
-  nickname: z.string().trim().min(1).max(60),
+  nickname: z.string().trim().max(60),
 });
 
 const pinMessageSchema = z.object({
@@ -44,6 +44,7 @@ const updateConversationPreferenceSchema = z.object({
   nickname: z.string().trim().min(1).max(60).nullable().optional(),
   isHidden: z.boolean().optional(),
   isDeleted: z.boolean().optional(),
+  deletedHistoryAt: z.string().datetime().nullable().optional(),
   mutedUntil: z.string().datetime().nullable().optional(),
   isPinned: z.boolean().optional(),
   isMuted: z.boolean().optional(),

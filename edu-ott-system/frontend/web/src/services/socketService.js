@@ -13,7 +13,7 @@ class SocketService {
   }
 
   connect(explicitToken = null) {
-    if (this.socket) return; 
+    if (this.socket) return;
     const token = explicitToken || localStorage.getItem("token");
     if (!token) return;
 
@@ -78,6 +78,12 @@ class SocketService {
   emitTyping(conversationId) {
     if (this.socket?.connected) {
       this.socket.emit("typing", { conversationId });
+    }
+  }
+
+  emitStopTyping(conversationId) {
+    if (this.socket?.connected) {
+      this.socket.emit("stop_typing", { conversationId });
     }
   }
 

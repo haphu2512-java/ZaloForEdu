@@ -16,6 +16,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
 import { getArchivedConversations, updateConversationPreference } from '@/utils/messageService';
+import { toAbsoluteUrl } from '@/utils/url';
 import { useAuth } from '@/context/auth';
 import type { Conversation } from '@/types/chat';
 
@@ -113,14 +114,15 @@ export default function ArchivedConversationsScreen() {
 
     const getDisplayAvatar = (conv: Conversation): string => {
         if (conv.type === 'group') {
-            if (conv.avatarUrl) return conv.avatarUrl;
+            const groupAvatar = toAbsoluteUrl(conv.avatarUrl || (conv as any).avatar);
+            if (groupAvatar) return groupAvatar;
             const name = conv.name || 'G';
             return `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=8B5CF6&color=fff&size=100&bold=true`;
         }
         const currentUserId = user?.id || '';
         const other = conv.participants?.find((p) => (p._id || p.id || '') !== currentUserId);
         return (
-            other?.avatarUrl ||
+            toAbsoluteUrl(other?.avatarUrl || (other as any)?.avatar) ||
             `https://ui-avatars.com/api/?name=${encodeURIComponent(other?.username || 'U')}&background=6366F1&color=fff&size=100&bold=true`
         );
     };
@@ -184,6 +186,7 @@ export default function ArchivedConversationsScreen() {
             <Stack.Screen
                 options={{
                     title: 'Tin nhắn lưu trữ',
+                    headerShown: true,
                     headerStyle: {
                         backgroundColor: colorScheme === 'dark' ? colors.surface : colors.tint,
                     },

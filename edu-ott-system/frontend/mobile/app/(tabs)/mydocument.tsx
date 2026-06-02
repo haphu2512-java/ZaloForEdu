@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   View,
   Text,
@@ -87,6 +88,8 @@ export default function MyDocumentScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const colors = Colors[colorScheme === 'dark' ? 'dark' : 'light'];
   const { user } = useAuth();
+  const router = useRouter();
+  const insets = useSafeAreaInsets();
 
   const [selfConv, setSelfConv] = useState<Conversation | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -115,8 +118,9 @@ export default function MyDocumentScreen() {
     
     try {
       const res = await getConversations(null, 100);
+      const currentUserId = user.id || (user as any)._id || '';
       const existing = (res?.items || []).find(
-        (c) => c.type === 'direct' && c.participants.length === 1,
+        (c) => c.type === 'direct' && c.participants?.every((p: any) => (typeof p === 'string' ? p : (p._id || p.id || '')) === currentUserId),
       );
       if (existing) return existing;
 
@@ -233,7 +237,10 @@ export default function MyDocumentScreen() {
     setSending(true);
 
     try {
-      const ext = uri.split('.').pop()?.toLowerCase() || 'm4a';
+      // Ensure uri has file:// prefix for React Native fetch
+      const safeUri = uri.startsWith('file://') ? uri : `file://${uri}`;
+
+      const ext = safeUri.split('.').pop()?.toLowerCase() || 'm4a';
       const fileName = `voice-${Date.now()}.${ext}`;
       
       const mimeType = ext === 'm4a' ? 'audio/mp4' : 
@@ -242,7 +249,7 @@ export default function MyDocumentScreen() {
                        ext === 'aac' ? 'audio/aac' : 
                        ext === 'webm' ? 'audio/webm' : 'audio/mp4';
 
-      const uploaded = await uploadMediaForm({ uri, fileName, mimeType, duration });
+      const uploaded = await uploadMediaForm({ uri: safeUri, fileName, mimeType, duration });
       const mediaId = uploaded?._id || uploaded?.id;
 
       if (!mediaId) throw new Error('Upload ghi âm không thành công');
@@ -458,7 +465,7 @@ export default function MyDocumentScreen() {
 
                 if (isImage && media?.url) {
                   return (
-                    <TouchableOpacity key={`${mediaId}-${idx}`} onPress={() => setViewImageUrl(media.url)} activeOpacity={0.9}>
+                    <TouchableOpacity key={`${mediaId}-${idx}`} onPress={() => setViewImageUrl(media.url)} onLongPress={() => handleMessageLongPress(item)} activeOpacity={0.9}>
                       <Image source={{ uri: media.url }} style={{ width: 200, height: 160, borderRadius: 12 }} resizeMode="cover" />
                     </TouchableOpacity>
                   );
@@ -469,6 +476,7 @@ export default function MyDocumentScreen() {
                     key={`${mediaId}-${idx}`}
                     disabled={!canOpen}
                     onPress={() => openAttachment(media)}
+                    onLongPress={() => handleMessageLongPress(item)}
                     style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: colors.background, padding: 8, borderRadius: 10, width: 230 }}
                   >
                     <View style={[styles.fileIconWrap, { backgroundColor: colors.tint + '20', width: 36, height: 36, marginRight: 8 }]}>
@@ -688,6 +696,39 @@ const styles = StyleSheet.create({
   listContent: { paddingHorizontal: 12, paddingVertical: 8 },
 
   msgRow: { marginBottom: 10, alignItems: 'flex-end' },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+    paddingBottom: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  backBtn: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 20,
+  },
+  headerCenter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flex: 1,
+    justifyContent: 'center',
+  },
+  headerCloudIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+  },
   bubble: {
     maxWidth: '88%',
     borderRadius: 16,

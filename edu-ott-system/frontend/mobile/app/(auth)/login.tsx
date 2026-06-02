@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { Link } from 'expo-router';
+import { Link, router } from 'expo-router';
 import { useAuth } from '../../context/auth';
 
 export default function LoginScreen() {
@@ -62,7 +62,13 @@ export default function LoginScreen() {
         );
       }
     } catch (err: any) {
-      if (err?.errorCode === 'INVALID_CREDENTIALS' || err?.statusCode === 401) {
+      if (err?.errorCode === 'EMAIL_NOT_VERIFIED' || err?.errorCode === 'PHONE_NOT_VERIFIED') {
+        const isEmail = ident.includes('@');
+        router.replace({
+          pathname: '/(auth)/verify-email' as any,
+          params: { email: isEmail ? ident.toLowerCase() : ident },
+        });
+      } else if (err?.errorCode === 'INVALID_CREDENTIALS' || err?.statusCode === 401) {
         setErrorMsg('Sai tài khoản hoặc mật khẩu');
       } else if (err?.errorCode === 'VALIDATION_ERROR') {
         setErrorMsg('Thông tin đăng nhập không hợp lệ');

@@ -285,4 +285,17 @@ export const conversationService = {
     const res = await axios.put(`${API_URL}/conversations/${id}/nicknames/${memberId}`, { nickname }, getAuthHeaders());
     return res.data;
   },
+  searchMessagesInConversation: async (conversationId, q, cursor = null, limit = 20) => {
+    const params = new URLSearchParams({ q, limit });
+    if (cursor) params.append('cursor', cursor);
+    const res = await axios.get(
+      `${API_URL}/conversations/${conversationId}/messages/search?${params}`,
+      getAuthHeaders()
+    );
+    return res.data;
+  },
+  checkBlockConflict: async (conversationId) => {
+    const res = await axios.get(`${API_URL}/conversations/${conversationId}/check-block-conflict`, getAuthHeaders());
+    return res.data;
+  },
 };

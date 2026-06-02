@@ -32,6 +32,11 @@ const conversationPreferenceSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    // Timestamp ghi lại lúc user xóa lịch sử — dùng để lọc tin nhắn cũ
+    deletedHistoryAt: {
+      type: Date,
+      default: null,
+    },
     mutedUntil: {
       type: Date,
       default: null,

@@ -3,13 +3,14 @@ import { View, Text, TouchableOpacity, Modal, TextInput, FlatList, Image, Activi
 import { Ionicons } from '@expo/vector-icons';
 import type { UserInfo } from '@/types/chat';
 import Colors from '@/constants/Colors';
-import { useColorScheme } from '@/components/useColorScheme';
+
+type ThemeColors = typeof Colors.light;
 
 type CreateGroupModalProps = {
   visible: boolean;
   onClose: () => void;
   brand: string;
-  colors: ReturnType<typeof Colors>[keyof typeof Colors];
+  colors: ThemeColors;
   groupActionLoading: boolean;
   handleCreateGroup: () => void;
   groupNameInput: string;
@@ -34,8 +35,6 @@ export default function CreateGroupModal({
   toggleMemberSelection,
   getUserId,
 }: CreateGroupModalProps) {
-  const colorScheme = useColorScheme() ?? 'light';
-
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
       <View style={[{ flex: 1 }, { backgroundColor: colors.background }]}>

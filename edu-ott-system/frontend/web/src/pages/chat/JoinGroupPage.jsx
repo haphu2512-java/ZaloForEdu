@@ -2,6 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { conversationService } from '../../services/conversationService';
 import toast from 'react-hot-toast';
+import { DEFAULT_AVATAR } from '../../utils/constants';
+
 
 export default function JoinGroupPage() {
   const { code } = useParams();

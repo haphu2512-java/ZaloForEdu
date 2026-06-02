@@ -34,24 +34,27 @@ export function useMessages({ activeConversation, userId, token, getOtherPartici
   };
 
   // ── Send text ─────────────────────────────────────────────────────────────
-  const handleSendText = async (content) => {
+  const handleSendText = async (content, mentions = [], mentionAll = false) => {
     if (!activeConversation || !content.trim()) return;
 
     const tempId = `temp-${Date.now()}`;
-    setMessages(prev => [...prev, {
+    const tempMsg = {
       _id: tempId,
       content,
       senderId: { _id: userId },
       conversationId: activeConversation._id,
       createdAt: new Date().toISOString(),
       status: 'sending',
-    }]);
+    };
+    setMessages(prev => [...prev, tempMsg]);
 
     try {
       const currentConvId = await ensureRealConversation();
+
+      // Gửi qua HTTP để lưu DB và nhận real message từ server
       const res = await axios.post(
         `${API_BASE_URL}/messages/send`,
-        { content, conversationId: currentConvId, replyTo: replyToMessage?._id },
+        { content, conversationId: currentConvId, replyTo: replyToMessage?._id, mentions, mentionAll },
         { headers: { Authorization: `Bearer ${token}` } }
       );
       setReplyToMessage(null);
@@ -72,8 +75,19 @@ export function useMessages({ activeConversation, userId, token, getOtherPartici
         );
         return [...filtered, normalizedMsg];
       });
-    } catch {
-      toast.error('Lỗi gửi tin nhắn');
+    } catch (err) {
+      const errData = err?.response?.data;
+      const serverMsg =
+        (typeof errData?.error === 'object' ? errData?.error?.message : errData?.error) ||
+        errData?.message ||
+        'Lỗi gửi tin nhắn';
+
+      if (err?.response?.status === 403 && typeof serverMsg === 'string' && serverMsg.includes('chặn')) {
+        toast(serverMsg, { icon: 'ℹ️', duration: 4000 });
+      } else {
+        toast.error(typeof serverMsg === 'string' ? serverMsg : 'Lỗi gửi tin nhắn');
+      }
+      
       setMessages(prev => prev.filter(m => m._id !== tempId));
     }
   };
@@ -212,14 +226,18 @@ export function useMessages({ activeConversation, userId, token, getOtherPartici
     setMessages(prev => prev.map(m => {
       if (String(m._id) === String(messageId)) {
         const filtered = (m.reactions || []).filter(r => String(r.userId) !== String(userId));
+        if (!emoji) {
+          return { ...m, reactions: filtered };
+        }
         return { ...m, reactions: [...filtered, { emoji, userId }] };
       }
       return m;
     }));
     try {
+      const payload = emoji ? { emoji } : {};
       await axios.put(
         `${API_BASE_URL}/messages/${messageId}/react`,
-        { emoji },
+        payload,
         { headers: { Authorization: `Bearer ${token}` } }
       );
     } catch { toast.error('Lỗi thả cảm xúc'); }
@@ -242,12 +260,55 @@ export function useMessages({ activeConversation, userId, token, getOtherPartici
     }
   };
 
-  // ── Delete ────────────────────────────────────────────────────────────────
+  // ── Edit message ─────────────────────────────────────────────────────────
+  // TODO: BE + Mobile chưa có → tạm comment, bật lại khi cả 3 platform sẵn sàng
+  // const handleEdit = async (msgId, newContent) => {
+  //   const original = messages.find(m => String(m._id) === String(msgId));
+  //   if (!original || !newContent.trim()) return;
+  //   setMessages(prev => prev.map(m => {
+  //     if (String(m._id) !== String(msgId)) return m;
+  //     const oldHistory = m.editHistory || [];
+  //     return {
+  //       ...m,
+  //       content: newContent,
+  //       isEdited: true,
+  //       editHistory: [...oldHistory, { content: m.content, editedAt: new Date().toISOString() }],
+  //     };
+  //   }));
+  //   try {
+  //     await axios.patch(
+  //       `${API_BASE_URL}/messages/${msgId}`,
+  //       { content: newContent },
+  //       { headers: { Authorization: `Bearer ${token}` } }
+  //     );
+  //     toast.success('Đã chỉnh sửa tin nhắn');
+  //   } catch {
+  //     setMessages(prev => prev.map(m =>
+  //       String(m._id) === String(msgId) ? original : m
+  //     ));
+  //     toast.error('Lỗi chỉnh sửa tin nhắn');
+  //   }
+  // };
+
+  // ── Delete (soft-delete phía client) ─────────────────────────────────────
   const handleDelete = async (msgId) => {
-    setMessages(prev => prev.filter(m => m._id !== msgId));
+    // Optimistic: đánh dấu deletedBy chứa userId hiện tại
+    setMessages(prev => prev.map(m =>
+      String(m._id) === String(msgId)
+        ? { ...m, deletedBy: [...(m.deletedBy || []), userId] }
+        : m
+    ));
     try {
       await axios.delete(`${API_BASE_URL}/messages/${msgId}`, { headers: { Authorization: `Bearer ${token}` } });
-    } catch { toast.error('Lỗi xóa tin nhắn'); }
+    } catch {
+      // Rollback
+      setMessages(prev => prev.map(m =>
+        String(m._id) === String(msgId)
+          ? { ...m, deletedBy: (m.deletedBy || []).filter(id => String(id) !== String(userId)) }
+          : m
+      ));
+      toast.error('Lỗi xóa tin nhắn');
+    }
   };
 
   return {
@@ -263,5 +324,6 @@ export function useMessages({ activeConversation, userId, token, getOtherPartici
     handleReaction,
     handleRecall,
     handleDelete,
+    // handleEdit, // TODO: uncomment khi BE sẵn sàng
   };
 }

@@ -73,23 +73,27 @@ const createPoll = asyncHandler(async (req, res) => {
 
   // Phát socket sự kiện
   socketService.emitToConversation(conversationId, 'new_message', message);
-  await socketService.emitConversationUpdated(conversationId, {
+  socketService.emitConversationUpdated(conversationId, {
     conversationId,
     latestMessage: message,
   });
 
   // Thông báo hệ thống tạo bình chọn
   const senderName = req.user.fullName || req.user.username;
+  const sysMsgContent = isAnonymous
+    ? `Ai đó đã tạo cuộc bình chọn ẩn danh: "${question}"`
+    : `${senderName} đã tạo cuộc bình chọn: "${question}"`;
+
   const sysMsg2 = await Message.create({
     conversationId,
     senderId: req.user._id,
-    content: `${senderName} đã tạo cuộc bình chọn: "${question}"`,
+    content: sysMsgContent,
     type: 'system',
     pollId: poll._id
   });
   await sysMsg2.populate('senderId', 'username avatarUrl fullName');
   socketService.emitToConversation(conversationId, 'new_message', sysMsg2);
-  await socketService.emitConversationUpdated(conversationId, {
+  socketService.emitConversationUpdated(conversationId, {
     conversationId,
     latestMessage: sysMsg2
   });
@@ -112,12 +116,12 @@ const getPoll = asyncHandler(async (req, res) => {
   const conversation = await Conversation.findById(poll.conversationId);
   ensureGroupMember(conversation, req.user._id);
 
-  // Nếu poll ẩn danh, ẩn danh sách voters
+  // Nếu poll ẩn danh, ẩn danh sách voters — giữ count bằng cách trả về array null
   const safePoll = poll.toObject();
   if (poll.isAnonymous) {
     safePoll.options = safePoll.options.map((opt) => ({
       ...opt,
-      votes: opt.votes.length, // Chỉ trả về count
+      votes: opt.votes.map(() => null), // giữ count nhưng ẩn thông tin người chọn
     }));
   }
 
@@ -164,28 +168,43 @@ const votePoll = asyncHandler(async (req, res) => {
 
   await poll.save();
   await poll.populate('createdBy', 'username avatarUrl');
-  // Populate votes để FE hiển thị avatar người bình chọn
+  // Populate votes để FE hiển thị avatar người bình chọn (nếu không ẩn danh)
   await poll.populate('options.votes', 'username avatarUrl');
 
   // Thông báo hệ thống khi tham gia bình chọn
   const senderName = req.user.fullName || req.user.username;
+
+  // Nếu bình chọn ẩn danh → ẩn tên trong system message và trong data trả về
+  const systemContent = poll.isAnonymous
+    ? `Ai đó đã tham gia bình chọn: "${poll.question}"`
+    : `${senderName} đã tham gia bình chọn: "${poll.question}"`;
+
   const sysMsg = await Message.create({
     conversationId: poll.conversationId,
     senderId: req.user._id,
-    content: `${senderName} đã tham gia bình chọn: "${poll.question}"`,
+    content: systemContent,
     type: 'system',
     pollId: poll._id
   });
   await sysMsg.populate('senderId', 'username avatarUrl fullName');
   socketService.emitToConversation(poll.conversationId.toString(), 'new_message', sysMsg);
-  await socketService.emitConversationUpdated(poll.conversationId.toString(), {
+  socketService.emitConversationUpdated(poll.conversationId.toString(), {
     conversationId: poll.conversationId,
     latestMessage: sysMsg
   });
 
-  await socketService.emitPollUpdated(poll.conversationId.toString(), poll);
+  // Build safe poll data trước khi emit/return
+  const safePoll = poll.toObject();
+  if (poll.isAnonymous) {
+    safePoll.options = safePoll.options.map((opt) => ({
+      ...opt,
+      votes: opt.votes.map(() => null), // giữ count nhưng ẩn thông tin người chọn
+    }));
+  }
 
-  return successResponse(res, poll, 'Vote submitted');
+  socketService.emitPollUpdated(poll.conversationId.toString(), safePoll);
+
+  return successResponse(res, safePoll, 'Vote submitted');
 });
 
 /**
@@ -214,7 +233,7 @@ const closePoll = asyncHandler(async (req, res) => {
   });
   await sysMsg.populate('senderId', 'username avatarUrl fullName');
   socketService.emitToConversation(poll.conversationId.toString(), 'new_message', sysMsg);
-  await socketService.emitConversationUpdated(poll.conversationId.toString(), {
+  socketService.emitConversationUpdated(poll.conversationId.toString(), {
     conversationId: poll.conversationId,
     latestMessage: sysMsg,
   });
@@ -239,7 +258,18 @@ const listPolls = asyncHandler(async (req, res) => {
     .limit(Math.min(Number(limit), 50))
     .populate('createdBy', 'username avatarUrl');
 
-  return successResponse(res, { items: polls }, 'Polls fetched');
+  const safePolls = polls.map((poll) => {
+    const safePoll = poll.toObject();
+    if (safePoll.isAnonymous) {
+      safePoll.options = safePoll.options.map((opt) => ({
+        ...opt,
+        votes: opt.votes.map(() => null), // Giữ số lượng nhưng xóa id
+      }));
+    }
+    return safePoll;
+  });
+
+  return successResponse(res, { items: safePolls }, 'Polls fetched');
 });
 
 module.exports = { createPoll, getPoll, votePoll, closePoll, listPolls };

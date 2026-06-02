@@ -34,13 +34,13 @@ const STICKER_PACKS = [
   },
 ];
 
-// Emoji → ảnh PNG via emojicdn.elm.sh (free, no key)
+// Emoji → ảnh PNG via twemoji (free, reliable)
 function emojiToUrl(emoji) {
   const codePoints = [...emoji]
     .map(c => c.codePointAt(0).toString(16))
     .filter(cp => cp !== 'fe0f') // remove variation selector
     .join('-');
-  return `https://emojicdn.elm.sh/${emoji}?style=twitter`;
+  return `https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/72x72/${codePoints}.png`;
 }
 
 async function fetchGifs(query) {

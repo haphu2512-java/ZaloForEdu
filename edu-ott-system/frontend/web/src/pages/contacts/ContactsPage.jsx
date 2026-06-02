@@ -12,7 +12,10 @@ import { useNavigate } from "react-router-dom";
 import AddFriendModal from "../../components/Modals/AddFriendModal";
 import UserProfileModal from "../../components/Modals/UserProfileModal";
 import CreateGroupModal from "../chat/Modals/CreateGroupModal";
+import { conversationService } from "../../services/conversationService";
 import { socketService } from "../../services/socketService";
+import { useConfirm } from "../../contexts/ConfirmContext";
+import toast from "react-hot-toast";
 import { useAuthStore } from "../../store/authStore";
 import axios from "axios";
 import { friendService } from "../../services/friendService";
@@ -144,6 +147,7 @@ function FriendDetailPanel({ friend, onClose, onChat, onBlock, onUnfriend, onVid
 // ── Main Component ───────────────────────────────────────────
 export default function ContactsPage() {
   const { t } = useLanguage();
+  const confirm = useConfirm();
   const navigate = useNavigate();
   const { user } = useAuthStore();
   const [activeTab, setActiveTab] = useState("friends");
@@ -222,7 +226,7 @@ export default function ContactsPage() {
       const currentUser = useAuthStore.getState().user;
       const myId = currentUser?._id || currentUser?.id;
       if (!myId) {
-        alert("Không tìm thấy thông tin người dùng, vui lòng đăng nhập lại.");
+        toast.error("Không tìm thấy thông tin người dùng, vui lòng đăng nhập lại.");
         return;
       }
 
@@ -237,19 +241,19 @@ export default function ContactsPage() {
       });
 
       if (!sent) {
-        alert("Mất kết nối socket, vui lòng thử lại.");
+        toast.error("Mất kết nối socket, vui lòng thử lại.");
         return;
       }
 
       const url = callType === "audio" ? `/call/${roomId}?type=voice` : `/call/${roomId}`;
       navigate(url);
     } else if (action === "unfriend") {
-      if (window.confirm(`Xóa ${friend.username} khỏi danh sách bạn bè?`)) {
+      if (await confirm(`Xóa ${friend.username} khỏi danh sách bạn bè?`, { isDanger: true })) {
         await unfriend(id);
         if (selectedFriend?._id === id) setSelectedFriend(null);
       }
     } else if (action === "block") {
-      if (window.confirm(`Chặn ${friend.username}? Người này sẽ không thể liên lạc với bạn.`)) {
+      if (await confirm(`Chặn ${friend.username}? Người này sẽ không thể liên lạc với bạn.`, { isDanger: true })) {
         await blockFriend(id);
         if (selectedFriend?._id === id) setSelectedFriend(null);
       }
@@ -257,10 +261,10 @@ export default function ContactsPage() {
   }, [navigate, unfriend, blockFriend, selectedFriend, user]);
 
   const TABS = [
-    { key: "friends", label: "Bạn bè", icon: FaUserFriends, count: friends.length },
-    { key: "groups", label: "Nhóm", icon: FaUsers, count: groups.length },
-    { key: "requests", label: "Lời mời", icon: FaUserCheck, count: incomingRequests.length },
-    { key: "sent", label: "Đã gửi", icon: FaUserClock, count: outgoingRequests.length },
+    { key: "friends", label: t("friendsTab"), icon: FaUserFriends, count: friends.length },
+    { key: "groups", label: t("groupsTab"), icon: FaUsers, count: groups.length },
+    { key: "requests", label: t("requestsTab"), icon: FaUserCheck, count: incomingRequests.length },
+    { key: "sent", label: t("sentTab"), icon: FaUserClock, count: outgoingRequests.length },
   ];
 
   return (
@@ -282,7 +286,7 @@ export default function ContactsPage() {
         <div className="cs-search">
           <FaSearch size={13} color="var(--text-tertiary)" />
           <input
-            placeholder="Tìm kiếm..."
+            placeholder={t('searchPlaceholder')}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />
@@ -321,7 +325,8 @@ export default function ContactsPage() {
               <div className="ch-search">
                 <FaSearch size={12} color="var(--text-tertiary)" />
                 <input
-                  placeholder="Tìm bạn..."
+                  type="text"
+                  placeholder={t("searchFriendsPlace")}
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                 />
@@ -586,7 +591,7 @@ function SentRequestsTab({ requests, onRefresh }) {
       await friendService.cancelFriendRequest(requestId);
       onRefresh();
     } catch (err) {
-      alert(err.response?.data?.message || "Không thể hủy lời mời.");
+      toast.error(err.response?.data?.message || "Không thể hủy lời mời.");
     } finally { setCancellingId(null); }
   };
 

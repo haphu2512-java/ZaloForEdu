@@ -73,7 +73,7 @@ export const API_BASE_URL = getApiBaseUrl();
 
 export const fetchAPI = async (endpoint: string, options: RequestInit = {}): Promise<any> => {
   const controller = new AbortController();
-  const id = setTimeout(() => controller.abort(), 15000);
+  const id = setTimeout(() => controller.abort(), 60000); // Increased timeout to 60s for media uploads
 
   try {
     let url = `${API_BASE_URL}${endpoint}`;
@@ -152,9 +152,20 @@ export const fetchAPI = async (endpoint: string, options: RequestInit = {}): Pro
         throw err;
       }
 
-      // Backend error format: { success: false, error: { code, message } }
+      // Backend error format: { success: false, error: { code, message, details } }
       const errorInfo = data.error || {};
-      const err: any = new Error(errorInfo.message || data.message || 'Error executing request');
+      let errMsg = errorInfo.message || data.message || 'Error executing request';
+      
+      // Parse detailed Zod field validation errors if message is "Invalid payload"
+      if (errorInfo.message?.toLowerCase() === "invalid payload" && errorInfo.details?.fieldErrors) {
+        const fieldErrs = errorInfo.details.fieldErrors;
+        const firstField = Object.keys(fieldErrs)[0];
+        if (firstField && fieldErrs[firstField].length > 0) {
+          errMsg = fieldErrs[firstField][0];
+        }
+      }
+
+      const err: any = new Error(errMsg);
       if (errorInfo.code) err.errorCode = errorInfo.code;
       err.statusCode = response.status;
       throw err;
@@ -168,7 +179,7 @@ export const fetchAPI = async (endpoint: string, options: RequestInit = {}): Pro
     }
     // Only log non-auth errors to reduce noise
     if (error.errorCode !== 'TOKEN_EXPIRED') {
-      console.error(`API Error on ${endpoint}:`, error.message);
+      console.log(`API Error on ${endpoint}:`, error.message);
     }
     throw error; // Rethrow to preserve custom fields like errorCode
   }
