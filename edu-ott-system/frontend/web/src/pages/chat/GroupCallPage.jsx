@@ -48,6 +48,7 @@ export default function GroupCallPage() {
           headers: {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${authToken}`,
+            'ngrok-skip-browser-warning': 'true',
           },
           body: JSON.stringify({ roomId, userName }),
         });

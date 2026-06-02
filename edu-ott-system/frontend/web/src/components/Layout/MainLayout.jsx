@@ -78,7 +78,10 @@ function SettingsModal({ onClose }) {
     const token = localStorage.getItem("token");
     if (!token) return;
     fetch(`${import.meta.env.VITE_API_URL || "http://localhost:5000/api/v1"}/users/${userId}`, {
-      headers: { Authorization: `Bearer ${token}` },
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "ngrok-skip-browser-warning": "true",
+      },
     })
       .then((r) => r.json())
       .then((res) => {
