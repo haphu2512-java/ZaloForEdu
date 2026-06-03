@@ -37,9 +37,6 @@ export default function IncomingCallModal() {
   };
 
   useEffect(() => {
-    const socket = socketService.socket;
-    if (!socket) return;
-
     // ── 1-1 call ──
     const handleIncomingCall = (data) => {
       setIncomingCall({ ...data, isGroup: false });
@@ -75,18 +72,18 @@ export default function IncomingCallModal() {
       }
     };
 
-    socket.on("incoming_call", handleIncomingCall);
-    socket.on("incoming_group_call", handleIncomingGroupCall);
-    socket.on("call:timeout", handleCallTimeout);
-    socket.on("call:ended", handleCallEnded);
-    socket.on("call_declined", handleCallDeclined);
+    socketService.on("incoming_call", handleIncomingCall);
+    socketService.on("incoming_group_call", handleIncomingGroupCall);
+    socketService.on("call:timeout", handleCallTimeout);
+    socketService.on("call:ended", handleCallEnded);
+    socketService.on("call_declined", handleCallDeclined);
 
     return () => {
-      socket.off("incoming_call", handleIncomingCall);
-      socket.off("incoming_group_call", handleIncomingGroupCall);
-      socket.off("call:timeout", handleCallTimeout);
-      socket.off("call:ended", handleCallEnded);
-      socket.off("call_declined", handleCallDeclined);
+      socketService.off("incoming_call", handleIncomingCall);
+      socketService.off("incoming_group_call", handleIncomingGroupCall);
+      socketService.off("call:timeout", handleCallTimeout);
+      socketService.off("call:ended", handleCallEnded);
+      socketService.off("call_declined", handleCallDeclined);
     };
   }, [incomingCall]);
 

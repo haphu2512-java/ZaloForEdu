@@ -14,9 +14,10 @@ const askChatbot = asyncHandler(async (req, res) => {
   try {
     payload = await askGemini({ message, history });
   } catch (_error) {
+    console.error('Chatbot Error:', _error.message);
     // Keep existing rule-based bot as fallback to avoid breaking user flow
     payload = {
-      reply: generateReply(message),
+      reply: 'Xin lỗi, tôi đang gặp sự cố khi xử lý yêu cầu. Vui lòng thử lại sau.',
       model: 'local-rule-based-ai-fallback',
       createdAt: new Date().toISOString(),
     };

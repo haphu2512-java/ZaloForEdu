@@ -63,7 +63,7 @@ export default function ChangeAvatarModal({
             <Text style={{ color: colors.muted, marginTop: 12, fontSize: 14 }}>Xem trước ảnh đại diện</Text>
           </View>
 
-          <View style={{ width: '100%' }}>
+          {/* <View style={{ width: '100%' }}>
             <Text style={[styles.inputLabel, { color: colors.text }]}>URL hình ảnh</Text>
             <View style={[styles.passwordInput, { borderColor: colors.border, backgroundColor: colorScheme === 'dark' ? '#374151' : '#F8FAFC' }]}>
               <Ionicons name="link-outline" size={20} color={colors.muted} />
@@ -76,7 +76,7 @@ export default function ChangeAvatarModal({
                 keyboardType="url"
                 style={[styles.passwordTextInput, { color: colors.text }]}
               />
-            </View>
+            </View> */}
 
             <TouchableOpacity
               onPress={handlePickAvatarFromLibrary}
@@ -86,7 +86,7 @@ export default function ChangeAvatarModal({
               {isUploadingAvatar ? (
                 <ActivityIndicator size="small" color="#fff" />
               ) : (
-                <Text style={{ color: '#fff', fontWeight: '700' }}>Chọn ảnh từ thư viện (Cloudinary)</Text>
+                <Text style={{ color: '#fff', fontWeight: '700' }}>Chọn ảnh từ thư viện</Text>
               )}
             </TouchableOpacity>
 
@@ -126,7 +126,6 @@ export default function ChangeAvatarModal({
               {isUploadingAvatar ? <ActivityIndicator color="white" style={{ marginRight: 8 }} /> : null}
               <Text style={{ color: '#fff', fontWeight: '700', fontSize: 16 }}>Cập nhật ảnh đại diện</Text>
             </TouchableOpacity>
-          </View>
         </ScrollView>
       </KeyboardAvoidingView>
     </Modal>
