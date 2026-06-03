@@ -59,10 +59,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!user) return;
 
-    const { getSocket } = require('../utils/socketService');
-    const socket = getSocket();
-    
-    if (!socket) return;
+    let active = true;
+    let socketInstance: any = null;
 
     const handleSettingsChanged = async (data: { theme?: string; notifications?: any }) => {
       console.log('[Auth] Real-time settings update:', data);
@@ -92,14 +90,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
     };
 
-    socket.on('settings_changed', handleSettingsChanged);
-    socket.on('you_blocked_user', handleYouBlockedUser);
-    socket.on('you_unblocked_user', handleYouUnblockedUser);
+    const setupSocket = async () => {
+      const { connectSocket } = require('../utils/socketService');
+      const socket = await connectSocket();
+      if (!active || !socket) return;
+      socketInstance = socket;
+
+      socket.on('settings_changed', handleSettingsChanged);
+      socket.on('you_blocked_user', handleYouBlockedUser);
+      socket.on('you_unblocked_user', handleYouUnblockedUser);
+    };
+
+    setupSocket();
 
     return () => {
-      socket.off('settings_changed', handleSettingsChanged);
-      socket.off('you_blocked_user', handleYouBlockedUser);
-      socket.off('you_unblocked_user', handleYouUnblockedUser);
+      active = false;
+      if (socketInstance) {
+        socketInstance.off('settings_changed', handleSettingsChanged);
+        socketInstance.off('you_blocked_user', handleYouBlockedUser);
+        socketInstance.off('you_unblocked_user', handleYouUnblockedUser);
+      }
     };
   }, [user]);
 

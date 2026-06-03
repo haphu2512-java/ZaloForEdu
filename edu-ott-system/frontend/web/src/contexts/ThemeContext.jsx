@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { settingsService } from '../services/settingsService';
+import { socketService } from '../services/socketService';
 
 const ThemeContext = createContext();
 
@@ -98,22 +99,19 @@ export const ThemeProvider = ({ children }) => {
 
   // Listen for real-time theme changes from other devices
   useEffect(() => {
-    // Dynamically import socketService to avoid circular dependency
-    import('../services/socketService').then(({ socketService }) => {
-      const handleSettingsChanged = (data) => {
-        if (data.theme && data.theme !== themeMode) {
-          console.log('[ThemeContext] Real-time theme update:', data.theme);
-          setThemeModeState(data.theme);
-          localStorage.setItem('app-theme-mode', data.theme);
-        }
-      };
+    const handleSettingsChanged = (data) => {
+      if (data.theme && data.theme !== themeMode) {
+        console.log('[ThemeContext] Real-time theme update:', data.theme);
+        setThemeModeState(data.theme);
+        localStorage.setItem('app-theme-mode', data.theme);
+      }
+    };
 
-      socketService.on('settings_changed', handleSettingsChanged);
+    socketService.on('settings_changed', handleSettingsChanged);
 
-      return () => {
-        socketService.off('settings_changed', handleSettingsChanged);
-      };
-    });
+    return () => {
+      socketService.off('settings_changed', handleSettingsChanged);
+    };
   }, [themeMode]);
 
   // Apply theme to DOM

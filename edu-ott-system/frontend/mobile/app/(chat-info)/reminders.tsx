@@ -1,4 +1,4 @@
-﻿import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -28,7 +28,7 @@ import {
   type Reminder,
   updateReminder,
 } from '@/utils/groupFeatureService';
-import { getSocket } from '@/utils/socketService';
+import { getSocket, connectSocket } from '@/utils/socketService';
 
 function normalizeId(value: any): string {
   if (!value) return '';
@@ -84,8 +84,8 @@ export default function GroupRemindersScreen() {
   }, [loadData]);
 
   useEffect(() => {
-    const socket = getSocket();
-    if (!socket) return;
+    let active = true;
+    let socketInstance: any = null;
 
     const onCreated = (reminder: Reminder) => {
       if (String(reminder?.conversationId) !== String(id)) return;
@@ -106,14 +106,25 @@ export default function GroupRemindersScreen() {
       setItems((prev) => prev.filter((r) => r._id !== payload.reminderId));
     };
 
-    socket.on('reminder_created', onCreated);
-    socket.on('reminder_updated', onUpdated);
-    socket.on('reminder_deleted', onDeleted);
+    const setupSocket = async () => {
+      const socket = await connectSocket();
+      if (!active || !socket) return;
+      socketInstance = socket;
+
+      socket.on('reminder_created', onCreated);
+      socket.on('reminder_updated', onUpdated);
+      socket.on('reminder_deleted', onDeleted);
+    };
+
+    setupSocket();
 
     return () => {
-      socket.off('reminder_created', onCreated);
-      socket.off('reminder_updated', onUpdated);
-      socket.off('reminder_deleted', onDeleted);
+      active = false;
+      if (socketInstance) {
+        socketInstance.off('reminder_created', onCreated);
+        socketInstance.off('reminder_updated', onUpdated);
+        socketInstance.off('reminder_deleted', onDeleted);
+      }
     };
   }, [id]);
 

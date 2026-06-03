@@ -376,10 +376,8 @@ export default function ChatScreen() {
 
   // ==================== SOCKET LISTENER FOR GROUP UPDATES ====================
   useEffect(() => {
-    const { getSocket } = require('../../utils/socketService');
-    const socket = getSocket();
-    
-    if (!socket) return;
+    let active = true;
+    let socketInstance: any = null;
 
     const handleGroupUpdated = async (payload: any) => {
       if (!payload) return;
@@ -446,18 +444,30 @@ export default function ChatScreen() {
       }
     };
 
-    socket.on('group_updated', handleGroupUpdated);
-    socket.on('you_blocked_user', handleBlockStatusChanged);
-    socket.on('you_unblocked_user', handleBlockStatusChanged);
-    socket.on('user_blocked', handleBlockStatusChanged);
-    socket.on('user_unblocked', handleBlockStatusChanged);
+    const setupSocket = async () => {
+      const { connectSocket } = require('../../utils/socketService');
+      const socket = await connectSocket();
+      if (!active || !socket) return;
+      socketInstance = socket;
+
+      socket.on('group_updated', handleGroupUpdated);
+      socket.on('you_blocked_user', handleBlockStatusChanged);
+      socket.on('you_unblocked_user', handleBlockStatusChanged);
+      socket.on('user_blocked', handleBlockStatusChanged);
+      socket.on('user_unblocked', handleBlockStatusChanged);
+    };
+
+    setupSocket();
 
     return () => {
-      socket.off('group_updated', handleGroupUpdated);
-      socket.off('you_blocked_user', handleBlockStatusChanged);
-      socket.off('you_unblocked_user', handleBlockStatusChanged);
-      socket.off('user_blocked', handleBlockStatusChanged);
-      socket.off('user_unblocked', handleBlockStatusChanged);
+      active = false;
+      if (socketInstance) {
+        socketInstance.off('group_updated', handleGroupUpdated);
+        socketInstance.off('you_blocked_user', handleBlockStatusChanged);
+        socketInstance.off('you_unblocked_user', handleBlockStatusChanged);
+        socketInstance.off('user_blocked', handleBlockStatusChanged);
+        socketInstance.off('user_unblocked', handleBlockStatusChanged);
+      }
     };
   }, [conversationId]);
 
